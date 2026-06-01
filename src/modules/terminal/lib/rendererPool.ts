@@ -7,7 +7,8 @@ import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ILink, type ILinkProvider } from "@xterm/xterm";
+import type { TerminalFileLink } from "./fileLinks";
 import {
   terminalDeleteSequence,
   terminalLineNavigationSequence,
@@ -28,6 +29,8 @@ export type SlotAdapter = {
 export type LeafBridge = {
   writeToPty(data: string): void;
   resizePty(cols: number, rows: number): void;
+  resolveFileLinks(line: string): Promise<TerminalFileLink[]>;
+  openFileLink(path: string): void;
   // Force a SIGWINCH on the underlying PTY at the given dims. Implemented
   // as a +1 row / restore bump because the Linux kernel suppresses winsize
   // ioctls that don't actually change the size. Used to make alt-screen
@@ -166,6 +169,8 @@ function createSlot(): Slot {
     lastUsedAt: 0,
   };
 
+  term.registerLinkProvider(createFileLinkProvider(() => slot));
+
   attachWebgl(slot);
 
   term.attachCustomKeyEventHandler((event) => {
@@ -238,6 +243,57 @@ function createSlot(): Slot {
 
   slots.push(slot);
   return slot;
+}
+
+function createFileLinkProvider(getSlot: () => Slot): ILinkProvider {
+  return {
+    provideLinks(bufferLineNumber, callback) {
+      const slot = getSlot();
+      const leafId = slot.currentLeafId;
+      if (leafId === null) {
+        callback(undefined);
+        return;
+      }
+      const bridge = adapter?.resolveLeaf(leafId);
+      if (!bridge) {
+        callback(undefined);
+        return;
+      }
+      const line =
+        slot.term.buffer.active.getLine(bufferLineNumber)?.translateToString(true) ??
+        slot.term.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ??
+        "";
+      if (!line.trim()) {
+        callback(undefined);
+        return;
+      }
+      bridge
+        .resolveFileLinks(line)
+        .then((links) => {
+          if (slot.currentLeafId !== leafId) {
+            callback(undefined);
+            return;
+          }
+          callback(links.map((link) => toXtermFileLink(link, bufferLineNumber, bridge)));
+        })
+        .catch(() => callback(undefined));
+    },
+  };
+}
+
+function toXtermFileLink(
+  link: TerminalFileLink,
+  y: number,
+  bridge: LeafBridge,
+): ILink {
+  return {
+    text: link.text,
+    range: {
+      start: { x: link.start + 1, y },
+      end: { x: link.end, y },
+    },
+    activate: () => bridge.openFileLink(link.path),
+  };
 }
 
 type PickResult = { slot: Slot; previousLeafId: number | null };
