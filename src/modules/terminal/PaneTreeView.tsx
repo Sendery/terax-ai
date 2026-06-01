@@ -22,6 +22,8 @@ type Props = {
   activeLeafId: number;
   onFocusLeaf: (leafId: number) => void;
   getBundle: (leafId: number) => LeafBundle;
+  onOpenFileLink: (path: string) => void;
+  homePath?: string | null;
 };
 
 export function PaneTreeView({
@@ -30,6 +32,8 @@ export function PaneTreeView({
   activeLeafId,
   onFocusLeaf,
   getBundle,
+  onOpenFileLink,
+  homePath,
 }: Props) {
   if (node.kind === "leaf") {
     const focused = node.id === activeLeafId;
@@ -52,10 +56,12 @@ export function PaneTreeView({
           visible={tabVisible}
           focused={focused}
           initialCwd={node.cwd}
+          homePath={homePath}
           ref={b.setRef}
           onSearchReady={(_id, addon) => b.onSearch(addon)}
           onCwd={(_id, cwd) => b.onCwd(cwd)}
           onExit={(_id, code) => b.onExit(code)}
+          onOpenFileLink={onOpenFileLink}
         />
         <DropOverlay leafId={node.id} />
       </div>
@@ -76,6 +82,8 @@ export function PaneTreeView({
               activeLeafId={activeLeafId}
               onFocusLeaf={onFocusLeaf}
               getBundle={getBundle}
+              onOpenFileLink={onOpenFileLink}
+              homePath={homePath}
             />
           </ResizablePanel>
         </Fragment>

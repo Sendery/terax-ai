@@ -884,6 +884,13 @@ export default function App() {
     [openFileTab],
   );
 
+  const handleOpenTerminalFileLink = useCallback(
+    (path: string) => {
+      openFileTab(path, true);
+    },
+    [openFileTab],
+  );
+
   const handlePathRenamed = useCallback(
     (from: string, to: string) => {
       for (const t of tabs) {
@@ -1381,6 +1388,8 @@ export default function App() {
           onCwd={handleTerminalCwd}
           onExit={handleLeafExit}
           onFocusLeaf={handleFocusLeaf}
+          onOpenFileLink={handleOpenTerminalFileLink}
+          homePath={home}
         />
       </div>
       <div

@@ -18,9 +18,11 @@ type Props = {
   /** This leaf is the active pane within its tab — receives auto-focus. */
   focused?: boolean;
   initialCwd?: string;
+  homePath?: string | null;
   onSearchReady?: (leafId: number, addon: SearchAddon) => void;
   onExit?: (leafId: number, code: number) => void;
   onCwd?: (leafId: number, cwd: string) => void;
+  onOpenFileLink?: (path: string) => void;
 };
 
 export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
@@ -30,9 +32,11 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       visible,
       focused = true,
       initialCwd,
+      homePath,
       onSearchReady,
       onExit,
       onCwd,
+      onOpenFileLink,
     },
     ref,
   ) {
@@ -45,9 +49,11 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       visible,
       focused,
       initialCwd,
+      homePath,
       onSearchReady: (a) => onSearchReady?.(leafId, a),
       onExit: (c) => onExit?.(leafId, c),
       onCwd: (c) => onCwd?.(leafId, c),
+      onOpenFileLink,
     });
 
     useEffect(() => {
