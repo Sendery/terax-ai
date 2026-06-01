@@ -11,10 +11,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:env": "node scripts/check-build-env.mjs",
+    "build:version": "node scripts/build-version.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
+    "version:set": "node scripts/set-version.mjs",
     "format": "biome format --write ./src",
     "format:check": "biome format ./src"
   },
