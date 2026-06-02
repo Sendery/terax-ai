@@ -44,7 +44,7 @@ type Props = {
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
   onPin: (id: number) => void;
-  /** Set a terminal tab's custom label; empty string resets to default. */
+  /** Set a tab's custom label; empty string resets to default. */
   onRename: (id: number, title: string) => void;
   /** Move a dragged tab to a new position (insertion gap index 0..tabs.length). */
   onReorder: (fromId: number, toGapIndex: number) => void;
@@ -153,7 +153,7 @@ export function TabBar({
               // While renaming, render a non-button cell so the <input> is not
               // nested inside the trigger <button> (invalid HTML, and WebKit
               // blocks focus/selection on inputs inside buttons).
-              if (editingId === t.id && t.kind === "terminal") {
+              if (editingId === t.id) {
                 return (
                   <Fragment key={t.id}>
                     {showGap(i) && <DropIndicator />}
@@ -285,40 +285,37 @@ export function TabBar({
                 </TabsTrigger>
               );
 
-              const tabNode =
-                t.kind === "terminal" ? (
-                  <ContextMenu>
-                    <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
-                    <ContextMenuContent
-                      className="min-w-36"
-                      onCloseAutoFocus={(e) => e.preventDefault()}
-                    >
-                      <ContextMenuItem onSelect={() => setEditingId(t.id)}>
-                        <HugeiconsIcon
-                          icon={PencilEdit02Icon}
-                          size={14}
-                          strokeWidth={1.75}
-                        />
-                        <span className="flex-1">Rename</span>
-                      </ContextMenuItem>
-                      {tabs.length > 1 && (
-                        <>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem onSelect={() => onClose(t.id)}>
-                            <HugeiconsIcon
-                              icon={Cancel01Icon}
-                              size={14}
-                              strokeWidth={1.75}
-                            />
-                            <span className="flex-1">Close</span>
-                          </ContextMenuItem>
-                        </>
-                      )}
-                    </ContextMenuContent>
-                  </ContextMenu>
-                ) : (
-                  trigger
-                );
+              const tabNode = (
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
+                  <ContextMenuContent
+                    className="min-w-36"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <ContextMenuItem onSelect={() => setEditingId(t.id)}>
+                      <HugeiconsIcon
+                        icon={PencilEdit02Icon}
+                        size={14}
+                        strokeWidth={1.75}
+                      />
+                      <span className="flex-1">Rename</span>
+                    </ContextMenuItem>
+                    {tabs.length > 1 && (
+                      <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onSelect={() => onClose(t.id)}>
+                          <HugeiconsIcon
+                            icon={Cancel01Icon}
+                            size={14}
+                            strokeWidth={1.75}
+                          />
+                          <span className="flex-1">Close</span>
+                        </ContextMenuItem>
+                      </>
+                    )}
+                  </ContextMenuContent>
+                </ContextMenu>
+              );
 
               return (
                 <Fragment key={t.id}>
