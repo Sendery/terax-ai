@@ -18,9 +18,11 @@ type Props = {
   /** This leaf is the active pane within its tab — receives auto-focus. */
   focused?: boolean;
   initialCwd?: string;
+  homePath?: string | null;
   onSearchReady?: (leafId: number, addon: SearchAddon) => void;
   onExit?: (leafId: number, code: number) => void;
   onCwd?: (leafId: number, cwd: string) => void;
+  onOpenFileLink?: (path: string) => void;
 };
 
 export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
@@ -30,9 +32,11 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       visible,
       focused = true,
       initialCwd,
+      homePath,
       onSearchReady,
       onExit,
       onCwd,
+      onOpenFileLink,
     },
     ref,
   ) {
@@ -45,9 +49,11 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       visible,
       focused,
       initialCwd,
+      homePath,
       onSearchReady: (a) => onSearchReady?.(leafId, a),
       onExit: (c) => onExit?.(leafId, c),
       onCwd: (c) => onCwd?.(leafId, c),
+      onOpenFileLink,
     });
 
     useEffect(() => {
@@ -67,15 +73,34 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, Props>(
       [session],
     );
 
+    const overlayColor = focused
+      ? "var(--terminal-last-active-pane-overlay)"
+      : "var(--terminal-inactive-pane-overlay)";
+
     return (
       <div
-        ref={containerRef}
-        className="zoom-exempt h-full w-full"
+        className="group/terminal-pane relative h-full w-full"
         style={{
           visibility: visible ? "visible" : "hidden",
           pointerEvents: visible ? "auto" : "none",
         }}
-      />
+      >
+        <div
+          ref={containerRef}
+          className="zoom-exempt h-full w-full"
+        />
+        <div
+          className={[
+            "pointer-events-none absolute inset-0 z-10 transition-opacity",
+            focused ? "group-focus-within/terminal-pane:hidden" : "",
+          ].join(" ")}
+          style={{
+            backgroundColor: overlayColor,
+            boxShadow:
+              "inset 0 0 0 1px var(--terminal-inactive-pane-edge), inset 0 1px 0 var(--terminal-inactive-pane-top-edge)",
+          }}
+        />
+      </div>
     );
   },
 );

@@ -184,6 +184,7 @@ export default function App() {
     tabs,
     activeId,
     setActiveId,
+    reorderTab,
     newTab,
     newAgentTab,
     newPrivateTab,
@@ -884,6 +885,13 @@ export default function App() {
     [openFileTab],
   );
 
+  const handleOpenTerminalFileLink = useCallback(
+    (path: string) => {
+      openFileTab(path, true);
+    },
+    [openFileTab],
+  );
+
   const handlePathRenamed = useCallback(
     (from: string, to: string) => {
       for (const t of tabs) {
@@ -1057,6 +1065,12 @@ export default function App() {
 
   const [zenMode, setZenMode] = useState(false);
 
+  const clearActiveTerminal = useCallback(() => {
+    if (!document.activeElement?.closest(".xterm")) return;
+    if (!activeTerminalTab || activeLeafId === null) return;
+    terminalRefs.current.get(activeLeafId)?.write("\x0c");
+  }, [activeTerminalTab, activeLeafId]);
+
   const shortcutHandlers = useMemo<ShortcutHandlers>(
     () => ({
       "tab.new": openNewTab,
@@ -1078,6 +1092,7 @@ export default function App() {
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
       "ai.askSelection": askFromSelection,
+      "terminal.clearActive": clearActiveTerminal,
       "shortcuts.open": () => setShortcutsOpen((v) => !v),
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -1099,6 +1114,7 @@ export default function App() {
       selectByIndex,
       splitActivePaneInActiveTab,
       focusNextPaneInTab,
+      clearActiveTerminal,
       toggleSourceControl,
       togglePanelAndFocus,
       askFromSelection,
@@ -1131,6 +1147,11 @@ export default function App() {
         const target =
           (e.target as HTMLElement | null) ?? document.activeElement;
         return !(target as HTMLElement | null)?.closest?.(".xterm");
+      }
+      if (id === "terminal.clearActive") {
+        const target =
+          (e.target as HTMLElement | null) ?? document.activeElement;
+        return !target?.closest?.(".xterm");
       }
       return false;
     },
@@ -1381,6 +1402,8 @@ export default function App() {
           onCwd={handleTerminalCwd}
           onExit={handleLeafExit}
           onFocusLeaf={handleFocusLeaf}
+          onOpenFileLink={handleOpenTerminalFileLink}
+          homePath={home}
         />
       </div>
       <div
@@ -1478,6 +1501,7 @@ export default function App() {
             onClose={handleClose}
             onPin={pinTab}
             onRename={handleRenameTab}
+            onReorder={reorderTab}
             onToggleSidebar={toggleSidebar}
             onSplit={splitActivePaneInActiveTab}
             canSplit={

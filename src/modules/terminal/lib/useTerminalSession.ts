@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { currentWorkspaceEnv } from "@/modules/workspace";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DormantRing } from "./dormantRing";
+import { resolveTerminalFileLinks, type FileLinkStat } from "./fileLinks";
 import {
   createShellIntegrationState,
   registerCwdHandler,
@@ -30,6 +32,7 @@ type Callbacks = {
   onSearchReady?: (addon: SearchAddon) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
+  onOpenFileLink?: (path: string) => void;
 };
 
 type Session = {
@@ -40,6 +43,8 @@ type Session = {
   pendingExit: number | null;
   shellExited: boolean;
   callbacks: Callbacks;
+  fileLinkHome: string | null | undefined;
+  fileLinkCache: Map<string, Promise<FileLinkStat | null>>;
   visibleNow: boolean;
   focusedNow: boolean;
   disposed: boolean;
@@ -135,6 +140,14 @@ configureRendererPool({
         s.rows = rows;
         s.pty?.resize(cols, rows);
       },
+      resolveFileLinks: (line) =>
+        resolveTerminalFileLinks({
+          line,
+          cwd: s.lastCwd ?? s.initialCwd,
+          home: s.fileLinkHome,
+          stat: (path) => statFileLink(s, path),
+        }),
+      openFileLink: (path) => s.callbacks.onOpenFileLink?.(path),
       kickPty: (cols, rows) => {
         const pty = s.pty;
         if (!pty || cols <= 0 || rows <= 0) return;
@@ -159,6 +172,24 @@ configureRendererPool({
   },
 });
 
+function statFileLink(
+  session: Session,
+  path: string,
+): Promise<FileLinkStat | null> {
+  const cached = session.fileLinkCache.get(path);
+  if (cached) return cached;
+  const request = invoke<FileLinkStat>("fs_stat", {
+    path,
+    workspace: currentWorkspaceEnv(),
+  }).catch(() => null);
+  session.fileLinkCache.set(path, request);
+  if (session.fileLinkCache.size > 256) {
+    const oldest = session.fileLinkCache.keys().next().value;
+    if (oldest !== undefined) session.fileLinkCache.delete(oldest);
+  }
+  return request;
+}
+
 function ensureSession(leafId: number, initialCwd?: string): Session {
   const existing = sessions.get(leafId);
   if (existing) return existing;
@@ -171,6 +202,8 @@ function ensureSession(leafId: number, initialCwd?: string): Session {
     pendingExit: null,
     shellExited: false,
     callbacks: {},
+    fileLinkHome: null,
+    fileLinkCache: new Map(),
     visibleNow: false,
     focusedNow: false,
     disposed: false,
@@ -400,9 +433,11 @@ type Options = {
   visible: boolean;
   focused?: boolean;
   initialCwd?: string;
+  homePath?: string | null;
   onSearchReady?: (addon: SearchAddon) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
+  onOpenFileLink?: (path: string) => void;
 };
 
 export function useTerminalSession({
@@ -411,12 +446,19 @@ export function useTerminalSession({
   visible,
   focused = true,
   initialCwd,
+  homePath,
   onSearchReady,
   onExit,
   onCwd,
+  onOpenFileLink,
 }: Options) {
-  const cbRef = useRef({ onSearchReady, onExit, onCwd });
-  cbRef.current = { onSearchReady, onExit, onCwd };
+  const cbRef = useRef({ onSearchReady, onExit, onCwd, onOpenFileLink });
+  cbRef.current = { onSearchReady, onExit, onCwd, onOpenFileLink };
+
+  useEffect(() => {
+    const s = ensureSession(leafId, initialCwd);
+    s.fileLinkHome = homePath;
+  }, [leafId, initialCwd, homePath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -429,6 +471,7 @@ export function useTerminalSession({
         onSearchReady: (a) => cbRef.current.onSearchReady?.(a),
         onExit: (c) => cbRef.current.onExit?.(c),
         onCwd: (c) => cbRef.current.onCwd?.(c),
+        onOpenFileLink: (path) => cbRef.current.onOpenFileLink?.(path),
       });
       if (s.visibleNow && s.focusedNow) focusSlot(leafId);
     });

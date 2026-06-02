@@ -14,6 +14,8 @@ type Props = {
   onCwd: (leafId: number, cwd: string) => void;
   onExit: (leafId: number, code: number) => void;
   onFocusLeaf: (tabId: number, leafId: number) => void;
+  onOpenFileLink: (path: string) => void;
+  homePath?: string | null;
 };
 
 type Bundle = {
@@ -31,6 +33,8 @@ export function TerminalStack({
   onCwd,
   onExit,
   onFocusLeaf,
+  onOpenFileLink,
+  homePath,
 }: Props) {
   const terminals = useMemo(
     () => tabs.filter((t) => t.kind === "terminal"),
@@ -97,6 +101,8 @@ export function TerminalStack({
               activeLeafId={t.activeLeafId}
               onFocusLeaf={(leafId) => onFocusLeaf(t.id, leafId)}
               getBundle={getBundle}
+              onOpenFileLink={onOpenFileLink}
+              homePath={homePath}
             />
           </div>
         );

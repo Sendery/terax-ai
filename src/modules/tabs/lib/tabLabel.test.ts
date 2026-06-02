@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { labelFor } from "./tabLabel";
-import type { TerminalTab } from "./useTabs";
+import type { EditorTab, TerminalTab } from "./useTabs";
 
 function terminalTab(over: Partial<TerminalTab> = {}): TerminalTab {
   return {
@@ -9,6 +9,18 @@ function terminalTab(over: Partial<TerminalTab> = {}): TerminalTab {
     title: "shell",
     paneTree: { kind: "leaf", id: 2 },
     activeLeafId: 2,
+    ...over,
+  };
+}
+
+function editorTab(over: Partial<EditorTab> = {}): EditorTab {
+  return {
+    id: 3,
+    kind: "editor",
+    title: "main.ts",
+    path: "/repo/src/main.ts",
+    dirty: false,
+    preview: false,
     ...over,
   };
 }
@@ -38,5 +50,13 @@ describe("labelFor (terminal tabs)", () => {
 
   it("handles Windows-style cwd separators", () => {
     expect(labelFor(terminalTab({ cwd: "C:\\Users\\me\\proj" }))).toBe("proj");
+  });
+});
+
+describe("labelFor (custom tab titles)", () => {
+  it("prefers custom titles for non-terminal tabs", () => {
+    expect(labelFor(editorTab({ customTitle: "Frontend entry" }))).toBe(
+      "Frontend entry",
+    );
   });
 });

@@ -16,6 +16,11 @@ import { disposeSession } from "@/modules/terminal/lib/useTerminalSession";
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
 
+type CustomNamedTab = {
+  /** User-set label that overrides the derived tab name. */
+  customTitle?: string;
+};
+
 export type TerminalTab = {
   id: number;
   kind: "terminal";
@@ -25,9 +30,7 @@ export type TerminalTab = {
   activeLeafId: number;
   /** AI agent cannot read buffer / context of this terminal. */
   private?: boolean;
-  /** User-set label that overrides the cwd-derived name. Survives cd. */
-  customTitle?: string;
-};
+} & CustomNamedTab;
 
 export type EditorTab = {
   id: number;
@@ -41,21 +44,21 @@ export type EditorTab = {
    * is replaced by the next single-click rather than accumulating.
    */
   preview: boolean;
-};
+} & CustomNamedTab;
 
 export type PreviewTab = {
   id: number;
   kind: "preview";
   title: string;
   url: string;
-};
+} & CustomNamedTab;
 
 export type MarkdownTab = {
   id: number;
   kind: "markdown";
   title: string;
   path: string;
-};
+} & CustomNamedTab;
 
 export type AiDiffStatus = "pending" | "approved" | "rejected";
 
@@ -71,7 +74,7 @@ export type AiDiffTab = {
   approvalId: string;
   status: AiDiffStatus;
   isNewFile: boolean;
-};
+} & CustomNamedTab;
 
 export type GitDiffTab = {
   id: number;
@@ -81,14 +84,14 @@ export type GitDiffTab = {
   repoRoot: string;
   mode: "-" | "+";
   originalPath: string | null;
-};
+} & CustomNamedTab;
 
 export type GitHistoryTab = {
   id: number;
   kind: "git-history";
   title: string;
   repoRoot: string;
-};
+} & CustomNamedTab;
 
 export type GitCommitFileDiffTab = {
   id: number;
@@ -100,7 +103,7 @@ export type GitCommitFileDiffTab = {
   subject: string;
   path: string;
   originalPath: string | null;
-};
+} & CustomNamedTab;
 
 export type Tab =
   | TerminalTab
@@ -118,7 +121,7 @@ export type TabPatch = Partial<{
   path: string;
   dirty: boolean;
   url: string;
-  /** Empty string resets a terminal tab to its cwd-derived name. */
+  /** Empty string resets a tab to its derived name. */
   customTitle: string;
 }>;
 
@@ -584,14 +587,19 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     setTabs((t) =>
       t.map((x) => {
         if (x.id !== id) return x;
+        const customTitlePatch =
+          patch.customTitle !== undefined
+            ? {
+                customTitle:
+                  patch.customTitle === "" ? undefined : patch.customTitle,
+              }
+            : {};
         if (x.kind === "terminal") {
           return {
             ...x,
             ...(patch.title !== undefined && { title: patch.title }),
             ...(patch.cwd !== undefined && { cwd: patch.cwd }),
-            ...(patch.customTitle !== undefined && {
-              customTitle: patch.customTitle === "" ? undefined : patch.customTitle,
-            }),
+            ...customTitlePatch,
           };
         }
         if (x.kind === "preview") {
@@ -602,12 +610,14 @@ export function useTabs(initial?: Partial<TerminalTab>) {
               url: patch.url,
               title: patch.title ?? titleFromUrl(patch.url),
             }),
+            ...customTitlePatch,
           };
         }
         if (x.kind === "markdown") {
           return {
             ...x,
             ...(patch.title !== undefined && { title: patch.title }),
+            ...customTitlePatch,
           };
         }
         // editor tab: auto-promote from preview the moment the file becomes dirty.
@@ -621,6 +631,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
           ...(patch.title !== undefined && { title: patch.title }),
           ...(patch.dirty !== undefined && { dirty: patch.dirty }),
           ...(patch.path !== undefined && { path: patch.path }),
+          ...customTitlePatch,
         };
       }),
     );
@@ -801,10 +812,30 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     for (const lid of toDispose) disposeSession(lid);
   }, []);
 
+  // Move a tab to a new position. `toGapIndex` is the insertion gap measured
+  // against the current array (0..tabs.length); the dragged tab is removed and
+  // re-inserted there (insert-and-shift), not swapped with another tab.
+  const reorderTab = useCallback((fromId: number, toGapIndex: number) => {
+    setTabs((prev) => {
+      const from = prev.findIndex((t) => t.id === fromId);
+      if (from === -1) return prev;
+      const next = prev.slice();
+      const [moved] = next.splice(from, 1);
+      // The gap was measured before removal, so shift it back by one when it
+      // sits past the source slot.
+      let target = toGapIndex > from ? toGapIndex - 1 : toGapIndex;
+      target = Math.max(0, Math.min(target, next.length));
+      if (target === from) return prev; // dropped in place — no change
+      next.splice(target, 0, moved);
+      return next;
+    });
+  }, []);
+
   return {
     tabs,
     activeId,
     setActiveId,
+    reorderTab,
     newTab,
     newAgentTab,
     newPrivateTab,
