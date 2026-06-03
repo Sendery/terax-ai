@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -153,9 +153,8 @@ pub async fn agent_cli_spawn(
 
     let program = resolve_bin(bin).ok_or_else(|| format!("{bin} not found on PATH"))?;
 
-    let mut cmd = Command::new(&program);
-    cmd.args(args)
-        .env("PATH", login_path())
+    let mut cmd = agent_command(&program, args);
+    cmd.env("PATH", login_path())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -191,6 +190,76 @@ pub async fn agent_cli_spawn(
     });
 
     Ok(())
+}
+
+fn agent_command(program: &Path, args: &[String]) -> Command {
+    #[cfg(windows)]
+    {
+        if is_windows_cmd_shim(program) {
+            let mut cmd = Command::new("cmd.exe");
+            cmd.args(["/d", "/s", "/c"])
+                .arg(windows_cmd_command_line(program, args));
+            return cmd;
+        }
+    }
+
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    cmd
+}
+
+#[cfg(windows)]
+fn is_windows_cmd_shim(program: &Path) -> bool {
+    matches!(
+        program
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
+        Some("cmd" | "bat")
+    )
+}
+
+#[cfg(windows)]
+fn windows_cmd_command_line(program: &Path, args: &[String]) -> String {
+    std::iter::once(program.to_string_lossy().into_owned())
+        .chain(args.iter().cloned())
+        .map(|s| windows_cmd_quote_arg(&s))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(windows)]
+fn windows_cmd_quote_arg(value: &str) -> String {
+    let sanitized = value.replace('%', "%%").replace(['\r', '\n'], " ");
+    let mut out = String::with_capacity(sanitized.len() + 2);
+    out.push('"');
+    let mut backslashes = 0;
+    for ch in sanitized.chars() {
+        match ch {
+            '\\' => backslashes += 1,
+            '"' => {
+                push_backslashes(&mut out, backslashes * 2 + 1);
+                out.push('"');
+                backslashes = 0;
+            }
+            _ => {
+                push_backslashes(&mut out, backslashes);
+                backslashes = 0;
+                out.push(ch);
+            }
+        }
+    }
+    push_backslashes(&mut out, backslashes * 2);
+    out.push('"');
+    out
+}
+
+#[cfg(windows)]
+fn push_backslashes(out: &mut String, count: usize) {
+    for _ in 0..count {
+        out.push('\\');
+    }
 }
 
 /// Kill a running agent by its spawn `id`. No-op if already gone.
@@ -232,6 +301,25 @@ mod tests {
     fn resolve_bin_rejects_missing() {
         assert!(resolve_bin("definitely-not-a-real-binary-zzz-9000").is_none());
         assert!(resolve_bin("").is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cmd_shims_run_through_cmd_exe() {
+        let args = vec![
+            "exec".to_string(),
+            "hello %USERPROFILE% & keep this as one arg".to_string(),
+        ];
+        let cmd = agent_command(Path::new(r"C:\Users\me\AppData\Roaming\npm\codex.cmd"), &args);
+        assert_eq!(cmd.get_program(), "cmd.exe");
+        let rendered_args = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(&rendered_args[..3], ["/d", "/s", "/c"]);
+        assert!(rendered_args[3].contains("codex.cmd"));
+        assert!(rendered_args[3].contains("%%USERPROFILE%%"));
+        assert!(rendered_args[3].contains("& keep this as one arg"));
     }
 
     #[cfg(unix)]

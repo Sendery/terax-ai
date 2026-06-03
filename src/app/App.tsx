@@ -31,6 +31,12 @@ import {
   SelectionAskAi,
   useChatStore,
 } from "@/modules/ai";
+import { resolveModel } from "@/modules/ai/config";
+import {
+  installedCliAgents,
+  useCliAvailabilityStore,
+  type CliAgentId,
+} from "@/modules/ai/cli";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { redactSensitive } from "@/modules/ai/lib/redact";
 import { native } from "@/modules/ai/lib/native";
@@ -149,6 +155,12 @@ const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_WIDTH_STORAGE_KEY = "terax.sidebar.width";
 const SIDEBAR_VIEW_STORAGE_KEY = "terax.sidebar.view";
+const CLI_MODEL_BY_AGENT: Record<CliAgentId, string> = {
+  claude: "cli-claude-agent",
+  codex: "cli-codex-agent",
+  cursor: "cli-cursor-agent",
+  opencode: "cli-opencode-agent",
+};
 
 function clampSidebarWidth(width: number): number {
   return Math.min(
@@ -436,6 +448,13 @@ export default function App() {
     (s) => s.openaiCompatibleBaseURL,
   );
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
+  const refreshCliPaths = useCliAvailabilityStore((s) => s.refresh);
+  const detectedCliAgents = useMemo(
+    () => installedCliAgents(cliPaths),
+    [cliPaths],
+  );
+  const hasCliAgent = detectedCliAgents.length > 0;
   const hasLocalModel =
     (lmstudioBaseURL.trim().length > 0 && lmstudioModelId.trim().length > 0) ||
     (mlxBaseURL.trim().length > 0 && mlxModelId.trim().length > 0) ||
@@ -443,7 +462,8 @@ export default function App() {
     (openaiCompatibleBaseURL.trim().length > 0 &&
       openaiCompatibleModelId.trim().length > 0) ||
     customEndpoints.some((e) => e.baseURL.trim().length > 0 && e.modelId.trim().length > 0);
-  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel;
+  const hasApiKey = hasAnyKey(apiKeys);
+  const hasComposer = hasApiKey || hasLocalModel || hasCliAgent;
 
   const prefsHydrated = usePreferencesStore((s) => s.hydrated);
   const [keysLoaded, setKeysLoaded] = useState(false);
@@ -471,6 +491,10 @@ export default function App() {
     };
   }, [setApiKeys, setCustomEndpointKeys, prefsHydrated]);
 
+  useEffect(() => {
+    void refreshCliPaths();
+  }, [refreshCliPaths]);
+
   // Hydrate the cross-window preference store and mirror the default model
   // into chatStore so the dropdown reflects what the user picked in Settings.
   const initPrefs = usePreferencesStore((s) => s.init);
@@ -482,6 +506,33 @@ export default function App() {
     if (!prefsHydrated) return;
     setSelectedModelId(prefDefaultModel);
   }, [prefsHydrated, prefDefaultModel, setSelectedModelId]);
+
+  useEffect(() => {
+    if (
+      !prefsHydrated ||
+      hasApiKey ||
+      hasLocalModel ||
+      detectedCliAgents.length === 0
+    ) {
+      return;
+    }
+    const current = useChatStore.getState().selectedModelId;
+    let currentProvider: string | null = null;
+    try {
+      currentProvider = resolveModel(current, customEndpoints).provider;
+    } catch {
+      currentProvider = null;
+    }
+    if (currentProvider?.startsWith("cli-")) return;
+    setSelectedModelId(CLI_MODEL_BY_AGENT[detectedCliAgents[0].id]);
+  }, [
+    prefsHydrated,
+    hasApiKey,
+    hasLocalModel,
+    detectedCliAgents,
+    customEndpoints,
+    setSelectedModelId,
+  ]);
 
   const hydrateSessions = useChatStore((s) => s.hydrateSessions);
   useEffect(() => {

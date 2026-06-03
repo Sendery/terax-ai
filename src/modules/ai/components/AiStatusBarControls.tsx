@@ -45,9 +45,11 @@ import { motion } from "motion/react";
 import { useMemo, useRef, useState } from "react";
 import {
   compatModelIdForEndpoint,
+  CLI_PROVIDERS,
   getCompatModelInfo,
   getModel,
   isCompatModelId,
+  isCliProvider,
   MODELS,
   providerNeedsKey,
   PROVIDERS,
@@ -56,6 +58,10 @@ import {
   type ModelInfo,
   type ProviderId,
 } from "../config";
+import {
+  isCliAgentInstalled,
+  useCliAvailabilityStore,
+} from "../cli";
 import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
@@ -220,6 +226,7 @@ function ModelDropdown() {
   const favoriteIds = usePreferencesStore((s) => s.favoriteModelIds);
   const recentIds = usePreferencesStore((s) => s.recentModelIds);
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
   const current = isCompatModelId(selected)
     ? getCompatModelInfo(selected, customEndpoints)
     : getModel(selected as ModelId);
@@ -229,12 +236,15 @@ function ModelDropdown() {
   const inputRef = useRef<HTMLInputElement>(null);
   const currentProviderHasKey = isCompatModelId(selected)
     ? true
-    : providerNeedsKey(current.provider)
-      ? !!apiKeys[current.provider]
-      : true;
+    : hasKeyFor(current.provider);
 
-  const hasKeyFor = (id: ProviderId) =>
-    providerNeedsKey(id) ? !!apiKeys[id] : true;
+  function hasKeyFor(id: ProviderId): boolean {
+    if (isCliProvider(id)) {
+      const cliId = CLI_PROVIDERS[id];
+      return !!cliId && isCliAgentInstalled(cliPaths, cliId);
+    }
+    return providerNeedsKey(id) ? !!apiKeys[id] : true;
+  }
 
   const epModelInfos = useMemo(() => {
     return customEndpoints.map((ep) =>
@@ -251,7 +261,7 @@ function ModelDropdown() {
     }
     return { configured, unconfigured };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys]);
+  }, [apiKeys, cliPaths]);
 
   const allModels = useMemo(
     () => [...MODELS, ...epModelInfos],

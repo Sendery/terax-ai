@@ -36,7 +36,11 @@ import {
   type CustomEndpointKeys,
 } from "@/modules/ai/lib/keyring";
 import { useChatStore } from "@/modules/ai/store/chatStore";
-import { CLI_AGENTS, detectCliAgents } from "@/modules/ai/cli";
+import {
+  CLI_AGENTS,
+  isCliAgentInstalled,
+  useCliAvailabilityStore,
+} from "@/modules/ai/cli";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
@@ -138,16 +142,16 @@ export function ModelsSection() {
   const [keys, setKeys] = useState<KeysMap | null>(null);
   const [epKeys, setEpKeys] = useState<CustomEndpointKeys>({});
   const [adding, setAdding] = useState<Set<ProviderId>>(new Set());
-  const [cliPaths, setCliPaths] = useState<Record<string, string | null>>({});
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
+  const refreshCliPaths = useCliAvailabilityStore((s) => s.refresh);
 
   useEffect(() => {
-    const bins = Object.values(CLI_PROVIDERS).map((id) => CLI_AGENTS[id].bin);
-    void detectCliAgents(bins).then(setCliPaths);
-  }, []);
+    void refreshCliPaths();
+  }, [refreshCliPaths]);
 
   const cliInstalled = (id: ProviderId): boolean => {
     const cliId = CLI_PROVIDERS[id];
-    return !!cliId && !!cliPaths[CLI_AGENTS[cliId].bin];
+    return !!cliId && isCliAgentInstalled(cliPaths, cliId);
   };
 
   const defaultModel = usePreferencesStore((s) => s.defaultModelId);
