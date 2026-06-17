@@ -149,6 +149,15 @@ export function whenSessionReady(
   });
 }
 
+const PENDING_INPUT_MAX = 256 * 1024;
+
+// Input typed before the pty attaches is queued and flushed on attach. Cap the
+// queue so a large paste into a still-spawning pane can't grow it without bound.
+function queuePendingInput(s: Session, data: string): void {
+  if (s.pendingInput.length + data.length > PENDING_INPUT_MAX) return;
+  s.pendingInput += data;
+}
+
 export function writeToSession(leafId: number, data: string): boolean {
   const s = sessions.get(leafId);
   if (!s || s.shellExited) return false;
@@ -156,7 +165,7 @@ export function writeToSession(leafId: number, data: string): boolean {
     void s.pty.write(data);
     return true;
   }
-  s.pendingInput += data;
+  queuePendingInput(s, data);
   return true;
 }
 
@@ -169,7 +178,7 @@ export function submitToLeaf(leafId: number, text: string): void {
     ? `\x1b[200~${text}\x1b[201~\r`
     : `${text}\r`;
   if (s.pty) void s.pty.write(data);
-  else s.pendingInput += data;
+  else queuePendingInput(s, data);
 }
 
 export function interruptLeaf(leafId: number): void {
@@ -391,7 +400,7 @@ configureRendererPool({
           return;
         }
         if (s.pty) void s.pty.write(data);
-        else s.pendingInput += data;
+        else queuePendingInput(s, data);
       },
       shiftEnterSequence: () =>
         shiftEnterSequence(s.keyboardProtocol.modifyOtherKeys),
@@ -1000,7 +1009,7 @@ export function useTerminalSession({
       const s = sessions.get(leafId);
       if (!s || s.shellExited) return;
       if (s.pty) void s.pty.write(data);
-      else s.pendingInput += data;
+      else queuePendingInput(s, data);
     },
     [leafId],
   );
