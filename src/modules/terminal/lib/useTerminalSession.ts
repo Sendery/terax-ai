@@ -78,6 +78,7 @@ type Session = {
   dormantRing: DormantRing;
   // Keyboard-encoding modes the foreground program negotiated via output.
   keyboardProtocol: KeyboardProtocolTracker;
+  pendingInput: string;
   hasSlot: boolean;
   blocks: boolean;
   blockMode: BlockMode;
@@ -148,18 +149,25 @@ export function whenSessionReady(
 
 export function writeToSession(leafId: number, data: string): boolean {
   const s = sessions.get(leafId);
-  if (!s?.pty) return false;
-  void s.pty.write(data);
+  if (!s || s.shellExited) return false;
+  if (s.pty) {
+    void s.pty.write(data);
+    return true;
+  }
+  s.pendingInput += data;
   return true;
 }
 
 export function submitToLeaf(leafId: number, text: string): void {
   const s = sessions.get(leafId);
-  if (!s?.pty) return;
+  if (!s || s.shellExited) return;
   s.everSubmitted = true;
   // Bracketed paste keeps a multiline command atomic; trailing CR runs it.
-  if (text.includes("\n")) s.pty.write(`\x1b[200~${text}\x1b[201~\r`);
-  else s.pty.write(`${text}\r`);
+  const data = text.includes("\n")
+    ? `\x1b[200~${text}\x1b[201~\r`
+    : `${text}\r`;
+  if (s.pty) void s.pty.write(data);
+  else s.pendingInput += data;
 }
 
 export function interruptLeaf(leafId: number): void {
@@ -365,7 +373,8 @@ configureRendererPool({
           if (data.includes("\r")) void respawnSession(leafId);
           return;
         }
-        s.pty?.write(data);
+        if (s.pty) void s.pty.write(data);
+        else s.pendingInput += data;
       },
       shiftEnterSequence: () =>
         shiftEnterSequence(s.keyboardProtocol.modifyOtherKeys),
@@ -471,6 +480,7 @@ function ensureSession(
     searchQuery: null,
     dormantRing: new DormantRing(),
     keyboardProtocol: new KeyboardProtocolTracker(),
+    pendingInput: "",
     hasSlot: false,
     blocks,
     blockMode: "prompt",
@@ -556,6 +566,7 @@ async function openPtyForSession(
       onExit: (code) => {
         s.shellExited = true;
         s.pty = null;
+        s.pendingInput = "";
         s.commandRunning = false;
         const slot = getSlotForLeaf(leafId);
         if (slot) slot.term.options.disableStdin = true;
@@ -710,6 +721,11 @@ function attachSession(
           return;
         }
         s.pty = pty;
+        if (s.pendingInput) {
+          void pty.write(s.pendingInput);
+          s.pendingInput = "";
+        }
+        if (s.cols > 0 && s.rows > 0) pty.resize(s.cols, s.rows);
       })
       .catch((e) => {
         s.ptyOpening = false;
@@ -738,6 +754,7 @@ export async function respawnSession(
   s.dormantRing = new DormantRing();
   s.shellExited = false;
   s.pendingExit = null;
+  s.pendingInput = "";
   s.altScreenAtRelease = false;
   s.commandRunning = false;
   s.spawnFailed = false;
@@ -767,6 +784,11 @@ export async function respawnSession(
     return;
   }
   s.pty = pty;
+  if (s.pendingInput) {
+    void pty.write(s.pendingInput);
+    s.pendingInput = "";
+  }
+  if (s.cols > 0 && s.rows > 0) pty.resize(s.cols, s.rows);
 }
 
 export async function leafHasForegroundProcess(
@@ -799,6 +821,7 @@ export function disposeSession(leafId: number): void {
   s.snapshot = null;
   s.pty?.close();
   s.pty = null;
+  s.pendingInput = "";
   sessions.delete(leafId);
   blockViewportListeners.delete(leafId);
   readyLeaves.delete(leafId);
@@ -948,7 +971,12 @@ export function useTerminalSession({
   }, [leafId, visible, focused, blocks]);
 
   const write = useCallback(
-    (data: string) => sessions.get(leafId)?.pty?.write(data),
+    (data: string) => {
+      const s = sessions.get(leafId);
+      if (!s || s.shellExited) return;
+      if (s.pty) void s.pty.write(data);
+      else s.pendingInput += data;
+    },
     [leafId],
   );
 
