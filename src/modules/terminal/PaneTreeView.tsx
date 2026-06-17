@@ -74,7 +74,7 @@ export function PaneTreeView({
     >
       {node.children.map((child, i) => (
         <Fragment key={child.id}>
-          {i > 0 && <ResizableHandle />}
+          {i > 0 && <ResizableHandle className="bg-green-400" />}
           <ResizablePanel id={`pane-${child.id}`} minSize="10%">
             <PaneTreeView
               node={child}
