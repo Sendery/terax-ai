@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import { fmtShortcut, MOD_KEY, SHIFT_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
 import {
@@ -28,7 +28,13 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
 
@@ -37,6 +43,7 @@ type Props = {
   activeId: number;
   onSelect: (id: number) => void;
   onNew: () => void;
+  onNewBlock: () => void;
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
@@ -46,8 +53,6 @@ type Props = {
   onPin: (id: number) => void;
   /** Set a tab's custom label; empty string resets to default. */
   onRename: (id: number, title: string) => void;
-  /** Move a dragged tab to a new position (insertion gap index 0..tabs.length). */
-  onReorder: (fromId: number, toGapIndex: number) => void;
   compact?: boolean;
 };
 
@@ -56,6 +61,7 @@ export function TabBar({
   activeId,
   onSelect,
   onNew,
+  onNewBlock,
   onNewPrivate,
   onNewPreview,
   onNewEditor,
@@ -63,45 +69,61 @@ export function TabBar({
   onClose,
   onPin,
   onRename,
-  onReorder,
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  // id of the tab being dragged, and the insertion gap (0..tabs.length) the
-  // cursor currently points at. Both null while no drag is in progress.
-  const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [dropGap, setDropGap] = useState<number | null>(null);
-  // Pointer-event drag state kept in a ref so pointermove doesn't re-render.
-  // WKWebView (Tauri/macOS) does not reliably fire the HTML5 drag API, so tab
-  // reordering is implemented with pointer events + pointer capture instead.
-  const drag = useRef<{
-    pointerId: number;
-    startX: number;
-    fromId: number;
-    active: boolean;
-  } | null>(null);
 
-  // Map a cursor X to an insertion gap (0..n) by measuring the rendered tabs.
-  const gapAtX = (clientX: number) => {
-    const els = Array.from(
-      scrollRef.current?.querySelectorAll<HTMLElement>("[data-tab-id]") ?? [],
+  // Play the enter animation only for tabs opened after the first paint, never
+  // the restored set and never on switch/reorder (triggers are keyed, so they
+  // don't remount then). The ref is seeded with the initial ids on first render.
+  const seenRef = useRef<Set<number> | null>(null);
+  const firstRender = seenRef.current === null;
+  let seen = seenRef.current;
+  if (seen === null) {
+    seen = new Set(tabs.map((t) => t.id));
+    seenRef.current = seen;
+  }
+  useEffect(() => {
+    seenRef.current = new Set(tabs.map((t) => t.id));
+  }, [tabs]);
+
+  // Single shared pill slides to the active tab instead of each tab toggling
+  // its own background. Measured relative to the list (its offsetParent) so it
+  // scrolls with the strip for free; transform/width only, no layout on siblings.
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(
+    null,
+  );
+  const [pillReady, setPillReady] = useState(false);
+
+  const measurePill = useCallback(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(
+      '[data-tab-active="true"]',
     );
-    for (let i = 0; i < els.length; i++) {
-      const r = els[i].getBoundingClientRect();
-      if (clientX < r.left + r.width / 2) return i;
-    }
-    return els.length;
-  };
+    setPill(el ? { left: el.offsetLeft, width: el.offsetWidth } : null);
+  }, []);
 
-  const endDrag = (currentTarget: HTMLElement) => {
-    const st = drag.current;
-    if (st) currentTarget.releasePointerCapture?.(st.pointerId);
-    drag.current = null;
-    setDraggingId(null);
-    setDropGap(null);
-    document.body.style.userSelect = "";
-  };
+  useLayoutEffect(() => {
+    measurePill();
+  }, [measurePill, activeId, tabs]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const ro = new ResizeObserver(measurePill);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [measurePill]);
+
+  // Hold the transition off until the pill is first placed, so it never slides
+  // in from the origin on mount.
+  useEffect(() => {
+    if (pill && !pillReady) {
+      const id = requestAnimationFrame(() => setPillReady(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [pill, pillReady]);
 
   // Horizontal wheel scroll without holding shift.
   useEffect(() => {
@@ -123,7 +145,7 @@ export function TabBar({
     if (!el) return;
     const active = el.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
     active?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeId, tabs.length]);
+  }, [activeId]);
 
   return (
     <div
@@ -136,48 +158,55 @@ export function TabBar({
           value={String(activeId)}
           onValueChange={(v) => onSelect(Number(v))}
         >
-          <TabsList className="h-7 w-max gap-0.5 bg-transparent p-0">
-            {tabs.map((t, i) => {
+          <TabsList
+            ref={listRef}
+            className="relative h-7 w-max gap-0.5 bg-transparent p-0"
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-0 top-1/2 h-7 rounded-md bg-foreground/[0.07] shadow-sm ring-1 ring-inset ring-foreground/[0.05]"
+              style={
+                pill
+                  ? {
+                      width: pill.width,
+                      transform: `translate(${pill.left}px, -50%)`,
+                      transitionProperty: pillReady
+                        ? "transform, width"
+                        : "none",
+                      transitionDuration: "var(--dur-base)",
+                      transitionTimingFunction: "var(--ease-premium)",
+                    }
+                  : { opacity: 0 }
+              }
+            />
+            {tabs.map((t) => {
               const isPreview = t.kind === "editor" && (t as EditorTab).preview;
               const isActive = t.id === activeId;
-
-              const srcIndex = tabs.findIndex((x) => x.id === draggingId);
-              // Hide the marker for gaps that would leave the order unchanged
-              // (either side of the tab being dragged).
-              const showGap = (gap: number) =>
-                draggingId !== null &&
-                dropGap === gap &&
-                gap !== srcIndex &&
-                gap !== srcIndex + 1;
+              const isNew = !firstRender && !seen.has(t.id);
 
               // While renaming, render a non-button cell so the <input> is not
               // nested inside the trigger <button> (invalid HTML, and WebKit
               // blocks focus/selection on inputs inside buttons).
               if (editingId === t.id) {
                 return (
-                  <Fragment key={t.id}>
-                    {showGap(i) && <DropIndicator />}
-                    <div
-                      data-tab-id={t.id}
-                      className={cn(
-                        "flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent text-xs text-foreground",
-                        compact ? "px-1.5" : "px-2",
-                      )}
-                    >
-                      <TabIcon tab={t} />
-                      <TabRenameInput
-                        initial={labelFor(t)}
-                        onCommit={(value) => {
-                          onRename(t.id, value);
-                          setEditingId(null);
-                        }}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    </div>
-                    {i === tabs.length - 1 && showGap(tabs.length) && (
-                      <DropIndicator />
+                  <div
+                    key={t.id}
+                    data-tab-id={t.id}
+                    className={cn(
+                      "flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent text-xs text-foreground",
+                      compact ? "px-1.5" : "px-2",
                     )}
-                  </Fragment>
+                  >
+                    <TabIcon tab={t} />
+                    <TabRenameInput
+                      initial={labelFor(t)}
+                      onCommit={(value) => {
+                        onRename(t.id, value);
+                        setEditingId(null);
+                      }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  </div>
                 );
               }
 
@@ -185,42 +214,7 @@ export function TabBar({
                 <TabsTrigger
                   value={String(t.id)}
                   data-tab-id={t.id}
-                  onPointerDown={(e) => {
-                    // Left button only; ignore grabs that start on the close
-                    // control so it can still receive the click.
-                    if (e.button !== 0) return;
-                    if ((e.target as HTMLElement).closest("[data-no-drag]"))
-                      return;
-                    drag.current = {
-                      pointerId: e.pointerId,
-                      startX: e.clientX,
-                      fromId: t.id,
-                      active: false,
-                    };
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                  }}
-                  onPointerMove={(e) => {
-                    const st = drag.current;
-                    if (!st || st.pointerId !== e.pointerId) return;
-                    if (!st.active) {
-                      // Don't start a drag until the pointer clears a small
-                      // threshold, so a plain click still selects the tab.
-                      if (Math.abs(e.clientX - st.startX) < 4) return;
-                      st.active = true;
-                      setDraggingId(st.fromId);
-                      document.body.style.userSelect = "none";
-                    }
-                    e.preventDefault();
-                    setDropGap(gapAtX(e.clientX));
-                  }}
-                  onPointerUp={(e) => {
-                    const st = drag.current;
-                    if (st?.active && dropGap !== null) {
-                      onReorder(st.fromId, dropGap);
-                    }
-                    endDrag(e.currentTarget);
-                  }}
-                  onPointerCancel={(e) => endDrag(e.currentTarget)}
+                  data-tab-active={isActive ? "true" : undefined}
                   onDoubleClick={() => isPreview && onPin(t.id)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && tabs.length > 1) {
@@ -233,11 +227,11 @@ export function TabBar({
                     if (e.button === 1) e.preventDefault();
                   }}
                   className={cn(
-                    "group h-7 shrink-0 gap-1.5 rounded-md text-xs transition-colors hover:text-foreground/80 justify-between",
+                    "group relative z-[1] h-7 shrink-0 justify-between gap-1.5 rounded-md bg-transparent text-xs transition-colors data-active:bg-transparent dark:data-active:bg-transparent",
+                    isNew && "terax-tab-in",
                     isActive
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground",
-                    draggingId === t.id && "opacity-50",
+                      ? "text-foreground dark:text-foreground"
+                      : "text-muted-foreground hover:text-foreground/80 dark:text-muted-foreground",
                     compact
                       ? "px-1.5!"
                       : tabs.length === 1
@@ -317,15 +311,7 @@ export function TabBar({
                 </ContextMenu>
               );
 
-              return (
-                <Fragment key={t.id}>
-                  {showGap(i) && <DropIndicator />}
-                  {tabNode}
-                  {i === tabs.length - 1 && showGap(tabs.length) && (
-                    <DropIndicator />
-                  )}
-                </Fragment>
-              );
+              return tabNode;
             })}
           </TabsList>
         </Tabs>
@@ -340,7 +326,11 @@ export function TabBar({
               <HugeiconsIcon icon={PlusSignIcon} size={14} strokeWidth={2} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-44">
+          <DropdownMenuContent
+            align="start"
+            className="min-w-44"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
             <DropdownMenuItem onSelect={() => onNew()}>
               <HugeiconsIcon
                 icon={ComputerTerminal02Icon}
@@ -350,6 +340,17 @@ export function TabBar({
               <span className="flex-1">Terminal</span>
               <span className="text-xs text-muted-foreground">
                 {fmtShortcut(MOD_KEY, "T")}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewBlock()}>
+              <HugeiconsIcon
+                icon={ComputerTerminal02Icon}
+                size={14}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">Blocks</span>
+              <span className="text-xs text-muted-foreground">
+                {fmtShortcut(MOD_KEY, SHIFT_KEY, "T")}
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewPrivate()}>
@@ -382,7 +383,11 @@ export function TabBar({
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewGitGraph()}>
-              <HugeiconsIcon icon={GitBranchIcon} size={14} strokeWidth={1.75} />
+              <HugeiconsIcon
+                icon={GitBranchIcon}
+                size={14}
+                strokeWidth={1.75}
+              />
               <span className="flex-1">Git Graph</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -392,17 +397,7 @@ export function TabBar({
   );
 }
 
-/** Vertical line marking where a dragged tab will be inserted. */
-function DropIndicator() {
-  return (
-    <span
-      aria-hidden
-      className="my-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-primary"
-    />
-  );
-}
-
-function TabIcon({ tab }: { tab: Tab }) {
+export function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === "editor" || tab.kind === "markdown") {
     const url = fileIconUrl(tab.title);
     return url ? <img src={url} alt="" className="size-3.5 shrink-0" /> : null;

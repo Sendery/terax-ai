@@ -6,6 +6,7 @@ function terminalTab(over: Partial<TerminalTab> = {}): TerminalTab {
   return {
     id: 1,
     kind: "terminal",
+    spaceId: "default",
     title: "shell",
     paneTree: { kind: "leaf", id: 2 },
     activeLeafId: 2,
@@ -17,6 +18,7 @@ function editorTab(over: Partial<EditorTab> = {}): EditorTab {
   return {
     id: 3,
     kind: "editor",
+    spaceId: "default",
     title: "main.ts",
     path: "/repo/src/main.ts",
     dirty: false,
