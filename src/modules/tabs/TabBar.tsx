@@ -44,6 +44,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -70,6 +71,8 @@ type Props = {
   onRename: (id: number, title: string) => void;
   /** Set or reset a tab's palette color. null clears the color. */
   onSetColor: (id: number, color: TabColor | null) => void;
+  /** Move a dragged tab to a new position (insertion gap index 0..tabs.length). */
+  onReorder: (fromId: number, toGapIndex: number) => void;
   compact?: boolean;
 };
 
@@ -87,11 +90,20 @@ export function TabBar({
   onPin,
   onRename,
   onSetColor,
+  onReorder,
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dropGap, setDropGap] = useState<number | null>(null);
+  const drag = useRef<{
+    pointerId: number;
+    startX: number;
+    fromId: number;
+    active: boolean;
+  } | null>(null);
 
   // Play the enter animation only for tabs opened after the first paint, never
   // the restored set and never on switch/reorder (triggers are keyed, so they
@@ -142,6 +154,26 @@ export function TabBar({
       return () => cancelAnimationFrame(id);
     }
   }, [pill, pillReady]);
+
+  const gapAtX = (clientX: number) => {
+    const els = Array.from(
+      scrollRef.current?.querySelectorAll<HTMLElement>("[data-tab-id]") ?? [],
+    );
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return i;
+    }
+    return els.length;
+  };
+
+  const endDrag = (currentTarget: HTMLElement) => {
+    const st = drag.current;
+    if (st) currentTarget.releasePointerCapture?.(st.pointerId);
+    drag.current = null;
+    setDraggingId(null);
+    setDropGap(null);
+    document.body.style.userSelect = "";
+  };
 
   // Horizontal wheel scroll without holding shift.
   useEffect(() => {
@@ -198,34 +230,46 @@ export function TabBar({
                   : { opacity: 0 }
               }
             />
-            {tabs.map((t) => {
+            {tabs.map((t, i) => {
               const isPreview = t.kind === "editor" && (t as EditorTab).preview;
               const isActive = t.id === activeId;
               const isNew = !firstRender && !seen.has(t.id);
+
+              const srcIndex = tabs.findIndex((x) => x.id === draggingId);
+              const showGap = (gap: number) =>
+                draggingId !== null &&
+                dropGap === gap &&
+                gap !== srcIndex &&
+                gap !== srcIndex + 1;
 
               // While renaming, render a non-button cell so the <input> is not
               // nested inside the trigger <button> (invalid HTML, and WebKit
               // blocks focus/selection on inputs inside buttons).
               if (editingId === t.id) {
                 return (
-                  <div
-                    key={t.id}
-                    data-tab-id={t.id}
-                    className={cn(
-                      "flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent text-xs text-foreground",
-                      compact ? "px-1.5" : "px-2",
+                  <Fragment key={t.id}>
+                    {showGap(i) && <DropIndicator />}
+                    <div
+                      data-tab-id={t.id}
+                      className={cn(
+                        "flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent text-xs text-foreground",
+                        compact ? "px-1.5" : "px-2",
+                      )}
+                    >
+                      <TabIcon tab={t} />
+                      <TabRenameInput
+                        initial={labelFor(t)}
+                        onCommit={(value) => {
+                          onRename(t.id, value);
+                          setEditingId(null);
+                        }}
+                        onCancel={() => setEditingId(null)}
+                      />
+                    </div>
+                    {i === tabs.length - 1 && showGap(tabs.length) && (
+                      <DropIndicator />
                     )}
-                  >
-                    <TabIcon tab={t} />
-                    <TabRenameInput
-                      initial={labelFor(t)}
-                      onCommit={(value) => {
-                        onRename(t.id, value);
-                        setEditingId(null);
-                      }}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  </div>
+                  </Fragment>
                 );
               }
 
@@ -235,7 +279,6 @@ export function TabBar({
 
               const trigger = (
                 <TabsTrigger
-                  key={t.id}
                   value={String(t.id)}
                   data-tab-id={t.id}
                   data-tab-active={isActive ? "true" : undefined}
@@ -253,6 +296,38 @@ export function TabBar({
                     t.color,
                     t.kind === "editor" && t.dirty,
                   )}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    if ((e.target as HTMLElement).closest("[data-no-drag]"))
+                      return;
+                    drag.current = {
+                      pointerId: e.pointerId,
+                      startX: e.clientX,
+                      fromId: t.id,
+                      active: false,
+                    };
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    const st = drag.current;
+                    if (!st || st.pointerId !== e.pointerId) return;
+                    if (!st.active) {
+                      if (Math.abs(e.clientX - st.startX) < 4) return;
+                      st.active = true;
+                      setDraggingId(st.fromId);
+                      document.body.style.userSelect = "none";
+                    }
+                    e.preventDefault();
+                    setDropGap(gapAtX(e.clientX));
+                  }}
+                  onPointerUp={(e) => {
+                    const st = drag.current;
+                    if (st?.active && dropGap !== null) {
+                      onReorder(st.fromId, dropGap);
+                    }
+                    endDrag(e.currentTarget);
+                  }}
+                  onPointerCancel={(e) => endDrag(e.currentTarget)}
                   onDoubleClick={() => isPreview && onPin(t.id)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && tabs.length > 1) {
@@ -281,6 +356,7 @@ export function TabBar({
                     // the identity, matching the reference design.
                     colorStyle && !isActive &&
                       "text-muted-foreground hover:text-foreground/80",
+                    draggingId === t.id && "opacity-50",
                     compact
                       ? "px-1.5!"
                       : tabs.length === 1
@@ -329,7 +405,7 @@ export function TabBar({
               );
 
               const tabNode = (
-                <ContextMenu key={t.id}>
+                <ContextMenu>
                   <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
                   <ContextMenuContent
                     className="min-w-36"
@@ -408,7 +484,15 @@ export function TabBar({
                 </ContextMenu>
               );
 
-              return tabNode;
+              return (
+                <Fragment key={t.id}>
+                  {showGap(i) && <DropIndicator />}
+                  {tabNode}
+                  {i === tabs.length - 1 && showGap(tabs.length) && (
+                    <DropIndicator />
+                  )}
+                </Fragment>
+              );
             })}
           </TabsList>
         </Tabs>
@@ -491,6 +575,15 @@ export function TabBar({
         </DropdownMenu>
       </div>
     </div>
+  );
+}
+
+function DropIndicator() {
+  return (
+    <span
+      aria-hidden
+      className="my-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-primary"
+    />
   );
 }
 

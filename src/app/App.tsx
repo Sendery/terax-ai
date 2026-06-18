@@ -126,6 +126,7 @@ export default function App() {
     replaceTabs,
     moveTabToSpace,
     reorderTab,
+    reorderTabByGap,
     newTabInSpace,
     removeTabsForSpace,
     markBooted,
@@ -1342,6 +1343,7 @@ export default function App() {
               onPin={pinTab}
               onRename={handleRenameTab}
               onSetColor={handleSetTabColor}
+              onReorder={reorderTabByGap}
               onToggleSidebar={toggleSidebar}
               onToggleNotes={handleToggleNotes}
               notesVisible={notesVisible || notesDetached}
