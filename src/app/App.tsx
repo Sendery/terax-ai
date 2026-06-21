@@ -160,6 +160,7 @@ import {
   WorkspaceInputBar,
 } from "./components/WorkspaceInputBar";
 import { WorkspaceSurface } from "./components/WorkspaceSurface";
+import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 
@@ -557,6 +558,9 @@ export default function App() {
     cancelDeleteClose,
     handlePathDeleted,
   } = useTabCloseGuards({ tabs, disposeTab });
+
+  const { pendingAppClose, confirmAppClose, cancelAppClose } =
+    useAppCloseGuard(tabsRef);
 
   useEffect(() => {
     const live = new Set<number>();
@@ -2415,6 +2419,9 @@ export default function App() {
             pendingDeleteTabs={pendingDeleteTabs}
             onCancelDeleteClose={cancelDeleteClose}
             onConfirmDeleteClose={confirmDeleteClose}
+            pendingAppClose={pendingAppClose}
+            onCancelAppClose={cancelAppClose}
+            onConfirmAppClose={confirmAppClose}
           />
         </div>
       </TooltipProvider>
