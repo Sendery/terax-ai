@@ -151,6 +151,7 @@ export type Preferences = {
   terminalWebglEnabled: boolean;
   terminalCursorBlink: boolean;
   terminalFontFamily: string;
+  terminalFontWeight: string;
   terminalLetterSpacing: number;
   terminalFontSize: number;
   terminalScrollback: number;
@@ -209,6 +210,7 @@ const KEY_EXPLORER_GIT_DECORATIONS = "explorerGitDecorations";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
 const KEY_TERMINAL_CURSOR_BLINK = "terminalCursorBlink";
 const KEY_TERMINAL_FONT_FAMILY = "terminalFontFamily";
+const KEY_TERMINAL_FONT_WEIGHT = "terminalFontWeight";
 const KEY_TERMINAL_LETTER_SPACING = "terminalLetterSpacing";
 const KEY_TERMINAL_FONT_SIZE = "terminalFontSize";
 const KEY_TERMINAL_SCROLLBACK = "terminalScrollback";
@@ -274,6 +276,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   terminalWebglEnabled: true,
   terminalCursorBlink: false,
   terminalFontFamily: "",
+  terminalFontWeight: "normal",
   terminalLetterSpacing: 0,
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollback: TERMINAL_SCROLLBACK_DEFAULT,
@@ -421,6 +424,10 @@ export async function loadPreferences(): Promise<Preferences> {
     terminalFontFamily:
       get<string>(KEY_TERMINAL_FONT_FAMILY) ??
       DEFAULT_PREFERENCES.terminalFontFamily,
+    terminalFontWeight: coerceFontWeight(
+      get<string>(KEY_TERMINAL_FONT_WEIGHT) ??
+        DEFAULT_PREFERENCES.terminalFontWeight,
+    ),
     terminalLetterSpacing:
       get<number>(KEY_TERMINAL_LETTER_SPACING) ??
       DEFAULT_PREFERENCES.terminalLetterSpacing,
@@ -633,6 +640,17 @@ export async function setTerminalFontFamily(value: string): Promise<void> {
   await writePref(KEY_TERMINAL_FONT_FAMILY, value.trim());
 }
 
+const TERMINAL_FONT_WEIGHT_VALUES = new Set(["normal", "500", "600", "bold"]);
+
+export function coerceFontWeight(value: string): string {
+  const v = value.trim();
+  return TERMINAL_FONT_WEIGHT_VALUES.has(v) ? v : "normal";
+}
+
+export async function setTerminalFontWeight(value: string): Promise<void> {
+  await writePref(KEY_TERMINAL_FONT_WEIGHT, coerceFontWeight(value));
+}
+
 export async function setTerminalLetterSpacing(value: number): Promise<void> {
   const clamped = Number.isFinite(value) ? Math.max(-10, Math.min(10, Math.round(value))) : 0;
   await writePref(KEY_TERMINAL_LETTER_SPACING, clamped);
@@ -741,6 +759,7 @@ export async function onPreferencesChange(
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_CURSOR_BLINK]: "terminalCursorBlink",
     [KEY_TERMINAL_FONT_FAMILY]: "terminalFontFamily",
+    [KEY_TERMINAL_FONT_WEIGHT]: "terminalFontWeight",
     [KEY_TERMINAL_LETTER_SPACING]: "terminalLetterSpacing",
     [KEY_TERMINAL_FONT_SIZE]: "terminalFontSize",
     [KEY_TERMINAL_SCROLLBACK]: "terminalScrollback",
