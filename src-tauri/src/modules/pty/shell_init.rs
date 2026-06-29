@@ -16,7 +16,6 @@ const ZLOGIN_SCRIPT: &str = include_str!("scripts/zlogin.zsh");
 const ZSHRC_SCRIPT: &str = include_str!("scripts/zshrc.zsh");
 #[cfg(windows)]
 const FISH_INIT_SCRIPT: &str = include_str!("scripts/init.fish");
-#[cfg(unix)]
 const FISH_REINSTALL_PROMPT: &str =
     "functions -q __terax_install_prompt; and __terax_install_prompt";
 
@@ -204,7 +203,11 @@ mod unix {
         let (shell, shell_path) = Shell::detect();
         let mut cmd = CommandBuilder::new(&shell_path);
         super::apply_common(&mut cmd, cwd, blocks);
+        apply_shell_init(&mut cmd, &shell, &shell_path);
+        Ok(cmd)
+    }
 
+    fn apply_shell_init(cmd: &mut CommandBuilder, shell: &Shell, shell_path: &str) {
         match shell {
             Shell::Zsh => {
                 match prepare_zdotdir() {
@@ -259,7 +262,6 @@ mod unix {
                 );
             }
         }
-        Ok(cmd)
     }
 
     fn integration_root() -> Result<PathBuf, String> {
@@ -311,6 +313,31 @@ mod unix {
             format!("rename {} -> {}: {e}", tmp.display(), path.display())
         })
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn builds_unix_fish_launch_with_post_config_rewrap() {
+            let mut cmd = CommandBuilder::new("/usr/bin/fish");
+            apply_shell_init(&mut cmd, &Shell::Fish, "/usr/bin/fish");
+            let argv: Vec<_> = cmd
+                .get_argv()
+                .iter()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                argv,
+                vec![
+                    "/usr/bin/fish".to_string(),
+                    "-i".to_string(),
+                    "-C".to_string(),
+                    super::super::FISH_REINSTALL_PROMPT.to_string(),
+                ]
+            );
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -349,7 +376,9 @@ mod windows {
             zdotdir: String,
             user_zdotdir: Option<String>,
         },
-        Bash { rcfile: String },
+        Bash {
+            rcfile: String,
+        },
         Fish,
         None,
     }
@@ -510,6 +539,8 @@ mod windows {
                 args.push("fish_features=no-mark-prompt".to_string());
                 args.push(shell_path.to_string());
                 args.push("-i".to_string());
+                args.push("-C".to_string());
+                args.push(super::FISH_REINSTALL_PROMPT.to_string());
             }
             (ShellKind::Zsh, WslShellIntegration::None) => {
                 args.push(shell_path.to_string());
@@ -756,6 +787,8 @@ mod windows {
                     "fish_features=no-mark-prompt".to_string(),
                     "/usr/bin/fish".to_string(),
                     "-i".to_string(),
+                    "-C".to_string(),
+                    super::super::FISH_REINSTALL_PROMPT.to_string(),
                 ]
             );
         }
