@@ -62,6 +62,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { LspServersGroup } from "../components/LspServersGroup";
 import { SectionHeader } from "../components/SectionHeader";
 import { SettingRow } from "../components/SettingRow";
 
@@ -274,6 +275,8 @@ export function GeneralSection() {
           />
         )}
       </div>
+
+      <LspServersGroup />
 
       <div className="flex flex-col gap-2">
         <Label>Explorer</Label>
