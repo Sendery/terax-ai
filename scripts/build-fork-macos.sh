@@ -8,6 +8,9 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TAURI_CONF="$PROJECT_DIR/src-tauri/tauri.conf.json"
 CARGO_TOML="$PROJECT_DIR/src-tauri/Cargo.toml"
+CARGO_LOCK="$PROJECT_DIR/src-tauri/Cargo.lock"
+PACKAGE_JSON="$PROJECT_DIR/package.json"
+LOCAL_BIN="$PROJECT_DIR/node_modules/.bin"
 
 usage() {
   cat <<EOF
@@ -52,37 +55,68 @@ if [[ "$(uname)" != "Darwin" ]]; then
   exit 1
 fi
 
-for cmd in pnpm node cargo; do
+for cmd in node cargo; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: $cmd is required but not found in PATH"
     exit 1
   fi
 done
 
+if [[ ! -x "$LOCAL_BIN/tauri" ]] && ! command -v pnpm &>/dev/null; then
+  echo "Error: node_modules/.bin/tauri was not found and pnpm is not available"
+  echo "Run pnpm install first, then retry."
+  exit 1
+fi
+
+USE_LOCAL_BUILD=false
+if [[ -x "$LOCAL_BIN/tauri" && -x "$LOCAL_BIN/tsc" && -x "$LOCAL_BIN/vite" ]]; then
+  USE_LOCAL_BUILD=true
+elif ! command -v pnpm &>/dev/null; then
+  echo "Error: local build tools were not found and pnpm is not available"
+  echo "Run pnpm install first, then retry."
+  exit 1
+fi
+
 cd "$PROJECT_DIR"
 
-tauri_conf_backup=$(cat "$TAURI_CONF")
-cargo_toml_backup=$(cat "$CARGO_TOML")
+backup_dir=$(mktemp -d "${TMPDIR:-/tmp}/terax-fork-build.XXXXXX")
+cp "$TAURI_CONF" "$backup_dir/tauri.conf.json"
+cp "$CARGO_TOML" "$backup_dir/Cargo.toml"
+cp "$CARGO_LOCK" "$backup_dir/Cargo.lock"
+cp "$PACKAGE_JSON" "$backup_dir/package.json"
 
 restore() {
   if [[ "$NO_RESTORE" == "false" ]]; then
-    echo "$tauri_conf_backup" > "$TAURI_CONF"
-    echo "$cargo_toml_backup" > "$CARGO_TOML"
+    cp "$backup_dir/tauri.conf.json" "$TAURI_CONF"
+    cp "$backup_dir/Cargo.toml" "$CARGO_TOML"
+    cp "$backup_dir/Cargo.lock" "$CARGO_LOCK"
+    cp "$backup_dir/package.json" "$PACKAGE_JSON"
     echo "Restored original config files"
   fi
+  rm -rf "$backup_dir"
 }
 trap restore EXIT
 
 echo "Patching app identity: $FORK_NAME ($FORK_IDENTIFIER)"
 
+TAURI_CONF="$TAURI_CONF" \
+FORK_NAME="$FORK_NAME" \
+FORK_IDENTIFIER="$FORK_IDENTIFIER" \
+USE_LOCAL_BUILD="$USE_LOCAL_BUILD" \
 node -e "
 const fs = require('fs');
-const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
-conf.productName = '$FORK_NAME';
-conf.identifier = '$FORK_IDENTIFIER';
-conf.app.windows[0].title = '$FORK_NAME';
-delete conf.plugins.updater;
-fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
+const confPath = process.env.TAURI_CONF;
+const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
+conf.productName = process.env.FORK_NAME;
+conf.identifier = process.env.FORK_IDENTIFIER;
+conf.app.windows[0].title = process.env.FORK_NAME;
+if (process.env.USE_LOCAL_BUILD === 'true') {
+  conf.build.beforeBuildCommand = 'node_modules/.bin/tsc && node_modules/.bin/vite build';
+}
+if (conf.bundle) {
+  conf.bundle.createUpdaterArtifacts = false;
+}
+fs.writeFileSync(confPath, JSON.stringify(conf, null, 2) + '\n');
 "
 
 sed -i '' "s/^name = \"terax\"/name = \"terax-arb\"/" "$CARGO_TOML"
@@ -98,7 +132,11 @@ if [[ "$DEBUG" == "true" ]]; then
   BUILD_ARGS+=(--debug)
 fi
 
-pnpm tauri build --bundles app "${BUILD_ARGS[@]}"
+if [[ -x "$LOCAL_BIN/tauri" ]]; then
+  "$LOCAL_BIN/tauri" build --bundles app "${BUILD_ARGS[@]}"
+else
+  pnpm tauri build --bundles app "${BUILD_ARGS[@]}"
+fi
 
 if [[ "$DEBUG" == "true" ]]; then
   BUNDLE_DIR="$PROJECT_DIR/src-tauri/target/debug/bundle/macos"
