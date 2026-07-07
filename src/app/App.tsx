@@ -462,6 +462,7 @@ export default function App() {
   const miniOpen = useChatStore((s) => s.mini.open);
   const miniPresence = usePresence(miniOpen, 200);
   const openMini = useChatStore((s) => s.openMini);
+  const toggleMini = useChatStore((s) => s.toggleMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
   const closePanel = useChatStore((s) => s.closePanel);
@@ -1082,6 +1083,13 @@ export default function App() {
       "blocks.next": () => navigateFocusedBlocks(1),
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
+      "ai.toggleMini": () => {
+        if (!hasComposer) {
+          void openSettingsWindow("models");
+          return;
+        }
+        toggleMini();
+      },
       "ai.askSelection": askFromSelection,
       "notes.addSelection": addSelectionToNote,
       "terminal.clearActive": clearActiveTerminal,
@@ -1110,7 +1118,9 @@ export default function App() {
       focusNextPaneInTab,
       clearActiveTerminal,
       toggleSourceControl,
+      hasComposer,
       togglePanelAndFocus,
+      toggleMini,
       askFromSelection,
       addSelectionToNote,
       toggleSidebar,
