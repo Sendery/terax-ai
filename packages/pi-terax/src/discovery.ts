@@ -174,7 +174,7 @@ async function windowsDiscoveryPathFromWsl(
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "[Environment]::GetFolderPath('LocalApplicationData')",
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Environment]::GetFolderPath('LocalApplicationData')",
       ],
       commandOptions,
     )

@@ -50,7 +50,7 @@ pub struct ClientRequest {
     pub payload: Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct UiCommandRequest {
     request_id: String,
@@ -216,7 +216,7 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), String> {
     };
     let status = unsafe {
         BCryptGenRandom(
-            0,
+            std::ptr::null_mut(),
             bytes.as_mut_ptr(),
             bytes.len() as u32,
             BCRYPT_USE_SYSTEM_PREFERRED_RNG,

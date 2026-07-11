@@ -80,7 +80,7 @@ describe("Windows Terax visual backend", () => {
     expect(run.mock.calls[0]?.[2]?.env).toMatchObject({
       TERAX_VISUAL_PID: "123",
       TERAX_VISUAL_PROCESS: "terax",
-      TERAX_VISUAL_TITLE: "Terax",
+      TERAX_VISUAL_TITLE: "",
     });
     expect(run.mock.calls[1]?.[2]?.env).toMatchObject({
       TERAX_VISUAL_HANDLE: "0x102A",
@@ -90,6 +90,27 @@ describe("Windows Terax visual backend", () => {
       TERAX_VISUAL_OUTPUT: "WIN:/tmp/evidence.png",
     });
     expect(pathSignals).toEqual([controller.signal]);
+  });
+
+  it("locks subsequent main captures to the unique authenticated runtime title", async () => {
+    const runtimeDescriptor =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture","x":10,"y":20,"width":800,"height":600}';
+    const run = vi
+      .fn<VisualCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: runtimeDescriptor, stderr: "" })
+      .mockResolvedValueOnce({ stdout: runtimeDescriptor, stderr: "" });
+    const backend = createWindowsVisualBackend({
+      powershellPath: "powershell.exe",
+      ffmpegPath: "ffmpeg.exe",
+      toWindowsPath: async (path: string) => path,
+      run,
+    });
+
+    await expect(backend.capture(selector, "/tmp/main.png")).resolves.toMatchObject({
+      title: "e2e-fixture",
+    });
+    expect(run.mock.calls[0]?.[2]?.env?.TERAX_VISUAL_TITLE).toBe("");
+    expect(run.mock.calls[1]?.[2]?.env?.TERAX_VISUAL_TITLE).toBe("e2e-fixture");
   });
 
   it("records with frame-by-frame identity, fixed dimensions, and byte limits", async () => {

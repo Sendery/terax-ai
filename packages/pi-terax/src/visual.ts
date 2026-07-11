@@ -30,7 +30,7 @@ export type VisualAction = "screenshot" | "video" | "compare";
 export type WindowSelector = {
   pid: number;
   processName: "terax";
-  title: "Terax" | "Settings";
+  title: string;
 };
 
 export type WindowDescriptor = {

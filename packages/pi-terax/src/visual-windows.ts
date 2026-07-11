@@ -82,9 +82,14 @@ function Get-ExactWindowIdentity([IntPtr]$handle) {
   $builder = New-Object System.Text.StringBuilder ($length + 1)
   [void][TeraxVisualWindowApi]::GetWindowText($handle, $builder, $builder.Capacity)
   try { $process = [System.Diagnostics.Process]::GetProcessById($actualPid) } catch { throw "Terax process no longer exists" }
+  $expectedTitle = $env:TERAX_VISUAL_TITLE
+  if ($env:TERAX_VISUAL_DYNAMIC_MAIN_TITLE) {
+    $expectedTitle = $builder.ToString()
+    $env:TERAX_VISUAL_TITLE = $expectedTitle
+  }
   if ($actualPid -ne [uint32]$env:TERAX_VISUAL_PID -or
       -not [String]::Equals($process.ProcessName, $env:TERAX_VISUAL_PROCESS, [StringComparison]::OrdinalIgnoreCase) -or
-      -not [String]::Equals($builder.ToString(), $env:TERAX_VISUAL_TITLE, [StringComparison]::Ordinal)) {
+      -not [String]::Equals($builder.ToString(), $expectedTitle, [StringComparison]::Ordinal)) {
     throw "Window identity changed during capture"
   }
   return $process.ProcessName
@@ -160,7 +165,7 @@ $callback = [TeraxVisualWindowApi+EnumWindowsProc]{
   $builder = New-Object System.Text.StringBuilder ($length + 1)
   [void][TeraxVisualWindowApi]::GetWindowText($hWnd, $builder, $builder.Capacity)
   $title = $builder.ToString()
-  if (-not [String]::Equals($title, $env:TERAX_VISUAL_TITLE, [StringComparison]::Ordinal)) { return $true }
+  if ($env:TERAX_VISUAL_TITLE -and -not [String]::Equals($title, $env:TERAX_VISUAL_TITLE, [StringComparison]::Ordinal)) { return $true }
   try { $process = [System.Diagnostics.Process]::GetProcessById($actualPid) } catch { return $true }
   if (-not [String]::Equals($process.ProcessName, $env:TERAX_VISUAL_PROCESS, [StringComparison]::OrdinalIgnoreCase)) { return $true }
   $frameRect = New-Object TeraxVisualWindowApi+RECT
@@ -251,12 +256,13 @@ function assertSameWindow(
   before: WindowDescriptor,
   after: WindowDescriptor,
   selector: WindowSelector,
+  allowDynamicTitle = false,
 ): void {
   if (
     after.handle.toLowerCase() !== before.handle.toLowerCase() ||
     after.pid !== selector.pid ||
     after.processName.toLowerCase() !== selector.processName ||
-    after.title !== selector.title ||
+    (!allowDynamicTitle && after.title !== selector.title) ||
     after.x !== before.x ||
     after.y !== before.y ||
     after.width !== before.width ||
@@ -274,6 +280,12 @@ function selectorEnv(selector: WindowSelector): NodeJS.ProcessEnv {
   };
 }
 
+function discoverySelectorEnv(selector: WindowSelector): NodeJS.ProcessEnv {
+  return selector.title === "Terax"
+    ? { ...selectorEnv(selector), TERAX_VISUAL_TITLE: "" }
+    : selectorEnv(selector);
+}
+
 async function discoverWindow(
   runtime: WindowsVisualRuntime,
   selector: WindowSelector,
@@ -282,13 +294,13 @@ async function discoverWindow(
   const result = await runtime.run(
     runtime.powershellPath,
     powerShellArgs(DISCOVER_WINDOW_SCRIPT),
-    commandOptions(runtime, signal, selectorEnv(selector)),
+    commandOptions(runtime, signal, discoverySelectorEnv(selector)),
   );
   const window = parseWindowDescriptor(result.stdout);
   if (
     window.pid !== selector.pid ||
     window.processName.toLowerCase() !== selector.processName ||
-    window.title !== selector.title
+    (selector.title !== "Terax" && window.title !== selector.title)
   ) {
     throw new Error("Discovered window did not match authenticated identity");
   }
@@ -298,19 +310,22 @@ async function discoverWindow(
 export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): VisualBackend {
   return {
     async capture(selector, outputPath, signal) {
+      const dynamicMainTitle = selector.title === "Terax";
       const window = await discoverWindow(runtime, selector, signal);
+      const authenticatedSelector = { ...selector, title: window.title };
       const nativeOutput = await runtime.toWindowsPath(outputPath, signal);
       const captured = await runtime.run(
         runtime.powershellPath,
         powerShellArgs(CAPTURE_WINDOW_SCRIPT),
         commandOptions(runtime, signal, {
-          ...selectorEnv(selector),
+          ...selectorEnv(authenticatedSelector),
+          ...(dynamicMainTitle ? { TERAX_VISUAL_DYNAMIC_MAIN_TITLE: "1" } : {}),
           TERAX_VISUAL_HANDLE: window.handle,
           TERAX_VISUAL_OUTPUT: nativeOutput,
         }),
       );
       const finalWindow = parseWindowDescriptor(captured.stdout);
-      assertSameWindow(window, finalWindow, selector);
+      assertSameWindow(window, finalWindow, authenticatedSelector);
       return finalWindow;
     },
     async record(selector, outputPath, durationSeconds, fps, signal) {
@@ -325,6 +340,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
       const frameCount = Math.ceil(durationSeconds * fps);
       if (frameCount > MAX_VIDEO_FRAMES) throw new Error("Video exceeds frame limit");
       const window = await discoverWindow(runtime, selector, signal);
+      const authenticatedSelector = { ...selector, title: window.title };
       const nativeOutput = await runtime.toWindowsPath(outputPath, signal);
       const stem = basename(outputPath).replace(/\.[^.]+$/, "");
       const frameDir = await mkdtemp(join(dirname(outputPath), `.${stem}.frames-`));
@@ -335,7 +351,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
           powerShellArgs(RECORD_WINDOW_SCRIPT),
           {
             ...commandOptions(runtime, signal, {
-              ...selectorEnv(selector),
+              ...selectorEnv(authenticatedSelector),
               TERAX_VISUAL_HANDLE: window.handle,
               TERAX_VISUAL_FRAME_DIR: nativeFrameDir,
               TERAX_VISUAL_DURATION: String(durationSeconds),
@@ -349,7 +365,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
           },
         );
         const finalWindow = parseWindowDescriptor(recorded.stdout);
-        assertSameWindow(window, finalWindow, selector);
+        assertSameWindow(window, finalWindow, authenticatedSelector);
         await runtime.run(
           runtime.ffmpegPath,
           buildVideoArgs(`${nativeFrameDir}\\frame-%06d.png`, nativeOutput, fps),
