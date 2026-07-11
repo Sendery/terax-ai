@@ -3,7 +3,12 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -13,9 +18,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import { fmtShortcut, MOD_KEY, SHIFT_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import {
+  TAB_COLORS,
+  TAB_COLOR_CSS,
+  TAB_COLOR_LABEL,
+  isTabColor,
+  tabAccessibleLabel,
+  type TabColor,
+} from "./lib/tabColors";
 import {
   Cancel01Icon,
   Clock01Icon,
@@ -24,11 +37,18 @@ import {
   GitCompareIcon,
   Globe02Icon,
   IncognitoIcon,
+  PaintBrush01Icon,
   PencilEdit02Icon,
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
 
@@ -37,6 +57,7 @@ type Props = {
   activeId: number;
   onSelect: (id: number) => void;
   onNew: () => void;
+  onNewBlock: () => void;
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
@@ -44,8 +65,10 @@ type Props = {
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
   onPin: (id: number) => void;
-  /** Set a terminal tab's custom label; empty string resets to default. */
+  /** Set a tab's custom label; empty string resets to default. */
   onRename: (id: number, title: string) => void;
+  /** Set or reset a tab's palette color. null clears the color. */
+  onSetColor: (id: number, color: TabColor | null) => void;
   compact?: boolean;
 };
 
@@ -54,6 +77,7 @@ export function TabBar({
   activeId,
   onSelect,
   onNew,
+  onNewBlock,
   onNewPrivate,
   onNewPreview,
   onNewEditor,
@@ -61,10 +85,62 @@ export function TabBar({
   onClose,
   onPin,
   onRename,
+  onSetColor,
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  // Play the enter animation only for tabs opened after the first paint, never
+  // the restored set and never on switch/reorder (triggers are keyed, so they
+  // don't remount then). The ref is seeded with the initial ids on first render.
+  const seenRef = useRef<Set<number> | null>(null);
+  const firstRender = seenRef.current === null;
+  let seen = seenRef.current;
+  if (seen === null) {
+    seen = new Set(tabs.map((t) => t.id));
+    seenRef.current = seen;
+  }
+  useEffect(() => {
+    seenRef.current = new Set(tabs.map((t) => t.id));
+  }, [tabs]);
+
+  // Single shared pill slides to the active tab instead of each tab toggling
+  // its own background. Measured relative to the list (its offsetParent) so it
+  // scrolls with the strip for free; transform/width only, no layout on siblings.
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(
+    null,
+  );
+  const [pillReady, setPillReady] = useState(false);
+
+  const measurePill = useCallback(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(
+      '[data-tab-active="true"]',
+    );
+    setPill(el ? { left: el.offsetLeft, width: el.offsetWidth } : null);
+  }, []);
+
+  useLayoutEffect(() => {
+    measurePill();
+  }, [measurePill, activeId, tabs]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const ro = new ResizeObserver(measurePill);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [measurePill]);
+
+  // Hold the transition off until the pill is first placed, so it never slides
+  // in from the origin on mount.
+  useEffect(() => {
+    if (pill && !pillReady) {
+      const id = requestAnimationFrame(() => setPillReady(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [pill, pillReady]);
 
   // Horizontal wheel scroll without holding shift.
   useEffect(() => {
@@ -86,7 +162,7 @@ export function TabBar({
     if (!el) return;
     const active = el.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
     active?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeId, tabs.length]);
+  }, [activeId]);
 
   return (
     <div
@@ -99,14 +175,36 @@ export function TabBar({
           value={String(activeId)}
           onValueChange={(v) => onSelect(Number(v))}
         >
-          <TabsList className="h-7 w-max gap-0.5 bg-transparent p-0">
+          <TabsList
+            ref={listRef}
+            className="relative h-7 w-max gap-0.5 bg-transparent p-0"
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-0 top-1/2 h-7 rounded-md bg-foreground/[0.07] shadow-sm ring-1 ring-inset ring-foreground/[0.05]"
+              style={
+                pill
+                  ? {
+                      width: pill.width,
+                      transform: `translate(${pill.left}px, -50%)`,
+                      transitionProperty: pillReady
+                        ? "transform, width"
+                        : "none",
+                      transitionDuration: "var(--dur-base)",
+                      transitionTimingFunction: "var(--ease-premium)",
+                    }
+                  : { opacity: 0 }
+              }
+            />
             {tabs.map((t) => {
               const isPreview = t.kind === "editor" && (t as EditorTab).preview;
+              const isActive = t.id === activeId;
+              const isNew = !firstRender && !seen.has(t.id);
 
               // While renaming, render a non-button cell so the <input> is not
               // nested inside the trigger <button> (invalid HTML, and WebKit
               // blocks focus/selection on inputs inside buttons).
-              if (editingId === t.id && t.kind === "terminal") {
+              if (editingId === t.id) {
                 return (
                   <div
                     key={t.id}
@@ -134,6 +232,12 @@ export function TabBar({
                   key={t.id}
                   value={String(t.id)}
                   data-tab-id={t.id}
+                  data-tab-active={isActive ? "true" : undefined}
+                  aria-label={tabAccessibleLabel(
+                    labelFor(t),
+                    t.color,
+                    t.kind === "editor" && t.dirty,
+                  )}
                   onDoubleClick={() => isPreview && onPin(t.id)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && tabs.length > 1) {
@@ -146,7 +250,11 @@ export function TabBar({
                     if (e.button === 1) e.preventDefault();
                   }}
                   className={cn(
-                    "group h-7 shrink-0 gap-1.5 rounded-md text-xs text-muted-foreground transition-colors data-[state=active]:bg-accent data-[state=active]:text-foreground hover:text-foreground/80 justify-between",
+                    "group relative z-[1] h-7 shrink-0 justify-between gap-1.5 rounded-md bg-transparent text-xs transition-colors data-active:bg-transparent dark:data-active:bg-transparent",
+                    isNew && "terax-tab-in",
+                    isActive
+                      ? "text-foreground dark:text-foreground"
+                      : "text-muted-foreground hover:text-foreground/80 dark:text-muted-foreground",
                     compact
                       ? "px-1.5!"
                       : tabs.length === 1
@@ -154,10 +262,21 @@ export function TabBar({
                         : "ps-2! pe-1!",
                   )}
                 >
+                  {t.color && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute left-0 top-[3px] bottom-[3px] w-[2px] rounded-full"
+                      style={{
+                        backgroundColor: TAB_COLOR_CSS[t.color],
+                        opacity: isActive ? 0.85 : 0.45,
+                      }}
+                    />
+                  )}
                   <span
                     className={cn(
                       "flex items-center gap-1.5 truncate",
                       compact ? "max-w-48" : "max-w-80",
+                      t.color && "pl-2",
                     )}
                   >
                     <TabIcon tab={t} />
@@ -177,6 +296,7 @@ export function TabBar({
                     <span
                       role="button"
                       aria-label="Close tab"
+                      data-no-drag
                       onClick={(e) => {
                         e.stopPropagation();
                         onClose(t.id);
@@ -193,12 +313,13 @@ export function TabBar({
                 </TabsTrigger>
               );
 
-              if (t.kind !== "terminal") return trigger;
-
-              return (
+              const tabNode = (
                 <ContextMenu key={t.id}>
                   <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
-                  <ContextMenuContent className="min-w-36">
+                  <ContextMenuContent
+                    className="min-w-36"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
                     <ContextMenuItem onSelect={() => setEditingId(t.id)}>
                       <HugeiconsIcon
                         icon={PencilEdit02Icon}
@@ -207,6 +328,54 @@ export function TabBar({
                       />
                       <span className="flex-1">Rename</span>
                     </ContextMenuItem>
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <HugeiconsIcon
+                          icon={PaintBrush01Icon}
+                          size={14}
+                          strokeWidth={1.75}
+                        />
+                        <span className="flex-1">Color</span>
+                        {t.color && (
+                          <span
+                            className="size-2 rounded-full shrink-0"
+                            style={{ backgroundColor: TAB_COLOR_CSS[t.color] }}
+                            aria-hidden
+                          />
+                        )}
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="w-44">
+                        <ContextMenuRadioGroup
+                          value={t.color ?? ""}
+                          onValueChange={(v) =>
+                            onSetColor(t.id, isTabColor(v) ? v : null)
+                          }
+                        >
+                          {TAB_COLORS.map((color) => (
+                            <ContextMenuRadioItem key={color} value={color}>
+                              <span
+                                className="size-3.5 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor: TAB_COLOR_CSS[color],
+                                }}
+                                aria-hidden
+                              />
+                              {TAB_COLOR_LABEL[color]}
+                            </ContextMenuRadioItem>
+                          ))}
+                        </ContextMenuRadioGroup>
+                        {t.color && (
+                          <>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem
+                              onSelect={() => onSetColor(t.id, null)}
+                            >
+                              Reset color
+                            </ContextMenuItem>
+                          </>
+                        )}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
                     {tabs.length > 1 && (
                       <>
                         <ContextMenuSeparator />
@@ -223,6 +392,8 @@ export function TabBar({
                   </ContextMenuContent>
                 </ContextMenu>
               );
+
+              return tabNode;
             })}
           </TabsList>
         </Tabs>
@@ -237,7 +408,11 @@ export function TabBar({
               <HugeiconsIcon icon={PlusSignIcon} size={14} strokeWidth={2} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-44">
+          <DropdownMenuContent
+            align="start"
+            className="min-w-44"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
             <DropdownMenuItem onSelect={() => onNew()}>
               <HugeiconsIcon
                 icon={ComputerTerminal02Icon}
@@ -247,6 +422,17 @@ export function TabBar({
               <span className="flex-1">Terminal</span>
               <span className="text-xs text-muted-foreground">
                 {fmtShortcut(MOD_KEY, "T")}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewBlock()}>
+              <HugeiconsIcon
+                icon={ComputerTerminal02Icon}
+                size={14}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">Blocks</span>
+              <span className="text-xs text-muted-foreground">
+                {fmtShortcut(MOD_KEY, SHIFT_KEY, "T")}
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewPrivate()}>
@@ -279,7 +465,11 @@ export function TabBar({
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewGitGraph()}>
-              <HugeiconsIcon icon={GitBranchIcon} size={14} strokeWidth={1.75} />
+              <HugeiconsIcon
+                icon={GitBranchIcon}
+                size={14}
+                strokeWidth={1.75}
+              />
               <span className="flex-1">Git Graph</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -289,7 +479,7 @@ export function TabBar({
   );
 }
 
-function TabIcon({ tab }: { tab: Tab }) {
+export function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === "editor" || tab.kind === "markdown") {
     const url = fileIconUrl(tab.title);
     return url ? <img src={url} alt="" className="size-3.5 shrink-0" /> : null;

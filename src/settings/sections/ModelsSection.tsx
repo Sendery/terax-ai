@@ -12,17 +12,22 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_MODEL_ID,
+  CLI_PROVIDERS,
   MODELS,
   PROVIDERS,
+  STT_PROVIDER_LABELS,
+  WHISPERCPP_DEFAULT_BASE_URL,
   compatModelIdForEndpoint,
   getAutocompleteEligibleModels,
   getModel,
   getProvider,
+  isCliProvider,
   providerNeedsKey,
   type CustomEndpoint,
   type ModelId,
   type ProviderId,
   type ProviderInfo,
+  type SttProvider,
 } from "@/modules/ai/config";
 import {
   clearKey,
@@ -34,6 +39,9 @@ import {
   type CustomEndpointKeys,
 } from "@/modules/ai/lib/keyring";
 import { useChatStore } from "@/modules/ai/store/chatStore";
+import { detectCliAgents } from "@/modules/ai/cli/bridge";
+import { CLI_AGENTS } from "@/modules/ai/cli/registry";
+import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   emitKeysChanged,
@@ -54,6 +62,10 @@ import {
   setOpenaiCompatibleModelId,
   setOpenrouterModelId,
   setRecentModelIds,
+  setCliAgentPermission,
+  setGroqSttModel,
+  setSttProvider,
+  setWhispercppBaseURL,
 } from "@/modules/settings/store";
 import {
   Add01Icon,
@@ -62,6 +74,7 @@ import {
   Cancel01Icon,
   CheckmarkCircle02Icon,
   ChevronDown,
+  Mic01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
@@ -133,6 +146,17 @@ export function ModelsSection() {
   const [keys, setKeys] = useState<KeysMap | null>(null);
   const [epKeys, setEpKeys] = useState<CustomEndpointKeys>({});
   const [adding, setAdding] = useState<Set<ProviderId>>(new Set());
+  const [cliPaths, setCliPaths] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    const bins = Object.values(CLI_PROVIDERS).map((id) => CLI_AGENTS[id].bin);
+    void detectCliAgents(bins).then(setCliPaths);
+  }, []);
+
+  const cliInstalled = (id: ProviderId): boolean => {
+    const cliId = CLI_PROVIDERS[id];
+    return !!cliId && !!cliPaths[CLI_AGENTS[cliId].bin];
+  };
 
   const defaultModel = usePreferencesStore((s) => s.defaultModelId);
   const lmstudioBaseURL = usePreferencesStore((s) => s.lmstudioBaseURL);
@@ -282,6 +306,7 @@ export function ModelsSection() {
   };
 
   const isConfigured = (id: ProviderId): boolean => {
+    if (isCliProvider(id)) return cliInstalled(id);
     if (id === "openrouter")
       return !!keys?.[id] && !!openrouterModelId.trim();
     if (!isLocalProvider(id)) return !!keys?.[id];
@@ -299,13 +324,20 @@ export function ModelsSection() {
   const configuredIds = new Set(
     PROVIDERS.filter((p) => isConfigured(p.id)).map((p) => p.id),
   );
-  const visibleIds = new Set<ProviderId>(configuredIds);
+  // CLI agents have their own block (detection-based, no key/URL config), so
+  // keep them out of the cloud/local add-remove flow.
+  const visibleIds = new Set<ProviderId>(
+    [...configuredIds].filter((id) => !isCliProvider(id)),
+  );
   for (const id of adding) visibleIds.add(id);
   const visibleProviders = PROVIDERS.filter(
     (p) => p.id !== "openai-compatible" && visibleIds.has(p.id),
   );
   const addableProviders = PROVIDERS.filter(
-    (p) => p.id !== "openai-compatible" && !visibleIds.has(p.id),
+    (p) =>
+      p.id !== "openai-compatible" &&
+      !visibleIds.has(p.id) &&
+      !isCliProvider(p.id),
   );
 
   const removeProvider = (id: ProviderId) => {
@@ -345,6 +377,8 @@ export function ModelsSection() {
         configuredIds={configuredIds}
         keys={keys}
       />
+
+      <VoiceBlock />
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -416,6 +450,8 @@ export function ModelsSection() {
           </div>
         )}
       </div>
+
+      <CliAgentsBlock cliPaths={cliPaths} />
     </div>
   );
 }
@@ -498,6 +534,147 @@ function ProviderMenuItem({
       <ProviderIcon provider={provider.id} size={13} />
       <span>{provider.label}</span>
     </DropdownMenuItem>
+  );
+}
+
+const CLI_PERMISSION_OPTIONS: {
+  value: CliPermissionMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "default",
+    label: "Plan only",
+    description: "Read-only. The agent can inspect but not edit or run commands.",
+  },
+  {
+    value: "acceptEdits",
+    label: "Auto-edit",
+    description: "Auto-accepts file edits; commands stay sandboxed.",
+  },
+  {
+    value: "full",
+    label: "Full access",
+    description: "Edits and runs commands without prompts. Use with care.",
+  },
+];
+
+function CliAgentsBlock({
+  cliPaths,
+}: {
+  cliPaths: Record<string, string | null>;
+}) {
+  const permission = usePreferencesStore((s) => s.cliAgentPermission);
+  const current =
+    CLI_PERMISSION_OPTIONS.find((o) => o.value === permission) ??
+    CLI_PERMISSION_OPTIONS[1];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <Label>Local CLI agents</Label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 justify-between gap-1.5 px-2.5 text-[11px]"
+            >
+              {current.label}
+              <HugeiconsIcon icon={ArrowDown01Icon} size={11} strokeWidth={2} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-64 p-1">
+            <DropdownMenuLabel className="px-2 text-[10px] tracking-wide text-muted-foreground uppercase">
+              Permission
+            </DropdownMenuLabel>
+            {CLI_PERMISSION_OPTIONS.map((o) => (
+              <DropdownMenuItem
+                key={o.value}
+                onSelect={() => void setCliAgentPermission(o.value)}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 text-[12px]",
+                  o.value === permission && "bg-accent/50",
+                )}
+              >
+                <span>{o.label}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {o.description}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Use coding-agent CLIs you already have installed — no API key. They run
+        in the active workspace and bring their own tools. Detected on your
+        login PATH.
+      </p>
+
+      <div className="flex flex-col gap-2">
+        {(
+          Object.entries(CLI_PROVIDERS) as [
+            ProviderId,
+            "claude" | "codex" | "cursor" | "opencode",
+          ][]
+        ).map(([providerId, cliId]) => {
+          const def = CLI_AGENTS[cliId];
+          const path = cliPaths[def.bin] ?? null;
+          const installed = !!path;
+          return (
+            <div
+              key={providerId}
+              className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5"
+            >
+              <ProviderIcon provider={providerId} size={15} />
+              <span className="text-[12.5px] font-medium">{def.label}</span>
+              {installed ? (
+                <Badge
+                  variant="outline"
+                  className="ml-1 h-4 gap-1 border-border/60 bg-muted/40 px-1.5 text-[10px] font-normal text-muted-foreground"
+                >
+                  <HugeiconsIcon
+                    icon={CheckmarkCircle02Icon}
+                    size={9}
+                    strokeWidth={2}
+                  />
+                  Installed
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="ml-1 h-4 px-1.5 text-[10px] font-normal text-muted-foreground/70"
+                >
+                  Not installed
+                </Badge>
+              )}
+              {installed ? (
+                <code
+                  className="ml-1 truncate font-mono text-[10px] text-muted-foreground/60"
+                  title={path ?? undefined}
+                >
+                  {def.bin}
+                </code>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void openUrl(def.docsUrl)}
+                className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {installed ? "Docs" : "Install"}
+                <HugeiconsIcon
+                  icon={ArrowUpRight01Icon}
+                  size={11}
+                  strokeWidth={1.75}
+                />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -1204,6 +1381,104 @@ function StatusLine({
     <span className="text-[10.5px] text-destructive/80">
       Could not reach the server.
     </span>
+  );
+}
+
+function VoiceBlock() {
+  const sttProvider = usePreferencesStore((s) => s.sttProvider);
+  const groqSttModel = usePreferencesStore((s) => s.groqSttModel);
+  const whispercppBaseURL = usePreferencesStore((s) => s.whispercppBaseURL);
+  const [urlDraft, setUrlDraft] = useState(whispercppBaseURL);
+  const [groqModelDraft, setGroqModelDraft] = useState(groqSttModel);
+
+  useEffect(() => setUrlDraft(whispercppBaseURL), [whispercppBaseURL]);
+  useEffect(() => setGroqModelDraft(groqSttModel), [groqSttModel]);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <HugeiconsIcon icon={Mic01Icon} size={15} strokeWidth={1.5} />
+        <span className="text-[12.5px] font-medium">Voice input</span>
+      </div>
+
+      <FieldRow label="Provider">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="h-8 flex-1 justify-between gap-2 px-2.5 text-[11.5px]"
+            >
+              <span>{STT_PROVIDER_LABELS[sttProvider]}</span>
+              <HugeiconsIcon
+                icon={ArrowDown01Icon}
+                size={11}
+                strokeWidth={2}
+                className="opacity-70"
+              />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-44 p-1">
+            {(Object.keys(STT_PROVIDER_LABELS) as SttProvider[]).map((p) => (
+              <DropdownMenuItem
+                key={p}
+                onSelect={() => void setSttProvider(p)}
+                className={cn(
+                  "flex items-center gap-2 text-[12px]",
+                  p === sttProvider && "bg-accent/50",
+                )}
+              >
+                <span>{STT_PROVIDER_LABELS[p]}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </FieldRow>
+
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        {sttProvider === "openai" &&
+          "Uses your official OpenAI API key and the Whisper model for transcription."}
+        {sttProvider === "groq" &&
+          "Uses your official Groq API key and Groq's Whisper endpoint for transcription."}
+        {sttProvider === "whispercpp" &&
+          "Connects to a local Whisper.cpp server for fully offline transcription."}
+      </p>
+
+      {sttProvider === "groq" && (
+        <div className="flex flex-col gap-2.5">
+          <FieldRow label="Model">
+            <Input
+              value={groqModelDraft}
+              onChange={(e) => setGroqModelDraft(e.target.value)}
+              onBlur={() => {
+                const v = groqModelDraft.trim();
+                if (v !== groqSttModel) void setGroqSttModel(v);
+              }}
+              placeholder="whisper-large-v3-turbo"
+              spellCheck={false}
+              className="h-8 font-mono text-[11.5px]"
+            />
+          </FieldRow>
+        </div>
+      )}
+
+      {sttProvider === "whispercpp" && (
+        <div className="flex flex-col gap-2.5">
+          <FieldRow label="Base URL">
+            <Input
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+              onBlur={() => {
+                const v = urlDraft.trim();
+                if (v !== whispercppBaseURL) void setWhispercppBaseURL(v);
+              }}
+              placeholder={WHISPERCPP_DEFAULT_BASE_URL}
+              spellCheck={false}
+              className="h-8 font-mono text-[11.5px]"
+            />
+          </FieldRow>
+        </div>
+      )}
+    </div>
   );
 }
 
