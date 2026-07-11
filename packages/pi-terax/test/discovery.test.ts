@@ -57,7 +57,7 @@ describe("discoverTerax", () => {
     ).resolves.toMatchObject({ pid: 777, token: "wsl" });
     expect(run.mock.calls[0]?.slice(0, 2)).toEqual([
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", "[Environment]::GetFolderPath('LocalApplicationData')"],
+      ["-NoProfile", "-NonInteractive", "-Command", "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Environment]::GetFolderPath('LocalApplicationData')"],
     ]);
     expect(run.mock.calls[1]?.slice(0, 2)).toEqual([
       "wslpath",
@@ -66,6 +66,36 @@ describe("discoverTerax", () => {
     expect(run.mock.calls.every(([, , options]) =>
       options?.signal === controller.signal && options.timeoutMs === 321,
     )).toBe(true);
+  });
+
+  it("preserves non-ASCII Windows LOCALAPPDATA when PowerShell emits UTF-8", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-terax-unicode-"));
+    const windowsCache = join(root, "Andrés", "AppData", "Local");
+    await mkdir(join(windowsCache, "terax-ai"), { recursive: true });
+    await writeFile(
+      join(windowsCache, "terax-ai", "pi-bridge.json"),
+      JSON.stringify({ version: 1, pid: 778, port: 40223, token: "unicode" }),
+    );
+    const run = vi
+      .fn<DiscoveryCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: "C:\\Users\\Andrés\\AppData\\Local\r\n", stderr: "" })
+      .mockResolvedValueOnce({ stdout: `${windowsCache}\n`, stderr: "" });
+
+    await expect(
+      discoverTerax({
+        env: { XDG_CACHE_HOME: join(root, "missing") },
+        platform: "linux",
+        release: "microsoft-standard-WSL2",
+        runner: { run },
+      }),
+    ).resolves.toMatchObject({ pid: 778, token: "unicode" });
+
+    expect(run.mock.calls[0]?.[1]).toEqual([
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Environment]::GetFolderPath('LocalApplicationData')",
+    ]);
   });
 
   it("uses bounded discovery command defaults", () => {
