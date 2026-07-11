@@ -1,6 +1,6 @@
 pub mod modules;
 
-use modules::{agent, agent_cli, fs, git, history, net, pty, secrets, shell, workspace};
+use modules::{agent, agent_cli, fs, git, history, net, pi, pty, secrets, shell, workspace};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 #[cfg(target_os = "macos")]
@@ -137,6 +137,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .manage(pi::PiBridgeState::default())
         .setup(|_app| {
             // macOS skips parent() for the settings window, so tie its lifecycle
             // to the main window here instead. Other platforms keep parent().
@@ -153,6 +154,9 @@ pub fn run() {
                         }
                     }
                 });
+            }
+            if let Err(err) = pi::start_bridge(_app.handle().clone()) {
+                log::warn!("pi bridge failed to start: {err}");
             }
             Ok(())
         })
@@ -231,6 +235,7 @@ pub fn run() {
             workspace::workspace_current_dir,
             get_launch_dir,
             open_settings_window,
+            pi::external_command_respond,
             agent::agent_enable_claude_hooks,
             agent::agent_claude_hooks_status,
             agent_cli::agent_cli_which,

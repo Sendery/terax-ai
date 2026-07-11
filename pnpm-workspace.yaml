@@ -1,6 +1,10 @@
 minimumReleaseAge: 4320
 minimumReleaseAgeStrict: true
+packages:
+  - packages/*
 allowBuilds:
+  "@google/genai": true
   esbuild: true
   msgpackr-extract: false
   msw: true
+  protobufjs: true

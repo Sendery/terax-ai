@@ -1,0 +1,21 @@
+export const TERAX_COMMAND_IDS = [
+  "app.snapshot",
+  "sidebar.show",
+  "sidebar.hide",
+  "tab.openFile",
+  "tab.focus",
+  "tab.close",
+  "tab.rename",
+  "tab.resetTitle",
+  "git.diff.open",
+  "settings.open",
+] as const;
+
+export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];
+
+export function isTeraxCommandId(value: unknown): value is TeraxCommandId {
+  return (
+    typeof value === "string" &&
+    TERAX_COMMAND_IDS.includes(value as TeraxCommandId)
+  );
+}

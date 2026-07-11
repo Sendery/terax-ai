@@ -48,6 +48,7 @@ Verify before claiming done: `pnpm lint`, `pnpm check-types`, `pnpm test`, `carg
 - `net::*` (`ai_http_request`, `ai_http_stream`, `lm_ping`): AI HTTP proxy with SSRF guard; keeps provider calls and local-model pings off the webview.
 - `secrets::secrets_*`: OS keychain via the `keyring` crate. Service constant `terax-ai`. Linux uses a file-based fallback gated behind `#[cfg(target_os = "linux")]`.
 - `open_settings_window`: separate webview window for Settings (optional `tab` arg deep-links a section).
+- `pi::*`: authenticated loopback TCP bridge for the first-party Pi Terax extension. Rust binds `127.0.0.1` on an ephemeral port, writes an atomic discovery file under the user cache dir, enforces protocol version 1, a per-launch random token, frame caps, timeouts, and the Terax command allowlist, then relays requests to React through Tauri events and `external_command_respond`. This is not HTTP and not MCP.
 
 ### PTY shell integration
 
@@ -91,7 +92,14 @@ Each module is self-contained, exports a thin barrel via `index.ts`, and owns it
 - **theme/** — custom theme engine (no `next-themes`). `ThemeProvider` + `applyTheme` write CSS variables; built-in presets in `themes/` (terax-default, claude, kanagawa, kanagawa-dragon, tokyo-night, catppuccin, rose-pine, everforest, nord, gruvbox, dracula, solarized, tide, sage, caffeine), each optionally declaring an `editorTheme` pairing consumed by `resolveEditorThemeId` (see editor/). User themes via `customThemes.ts` + `validateTheme.ts`, optional background image via `bgImageStore.ts` + `SurfaceLayer`.
 - **updater/** — auto-updater UI built on `tauri-plugin-updater`.
 - **agents/** — agent notifications + management for both the built-in Terax agent and terminal coding-agents (Claude Code; Codex later). Shared store (`store/agentStore.ts`: terminal `sessions` + `localAgent` + `notifications`) and a shared router (`lib/route.ts`: suppress when focused-and-visible, OS-notify when unfocused, in-app Sonner toast when focused-but-hidden) feed the header `NotificationBell` (management surface, Terax agent listed first). Toasts use Sonner (`components/ui/sonner.tsx`) themed via the central engine; `lib/agentIcon.tsx` renders the per-agent brand mark (Terax logo, Claude/Codex hugeicon). Terminal detection is Rust-side (`pty/agent_detect.rs`) on the PTY reader's byte filter, armed on `OSC 133;C;<cmd>`, emitting `terax:agent-signal` transitions (`started`/`working`/`attention`/`finished`/`exited`) driven only by OSC sequences (never raw output, so a repainting TUI never flaps) — zero cost when no agent runs. Terminal signals arrive via Claude Code hooks (`UserPromptSubmit`/`Notification`/`Stop`) returning an `OSC 777` marker through the `terminalSequence` field (hooks lost `/dev/tty` access in v2.1.139); `agent_enable_claude_hooks` installs them (atomic write, never clobbers invalid JSON, prunes empty groups), gated on `TERAX_TERMINAL`, and the marker self-arms the detector so it works in bash/Windows/tmux without shell preexec. The Terax agent path is `ai/components/LocalAgentNotificationsBridge.tsx`, mapping `chatStore.agentMeta` (`awaiting-approval`→attention, busy→idle→finished, `error`) into the same router.
+- **commands/** — dependency-light typed frontend command registry, separate from command-palette presentation. It validates command IDs and payloads, normalizes failures, builds redacted app snapshots, and dispatches only through existing App, tabs, sidebar, git diff, and settings APIs. Snapshots never include terminal text, private terminal details, AI diff approval IDs, or AI diff content.
 - **ai/** — see below.
+
+### Pi Terax package
+
+`packages/pi-terax` is the first-party Pi package `@crynta/pi-terax`. It uses the official Pi extension API and `typebox`, declares Pi host packages as peers, and uses Node built-ins for TCP discovery and NDJSON transport. Its control tools are `terax_get_state`, `terax_call`, and `terax_wait`; `terax_development_guide` plus the bundled `terax-development` skill guide Pi when changing Terax features, windows, settings, shortcuts, or commands. `terax_call` must only send allowlisted command-registry IDs. Pi extends Terax through reviewed source changes, not arbitrary runtime plugins. Do not add direct MCP dependencies, MCP server/client code, or MCP protocol paths. Transitive packages supplied by Pi or existing workspace tooling do not make the Terax bridge an MCP implementation.
+
+See `docs/pi-terax.md` for usage, protocol, and security details.
 
 ### AI subsystem (`src/modules/ai/`)
 

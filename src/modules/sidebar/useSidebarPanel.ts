@@ -74,6 +74,24 @@ export function useSidebarPanel(
     else p.collapse();
   }, []);
 
+  const showSidebar = useCallback(
+    (view?: SidebarViewId) => {
+      const panel = sidebarRef.current;
+      if (view && view !== sidebarView) persistSidebarView(view);
+      if (!panel) return;
+      if (panel.getSize().asPercentage <= 0) {
+        panel.resize(`${sidebarWidthRef.current}px`);
+      }
+    },
+    [persistSidebarView, sidebarView],
+  );
+
+  const hideSidebar = useCallback(() => {
+    const panel = sidebarRef.current;
+    if (!panel) return;
+    if (panel.getSize().asPercentage > 0) panel.collapse();
+  }, []);
+
   const cycleSidebarView = useCallback(
     (view: SidebarViewId) => {
       const panel = sidebarRef.current;
@@ -153,6 +171,8 @@ export function useSidebarPanel(
     sidebarView,
     persistSidebarView,
     toggleSidebar,
+    showSidebar,
+    hideSidebar,
     cycleSidebarView,
     persistSidebarWidth,
     toggleExplorerFocus,

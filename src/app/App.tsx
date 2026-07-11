@@ -27,6 +27,11 @@ import {
   createCommandItems,
 } from "@/modules/command-palette";
 import {
+  buildAppSnapshot,
+  useExternalCommandBridge,
+  type CommandHandlers,
+} from "@/modules/commands";
+import {
   NewEditorDialog,
   useEditorFileSync,
   type EditorPaneHandle,
@@ -259,6 +264,8 @@ export default function App() {
     sidebarView,
     persistSidebarView,
     toggleSidebar,
+    showSidebar,
+    hideSidebar,
     cycleSidebarView,
     persistSidebarWidth,
     toggleExplorerFocus,
@@ -994,6 +1001,80 @@ export default function App() {
       handleNewSpace,
     ],
   );
+
+  const externalCommandHandlers = useMemo<CommandHandlers>(
+    () => ({
+      getSnapshot: () =>
+        buildAppSnapshot({
+          tabs: tabsRef.current,
+          activeTabId: activeId,
+          activeSpaceId,
+          sidebar: {
+            visible:
+              (sidebarRef.current?.getSize().asPercentage ??
+                sidebarWidthRef.current) > 0,
+            view: sidebarView,
+          },
+        }),
+      showSidebar: ({ view }) => {
+        showSidebar(view);
+        return { visible: true, view: view ?? sidebarView };
+      },
+      hideSidebar: () => {
+        hideSidebar();
+        return { visible: false };
+      },
+      openFile: ({ path, pin }) => {
+        handleOpenFile(path, pin);
+        return { opened: true };
+      },
+      focusTab: ({ tabId }) => {
+        const tab = tabsRef.current.find((t) => t.id === tabId);
+        if (!tab) {
+          throw { code: "command_failed", message: `Tab ${tabId} not found` };
+        }
+        useSpaces.getState().setActive(tab.spaceId);
+        setActiveId(tabId);
+        return { tabId, spaceId: tab.spaceId };
+      },
+      closeTab: ({ tabId }) => {
+        void handleClose(tabId ?? activeId);
+        return { requested: true, tabId: tabId ?? activeId };
+      },
+      renameTab: ({ tabId, title }) => {
+        updateTab(tabId, { customTitle: title.trim() });
+        return { tabId };
+      },
+      resetTabTitle: ({ tabId }) => {
+        updateTab(tabId, { customTitle: "" });
+        return { tabId };
+      },
+      openGitDiff: (payload) => {
+        const tabId = openGitDiffTab(payload);
+        return { tabId };
+      },
+      openSettings: ({ tab }) => {
+        void openSettingsWindow(tab);
+        return { opened: true, tab: tab ?? null };
+      },
+    }),
+    [
+      activeId,
+      activeSpaceId,
+      handleClose,
+      handleOpenFile,
+      hideSidebar,
+      openGitDiffTab,
+      setActiveId,
+      showSidebar,
+      sidebarRef,
+      sidebarView,
+      sidebarWidthRef,
+      updateTab,
+    ],
+  );
+
+  useExternalCommandBridge(externalCommandHandlers);
 
   const pendingGotoLine = useRef<Map<number, number>>(new Map());
   const openContentHit = useCallback(

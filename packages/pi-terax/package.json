@@ -1,0 +1,38 @@
+{
+  "name": "@crynta/pi-terax",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": ["pi-package"],
+  "files": ["dist", "skills", "README.md"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./extension": {
+      "types": "./dist/extension.d.ts",
+      "import": "./dist/extension.js"
+    }
+  },
+  "pi": {
+    "extensions": ["./dist/extension.js"],
+    "skills": ["./skills"]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.3",
+    "typebox": "^1.1.38"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.3",
+    "@types/node": "^25.9.3",
+    "typebox": "1.1.38",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

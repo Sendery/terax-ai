@@ -39,7 +39,8 @@ import {
   type CustomEndpointKeys,
 } from "@/modules/ai/lib/keyring";
 import { useChatStore } from "@/modules/ai/store/chatStore";
-import { CLI_AGENTS, detectCliAgents } from "@/modules/ai/cli";
+import { detectCliAgents } from "@/modules/ai/cli/bridge";
+import { CLI_AGENTS } from "@/modules/ai/cli/registry";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
