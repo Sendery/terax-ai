@@ -22,10 +22,7 @@ import {
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { native } from "@/modules/ai/lib/native";
-import {
-  CommandPalette,
-  createCommandItems,
-} from "@/modules/command-palette";
+import { CommandPalette, createCommandItems } from "@/modules/command-palette";
 import {
   buildAppSnapshot,
   useExternalCommandBridge,
@@ -67,6 +64,8 @@ import {
   useTabs,
   useWindowTitle,
   useWorkspaceCwd,
+  DEFAULT_SPACE_ID,
+  type TabColor,
 } from "@/modules/tabs";
 import {
   clearFocusedTerminal,
@@ -86,7 +85,6 @@ import {
   useSpacePersistence,
   useSpacesBoot,
 } from "@/modules/spaces";
-import { DEFAULT_SPACE_ID } from "@/modules/tabs/lib/useTabs";
 import { ThemeProvider, useThemeFileEditing } from "@/modules/theme";
 import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
@@ -234,7 +232,9 @@ export default function App() {
     const prev = prevSpaceRef.current;
     prevSpaceRef.current = activeSpaceId;
     if (prev === null || prev === activeSpaceId) return;
-    const meta = useSpaces.getState().spaces.find((s) => s.id === activeSpaceId);
+    const meta = useSpaces
+      .getState()
+      .spaces.find((s) => s.id === activeSpaceId);
     if (meta) void adoptWorkspaceEnv(meta.env);
     const inSpace = tabsRef.current.filter((t) => t.spaceId === activeSpaceId);
     if (inSpace.length === 0) return;
@@ -596,7 +596,6 @@ export default function App() {
     [newPreviewTab],
   );
 
-
   const splitActivePaneInActiveTab = useCallback(
     (dir: "row" | "col") => {
       const t = tabsRef.current.find((x) => x.id === activeId);
@@ -838,6 +837,11 @@ export default function App() {
     [updateTab],
   );
 
+  const handleSetTabColor = useCallback(
+    (id: number, color: TabColor | null) => updateTab(id, { color }),
+    [updateTab],
+  );
+
   const searchTarget = useMemo<SearchTarget>(() => {
     if (isTerminalTab && activeLeafId !== null && activeSearchAddon)
       return {
@@ -912,8 +916,9 @@ export default function App() {
 
   const handleNewTabInSpace = useCallback(
     (spaceId: string) => {
-      const root = useSpaces.getState().spaces.find((s) => s.id === spaceId)
-        ?.root;
+      const root = useSpaces
+        .getState()
+        .spaces.find((s) => s.id === spaceId)?.root;
       newTabInSpace(spaceId, root ?? undefined);
     },
     [newTabInSpace],
@@ -1049,6 +1054,14 @@ export default function App() {
         updateTab(tabId, { customTitle: "" });
         return { tabId };
       },
+      setTabColor: ({ tabId, color }) => {
+        const tab = tabsRef.current.find((t) => t.id === tabId);
+        if (!tab) {
+          throw { code: "command_failed", message: `Tab ${tabId} not found` };
+        }
+        updateTab(tabId, { color });
+        return { tabId };
+      },
       openGitDiff: (payload) => {
         const tabId = openGitDiffTab(payload);
         return { tabId };
@@ -1129,6 +1142,7 @@ export default function App() {
               onClose={handleClose}
               onPin={pinTab}
               onRename={handleRenameTab}
+              onSetColor={handleSetTabColor}
               onToggleSidebar={toggleSidebar}
               onOpenCommandPalette={() => openCommandPalette("commands")}
               onActivateAgent={onActivateAgent}
@@ -1158,7 +1172,10 @@ export default function App() {
                 }}
               >
                 <div className="flex h-full min-h-0 flex-col border-r border-border/60 bg-card">
-                  <div key={sidebarView} className="min-h-0 flex-1 terax-panel-in">
+                  <div
+                    key={sidebarView}
+                    className="min-h-0 flex-1 terax-panel-in"
+                  >
                     {sidebarView === "explorer" ? (
                       <FileExplorer
                         ref={explorerRef}

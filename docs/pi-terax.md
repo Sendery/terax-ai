@@ -14,12 +14,28 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tab.close`
 - `tab.rename`
 - `tab.resetTitle`
+- `tab.setColor`
 - `git.diff.open`
 - `settings.open`
 
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, and settings APIs. It does not expose AI diff approval internals.
 
 `app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, and excludes AI diff approval IDs and proposed or original content.
+
+### tab.setColor
+
+Assign or clear a palette color accent on any tab.
+
+```json
+{ "id": "tab.setColor", "payload": { "tabId": 1, "color": "teal" } }
+```
+
+- `tabId` (number, required): the ID of the tab to update, as reported by `app.snapshot`.
+- `color` (string | null, required): one of the nine palette names, or `null` to clear the color.
+
+Palette: `red`, `orange`, `amber`, `green`, `teal`, `blue`, `indigo`, `purple`, `pink`.
+
+Any value outside this exact set -- including unknown color names, arbitrary hex strings, or non-string types -- is rejected with `invalid_payload`. Pass `null` to remove an assigned color. The color is reflected immediately in `app.snapshot` for every non-private tab kind; private terminals appear as `kind: "private-terminal"` in the snapshot and never expose a color field.
 
 ## External Bridge
 
@@ -70,10 +86,13 @@ The bundled `terax-development` skill is the supported source-extension workflow
 
 1. Reads `AGENTS.md` and `TERAX.md`.
 2. Calls `terax_development_guide` for current contribution points.
-3. Inspects the existing implementation before editing.
-4. Adds failing tests before production code.
-5. Uses its built-in filesystem and shell tools to change the Terax repository.
-6. Runs the frontend and Rust quality gates.
+3. Verifies the prerequisite base commit and creates an isolated branch and worktree.
+4. Starts an ignored implementation journal from the bundled template.
+5. Inspects the existing implementation and completes the cross-layer change matrix.
+6. Adds failing tests before production code and builds one vertical slice at a time.
+7. Exercises the real authenticated path and native visual behavior when applicable.
+8. Runs the frontend, Pi package, Rust, diff, and changed-file quality gates.
+9. Triages each gotcha candidate into the durable catalog, `TERAX.md`, a justified deferral, or discard.
 
 This deliberately extends Terax at source level. The app does not dynamically load arbitrary JavaScript or Rust plugins from Pi. New functionality is reviewed, tested, and compiled with Terax before it ships.
 

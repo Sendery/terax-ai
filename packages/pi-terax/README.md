@@ -30,7 +30,11 @@ The package bundles `terax-development` and `terax-visual-qa`. Pi can load them 
 /skill:terax-visual-qa
 ```
 
-The development skill directs Pi to inspect `AGENTS.md` and `TERAX.md`, call `terax_development_guide`, implement through test-first changes, and run the project quality gates. The visual skill adds a state/action/screenshot-or-video/verdict loop for future features. Pi uses its built-in read, edit, write, and bash tools to change Terax source. Terax does not load arbitrary extension code at runtime.
+The development skill directs Pi to inspect `AGENTS.md` and `TERAX.md`, call `terax_development_guide`, create an isolated branch and worktree, implement vertical slices through strict test-first changes, exercise the real authenticated path, and run the project quality gates. It includes a cross-layer checklist for models, UI, persistence, commands, snapshots, Rust, the Pi package, accessibility, and visual QA.
+
+Each run uses an ignored journal copied from `skills/terax-development/templates/implementation-journal.md`. Unexpected constraints are captured there as candidates, then reproduced, deduplicated, and either promoted to the bundled `references/gotchas.md`, moved to `TERAX.md` as architecture invariants, deferred with evidence requirements, or discarded. This keeps implementation knowledge durable without turning one-off failures into folklore.
+
+The visual skill adds a state/action/screenshot-or-video/verdict loop for future features. Pi uses its built-in read, edit, write, and bash tools to change Terax source. Terax does not load arbitrary extension code at runtime.
 
 `terax_call` supports:
 
@@ -42,8 +46,21 @@ The development skill directs Pi to inspect `AGENTS.md` and `TERAX.md`, call `te
 - `tab.close`
 - `tab.rename`
 - `tab.resetTitle`
+- `tab.setColor` -- assign or clear a tab accent color
 - `git.diff.open`
 - `settings.open`
+
+### tab.setColor
+
+Assign a palette color to a tab or clear an existing one:
+
+```json
+{ "command": "tab.setColor", "payload": { "tabId": 1, "color": "teal" } }
+```
+
+Palette (exact names): `red`, `orange`, `amber`, `green`, `teal`, `blue`, `indigo`, `purple`, `pink`.
+
+Pass `null` for `color` to remove the accent. Any value outside the palette -- unknown names, hex strings, numbers -- is rejected with `invalid_payload`. The assigned color appears in `app.snapshot` for every non-private tab kind; private terminals are reported as `kind: "private-terminal"` and never expose a color.
 
 ## Security
 

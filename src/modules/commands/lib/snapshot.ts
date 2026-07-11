@@ -1,6 +1,6 @@
 import { leafIds } from "@/modules/terminal";
 import type { SidebarViewId } from "@/modules/sidebar";
-import type { Tab } from "@/modules/tabs";
+import type { Tab, TabColor } from "@/modules/tabs";
 
 export type SnapshotTab =
   | {
@@ -10,6 +10,7 @@ export type SnapshotTab =
       title: string;
       cwd?: string;
       paneCount: number;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -24,6 +25,7 @@ export type SnapshotTab =
       path: string;
       dirty: boolean;
       preview: boolean;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -31,6 +33,7 @@ export type SnapshotTab =
       spaceId: string;
       title: string;
       url: string;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -38,6 +41,7 @@ export type SnapshotTab =
       spaceId: string;
       title: string;
       path: string;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -47,6 +51,7 @@ export type SnapshotTab =
       path: string;
       status: "pending" | "approved" | "rejected";
       isNewFile: boolean;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -57,6 +62,7 @@ export type SnapshotTab =
       path: string;
       mode: "-" | "+";
       originalPath: string | null;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -64,6 +70,7 @@ export type SnapshotTab =
       spaceId: string;
       title: string;
       repoRoot: string;
+      color?: TabColor;
     }
   | {
       id: number;
@@ -76,6 +83,7 @@ export type SnapshotTab =
       subject: string;
       path: string;
       originalPath: string | null;
+      color?: TabColor;
     };
 
 export type AppSnapshot = {
@@ -119,6 +127,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       title: displayTitle(tab),
       ...(tab.cwd ? { cwd: tab.cwd } : {}),
       paneCount: leafIds(tab.paneTree).length,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -131,6 +140,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       path: tab.path,
       dirty: tab.dirty,
       preview: tab.preview,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -141,6 +151,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       url: tab.url,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -151,6 +162,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       path: tab.path,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -163,6 +175,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       path: tab.path,
       status: tab.status,
       isNewFile: tab.isNewFile,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -176,6 +189,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       path: tab.path,
       mode: tab.mode,
       originalPath: tab.originalPath,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -186,6 +200,7 @@ function serializeTab(tab: Tab): SnapshotTab {
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       repoRoot: tab.repoRoot,
+      ...(tab.color ? { color: tab.color } : {}),
     };
   }
 
@@ -200,6 +215,7 @@ function serializeTab(tab: Tab): SnapshotTab {
     subject: tab.subject,
     path: tab.path,
     originalPath: tab.originalPath,
+    ...(tab.color ? { color: tab.color } : {}),
   };
 }
 

@@ -3,7 +3,12 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -17,6 +22,14 @@ import { fmtShortcut, MOD_KEY, SHIFT_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
 import {
+  TAB_COLORS,
+  TAB_COLOR_CSS,
+  TAB_COLOR_LABEL,
+  isTabColor,
+  tabAccessibleLabel,
+  type TabColor,
+} from "./lib/tabColors";
+import {
   Cancel01Icon,
   Clock01Icon,
   ComputerTerminal02Icon,
@@ -24,6 +37,7 @@ import {
   GitCompareIcon,
   Globe02Icon,
   IncognitoIcon,
+  PaintBrush01Icon,
   PencilEdit02Icon,
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
@@ -53,6 +67,8 @@ type Props = {
   onPin: (id: number) => void;
   /** Set a tab's custom label; empty string resets to default. */
   onRename: (id: number, title: string) => void;
+  /** Set or reset a tab's palette color. null clears the color. */
+  onSetColor: (id: number, color: TabColor | null) => void;
   compact?: boolean;
 };
 
@@ -69,6 +85,7 @@ export function TabBar({
   onClose,
   onPin,
   onRename,
+  onSetColor,
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -212,9 +229,15 @@ export function TabBar({
 
               const trigger = (
                 <TabsTrigger
+                  key={t.id}
                   value={String(t.id)}
                   data-tab-id={t.id}
                   data-tab-active={isActive ? "true" : undefined}
+                  aria-label={tabAccessibleLabel(
+                    labelFor(t),
+                    t.color,
+                    t.kind === "editor" && t.dirty,
+                  )}
                   onDoubleClick={() => isPreview && onPin(t.id)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && tabs.length > 1) {
@@ -239,10 +262,21 @@ export function TabBar({
                         : "ps-2! pe-1!",
                   )}
                 >
+                  {t.color && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute left-0 top-[3px] bottom-[3px] w-[2px] rounded-full"
+                      style={{
+                        backgroundColor: TAB_COLOR_CSS[t.color],
+                        opacity: isActive ? 0.85 : 0.45,
+                      }}
+                    />
+                  )}
                   <span
                     className={cn(
                       "flex items-center gap-1.5 truncate",
                       compact ? "max-w-48" : "max-w-80",
+                      t.color && "pl-2",
                     )}
                   >
                     <TabIcon tab={t} />
@@ -280,7 +314,7 @@ export function TabBar({
               );
 
               const tabNode = (
-                <ContextMenu>
+                <ContextMenu key={t.id}>
                   <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
                   <ContextMenuContent
                     className="min-w-36"
@@ -294,6 +328,54 @@ export function TabBar({
                       />
                       <span className="flex-1">Rename</span>
                     </ContextMenuItem>
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>
+                        <HugeiconsIcon
+                          icon={PaintBrush01Icon}
+                          size={14}
+                          strokeWidth={1.75}
+                        />
+                        <span className="flex-1">Color</span>
+                        {t.color && (
+                          <span
+                            className="size-2 rounded-full shrink-0"
+                            style={{ backgroundColor: TAB_COLOR_CSS[t.color] }}
+                            aria-hidden
+                          />
+                        )}
+                      </ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="w-44">
+                        <ContextMenuRadioGroup
+                          value={t.color ?? ""}
+                          onValueChange={(v) =>
+                            onSetColor(t.id, isTabColor(v) ? v : null)
+                          }
+                        >
+                          {TAB_COLORS.map((color) => (
+                            <ContextMenuRadioItem key={color} value={color}>
+                              <span
+                                className="size-3.5 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor: TAB_COLOR_CSS[color],
+                                }}
+                                aria-hidden
+                              />
+                              {TAB_COLOR_LABEL[color]}
+                            </ContextMenuRadioItem>
+                          ))}
+                        </ContextMenuRadioGroup>
+                        {t.color && (
+                          <>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem
+                              onSelect={() => onSetColor(t.id, null)}
+                            >
+                              Reset color
+                            </ContextMenuItem>
+                          </>
+                        )}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
                     {tabs.length > 1 && (
                       <>
                         <ContextMenuSeparator />

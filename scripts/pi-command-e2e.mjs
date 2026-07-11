@@ -111,6 +111,29 @@ await scenario("tab-reset-title", async () => {
   assert(editor?.title === "alpha.txt", "tab.resetTitle did not restore default title");
 });
 
+await scenario("tab-set-color", async () => {
+  await call("tab.setColor", { tabId: editorId, color: "teal" });
+  return { editorId };
+}).then(({ after }) => {
+  const editor = after.tabs.find((tab) => tab.id === editorId);
+  assert(editor?.color === "teal", "tab.setColor did not assign color");
+});
+
+await scenario("tab-set-color-snapshot", async () => {
+  const snap = (await call("app.snapshot")).details.result;
+  const editor = snap.tabs.find((tab) => tab.id === editorId);
+  assert(editor?.color === "teal", "tab.setColor color not visible in app.snapshot");
+  return { snap };
+}, { visual: false });
+
+await scenario("tab-set-color-reset", async () => {
+  await call("tab.setColor", { tabId: editorId, color: null });
+  return { editorId };
+}).then(({ after }) => {
+  const editor = after.tabs.find((tab) => tab.id === editorId);
+  assert(!editor?.color, "tab.setColor null did not clear color");
+});
+
 const terminalId = (await state()).tabs.find((tab) => tab.kind === "terminal")?.id;
 assert(Number.isInteger(terminalId), "fixture terminal tab missing");
 await scenario("tab-focus-terminal", async () => {
@@ -159,6 +182,15 @@ assert(blocked, "non-allowlisted command was not rejected");
 let invalid = false;
 try { await call("tab.focus", { tabId: "bad" }); } catch { invalid = true; }
 assert(invalid, "invalid payload was not rejected");
+
+let invalidColor = false;
+try { await call("tab.setColor", { tabId: editorId, color: "yellow" }); } catch { invalidColor = true; }
+assert(invalidColor, "arbitrary color was not rejected by tab.setColor");
+
+let missingTab = false;
+try { await call("tab.setColor", { tabId: 99999, color: "red" }); } catch { missingTab = true; }
+assert(missingTab, "missing tab was not rejected by tab.setColor");
+
 const negativeAfter = await state();
 assert(JSON.stringify(negativeBefore) === JSON.stringify(negativeAfter), "negative commands changed state");
 results.push({ name: "negative-boundary", status: "PASS", before: negativeBefore, after: negativeAfter });

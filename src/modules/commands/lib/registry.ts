@@ -1,5 +1,6 @@
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
+import { isTabColor, type TabColor } from "@/modules/tabs";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
@@ -11,6 +12,7 @@ export const COMMAND_IDS = [
   "tab.close",
   "tab.rename",
   "tab.resetTitle",
+  "tab.setColor",
   "git.diff.open",
   "settings.open",
 ] as const;
@@ -43,6 +45,7 @@ export type CommandPayloads = {
   "tab.close": { tabId?: number };
   "tab.rename": { tabId: number; title: string };
   "tab.resetTitle": { tabId: number };
+  "tab.setColor": { tabId: number; color: TabColor | null };
   "git.diff.open": {
     repoRoot: string;
     path: string;
@@ -79,6 +82,9 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   resetTabTitle: (
     payload: CommandPayloads["tab.resetTitle"],
+  ) => Promise<unknown> | unknown;
+  setTabColor: (
+    payload: CommandPayloads["tab.setColor"],
   ) => Promise<unknown> | unknown;
   openGitDiff: (
     payload: CommandPayloads["git.diff.open"],
@@ -146,7 +152,9 @@ function validateOptionalBoolean(
 }
 
 function validateSidebarView(value: unknown): value is SidebarViewId {
-  return value === undefined || value === "explorer" || value === "source-control";
+  return (
+    value === undefined || value === "explorer" || value === "source-control"
+  );
 }
 
 function validateSettingsTab(value: unknown): value is SettingsTab | undefined {
@@ -165,7 +173,10 @@ export function validateCommandRequest(
   input: unknown,
 ): CommandResult<CommandRequest> {
   if (!isRecord(input) || typeof input.id !== "string") {
-    return { ok: false, error: { code: "unknown_command", message: "Missing command id" } };
+    return {
+      ok: false,
+      error: { code: "unknown_command", message: "Missing command id" },
+    };
   }
   if (!isCommandId(input.id)) {
     return {
@@ -196,7 +207,9 @@ export function validateCommandRequest(
 
   if (id === "sidebar.show") {
     if (!validateSidebarView(obj.view)) {
-      return invalidPayload("sidebar.show requires payload.view to be a sidebar view");
+      return invalidPayload(
+        "sidebar.show requires payload.view to be a sidebar view",
+      );
     }
     return { ok: true, value: { id, payload: { view: obj.view } } };
   }
@@ -218,6 +231,23 @@ export function validateCommandRequest(
     return { ok: true, value: { id, payload: { tabId: tabId.value } } };
   }
 
+  if (id === "tab.setColor") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    if (obj.color !== null && !isTabColor(obj.color)) {
+      return invalidPayload(
+        "tab.setColor requires payload.color to be a palette color or null",
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { tabId: tabId.value, color: obj.color as TabColor | null },
+      },
+    };
+  }
+
   if (id === "tab.close") {
     if (obj.tabId !== undefined && !Number.isInteger(obj.tabId)) {
       return invalidPayload("tab.close requires payload.tabId");
@@ -231,7 +261,10 @@ export function validateCommandRequest(
     if (!tabId.ok) return tabId;
     const title = requireString(obj, "title", id);
     if (!title.ok) return title;
-    return { ok: true, value: { id, payload: { tabId: tabId.value, title: title.value } } };
+    return {
+      ok: true,
+      value: { id, payload: { tabId: tabId.value, title: title.value } },
+    };
   }
 
   if (id === "git.diff.open") {
@@ -308,6 +341,8 @@ async function dispatchCommand(
       return handlers.renameTab(request.payload);
     case "tab.resetTitle":
       return handlers.resetTabTitle(request.payload);
+    case "tab.setColor":
+      return handlers.setTabColor(request.payload);
     case "git.diff.open":
       return handlers.openGitDiff(request.payload);
     case "settings.open":
@@ -321,7 +356,10 @@ export function createCommandRegistry(handlers: CommandHandlers) {
       const request = validateCommandRequest(input);
       if (!request.ok) return request;
       try {
-        return { ok: true, value: await dispatchCommand(handlers, request.value) };
+        return {
+          ok: true,
+          value: await dispatchCommand(handlers, request.value),
+        };
       } catch (error) {
         return { ok: false, error: normalizeCommandError(error) };
       }

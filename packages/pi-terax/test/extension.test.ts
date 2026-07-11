@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import extension, { createExtension, type ExtensionDependencies } from "../src/extension.js";
 import type { VisualQaResult, WindowDescriptor } from "../src/visual.js";
+import { isTeraxCommandId, TERAX_COMMAND_IDS } from "../src/commands.js";
 
 type RegisteredTool = {
   name: string;
@@ -75,6 +76,11 @@ describe("Pi extension", () => {
         payload: {},
       }),
     ).rejects.toThrow("Command ai.diff.approve is not allowed");
+  });
+
+  it("accepts tab.setColor as an allowlisted command", () => {
+    expect(isTeraxCommandId("tab.setColor")).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain("tab.setColor");
   });
 
   it("returns project contribution points for new windows", async () => {

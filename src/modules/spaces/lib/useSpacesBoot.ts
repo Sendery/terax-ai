@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { native } from "@/modules/ai/lib/native";
 import type { Tab } from "@/modules/tabs";
-import { DEFAULT_SPACE_ID } from "@/modules/tabs/lib/useTabs";
+import { DEFAULT_SPACE_ID } from "@/modules/tabs";
 import { isLeaf, type PaneNode } from "@/modules/terminal/lib/panes";
 import type { WorkspaceEnv } from "@/modules/workspace";
 import { activeSpaceEnv, freshTabCwd } from "./activeSpace";

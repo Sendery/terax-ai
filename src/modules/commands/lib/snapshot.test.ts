@@ -99,4 +99,119 @@ describe("buildAppSnapshot", () => {
     expect(JSON.stringify(snapshot)).not.toContain("approval-private");
     expect(JSON.stringify(snapshot)).not.toContain("/private-home");
   });
+
+  it("includes color in the snapshot when set on a tab", () => {
+    const tabs: Tab[] = [
+      {
+        id: 1,
+        kind: "terminal",
+        spaceId: "default",
+        title: "shell",
+        color: "teal",
+        paneTree: { kind: "leaf", id: 2 },
+        activeLeafId: 2,
+      },
+      {
+        id: 3,
+        kind: "editor",
+        spaceId: "default",
+        title: "main.ts",
+        path: "/repo/main.ts",
+        dirty: false,
+        preview: false,
+        color: "purple",
+      },
+      {
+        id: 5,
+        kind: "terminal",
+        spaceId: "default",
+        title: "uncolored",
+        paneTree: { kind: "leaf", id: 6 },
+        activeLeafId: 6,
+      },
+    ];
+
+    const snapshot = buildAppSnapshot({
+      tabs,
+      activeTabId: 1,
+      activeSpaceId: "default",
+    });
+
+    expect(snapshot.tabs[0]).toMatchObject({
+      id: 1,
+      kind: "terminal",
+      color: "teal",
+    });
+    expect(snapshot.tabs[1]).toMatchObject({
+      id: 3,
+      kind: "editor",
+      color: "purple",
+    });
+    expect(snapshot.tabs[2]).not.toHaveProperty("color");
+  });
+
+  it("does not expose color for private terminals", () => {
+    const tabs: Tab[] = [
+      {
+        id: 1,
+        kind: "terminal",
+        spaceId: "default",
+        title: "private",
+        color: "red" as const,
+        paneTree: { kind: "leaf", id: 2 },
+        activeLeafId: 2,
+        private: true,
+      },
+    ];
+    const snapshot = buildAppSnapshot({
+      tabs,
+      activeTabId: 1,
+      activeSpaceId: "default",
+    });
+    expect(snapshot.tabs[0].kind).toBe("private-terminal");
+    expect(JSON.stringify(snapshot)).not.toContain('"color"');
+  });
+
+  it("serializes color for every non-private tab kind", () => {
+    const tabs: Tab[] = [
+      {
+        id: 1,
+        kind: "markdown",
+        spaceId: "default",
+        title: "README",
+        path: "README.md",
+        color: "teal" as const,
+      },
+      {
+        id: 2,
+        kind: "git-history",
+        spaceId: "default",
+        title: "History",
+        repoRoot: "/repo",
+        color: "orange" as const,
+      },
+      {
+        id: 3,
+        kind: "git-diff",
+        spaceId: "default",
+        title: "diff",
+        path: "a.ts",
+        repoRoot: "/repo",
+        mode: "+" as const,
+        originalPath: null,
+        color: "blue" as const,
+      },
+    ];
+    const snapshot = buildAppSnapshot({
+      tabs,
+      activeTabId: 1,
+      activeSpaceId: "default",
+    });
+    expect(snapshot.tabs[0]).toMatchObject({ kind: "markdown", color: "teal" });
+    expect(snapshot.tabs[1]).toMatchObject({
+      kind: "git-history",
+      color: "orange",
+    });
+    expect(snapshot.tabs[2]).toMatchObject({ kind: "git-diff", color: "blue" });
+  });
 });

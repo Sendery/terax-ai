@@ -1,4 +1,4 @@
-import type { Tab, TerminalTab } from "@/modules/tabs/lib/useTabs";
+import type { Tab, TerminalTab } from "@/modules/tabs";
 
 /**
  * Terminal tabs that TerminalStack mounts. Cold tabs (restored, not yet

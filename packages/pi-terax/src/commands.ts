@@ -7,6 +7,7 @@ export const TERAX_COMMAND_IDS = [
   "tab.close",
   "tab.rename",
   "tab.resetTitle",
+  "tab.setColor",
   "git.diff.open",
   "settings.open",
 ] as const;

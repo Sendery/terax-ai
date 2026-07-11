@@ -30,4 +30,24 @@ describe("Pi package metadata", () => {
     const devDependencies = manifest.devDependencies as Record<string, unknown>;
     expect(devDependencies["@earendil-works/pi-coding-agent"]).toBe("0.80.3");
   });
+
+  it("bundles the isolated development workflow and learning assets", async () => {
+    const skillRoot = join(packageRoot, "skills", "terax-development");
+    const [skill, gotchas, journalTemplate] = await Promise.all([
+      readFile(join(skillRoot, "SKILL.md"), "utf8"),
+      readFile(join(skillRoot, "references", "gotchas.md"), "utf8"),
+      readFile(
+        join(skillRoot, "templates", "implementation-journal.md"),
+        "utf8",
+      ),
+    ]);
+
+    expect(skill).toContain("## Branch and Worktree Protocol");
+    expect(skill).toContain("## Gotcha Learning System");
+    expect(skill).toContain("templates/implementation-journal.md");
+    expect(gotchas).toContain("## Cross-Layer Change Matrix");
+    expect(gotchas).toContain("## Catalog Maintenance");
+    expect(journalTemplate).toContain("## Gotcha Candidates");
+    expect(journalTemplate).toContain("## Verification Evidence");
+  });
 });

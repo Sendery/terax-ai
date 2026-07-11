@@ -145,6 +145,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "tab.close"
             | "tab.rename"
             | "tab.resetTitle"
+            | "tab.setColor"
             | "git.diff.open"
             | "settings.open"
     )
@@ -426,5 +427,21 @@ mod tests {
         let err = read_frame(&mut &input[..]).expect_err("frame cap");
 
         assert_eq!(err.code(), "frame_too_large");
+    }
+
+    #[test]
+    fn allows_tab_set_color_command() {
+        let line = br#"{"version":1,"id":"r2","token":"tok","command":"tab.setColor","payload":{"tabId":1,"color":"blue"}}"#;
+        let request = decode_request_line(line, "tok").expect("tab.setColor must be allowed");
+
+        assert_eq!(request.command, "tab.setColor");
+    }
+
+    #[test]
+    fn rejects_unknown_command_at_bridge() {
+        let line = br#"{"version":1,"id":"r3","token":"tok","command":"ai.diff.approve"}"#;
+        let err = decode_request_line(line, "tok").expect_err("unlisted command blocked");
+
+        assert_eq!(err.code(), "unknown_command");
     }
 }

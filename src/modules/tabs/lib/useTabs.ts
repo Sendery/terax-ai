@@ -1,4 +1,5 @@
 import { isMarkdownPath } from "@/lib/utils";
+import type { TabColor } from "./tabColors";
 import {
   findLeafCwd,
   hasLeaf,
@@ -23,6 +24,8 @@ type TabBase = {
   cold?: boolean;
   /** User-set label that overrides the derived tab name. */
   customTitle?: string;
+  /** Optional accent color for the tab, chosen from the fixed palette. */
+  color?: TabColor;
 };
 
 export type TerminalTab = TabBase & {
@@ -128,7 +131,93 @@ export type TabPatch = Partial<{
   url: string;
   /** Empty string resets a tab to its derived name. */
   customTitle: string;
+  /** Palette color to apply. null explicitly clears any set color. */
+  color: TabColor | null;
 }>;
+
+/** Pure helper: apply a patch to a single tab without React state machinery. */
+export function applyTabPatch(tab: Tab, patch: TabPatch): Tab {
+  const customTitlePatch =
+    patch.customTitle !== undefined
+      ? {
+          customTitle: patch.customTitle === "" ? undefined : patch.customTitle,
+        }
+      : {};
+  const colorPatch =
+    "color" in patch
+      ? { color: patch.color === null ? undefined : patch.color }
+      : {};
+
+  if (tab.kind === "terminal") {
+    return {
+      ...tab,
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.cwd !== undefined && { cwd: patch.cwd }),
+      ...customTitlePatch,
+      ...colorPatch,
+    };
+  }
+  if (tab.kind === "preview") {
+    return {
+      ...tab,
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.url !== undefined && {
+        url: patch.url,
+        title: patch.title ?? titleFromUrl(patch.url),
+      }),
+      ...customTitlePatch,
+      ...colorPatch,
+    };
+  }
+  if (tab.kind === "markdown") {
+    return {
+      ...tab,
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...customTitlePatch,
+      ...colorPatch,
+    };
+  }
+  // editor tab: auto-promote from preview the moment the file becomes dirty.
+  const autoPin =
+    patch.dirty === true && (tab as EditorTab).preview
+      ? { preview: false }
+      : {};
+  return {
+    ...tab,
+    ...autoPin,
+    ...(patch.title !== undefined && { title: patch.title }),
+    ...(patch.dirty !== undefined && { dirty: patch.dirty }),
+    ...(patch.path !== undefined && { path: patch.path }),
+    ...customTitlePatch,
+    ...colorPatch,
+  };
+}
+
+/**
+ * Pure helper: apply a markdown/raw view mode transition to a tab.
+ * Preserves all TabBase metadata (color, customTitle, cold, spaceId) across
+ * the markdown ↔ editor kind change.
+ */
+export function applyMarkdownView(tab: Tab, mode: "rendered" | "raw"): Tab {
+  if (!isMarkdownPath((tab as { path?: string }).path ?? "")) return tab;
+  if (mode === "raw" && tab.kind === "markdown") {
+    return { ...tab, kind: "editor" as const, dirty: false, preview: false };
+  }
+  if (mode === "rendered" && tab.kind === "editor") {
+    if (tab.dirty) return tab;
+    return {
+      id: tab.id,
+      kind: "markdown" as const,
+      spaceId: tab.spaceId,
+      cold: tab.cold,
+      title: tab.title,
+      path: tab.path,
+      ...(tab.customTitle !== undefined && { customTitle: tab.customTitle }),
+      ...(tab.color !== undefined && { color: tab.color }),
+    };
+  }
+  return tab;
+}
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -610,33 +699,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
   const setMarkdownView = useCallback(
     (id: number, mode: "rendered" | "raw") => {
       setTabs((curr) =>
-        curr.map((t) => {
-          if (
-            t.id !== id ||
-            !isMarkdownPath((t as { path?: string }).path ?? "")
-          )
-            return t;
-          if (mode === "raw" && t.kind === "markdown") {
-            return {
-              ...t,
-              kind: "editor" as const,
-              dirty: false,
-              preview: false,
-            };
-          }
-          if (mode === "rendered" && t.kind === "editor") {
-            if (t.dirty) return t;
-            return {
-              id: t.id,
-              kind: "markdown" as const,
-              spaceId: t.spaceId,
-              cold: t.cold,
-              title: t.title,
-              path: t.path,
-            };
-          }
-          return t;
-        }),
+        curr.map((t) => (t.id !== id ? t : applyMarkdownView(t, mode))),
       );
     },
     [],
@@ -809,55 +872,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     setTabs((t) =>
       t.map((x) => {
         if (x.id !== id) return x;
-        const customTitlePatch =
-          patch.customTitle !== undefined
-            ? {
-                customTitle:
-                  patch.customTitle === "" ? undefined : patch.customTitle,
-              }
-            : {};
-        if (x.kind === "terminal") {
-          return {
-            ...x,
-            ...(patch.title !== undefined && { title: patch.title }),
-            ...(patch.cwd !== undefined && { cwd: patch.cwd }),
-            ...(patch.customTitle !== undefined && {
-              customTitle:
-                patch.customTitle === "" ? undefined : patch.customTitle,
-            }),
-          };
-        }
-        if (x.kind === "preview") {
-          return {
-            ...x,
-            ...(patch.title !== undefined && { title: patch.title }),
-            ...(patch.url !== undefined && {
-              url: patch.url,
-              title: patch.title ?? titleFromUrl(patch.url),
-            }),
-            ...customTitlePatch,
-          };
-        }
-        if (x.kind === "markdown") {
-          return {
-            ...x,
-            ...(patch.title !== undefined && { title: patch.title }),
-            ...customTitlePatch,
-          };
-        }
-        // editor tab: auto-promote from preview the moment the file becomes dirty.
-        const autoPin =
-          patch.dirty === true && (x as EditorTab).preview
-            ? { preview: false }
-            : {};
-        return {
-          ...x,
-          ...autoPin,
-          ...(patch.title !== undefined && { title: patch.title }),
-          ...(patch.dirty !== undefined && { dirty: patch.dirty }),
-          ...(patch.path !== undefined && { path: patch.path }),
-          ...customTitlePatch,
-        };
+        return applyTabPatch(x, patch);
       }),
     );
   }, []);

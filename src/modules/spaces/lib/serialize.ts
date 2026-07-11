@@ -3,28 +3,32 @@ import {
   type PaneNode,
   type SplitDir,
 } from "@/modules/terminal/lib/panes";
-import type {
-  EditorTab,
-  MarkdownTab,
-  PreviewTab,
-  Tab,
-  TerminalTab,
-} from "@/modules/tabs/lib/useTabs";
+import {
+  type EditorTab,
+  isTabColor,
+  type MarkdownTab,
+  type PreviewTab,
+  type Tab,
+  type TabColor,
+  type TerminalTab,
+} from "@/modules/tabs";
 
 export type SerializedNode =
   | { kind: "leaf"; cwd?: string; active?: boolean }
   | { kind: "split"; dir: SplitDir; children: SerializedNode[] };
 
+type SerializedTabBase = { color?: TabColor };
+
 export type SerializedTab =
-  | {
+  | (SerializedTabBase & {
       kind: "terminal";
       tree: SerializedNode;
       blocks?: boolean;
       customTitle?: string;
-    }
-  | { kind: "editor"; path: string }
-  | { kind: "preview"; url: string }
-  | { kind: "markdown"; path: string };
+    })
+  | (SerializedTabBase & { kind: "editor"; path: string })
+  | (SerializedTabBase & { kind: "preview"; url: string })
+  | (SerializedTabBase & { kind: "markdown"; path: string });
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -76,13 +80,26 @@ function serializeTab(tab: Tab): SerializedTab | null {
         tree: serializeNode(tab.paneTree, tab.activeLeafId),
         ...(tab.blocks && { blocks: true }),
         ...(tab.customTitle !== undefined && { customTitle: tab.customTitle }),
+        ...(tab.color !== undefined && { color: tab.color }),
       };
     case "editor":
-      return { kind: "editor", path: tab.path };
+      return {
+        kind: "editor",
+        path: tab.path,
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
     case "preview":
-      return { kind: "preview", url: tab.url };
+      return {
+        kind: "preview",
+        url: tab.url,
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
     case "markdown":
-      return { kind: "markdown", path: tab.path };
+      return {
+        kind: "markdown",
+        path: tab.path,
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
     default:
       return null;
   }
@@ -146,6 +163,7 @@ function hydrateTab(
   spaceId: string,
   allocId: () => number,
 ): Tab | null {
+  const color = isTabColor(s.color) ? { color: s.color } : {};
   switch (s.kind) {
     case "terminal": {
       const { tree, activeLeafId, firstLeafCwd } = hydrateTree(s.tree, allocId);
@@ -163,6 +181,7 @@ function hydrateTab(
         activeLeafId,
         ...(s.blocks && { blocks: true }),
         ...(s.customTitle !== undefined && { customTitle: s.customTitle }),
+        ...color,
       } satisfies TerminalTab;
     }
     case "editor":
@@ -175,6 +194,7 @@ function hydrateTab(
         path: s.path,
         dirty: false,
         preview: false,
+        ...color,
       } satisfies EditorTab;
     case "preview":
       return {
@@ -184,6 +204,7 @@ function hydrateTab(
         cold: true,
         title: titleFromUrl(s.url),
         url: s.url,
+        ...color,
       } satisfies PreviewTab;
     case "markdown":
       return {
@@ -193,6 +214,7 @@ function hydrateTab(
         cold: true,
         title: basename(s.path),
         path: s.path,
+        ...color,
       } satisfies MarkdownTab;
     default:
       return null;

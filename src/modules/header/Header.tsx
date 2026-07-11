@@ -2,8 +2,7 @@ import { Button } from "@/components/ui/button";
 import { WindowControls } from "@/components/WindowControls";
 import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
 import { NotificationBell } from "@/modules/agents";
-import type { Tab } from "@/modules/tabs";
-import { TabBar } from "@/modules/tabs";
+import { TabBar, type Tab, type TabColor } from "@/modules/tabs";
 import {
   CommandIcon,
   Settings01Icon,
@@ -38,6 +37,8 @@ type Props = {
   onPin: (id: number) => void;
   /** Set a tab's custom label; empty string resets to default. */
   onRename: (id: number, title: string) => void;
+  /** Set or reset a tab's palette color. null clears the color. */
+  onSetColor: (id: number, color: TabColor | null) => void;
   onToggleSidebar: () => void;
   onOpenCommandPalette: () => void;
   onActivateAgent: (tabId: number, leafId: number) => void;
@@ -63,6 +64,7 @@ export function Header({
   onClose,
   onPin,
   onRename,
+  onSetColor,
   onToggleSidebar,
   onOpenCommandPalette,
   onActivateAgent,
@@ -157,6 +159,7 @@ export function Header({
           onClose={onClose}
           onPin={onPin}
           onRename={onRename}
+          onSetColor={onSetColor}
           compact={compact}
         />
         <div data-tauri-drag-region className="h-full min-w-2 flex-1" />

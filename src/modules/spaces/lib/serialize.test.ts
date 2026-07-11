@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PaneNode } from "@/modules/terminal/lib/panes";
-import type { Tab } from "@/modules/tabs/lib/useTabs";
+import type { Tab } from "@/modules/tabs";
 import { hydrateTabs, serializeTabs, type SerializedTab } from "./serialize";
 
 function counter(start = 100): () => number {
@@ -74,6 +74,60 @@ describe("serializeTabs", () => {
 });
 
 describe("hydrateTabs", () => {
+  it("round-trips valid tab colors for every persisted tab kind", () => {
+    const tabs: Tab[] = [
+      term({ color: "teal" }),
+      {
+        id: 3,
+        kind: "editor",
+        spaceId: "s1",
+        title: "app.ts",
+        path: "/a/app.ts",
+        dirty: false,
+        preview: false,
+        color: "blue",
+      },
+      {
+        id: 4,
+        kind: "preview",
+        spaceId: "s1",
+        title: "example.com",
+        url: "https://example.com",
+        color: "purple",
+      },
+      {
+        id: 5,
+        kind: "markdown",
+        spaceId: "s1",
+        title: "README.md",
+        path: "/a/README.md",
+        color: "amber",
+      },
+    ];
+
+    const restored = hydrateTabs(serializeTabs(tabs), "s2", counter());
+
+    expect(restored.map((tab) => tab.color)).toEqual([
+      "teal",
+      "blue",
+      "purple",
+      "amber",
+    ]);
+  });
+
+  it("ignores invalid stored tab colors while preserving legacy entries", () => {
+    const serialized = [
+      { kind: "editor", path: "/a/app.ts", color: "javascript:alert(1)" },
+      { kind: "markdown", path: "/a/README.md" },
+    ] as unknown as SerializedTab[];
+
+    const restored = hydrateTabs(serialized, "s1", counter());
+
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).not.toHaveProperty("color");
+    expect(restored[1]).not.toHaveProperty("color");
+  });
+
   it("round-trips structure, cwd, blocks and active leaf", () => {
     const tree: PaneNode = {
       kind: "split",
