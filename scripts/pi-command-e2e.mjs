@@ -1,9 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createExtension } from "../packages/pi-terax/dist/extension.js";
 
 const root = process.cwd();
 const outputDir = join(root, ".terax", "visual-qa", "pi-command-e2e");
+await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
 const tools = new Map();
@@ -24,8 +25,8 @@ async function call(command, payload) {
   return invoke("terax_call", { command, ...(payload === undefined ? {} : { payload }) });
 }
 
-async function wait() {
-  await invoke("terax_wait", { milliseconds: 350 });
+async function wait(milliseconds = 350) {
+  await invoke("terax_wait", { milliseconds });
 }
 
 async function capture(name, surface = "main") {
@@ -38,7 +39,7 @@ function assert(condition, message) {
 
 const fixture = "C:/Users/Andrés/AppData/Local/terax-ai/e2e-fixture";
 const alpha = `${fixture}/alpha.txt`;
-const diff = `${fixture}/diff.txt`;
+const diff = "diff.txt";
 const results = [];
 
 async function scenario(name, fn, options = {}) {
@@ -146,7 +147,7 @@ await scenario("tab-close-editor", async () => {
 
 await scenario("settings-open-shortcuts", async () => {
   await call("settings.open", { tab: "shortcuts" });
-  await wait();
+  await wait(1_500);
   const settingsVisual = await capture("settings-open-shortcuts-after", "settings");
   return { settingsVisual };
 }, { visual: false });

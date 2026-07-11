@@ -113,6 +113,108 @@ describe("Windows Terax visual backend", () => {
     expect(run.mock.calls[1]?.[2]?.env?.TERAX_VISUAL_TITLE).toBe("e2e-fixture");
   });
 
+  it("discovers the main window by authenticated pid without selecting Settings", async () => {
+    const runtimeDescriptor =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture","x":10,"y":20,"width":800,"height":600}';
+    const run = vi
+      .fn<VisualCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: runtimeDescriptor, stderr: "" })
+      .mockResolvedValueOnce({ stdout: runtimeDescriptor, stderr: "" });
+    const backend = createWindowsVisualBackend({
+      powershellPath: "powershell.exe",
+      ffmpegPath: "ffmpeg.exe",
+      toWindowsPath: async (path: string) => path,
+      run,
+    });
+
+    await backend.capture(selector, "/tmp/main-with-settings-open.png");
+
+    const discoveryScript = Buffer.from(
+      run.mock.calls[0]?.[1]?.[3] ?? "",
+      "base64",
+    ).toString("utf16le");
+    expect(discoveryScript).toContain('$env:TERAX_VISUAL_EXCLUDED_TITLE');
+    expect(run.mock.calls[0]?.[2]?.env).toMatchObject({
+      TERAX_VISUAL_TITLE: "",
+      TERAX_VISUAL_EXCLUDED_TITLE: "Settings",
+    });
+  });
+
+  it("accepts a main-window title change during a private screenshot", async () => {
+    const initial =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture","x":10,"y":20,"width":800,"height":600}';
+    const renamed =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture - alpha.txt","x":10,"y":20,"width":800,"height":600}';
+    const run = vi
+      .fn<VisualCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: initial, stderr: "" })
+      .mockResolvedValueOnce({ stdout: renamed, stderr: "" });
+    const backend = createWindowsVisualBackend({
+      powershellPath: "powershell.exe",
+      ffmpegPath: "ffmpeg.exe",
+      toWindowsPath: async (path: string) => path,
+      run,
+    });
+
+    await expect(backend.capture(selector, "/tmp/main.png")).resolves.toMatchObject({
+      title: "e2e-fixture - alpha.txt",
+    });
+    expect(run.mock.calls[1]?.[2]?.env).toMatchObject({
+      TERAX_VISUAL_TITLE: "e2e-fixture",
+      TERAX_VISUAL_DYNAMIC_MAIN_TITLE: "1",
+    });
+  });
+
+  it("accepts main-window title changes while recording but keeps the same window", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-terax-dynamic-record-"));
+    const initial =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture","x":10,"y":20,"width":800,"height":600}';
+    const renamed =
+      '{"handle":"0x102A","pid":123,"processName":"terax","title":"e2e-fixture - alpha.txt","x":10,"y":20,"width":800,"height":600}';
+    const run = vi
+      .fn<VisualCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: initial, stderr: "" })
+      .mockResolvedValueOnce({ stdout: renamed, stderr: "" })
+      .mockResolvedValueOnce({ stdout: "", stderr: "" });
+    const backend = createWindowsVisualBackend({
+      powershellPath: "powershell.exe",
+      ffmpegPath: "ffmpeg.exe",
+      toWindowsPath: async (path: string) => path,
+      run,
+    });
+
+    await expect(backend.record(selector, join(root, "main.mp4"), 1, 1)).resolves.toMatchObject({
+      title: "e2e-fixture - alpha.txt",
+    });
+    expect(run.mock.calls[1]?.[2]?.env).toMatchObject({
+      TERAX_VISUAL_TITLE: "e2e-fixture",
+      TERAX_VISUAL_DYNAMIC_MAIN_TITLE: "1",
+    });
+  });
+
+  it("rejects title changes for the exact Settings surface", async () => {
+    const settingsSelector = { pid: 123, processName: "terax" as const, title: "Settings" };
+    const settings =
+      '{"handle":"0x202B","pid":123,"processName":"terax","title":"Settings","x":10,"y":20,"width":800,"height":600}';
+    const changed =
+      '{"handle":"0x202B","pid":123,"processName":"terax","title":"Other","x":10,"y":20,"width":800,"height":600}';
+    const run = vi
+      .fn<VisualCommandRunner["run"]>()
+      .mockResolvedValueOnce({ stdout: settings, stderr: "" })
+      .mockResolvedValueOnce({ stdout: changed, stderr: "" });
+    const backend = createWindowsVisualBackend({
+      powershellPath: "powershell.exe",
+      ffmpegPath: "ffmpeg.exe",
+      toWindowsPath: async (path: string) => path,
+      run,
+    });
+
+    await expect(backend.capture(settingsSelector, "/tmp/settings.png")).rejects.toThrow(
+      "Window identity or geometry changed during capture",
+    );
+    expect(run.mock.calls[1]?.[2]?.env?.TERAX_VISUAL_DYNAMIC_MAIN_TITLE).toBeUndefined();
+  });
+
   it("records with frame-by-frame identity, fixed dimensions, and byte limits", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-terax-record-"));
     const output = join(root, "demo.mp4");

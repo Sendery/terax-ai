@@ -165,6 +165,7 @@ $callback = [TeraxVisualWindowApi+EnumWindowsProc]{
   $builder = New-Object System.Text.StringBuilder ($length + 1)
   [void][TeraxVisualWindowApi]::GetWindowText($hWnd, $builder, $builder.Capacity)
   $title = $builder.ToString()
+  if ($env:TERAX_VISUAL_EXCLUDED_TITLE -and [String]::Equals($title, $env:TERAX_VISUAL_EXCLUDED_TITLE, [StringComparison]::Ordinal)) { return $true }
   if ($env:TERAX_VISUAL_TITLE -and -not [String]::Equals($title, $env:TERAX_VISUAL_TITLE, [StringComparison]::Ordinal)) { return $true }
   try { $process = [System.Diagnostics.Process]::GetProcessById($actualPid) } catch { return $true }
   if (-not [String]::Equals($process.ProcessName, $env:TERAX_VISUAL_PROCESS, [StringComparison]::OrdinalIgnoreCase)) { return $true }
@@ -282,7 +283,11 @@ function selectorEnv(selector: WindowSelector): NodeJS.ProcessEnv {
 
 function discoverySelectorEnv(selector: WindowSelector): NodeJS.ProcessEnv {
   return selector.title === "Terax"
-    ? { ...selectorEnv(selector), TERAX_VISUAL_TITLE: "" }
+    ? {
+        ...selectorEnv(selector),
+        TERAX_VISUAL_TITLE: "",
+        TERAX_VISUAL_EXCLUDED_TITLE: "Settings",
+      }
     : selectorEnv(selector);
 }
 
@@ -325,7 +330,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
         }),
       );
       const finalWindow = parseWindowDescriptor(captured.stdout);
-      assertSameWindow(window, finalWindow, authenticatedSelector);
+      assertSameWindow(window, finalWindow, authenticatedSelector, dynamicMainTitle);
       return finalWindow;
     },
     async record(selector, outputPath, durationSeconds, fps, signal) {
@@ -339,11 +344,13 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
       }
       const frameCount = Math.ceil(durationSeconds * fps);
       if (frameCount > MAX_VIDEO_FRAMES) throw new Error("Video exceeds frame limit");
+      const dynamicMainTitle = selector.title === "Terax";
       const window = await discoverWindow(runtime, selector, signal);
       const authenticatedSelector = { ...selector, title: window.title };
       const nativeOutput = await runtime.toWindowsPath(outputPath, signal);
       const stem = basename(outputPath).replace(/\.[^.]+$/, "");
       const frameDir = await mkdtemp(join(dirname(outputPath), `.${stem}.frames-`));
+      let finalWindow = window;
       try {
         const nativeFrameDir = await runtime.toWindowsPath(frameDir, signal);
         const recorded = await runtime.run(
@@ -352,6 +359,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
           {
             ...commandOptions(runtime, signal, {
               ...selectorEnv(authenticatedSelector),
+              ...(dynamicMainTitle ? { TERAX_VISUAL_DYNAMIC_MAIN_TITLE: "1" } : {}),
               TERAX_VISUAL_HANDLE: window.handle,
               TERAX_VISUAL_FRAME_DIR: nativeFrameDir,
               TERAX_VISUAL_DURATION: String(durationSeconds),
@@ -364,8 +372,8 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
             timeoutMs: runtime.timeoutMs ?? recordCommandTimeoutMs(durationSeconds),
           },
         );
-        const finalWindow = parseWindowDescriptor(recorded.stdout);
-        assertSameWindow(window, finalWindow, authenticatedSelector);
+        finalWindow = parseWindowDescriptor(recorded.stdout);
+        assertSameWindow(window, finalWindow, authenticatedSelector, dynamicMainTitle);
         await runtime.run(
           runtime.ffmpegPath,
           buildVideoArgs(`${nativeFrameDir}\\frame-%06d.png`, nativeOutput, fps),
@@ -374,7 +382,7 @@ export function createWindowsVisualBackend(runtime: WindowsVisualRuntime): Visua
       } finally {
         await rm(frameDir, { recursive: true, force: true });
       }
-      return window;
+      return finalWindow;
     },
     async compare(currentPath, baselinePath, signal) {
       const nativeCurrent = await runtime.toWindowsPath(currentPath, signal);
