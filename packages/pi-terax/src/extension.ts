@@ -1,3 +1,5 @@
+import { readFile, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   defineTool,
@@ -17,6 +19,14 @@ import {
   isDevelopmentCapability,
 } from "./development.js";
 import { discoverTerax } from "./discovery.js";
+import {
+  assertVisualCaptureSafe,
+  runVisualQa,
+  validateVisualQaRequest,
+  type VisualBackend,
+  type VisualQaRequest,
+} from "./visual.js";
+import { createSystemWindowsVisualBackend } from "./visual-windows.js";
 
 type TextDetails = Record<string, unknown>;
 
@@ -108,9 +118,100 @@ const developmentGuideTool = defineTool({
   },
 });
 
-export default function extension(pi: ExtensionAPI): void {
+export type ExtensionDependencies = {
+  discover: typeof discoverTerax;
+  createClient: (discovery: Awaited<ReturnType<typeof discoverTerax>>, signal?: AbortSignal) => {
+    call: (command: TeraxCommandId, payload?: unknown) => Promise<unknown>;
+  };
+  createVisualBackend: (signal?: AbortSignal) => Promise<VisualBackend>;
+  runVisual: typeof runVisualQa;
+  readEvidence: typeof readFile;
+};
+
+const defaultDependencies: ExtensionDependencies = {
+  discover: discoverTerax,
+  createClient: (discovery, signal) => new TeraxClient(discovery, { signal }),
+  createVisualBackend: (signal) => createSystemWindowsVisualBackend({ signal }),
+  runVisual: runVisualQa,
+  readEvidence: readFile,
+};
+
+function createVisualQaTool(dependencies: ExtensionDependencies) {
+  return defineTool({
+  name: "terax_visual_qa",
+  label: "Terax visual QA",
+  description:
+    "Capture a Terax screenshot, record a short MP4 with a PNG preview, or compare the current UI against a project baseline. Returns visual evidence for model inspection.",
+  parameters: Type.Object({
+    action: Type.Union([
+      Type.Literal("screenshot"),
+      Type.Literal("video"),
+      Type.Literal("compare"),
+    ]),
+    surface: Type.Union([Type.Literal("main"), Type.Literal("settings")]),
+    name: Type.String({ minLength: 1, maxLength: 80 }),
+    durationSeconds: Type.Optional(Type.Number({ minimum: 1, maximum: 30 })),
+    fps: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
+    baselinePath: Type.Optional(Type.String({ minLength: 1 })),
+    threshold: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+  }),
+  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+    if (!ctx.isProjectTrusted()) {
+      throw new Error("Visual QA requires a trusted Pi project");
+    }
+    const validated = validateVisualQaRequest(params as VisualQaRequest);
+    const discovery = await dependencies.discover({ signal });
+    const client = dependencies.createClient(discovery, signal);
+    const guard = async () => {
+      const snapshot = await client.call("app.snapshot", undefined);
+      if (validated.surface === "main") assertVisualCaptureSafe(snapshot);
+    };
+    await guard();
+    const backend = await dependencies.createVisualBackend(signal);
+    const result = await dependencies.runVisual(validated, {
+      projectRoot: ctx.cwd,
+      pid: discovery.pid,
+      backend,
+      guard,
+      signal,
+    });
+    try {
+      await guard();
+      signal?.throwIfAborted();
+      const image = await dependencies.readEvidence(result.imagePath);
+      signal?.throwIfAborted();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+          {
+            type: "image",
+            data: image.toString("base64"),
+            mimeType: "image/png",
+          },
+        ],
+        details: result,
+      };
+    } catch (error) {
+      await rm(dirname(result.reportPath), { recursive: true, force: true });
+      throw error;
+    }
+  },
+  });
+}
+
+export function createExtension(
+  dependencies: ExtensionDependencies = defaultDependencies,
+): (pi: ExtensionAPI) => void {
+  return (pi: ExtensionAPI): void => {
   pi.registerTool(getStateTool);
   pi.registerTool(callTool);
   pi.registerTool(waitTool);
   pi.registerTool(developmentGuideTool);
+    pi.registerTool(createVisualQaTool(dependencies));
+  };
 }
+
+export default createExtension();

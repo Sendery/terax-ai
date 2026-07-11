@@ -40,12 +40,13 @@ The discovery file is written atomically. Terax removes stale discovery data on 
 
 ## Pi Package
 
-The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus the `terax-development` skill. The extension registers four tools:
+The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus development and visual-QA skills. The extension registers five tools:
 
 - `terax_get_state`: returns the redacted Terax snapshot.
 - `terax_call`: calls only allowlisted Terax registry commands.
 - `terax_wait`: waits for a short interval before the next state check.
 - `terax_development_guide`: returns project contribution points for a feature, native window, setting, shortcut, or app command.
+- `terax_visual_qa`: returns screenshot evidence, records short MP4s, or compares the UI against a project baseline.
 
 The client uses Node built-ins only for its TCP transport and adds no direct HTTP or MCP transport dependency.
 
@@ -75,6 +76,8 @@ The bundled `terax-development` skill is the supported source-extension workflow
 6. Runs the frontend and Rust quality gates.
 
 This deliberately extends Terax at source level. The app does not dynamically load arbitrary JavaScript or Rust plugins from Pi. New functionality is reviewed, tested, and compiled with Terax before it ships.
+
+The bundled `terax-visual-qa` skill defines how Pi validates those changes with semantic state plus native visual evidence. See `pi-visual-qa.md` for the tool contract, Windows/WSL backend, privacy rules, and baseline policy.
 
 ## Security
 
