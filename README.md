@@ -93,7 +93,7 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 
 ## Install
 
-Latest installers are on the [Releases](https://github.com/crynta/terax-ai/releases/latest) page. Terax auto-updates from there.
+Latest installers are on the [Releases](https://github.com/Sendery/terax-ai/releases/latest) page. Terax auto-updates from there.
 
 ### Windows notes
 
@@ -104,7 +104,7 @@ Latest installers are on the [Releases](https://github.com/crynta/terax-ai/relea
 ### Linux notes
 
 - **Arch / AUR:** `yay -S terax-bin` (or `paru`, etc.). Tracks the latest release.
-- **NixOS / Nix**: use the official flake — `nix profile install github:crynta/terax-ai` (non-NixOS), or import the flake and add `inputs.terax.packages.${pkgs.system}.terax` to `environment.systemPackages` (NixOS). The `nixosModules.terax` output is also available for a simpler setup.
+- **NixOS / Nix**: use the official flake: `nix profile install github:Sendery/terax-ai` (non-NixOS), or import the flake and add `inputs.terax.packages.${pkgs.system}.terax` to `environment.systemPackages` (NixOS). The `nixosModules.terax` output is also available for a simpler setup.
 - **AppImage:** needs FUSE. Without it: `./Terax_*.AppImage --appimage-extract-and-run`. On Wayland with rendering glitches, try `WEBKIT_DISABLE_DMABUF_RENDERER=1`. Otherwise the `.deb` / `.rpm` packages link against the system GTK stack and tend to be smoother.
 
 ## Configure AI
@@ -126,6 +126,15 @@ pnpm install
 pnpm tauri dev          # development
 pnpm tauri build        # production bundle
 ```
+
+**Local releases without GitHub Actions**
+
+```bash
+pnpm release:local 0.9.0          # build, sign, and stage this host platform
+pnpm release:publish 0.9.0        # publish after all platform stages exist
+```
+
+See [Local Releases](docs/local-releases.md) for signing setup, Linux, Windows, macOS cross-architecture builds, draft releases, and updater manifest publication.
 
 **Checks**
 ```bash

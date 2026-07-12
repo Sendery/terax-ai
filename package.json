@@ -14,6 +14,8 @@
     "build": "tsc && vite build",
     "build:env": "node scripts/check-build-env.mjs",
     "build:version": "node scripts/build-version.mjs",
+    "release:local": "node scripts/release-local.mjs",
+    "release:publish": "node scripts/release-local.mjs --publish",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",

@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 const args = process.argv.slice(2);
 const version = args[0];
@@ -31,9 +31,16 @@ const snapshots = new Map(
   files.map((path) => [path, readFileSync(path, "utf8")]),
 );
 const cargoBin = join(homedir(), ".cargo", "bin");
+const tauriCli = join(
+  process.cwd(),
+  "node_modules",
+  "@tauri-apps",
+  "cli",
+  "tauri.js",
+);
 const env = {
   ...process.env,
-  PATH: `${cargoBin}:${process.env.PATH ?? ""}`,
+  PATH: `${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
 };
 
 function run(command, runArgs) {
@@ -42,12 +49,16 @@ function run(command, runArgs) {
     stdio: "inherit",
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.status !== 0) {
+    const error = new Error(`${command} failed with exit code ${result.status ?? 1}`);
+    error.exitCode = result.status ?? 1;
+    throw error;
+  }
 }
 
 try {
-  run("node", ["scripts/set-version.mjs", version]);
-  run("pnpm", ["tauri", "build", ...tauriArgs]);
+  run(process.execPath, ["scripts/set-version.mjs", version]);
+  run(process.execPath, [tauriCli, "build", ...tauriArgs]);
 } finally {
   if (!keepVersion) {
     for (const [path, content] of snapshots) writeFileSync(path, content);

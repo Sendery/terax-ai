@@ -14,6 +14,7 @@ dist-ssr
 stats.html
 .terax/visual-qa/
 .terax/pi-development/
+.terax/releases/
 
 # Editor directories and files
 .vscode/*

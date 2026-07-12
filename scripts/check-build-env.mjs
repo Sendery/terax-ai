@@ -2,12 +2,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 const cargoBin = join(homedir(), ".cargo", "bin");
 const env = {
   ...process.env,
-  PATH: `${cargoBin}:${process.env.PATH ?? ""}`,
+  PATH: `${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
 };
 
 function commandVersion(command, args) {
@@ -57,13 +57,15 @@ const packages = [
 ];
 
 const missingApt = [];
-for (const [pkg, apt] of packages) {
-  if (pkgExists(pkg)) {
-    console.log(`ok pkg-config: ${pkg}`);
-  } else {
-    failed = true;
-    missingApt.push(apt);
-    console.log(`missing pkg-config: ${pkg} (${apt})`);
+if (process.platform === "linux") {
+  for (const [pkg, apt] of packages) {
+    if (pkgExists(pkg)) {
+      console.log(`ok pkg-config: ${pkg}`);
+    } else {
+      failed = true;
+      missingApt.push(apt);
+      console.log(`missing pkg-config: ${pkg} (${apt})`);
+    }
   }
 }
 
