@@ -1,9 +1,11 @@
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import path from "path";
 import { defineConfig, type PluginOption, type UserConfig } from "vite";
 import Inspect from "vite-plugin-inspect";
+import { createBuildInfo } from "./scripts/build-info.mjs";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -14,8 +16,17 @@ const analyze = process.env.ANALYZE === "true";
 // `pnpm dev` from paying its transform-tracking overhead on every run.
 const inspectGraph = process.env.INSPECT === "true";
 
+const packageVersion = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+).version as string;
+
+const buildInfo = createBuildInfo({ version: packageVersion });
+
 // https://vite.dev/config/
 export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
+  define: {
+    __TERAX_BUILD_INFO__: JSON.stringify(buildInfo),
+  },
   plugins: [
     babel({
       presets: [reactCompilerPreset({ target: "19" })],

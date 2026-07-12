@@ -152,6 +152,7 @@ BYOK. Cloud providers via `@ai-sdk/*`: **OpenAI, Anthropic, Google, xAI, Cerebra
   - **Linux**: deb depends `libwebkit2gtk-4.1-0`, `libgtk-3-0`; rpm `webkit2gtk4.1`, `gtk3`; AppImage bundles its media framework.
   - **Windows**: NSIS installer in `currentUser` mode (no admin required), WebView2 via `embedBootstrapper` (offline install).
 - Auto-updater configured with a public minisign key; release artifacts at `https://github.com/Sendery/terax-ai/releases/latest/download/latest.json`.
+- Vite injects immutable About-page build provenance from Git at build time: `Sendery/terax-ai`, source branch, full commit SHA, UTC build timestamp, and `development`/`official` channel derived from SemVer. `TERAX_BUILD_REPOSITORY`, `TERAX_BUILD_BRANCH`, `TERAX_BUILD_COMMIT`, and `TERAX_BUILD_DATE` can explicitly pin those values for detached or orchestrated builds.
 
 ### Known gotchas
 
