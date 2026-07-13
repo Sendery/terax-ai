@@ -1,5 +1,6 @@
 export const TERAX_COMMAND_IDS = [
   "app.snapshot",
+  "app.commands",
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",

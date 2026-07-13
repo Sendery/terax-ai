@@ -27,6 +27,7 @@ import {
   TAB_COLOR_LABEL,
   isTabColor,
   tabAccessibleLabel,
+  tabColorStyle,
   type TabColor,
 } from "./lib/tabColors";
 import {
@@ -227,12 +228,25 @@ export function TabBar({
                 );
               }
 
+              const colorStyle = t.color
+                ? tabColorStyle(t.color, isActive)
+                : undefined;
+
               const trigger = (
                 <TabsTrigger
                   key={t.id}
                   value={String(t.id)}
                   data-tab-id={t.id}
                   data-tab-active={isActive ? "true" : undefined}
+                  style={
+                    colorStyle
+                      ? {
+                          backgroundColor: colorStyle.backgroundColor,
+                          boxShadow: `inset 0 0 0 1.5px ${colorStyle.borderColor}`,
+                          color: colorStyle.color,
+                        }
+                      : undefined
+                  }
                   aria-label={tabAccessibleLabel(
                     labelFor(t),
                     t.color,
@@ -250,11 +264,22 @@ export function TabBar({
                     if (e.button === 1) e.preventDefault();
                   }}
                   className={cn(
-                    "group relative z-[1] h-7 shrink-0 justify-between gap-1.5 rounded-md bg-transparent text-xs transition-colors data-active:bg-transparent dark:data-active:bg-transparent",
+                    "group relative z-[1] h-7 shrink-0 justify-between gap-1.5 rounded-md bg-transparent text-xs transition-colors",
+                    // A colored tab paints its own fill via inline style; let it
+                    // win over the shared active pill and the default bg reset.
+                    colorStyle
+                      ? "data-active:bg-[color:inherit]"
+                      : "data-active:bg-transparent dark:data-active:bg-transparent",
                     isNew && "terax-tab-in",
-                    isActive
-                      ? "text-foreground dark:text-foreground"
-                      : "text-muted-foreground hover:text-foreground/80 dark:text-muted-foreground",
+                    colorStyle
+                      ? undefined
+                      : isActive
+                        ? "text-foreground dark:text-foreground"
+                        : "text-muted-foreground hover:text-foreground/80 dark:text-muted-foreground",
+                    // Inactive colored tabs keep muted text; the border carries
+                    // the identity, matching the reference design.
+                    colorStyle && !isActive &&
+                      "text-muted-foreground hover:text-foreground/80",
                     compact
                       ? "px-1.5!"
                       : tabs.length === 1
@@ -262,21 +287,10 @@ export function TabBar({
                         : "ps-2! pe-1!",
                   )}
                 >
-                  {t.color && (
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute left-0 top-[3px] bottom-[3px] w-[2px] rounded-full"
-                      style={{
-                        backgroundColor: TAB_COLOR_CSS[t.color],
-                        opacity: isActive ? 0.85 : 0.45,
-                      }}
-                    />
-                  )}
                   <span
                     className={cn(
                       "flex items-center gap-1.5 truncate",
                       compact ? "max-w-48" : "max-w-80",
-                      t.color && "pl-2",
                     )}
                   >
                     <TabIcon tab={t} />

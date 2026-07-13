@@ -65,10 +65,22 @@ const callTool = defineTool({
   name: "terax_call",
   label: "Call Terax",
   description:
-    "Invoke an allowlisted Terax UI command on the running app using the first-party command registry.",
+    "Invoke an allowlisted Terax UI command on the running app using the first-party command registry. Call app.commands first to read every command's supported payload arguments (types, required fields, and enum values such as tab colors).",
   parameters: Type.Object({
     command: Type.Union(TERAX_COMMAND_IDS.map((id) => Type.Literal(id))),
-    payload: Type.Optional(Type.Any()),
+    // A described object (not Type.Any) so host argument sanitizers forward
+    // nested fields instead of collapsing an empty schema to null. Call
+    // app.commands to read the exact fields and enum values per command.
+    payload: Type.Optional(
+      Type.Object(
+        {},
+        {
+          additionalProperties: true,
+          description:
+            "Command arguments as an object. Call app.commands to read the supported fields, types, and enum values per command.",
+        },
+      ),
+    ),
   }),
   async execute(_toolCallId, params, signal) {
     if (!isTeraxCommandId(params.command)) {

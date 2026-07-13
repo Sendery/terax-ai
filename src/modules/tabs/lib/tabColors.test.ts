@@ -4,6 +4,8 @@ import {
   TAB_COLOR_CSS,
   isTabColor,
   tabAccessibleLabel,
+  tabColorForeground,
+  tabColorStyle,
 } from "./tabColors";
 import { applyMarkdownView, applyTabPatch } from "./useTabs";
 import type { EditorTab, MarkdownTab, Tab } from "./useTabs";
@@ -50,6 +52,53 @@ describe("tab color palette", () => {
       const css = TAB_COLOR_CSS[color];
       expect(typeof css).toBe("string");
       expect(css.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("tabColorForeground", () => {
+  it("returns dark text over light fills for contrast", () => {
+    // amber/green are light, so the foreground must be near-black.
+    expect(tabColorForeground("amber")).toBe("#0a0a0a");
+    expect(tabColorForeground("green")).toBe("#0a0a0a");
+  });
+
+  it("returns light text over dark fills for contrast", () => {
+    expect(tabColorForeground("blue")).toBe("#ffffff");
+    expect(tabColorForeground("indigo")).toBe("#ffffff");
+    expect(tabColorForeground("purple")).toBe("#ffffff");
+  });
+
+  it("is defined for every palette color", () => {
+    for (const color of TAB_COLORS) {
+      expect(["#0a0a0a", "#ffffff"]).toContain(tabColorForeground(color));
+    }
+  });
+});
+
+describe("tabColorStyle", () => {
+  it("paints a solid fill and contrasting text when active", () => {
+    const style = tabColorStyle("green", true);
+    expect(style.backgroundColor).toBe(TAB_COLOR_CSS.green);
+    expect(style.borderColor).toBe(TAB_COLOR_CSS.green);
+    expect(style.color).toBe("#0a0a0a");
+  });
+
+  it("paints a tinted fill and colored border when inactive", () => {
+    const style = tabColorStyle("blue", false);
+    expect(style.backgroundColor).toContain("rgba(");
+    expect(style.borderColor).toContain("rgba(");
+    // Inactive text is left to the muted-foreground class, not overridden.
+    expect(style.color).toBeUndefined();
+  });
+
+  it("produces a style for every palette color in both states", () => {
+    for (const color of TAB_COLORS) {
+      for (const active of [true, false]) {
+        const style = tabColorStyle(color, active);
+        expect(style.backgroundColor.length).toBeGreaterThan(0);
+        expect(style.borderColor.length).toBeGreaterThan(0);
+      }
     }
   });
 });

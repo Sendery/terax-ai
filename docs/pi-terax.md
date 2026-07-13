@@ -7,6 +7,7 @@ Pi Terax lets a Pi coding-agent package control a running Terax window through a
 The frontend registry lives in `src/modules/commands`. It is separate from the command palette UI and accepts typed command requests:
 
 - `app.snapshot`
+- `app.commands`
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
@@ -21,6 +22,16 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, and settings APIs. It does not expose AI diff approval internals.
 
 `app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, and excludes AI diff approval IDs and proposed or original content.
+
+### app.commands
+
+Read the supported arguments for every command. This is the discovery action: call it before `terax_call` to learn each command's payload shape without guessing.
+
+```json
+{ "id": "app.commands" }
+```
+
+Returns `{ version: 1, commands: [{ id, description, params }] }`. Each `param` reports `name`, `type` (`string` | `integer` | `boolean` | `enum`), `required`, `description`, and, for enums, the closed `values` set (for example the `tab.setColor` color palette) plus `nullable` when `null` is also accepted. The catalog is derived from the same schema table the registry validates against, so documented arguments never drift from enforced ones.
 
 ### tab.setColor
 

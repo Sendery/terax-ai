@@ -43,6 +43,52 @@ export const TAB_COLOR_LABEL: Record<TabColor, string> = {
   pink: "Pink",
 };
 
+function hexChannels(hex: string): [number, number, number] {
+  const value = hex.replace("#", "");
+  return [
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16),
+  ];
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexChannels(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Perceived luminance (sRGB coefficients) decides whether an active fill needs
+// dark or light text so the label stays legible on every palette color.
+function luminance(hex: string): number {
+  const [r, g, b] = hexChannels(hex);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+export function tabColorForeground(color: TabColor): "#0a0a0a" | "#ffffff" {
+  return luminance(TAB_COLOR_CSS[color]) > 0.52 ? "#0a0a0a" : "#ffffff";
+}
+
+export type TabColorStyle = {
+  backgroundColor: string;
+  borderColor: string;
+  color?: string;
+};
+
+export function tabColorStyle(color: TabColor, active: boolean): TabColorStyle {
+  const hex = TAB_COLOR_CSS[color];
+  if (active) {
+    return {
+      backgroundColor: hex,
+      borderColor: hex,
+      color: tabColorForeground(color),
+    };
+  }
+  return {
+    backgroundColor: hexToRgba(hex, 0.14),
+    borderColor: hexToRgba(hex, 0.55),
+  };
+}
+
 export function tabAccessibleLabel(
   title: string,
   color: TabColor | undefined,
