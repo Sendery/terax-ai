@@ -34,6 +34,9 @@ export type SlotAdapter = {
 export type LeafBridge = {
   writeToPty(data: string): void;
   resizePty(cols: number, rows: number): void;
+  // Byte sequence for Shift+Enter, chosen from the keyboard-encoding mode the
+  // foreground program negotiated (see keyboardProtocol.ts).
+  shiftEnterSequence(): string;
   resolveFileLinks(line: string): Promise<TerminalFileLink[]>;
   openFileLink(path: string): void;
   // Force a SIGWINCH on the underlying PTY at the given dims. Implemented
@@ -277,7 +280,8 @@ function createSlot(): Slot {
     }
     if (isShiftEnter(event)) {
       event.preventDefault();
-      if (event.type === "keydown") bridge.writeToPty("\x1b\r");
+      if (event.type === "keydown")
+        bridge.writeToPty(bridge.shiftEnterSequence());
       return false;
     }
     if (isTerminalCopy(event)) {
