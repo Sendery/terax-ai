@@ -102,9 +102,18 @@ fn ensure_utf8_locale(cmd: &mut CommandBuilder) {
     cmd.env("LANG", fallback);
 }
 
+// Identify Terax as the host terminal. This overrides any TERM_PROGRAM inherited
+// from the process that launched Terax (e.g. Apple_Terminal or iTerm.app on
+// macOS). Programs like pi-tui special-case Apple Terminal and switch from
+// escape-sequence key encoding to native modifier probing when they see
+// TERM_PROGRAM=Apple_Terminal, which would break Shift+Enter under Terax.
+const TERM_PROGRAM: &str = "Terax";
+
 fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    cmd.env("TERM_PROGRAM", TERM_PROGRAM);
+    cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     cmd.env("TERAX_TERMINAL", "1");
     if blocks {
         cmd.env("TERAX_BLOCKS", "1");
@@ -452,6 +461,8 @@ mod windows {
         }
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", super::TERM_PROGRAM);
+        cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
         cmd.env("TERAX_TERMINAL", "1");
         super::ensure_utf8_locale(&mut cmd);
         log::info!("spawning WSL shell: {distro} ({shell_path})");
@@ -811,4 +822,28 @@ fn which_in_path(name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod term_program_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn apply_common_identifies_terax_as_term_program() {
+        let mut cmd = CommandBuilder::new("sh");
+        apply_common(&mut cmd, None, false);
+        assert_eq!(cmd.get_env("TERM_PROGRAM"), Some(OsStr::new("Terax")));
+        assert!(cmd.get_env("TERM_PROGRAM_VERSION").is_some());
+    }
+
+    #[test]
+    fn apply_common_overrides_inherited_apple_terminal() {
+        // pi-tui switches to native modifier probing (breaking Shift+Enter) when
+        // it sees TERM_PROGRAM=Apple_Terminal, so an inherited value must not leak.
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env("TERM_PROGRAM", "Apple_Terminal");
+        apply_common(&mut cmd, None, false);
+        assert_eq!(cmd.get_env("TERM_PROGRAM"), Some(OsStr::new("Terax")));
+    }
 }

@@ -11,7 +11,11 @@ import {
 } from "../block/lib/blockDecorations";
 import type { BlockMode } from "../block/lib/modeMachine";
 import { DormantRing } from "./dormantRing";
-import { resolveTerminalFileLinks, type FileLinkStat } from "./fileLinks";
+import { type FileLinkStat, resolveTerminalFileLinks } from "./fileLinks";
+import {
+  KeyboardProtocolTracker,
+  shiftEnterSequence,
+} from "./keyboardProtocol";
 import {
   createShellIntegrationState,
   registerCwdHandler,
@@ -72,6 +76,8 @@ type Session = {
   snapshot: string | null;
   searchQuery: string | null;
   dormantRing: DormantRing;
+  // Keyboard-encoding modes the foreground program negotiated via output.
+  keyboardProtocol: KeyboardProtocolTracker;
   hasSlot: boolean;
   blocks: boolean;
   blockMode: BlockMode;
@@ -361,6 +367,8 @@ configureRendererPool({
         }
         s.pty?.write(data);
       },
+      shiftEnterSequence: () =>
+        shiftEnterSequence(s.keyboardProtocol.modifyOtherKeys),
       resizePty: (cols, rows) => {
         s.cols = cols;
         s.rows = rows;
@@ -462,6 +470,7 @@ function ensureSession(
     snapshot: null,
     searchQuery: null,
     dormantRing: new DormantRing(),
+    keyboardProtocol: new KeyboardProtocolTracker(),
     hasSlot: false,
     blocks,
     blockMode: "prompt",
@@ -491,6 +500,7 @@ function deliverPtyBytes(leafId: number, bytes: Uint8Array): void {
   if (!s) return;
   // Retained slots keep parsing live (render paused); the ring is only for
   // leaves whose buffer was stolen or never bound.
+  s.keyboardProtocol.ingest(bytes);
   const slot = getLiveSlotForLeaf(leafId);
   if (slot) slot.term.write(bytes);
   else s.dormantRing.push(bytes);
