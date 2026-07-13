@@ -104,6 +104,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** validate all payload fields and resolve the target before mutation.
 - **Verification:** snapshot before rejection and snapshot after rejection are equivalent for the affected state.
 
+### Tool payload schemas must be described objects, not Type.Any
+
+- **Trigger:** exposing a Pi tool that forwards a free-form `payload` to a command (for example `terax_call`).
+- **Failure mode:** `Type.Any()`/`Type.Unknown()` compile to an empty JSON schema `{}`; host argument sanitizers drop the value, so the command receives `null` and rejects with "requires an object payload" even though the client, bridge, and registry are correct.
+- **Prevention:** describe the payload as a typed object (`Type.Object({}, { additionalProperties: true })`) so nested fields survive transport, and provide a read command (for example `app.commands`) that reports the exact per-command fields and enum values.
+- **Verification:** assert the built tool schema exposes `payload.type === "object"` with `additionalProperties: true`; confirm a real payload reaches the registry by calling the authenticated bridge directly.
+
 ### Closed values beat arbitrary presentation input
 
 - **Trigger:** a remote command selects a visual style, mode, layout, or behavior.

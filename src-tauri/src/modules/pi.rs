@@ -138,6 +138,7 @@ fn is_allowed_command(command: &str) -> bool {
     matches!(
         command,
         "app.snapshot"
+            | "app.commands"
             | "sidebar.show"
             | "sidebar.hide"
             | "tab.openFile"

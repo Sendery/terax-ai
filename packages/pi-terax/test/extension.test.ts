@@ -83,6 +83,28 @@ describe("Pi extension", () => {
     expect(TERAX_COMMAND_IDS).toContain("tab.setColor");
   });
 
+  it("exposes app.commands as the payload discovery command", () => {
+    expect(isTeraxCommandId("app.commands")).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain("app.commands");
+  });
+
+  it("describes terax_call payload as an open object so hosts forward it", () => {
+    const tools: Array<{ name: string; parameters?: unknown }> = [];
+    extension({
+      registerTool: (tool: { name: string }) => tools.push(tool),
+    } as never);
+    const call = tools.find((tool) => tool.name === "terax_call");
+    const params = call?.parameters as {
+      properties?: { payload?: Record<string, unknown> };
+    };
+    const payload = params?.properties?.payload;
+    expect(payload).toBeDefined();
+    // Type.Any() compiles to an empty schema that arg sanitizers drop; the
+    // payload must be a typed object so nested arguments survive transport.
+    expect(payload?.type).toBe("object");
+    expect(payload?.additionalProperties).toBe(true);
+  });
+
   it("returns project contribution points for new windows", async () => {
     const tools: RegisteredTool[] = [];
     extension({

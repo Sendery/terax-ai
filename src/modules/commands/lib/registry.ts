@@ -1,10 +1,11 @@
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
-import { isTabColor, type TabColor } from "@/modules/tabs";
+import { TAB_COLORS, isTabColor, type TabColor } from "@/modules/tabs";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
   "app.snapshot",
+  "app.commands",
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",
@@ -38,6 +39,7 @@ export type CommandResult<T = unknown> =
 
 export type CommandPayloads = {
   "app.snapshot": undefined;
+  "app.commands": undefined;
   "sidebar.show": { view?: SidebarViewId };
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
@@ -55,6 +57,226 @@ export type CommandPayloads = {
   };
   "settings.open": { tab?: SettingsTab };
 };
+
+export type CommandParamType =
+  | "string"
+  | "integer"
+  | "boolean"
+  | "enum";
+
+export type CommandParamSchema = {
+  name: string;
+  type: CommandParamType;
+  required: boolean;
+  description: string;
+  /** For enum params, the closed set of accepted values. */
+  values?: readonly string[];
+  /** Whether null is an accepted value in addition to the declared type. */
+  nullable?: boolean;
+};
+
+export type CommandSchema = {
+  id: CommandId;
+  description: string;
+  params: CommandParamSchema[];
+};
+
+export type CommandCatalog = {
+  version: 1;
+  commands: CommandSchema[];
+};
+
+// Single source of truth for the arguments each command accepts. Kept beside
+// the validators so a read action can report supported arguments without the
+// caller guessing, and so drift between docs and validation is visible here.
+const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
+  "app.snapshot": {
+    id: "app.snapshot",
+    description: "Return a redacted snapshot of the window state.",
+    params: [],
+  },
+  "app.commands": {
+    id: "app.commands",
+    description:
+      "List every command id with its supported arguments (this catalog).",
+    params: [],
+  },
+  "sidebar.show": {
+    id: "sidebar.show",
+    description: "Show the sidebar, optionally selecting a view.",
+    params: [
+      {
+        name: "view",
+        type: "enum",
+        required: false,
+        description: "Sidebar view to reveal.",
+        values: ["explorer", "source-control"],
+      },
+    ],
+  },
+  "sidebar.hide": {
+    id: "sidebar.hide",
+    description: "Hide the sidebar.",
+    params: [],
+  },
+  "tab.openFile": {
+    id: "tab.openFile",
+    description: "Open a file in an editor tab.",
+    params: [
+      {
+        name: "path",
+        type: "string",
+        required: true,
+        description: "Absolute or workspace path to open.",
+      },
+      {
+        name: "pin",
+        type: "boolean",
+        required: false,
+        description: "Pin the tab instead of opening it as a preview.",
+      },
+    ],
+  },
+  "tab.focus": {
+    id: "tab.focus",
+    description: "Focus an existing tab by id.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to focus.",
+      },
+    ],
+  },
+  "tab.close": {
+    id: "tab.close",
+    description: "Close a tab (defaults to the active tab).",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: false,
+        description: "Id of the tab to close; omit for the active tab.",
+      },
+    ],
+  },
+  "tab.rename": {
+    id: "tab.rename",
+    description: "Set a custom title on a tab.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to rename.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "New custom title.",
+      },
+    ],
+  },
+  "tab.resetTitle": {
+    id: "tab.resetTitle",
+    description: "Clear a custom title and restore the derived one.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to reset.",
+      },
+    ],
+  },
+  "tab.setColor": {
+    id: "tab.setColor",
+    description: "Set or clear a tab's palette color.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to color.",
+      },
+      {
+        name: "color",
+        type: "enum",
+        required: true,
+        nullable: true,
+        description: "Palette color, or null to clear the color.",
+        values: TAB_COLORS,
+      },
+    ],
+  },
+  "git.diff.open": {
+    id: "git.diff.open",
+    description: "Open a git diff tab for a file.",
+    params: [
+      {
+        name: "repoRoot",
+        type: "string",
+        required: true,
+        description: "Repository root path.",
+      },
+      {
+        name: "path",
+        type: "string",
+        required: true,
+        description: "File path relative to the repo.",
+      },
+      {
+        name: "mode",
+        type: "enum",
+        required: true,
+        description: "Diff side: '-' for old, '+' for new.",
+        values: ["-", "+"],
+      },
+      {
+        name: "originalPath",
+        type: "string",
+        required: false,
+        nullable: true,
+        description: "Original path for renames.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Custom tab title.",
+      },
+    ],
+  },
+  "settings.open": {
+    id: "settings.open",
+    description: "Open the settings window, optionally on a section.",
+    params: [
+      {
+        name: "tab",
+        type: "enum",
+        required: false,
+        description: "Settings section to deep-link.",
+        values: [
+          "general",
+          "models",
+          "agents",
+          "themes",
+          "shortcuts",
+          "about",
+        ],
+      },
+    ],
+  },
+};
+
+export function describeCommands(): CommandCatalog {
+  return {
+    version: 1,
+    commands: COMMAND_IDS.map((id) => structuredClone(COMMAND_SCHEMAS[id])),
+  };
+}
 
 export type CommandRequest<K extends CommandId = CommandId> = {
   [P in K]: CommandPayloads[P] extends undefined
@@ -189,7 +411,7 @@ export function validateCommandRequest(
   }
 
   const { id, payload } = input;
-  if (id === "app.snapshot" || id === "sidebar.hide") {
+  if (id === "app.snapshot" || id === "app.commands" || id === "sidebar.hide") {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
     }
@@ -327,6 +549,8 @@ async function dispatchCommand(
   switch (request.id) {
     case "app.snapshot":
       return handlers.getSnapshot();
+    case "app.commands":
+      return describeCommands();
     case "sidebar.show":
       return handlers.showSidebar(request.payload);
     case "sidebar.hide":

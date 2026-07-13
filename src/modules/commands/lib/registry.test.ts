@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { TAB_COLORS } from "@/modules/tabs";
 import {
+  COMMAND_IDS,
   PI_ALLOWED_COMMAND_IDS,
   createCommandRegistry,
+  describeCommands,
   normalizeCommandError,
   validateCommandRequest,
   type CommandHandlers,
@@ -27,6 +30,40 @@ function handlers(): CommandHandlers {
     setTabColor: vi.fn(async () => ({ tabId: 2 })),
   };
 }
+
+describe("describeCommands", () => {
+  it("documents a schema entry for every command id", () => {
+    const catalog = describeCommands();
+    const documented = catalog.commands.map((c) => c.id).sort();
+    expect(documented).toEqual([...COMMAND_IDS].sort());
+  });
+
+  it("exposes tab.setColor supported arguments including the color palette", () => {
+    const entry = describeCommands().commands.find(
+      (c) => c.id === "tab.setColor",
+    );
+    expect(entry).toBeDefined();
+    const tabId = entry?.params.find((p) => p.name === "tabId");
+    const color = entry?.params.find((p) => p.name === "color");
+    expect(tabId?.required).toBe(true);
+    expect(tabId?.type).toBe("integer");
+    expect(color?.required).toBe(true);
+    expect(color?.type).toBe("enum");
+    expect(color?.nullable).toBe(true);
+    expect(color?.values).toEqual([...TAB_COLORS]);
+  });
+
+  it("is reachable as a read command through the registry", async () => {
+    const registry = createCommandRegistry(handlers());
+    const result = await registry.call({ id: "app.commands" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(
+        (result.value as ReturnType<typeof describeCommands>).commands.length,
+      ).toBe(COMMAND_IDS.length);
+    }
+  });
+});
 
 describe("command registry", () => {
   it("rejects unknown command ids before dispatch", async () => {
@@ -102,6 +139,7 @@ describe("command registry", () => {
   it("keeps Pi command allowlist compact and excludes AI diff internals", () => {
     expect(PI_ALLOWED_COMMAND_IDS).toEqual([
       "app.snapshot",
+      "app.commands",
       "sidebar.show",
       "sidebar.hide",
       "tab.openFile",
