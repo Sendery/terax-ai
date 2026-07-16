@@ -1,7 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, capture, fs, git, history, net, pi, pty, secrets, shell, workspace,
+    agent, agent_cli, capture, fs, git, history, net, pi, pty, secrets, shell, slotmonit,
+    workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -231,6 +232,7 @@ pub fn run() {
             shell::shell_bg_logs,
             shell::shell_bg_kill,
             shell::shell_bg_list,
+            slotmonit::slot_monit_query,
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,
             workspace::wsl_home,
