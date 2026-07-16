@@ -13,8 +13,13 @@ pi install ./packages/pi-terax
 
 Restart Pi after installation.
 
+## Host awareness
+
+The extension detects whether Pi runs inside a Terax terminal via the `TERAX_TERMINAL=1` / `TERM_PROGRAM=Terax` environment Terax injects. Inside Terax it registers the full tool set; in any other terminal it registers only `terax_status` (minimal footprint) and posts a one-time startup notice with enable instructions. Set `TERAX_FORCE=1` to operate against a reachable Terax from a non-Terax shell.
+
 ## Tools
 
+- `terax_status`: reports whether this session is inside a Terax terminal, which capabilities are available, and how to enable them when not.
 - `terax_get_state`: returns a structural, redacted snapshot of tabs and sidebar state.
 - `terax_call`: invokes an allowlisted Terax command with a validated payload.
 - `terax_wait`: waits briefly before the next state check.

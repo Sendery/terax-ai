@@ -6,6 +6,7 @@ import type { AppSnapshot } from "./snapshot";
 export const COMMAND_IDS = [
   "app.snapshot",
   "app.commands",
+  "app.buildInfo",
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",
@@ -40,6 +41,7 @@ export type CommandResult<T = unknown> =
 export type CommandPayloads = {
   "app.snapshot": undefined;
   "app.commands": undefined;
+  "app.buildInfo": undefined;
   "sidebar.show": { view?: SidebarViewId };
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
@@ -99,6 +101,12 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     id: "app.commands",
     description:
       "List every command id with its supported arguments (this catalog).",
+    params: [],
+  },
+  "app.buildInfo": {
+    id: "app.buildInfo",
+    description:
+      "Read the running app's source provenance (repository, branch, commit, channel) so a client can clone the exact source to develop against.",
     params: [],
   },
   "sidebar.show": {
@@ -284,8 +292,16 @@ export type CommandRequest<K extends CommandId = CommandId> = {
     : { id: P; payload: CommandPayloads[P] };
 }[K];
 
+export type BuildInfoResult = {
+  repository: string;
+  branch: string;
+  commit: string;
+  channel: "development" | "official";
+};
+
 export type CommandHandlers = {
   getSnapshot: () => Promise<AppSnapshot> | AppSnapshot;
+  getBuildInfo: () => Promise<BuildInfoResult> | BuildInfoResult;
   showSidebar: (
     payload: CommandPayloads["sidebar.show"],
   ) => Promise<unknown> | unknown;
@@ -411,7 +427,12 @@ export function validateCommandRequest(
   }
 
   const { id, payload } = input;
-  if (id === "app.snapshot" || id === "app.commands" || id === "sidebar.hide") {
+  if (
+    id === "app.snapshot" ||
+    id === "app.commands" ||
+    id === "app.buildInfo" ||
+    id === "sidebar.hide"
+  ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
     }
@@ -551,6 +572,8 @@ async function dispatchCommand(
       return handlers.getSnapshot();
     case "app.commands":
       return describeCommands();
+    case "app.buildInfo":
+      return handlers.getBuildInfo();
     case "sidebar.show":
       return handlers.showSidebar(request.payload);
     case "sidebar.hide":

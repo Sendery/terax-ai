@@ -43,7 +43,21 @@ Do not use it merely to control a running Terax instance through existing comman
 8. Do not commit, merge, push, publish, or delete a worktree unless the user has authorized that action.
 9. Record implementation gotchas as they occur. Promote only verified, reusable lessons.
 
-## Phase 0: Establish Scope and Invariants
+## Phase 0a: Recognize the host and bootstrap the source
+
+Orientation must not assume the session started in the Terax checkout.
+
+1. Confirm which domain applies. Call `terax_development_guide` with `orientation` and `terax_status`. If the task is only controlling a running Terax, stop here and use the control tools; do not clone or build.
+2. Only for the develop or extend-Pi domains, locate the source:
+   - If the current directory is a Terax checkout, use it.
+   - If not, read the running binary's provenance with `app.buildInfo` (repository and commit) and clone that exact source, then develop from an isolated worktree:
+     ```bash
+     git clone https://github.com/<repository>.git <dir>
+     git -C <dir> checkout <commit>
+     ```
+   Perform the clone with your own bash under workspace authorization. The bridge never clones. Clone only when the task needs source changes.
+
+## Phase 0b: Establish Scope and Invariants
 
 1. Confirm the current directory belongs to Terax:
 

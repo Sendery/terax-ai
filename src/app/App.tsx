@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BUILD_INFO } from "@/lib/buildInfo";
 import { getLaunchDir } from "@/lib/launchDir";
 import { usePresence } from "@/lib/usePresence";
 import { quoteShellArg } from "@/lib/shellQuote";
@@ -1021,6 +1022,12 @@ export default function App() {
             view: sidebarView,
           },
         }),
+      getBuildInfo: () => ({
+        repository: BUILD_INFO.repository,
+        branch: BUILD_INFO.branch,
+        commit: BUILD_INFO.commit,
+        channel: BUILD_INFO.channel,
+      }),
       showSidebar: ({ view }) => {
         showSidebar(view);
         return { visible: true, view: view ?? sidebarView };
