@@ -1,7 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, fs, git, history, net, pi, pty, secrets, shell, slotmonit, workspace,
+    agent, agent_cli, capture, fs, git, history, net, pi, pty, secrets, shell, slotmonit,
+    workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -179,6 +180,7 @@ pub fn run() {
         })
         .manage(LaunchDir(Mutex::new(cli_dir)))
         .invoke_handler(tauri::generate_handler![
+            capture::capture_persist,
             pty::pty_open,
             pty::pty_write,
             pty::pty_resize,

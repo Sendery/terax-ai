@@ -34,8 +34,10 @@ export {
   MAX_VIDEO_DURATION_SECONDS,
   MAX_VIDEO_FPS,
   MAX_VIDEO_FRAMES,
+  NATIVE_CAPTURE_TARGETS,
   assertVisualCaptureSafe,
   buildArtifactPaths,
+  isNativeCaptureTarget,
   buildVideoArgs,
   parseSsim,
   parseWindowDescriptor,
@@ -47,12 +49,20 @@ export {
   type VisualAction,
   type VisualBackend,
   type VisualQaRequest,
+  type NativeCaptureTarget,
   type VisualQaResult,
   type ValidatedVisualQaRequest,
   type VisualSurface,
   type WindowDescriptor,
   type WindowSelector,
 } from "./visual.js";
+export {
+  createNativeVisualBackend,
+  parseCaptureOutcome,
+  type CaptureOutcome,
+  type NativeCaptureClient,
+  type NativeVisualBackendOptions,
+} from "./visual-native.js";
 export {
   COMMAND_OUTPUT_LIMIT_BYTES,
   COMMAND_TIMEOUT_MS,

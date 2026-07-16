@@ -44,6 +44,7 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 `terax_call` supports:
 
 - `app.snapshot`
+- `app.capture` -- native in-app PNG capture of a Terax surface
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`

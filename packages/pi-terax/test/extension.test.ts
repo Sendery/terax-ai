@@ -40,6 +40,7 @@ describe("Pi extension", () => {
       discover,
       createClient: () => ({ call }),
       createVisualBackend: vi.fn(async () => ({ capture: vi.fn(), record: vi.fn(), compare: vi.fn() })),
+      createNativeBackend: vi.fn(() => ({ capture: vi.fn(), record: vi.fn(), compare: vi.fn() })),
       runVisual,
       readEvidence: vi.fn(async () => Buffer.from("png")) as ExtensionDependencies["readEvidence"],
       hostEnv: { TERAX_TERMINAL: "1" },
@@ -202,6 +203,48 @@ describe("Pi extension", () => {
     expect(harness.discover).not.toHaveBeenCalled();
     expect(harness.dependencies.createVisualBackend).not.toHaveBeenCalled();
     expect(harness.runVisual).not.toHaveBeenCalled();
+  });
+
+  it("uses the native in-app backend for the main surface", async () => {
+    const harness = visualHarness({ tabs: [] });
+    await expect(harness.visual?.execute(
+      "visual-native",
+      { action: "screenshot", surface: "main", name: "native", target: "sidebar" },
+      undefined,
+      undefined,
+      { cwd: "/tmp/project", isProjectTrusted: () => true },
+    )).resolves.toMatchObject({ details: { surface: "main" } });
+    expect(harness.dependencies.createNativeBackend).toHaveBeenCalledWith(
+      expect.objectContaining({ pid: 123, target: "sidebar" }),
+    );
+    expect(harness.dependencies.createVisualBackend).not.toHaveBeenCalled();
+  });
+
+  it("defaults the native target to the whole window", async () => {
+    const harness = visualHarness({ tabs: [] });
+    await harness.visual?.execute(
+      "visual-native-default",
+      { action: "screenshot", surface: "main", name: "native" },
+      undefined,
+      undefined,
+      { cwd: "/tmp/project", isProjectTrusted: () => true },
+    );
+    expect(harness.dependencies.createNativeBackend).toHaveBeenCalledWith(
+      expect.objectContaining({ target: "window" }),
+    );
+  });
+
+  it("keeps the system backend for the settings surface", async () => {
+    const harness = visualHarness({ tabs: [] });
+    await harness.visual?.execute(
+      "visual-settings-system",
+      { action: "screenshot", surface: "settings", name: "settings" },
+      undefined,
+      undefined,
+      { cwd: "/tmp/project", isProjectTrusted: () => true },
+    );
+    expect(harness.dependencies.createVisualBackend).toHaveBeenCalled();
+    expect(harness.dependencies.createNativeBackend).not.toHaveBeenCalled();
   });
 
   it("authenticates settings with app.snapshot before and after capture", async () => {

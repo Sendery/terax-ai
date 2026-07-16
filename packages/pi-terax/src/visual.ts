@@ -27,6 +27,28 @@ export const DEFAULT_GUARD_INTERVAL_MS = 250;
 export type VisualSurface = "main" | "settings";
 export type VisualAction = "screenshot" | "video" | "compare";
 
+export const NATIVE_CAPTURE_TARGETS = [
+  "window",
+  "header",
+  "sidebar",
+  "tabstrip",
+  "statusbar",
+  "active-pane",
+  "pane",
+  "overlay",
+] as const;
+
+export type NativeCaptureTarget = (typeof NATIVE_CAPTURE_TARGETS)[number];
+
+export function isNativeCaptureTarget(
+  value: unknown,
+): value is NativeCaptureTarget {
+  return (
+    typeof value === "string" &&
+    NATIVE_CAPTURE_TARGETS.includes(value as NativeCaptureTarget)
+  );
+}
+
 export type WindowSelector = {
   pid: number;
   processName: "terax";
@@ -235,6 +257,8 @@ export type VisualQaRequest = {
   action: VisualAction;
   surface: VisualSurface;
   name: string;
+  target?: NativeCaptureTarget;
+  tabId?: number;
   durationSeconds?: number;
   fps?: number;
   baselinePath?: string;
@@ -280,6 +304,8 @@ export type ValidatedVisualQaRequest = {
   action: VisualAction;
   surface: VisualSurface;
   name: string;
+  target?: NativeCaptureTarget;
+  tabId?: number;
   durationSeconds: number;
   fps: number;
   threshold?: number;
@@ -311,6 +337,22 @@ export function validateVisualQaRequest(
   if (Math.ceil(durationSeconds * fps) > MAX_VIDEO_FRAMES) {
     throw new Error(`Video exceeds the ${MAX_VIDEO_FRAMES} frame limit`);
   }
+  if (request.target !== undefined) {
+    if (!isNativeCaptureTarget(request.target)) {
+      throw new Error("Invalid native capture target");
+    }
+    if (request.surface !== "main") {
+      throw new Error("Native capture targets require the main surface");
+    }
+    if (request.target === "pane" && !Number.isInteger(request.tabId)) {
+      throw new Error("Native pane capture requires an integer tabId");
+    }
+    if (request.target !== "pane" && request.tabId !== undefined) {
+      throw new Error("tabId is only accepted for pane captures");
+    }
+  } else if (request.tabId !== undefined) {
+    throw new Error("tabId requires a native capture target");
+  }
   if (request.action === "compare" && !request.baselinePath) {
     throw new Error("baselinePath is required for visual comparison");
   }
@@ -325,6 +367,8 @@ export function validateVisualQaRequest(
     action: request.action,
     surface: request.surface,
     name,
+    ...(request.target === undefined ? {} : { target: request.target }),
+    ...(request.tabId === undefined ? {} : { tabId: request.tabId }),
     durationSeconds,
     fps,
     threshold,
