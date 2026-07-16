@@ -98,7 +98,7 @@ if [[ "$DEBUG" == "true" ]]; then
   BUILD_ARGS+=(--debug)
 fi
 
-pnpm tauri build --bundles app "${BUILD_ARGS[@]}"
+pnpm tauri build --bundles app,dmg "${BUILD_ARGS[@]}"
 
 if [[ "$DEBUG" == "true" ]]; then
   BUNDLE_DIR="$PROJECT_DIR/src-tauri/target/debug/bundle/macos"
