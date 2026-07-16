@@ -87,6 +87,8 @@ export function TerminalStack({
         return (
           <div
             key={t.id}
+            data-capture-target="pane"
+            data-capture-tab-id={t.id}
             className="absolute inset-0"
             style={{
               visibility: tabVisible ? "visible" : "hidden",

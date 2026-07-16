@@ -1,12 +1,19 @@
+import {
+  CAPTURE_TARGETS,
+  type CaptureOutcome,
+  type CaptureRequest,
+  validateCaptureRequest,
+} from "@/modules/capture";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
-import { TAB_COLORS, isTabColor, type TabColor } from "@/modules/tabs";
+import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
   "app.snapshot",
   "app.commands",
   "app.buildInfo",
+  "app.capture",
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",
@@ -42,6 +49,7 @@ export type CommandPayloads = {
   "app.snapshot": undefined;
   "app.commands": undefined;
   "app.buildInfo": undefined;
+  "app.capture": CaptureRequest;
   "sidebar.show": { view?: SidebarViewId };
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
@@ -60,11 +68,7 @@ export type CommandPayloads = {
   "settings.open": { tab?: SettingsTab };
 };
 
-export type CommandParamType =
-  | "string"
-  | "integer"
-  | "boolean"
-  | "enum";
+export type CommandParamType = "string" | "integer" | "boolean" | "enum";
 
 export type CommandParamSchema = {
   name: string;
@@ -108,6 +112,26 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description:
       "Read the running app's source provenance (repository, branch, commit, channel) so a client can clone the exact source to develop against.",
     params: [],
+  },
+  "app.capture": {
+    id: "app.capture",
+    description:
+      "Rasterize a Terax surface inside the webview (no OS capture APIs) and persist it as a PNG in the app cache. Returns the file path and dimensions. Refused when a private terminal is in scope.",
+    params: [
+      {
+        name: "target",
+        type: "enum",
+        required: true,
+        description: "Surface to capture.",
+        values: CAPTURE_TARGETS,
+      },
+      {
+        name: "tabId",
+        type: "integer",
+        required: false,
+        description: "Tab id, required when target is 'pane'.",
+      },
+    ],
   },
   "sidebar.show": {
     id: "sidebar.show",
@@ -266,14 +290,7 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         type: "enum",
         required: false,
         description: "Settings section to deep-link.",
-        values: [
-          "general",
-          "models",
-          "agents",
-          "themes",
-          "shortcuts",
-          "about",
-        ],
+        values: ["general", "models", "agents", "themes", "shortcuts", "about"],
       },
     ],
   },
@@ -302,6 +319,9 @@ export type BuildInfoResult = {
 export type CommandHandlers = {
   getSnapshot: () => Promise<AppSnapshot> | AppSnapshot;
   getBuildInfo: () => Promise<BuildInfoResult> | BuildInfoResult;
+  capture: (
+    payload: CommandPayloads["app.capture"],
+  ) => Promise<CaptureOutcome> | CaptureOutcome;
   showSidebar: (
     payload: CommandPayloads["sidebar.show"],
   ) => Promise<unknown> | unknown;
@@ -448,6 +468,12 @@ export function validateCommandRequest(
   if (!objectPayload.ok) return objectPayload;
   const obj: Record<string, unknown> = objectPayload.value;
 
+  if (id === "app.capture") {
+    const capture = validateCaptureRequest(obj);
+    if (!capture.ok) return invalidPayload(capture.message);
+    return { ok: true, value: { id, payload: capture.value } };
+  }
+
   if (id === "sidebar.show") {
     if (!validateSidebarView(obj.view)) {
       return invalidPayload(
@@ -574,6 +600,8 @@ async function dispatchCommand(
       return describeCommands();
     case "app.buildInfo":
       return handlers.getBuildInfo();
+    case "app.capture":
+      return handlers.capture(request.payload);
     case "sidebar.show":
       return handlers.showSidebar(request.payload);
     case "sidebar.hide":

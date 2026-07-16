@@ -18,6 +18,8 @@ A feature passes only when all applicable layers pass. SSIM alone cannot prove c
 
 - `action`: `screenshot`, `video`, or `compare`.
 - `surface`: `main` or `settings`.
+- `target` (main surface only): native in-app capture target, one of `window` (default), `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane`, `overlay`. `overlay` captures the topmost open menu, dialog, or popover.
+- `tabId`: tab id, required with `target: pane`; also reaches panes that are mounted but hidden (inactive shells keep rendering in the background).
 - `name`: evidence name; path separators are rejected.
 - `durationSeconds`: video duration from 1 to 30 seconds.
 - `fps`: video rate from 1 to 30 FPS.
@@ -68,6 +70,19 @@ visual-baselines/
 ```
 
 A baseline must already exist as a regular file whose canonical path remains inside the canonical trusted project. File symlinks and escaping directory symlinks are rejected. A baseline change requires visual review. Never overwrite the baseline automatically after a failed comparison. Different content, font rendering, DPI, themes, and operating-system chrome can lower SSIM even when behavior is correct; use separate baselines when those dimensions are intentional.
+
+## Native in-app backend (main surface)
+
+The `main` surface is captured by Terax itself, not by the operating system:
+
+- The webview rasterizes the requested surface (DOM -> SVG foreignObject -> canvas -> PNG) through the `app.capture` registry command. No OS screen-capture API, permission, or authorization prompt is involved, and content outside the Terax window cannot appear in the evidence.
+- Targets are a closed set; arbitrary selectors are rejected at the registry boundary.
+- Private terminals block capture natively: any private tab blocks `window`/`tabstrip`, the targeted private tab blocks `pane`, and an active private tab blocks the remaining targets. The bridge-side `app.snapshot` guard still runs before, during, and after capture.
+- xterm webgl surfaces render with `preserveDrawingBuffer`, so terminal pixels are composited into the capture. Password inputs are masked.
+- Rust persists the PNG under a private app cache directory (`visual-captures/`, owner-only permissions, 64 MiB cap, pruned by age and total size); the Pi backend copies it into the evidence directory and deletes the source.
+- Video is a sequence of native frames encoded with local FFmpeg; SSIM comparison also uses FFmpeg. Screenshots need no external tools.
+
+The `settings` window runs in a separate webview without the command bridge, so it continues to use the system backend below.
 
 ## Windows and WSL backend
 

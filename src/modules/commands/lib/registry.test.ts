@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
 import { TAB_COLORS } from "@/modules/tabs";
+import { describe, expect, it, vi } from "vitest";
 import {
   COMMAND_IDS,
-  PI_ALLOWED_COMMAND_IDS,
+  type CommandHandlers,
   createCommandRegistry,
   describeCommands,
   normalizeCommandError,
+  PI_ALLOWED_COMMAND_IDS,
   validateCommandRequest,
-  type CommandHandlers,
 } from "./registry";
 
 function handlers(): CommandHandlers {
@@ -34,8 +34,90 @@ function handlers(): CommandHandlers {
       commit: "abc1234",
       channel: "development" as const,
     })),
+    capture: vi.fn(async () => ({
+      target: "window" as const,
+      path: "/tmp/capture.png",
+      width: 100,
+      height: 100,
+      bytes: 1000,
+      format: "png" as const,
+    })),
   };
 }
+
+describe("app.capture", () => {
+  it("accepts every closed capture target", () => {
+    for (const target of [
+      "window",
+      "header",
+      "sidebar",
+      "tabstrip",
+      "statusbar",
+      "active-pane",
+      "overlay",
+    ]) {
+      expect(
+        validateCommandRequest({ id: "app.capture", payload: { target } }),
+      ).toEqual({
+        ok: true,
+        value: { id: "app.capture", payload: { target } },
+      });
+    }
+  });
+
+  it("requires tabId for pane captures and rejects it elsewhere", () => {
+    expect(
+      validateCommandRequest({ id: "app.capture", payload: { target: "pane" } })
+        .ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "app.capture",
+        payload: { target: "pane", tabId: 4 },
+      }),
+    ).toEqual({
+      ok: true,
+      value: { id: "app.capture", payload: { target: "pane", tabId: 4 } },
+    });
+    expect(
+      validateCommandRequest({
+        id: "app.capture",
+        payload: { target: "sidebar", tabId: 4 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("rejects arbitrary selectors as targets", () => {
+    expect(
+      validateCommandRequest({
+        id: "app.capture",
+        payload: { target: "#root" },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("dispatches to the capture handler", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({
+      id: "app.capture",
+      payload: { target: "window" },
+    });
+    expect(result.ok).toBe(true);
+    expect(h.capture).toHaveBeenCalledWith({ target: "window" });
+  });
+
+  it("documents the capture target enum", () => {
+    const entry = describeCommands().commands.find(
+      (c) => c.id === "app.capture",
+    );
+    expect(entry).toBeDefined();
+    const target = entry?.params.find((p) => p.name === "target");
+    expect(target?.type).toBe("enum");
+    expect(target?.values).toContain("window");
+    expect(target?.values).toContain("pane");
+  });
+});
 
 describe("describeCommands", () => {
   it("documents a schema entry for every command id", () => {
@@ -181,6 +263,7 @@ describe("command registry", () => {
       "app.snapshot",
       "app.commands",
       "app.buildInfo",
+      "app.capture",
       "sidebar.show",
       "sidebar.hide",
       "tab.openFile",

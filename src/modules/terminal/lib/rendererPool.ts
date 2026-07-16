@@ -834,7 +834,9 @@ function attachWebgl(slot: Slot): void {
     elem.querySelectorAll<HTMLCanvasElement>("canvas"),
   );
   try {
-    const webgl = new WebglAddon();
+    // preserveDrawingBuffer keeps the framebuffer readable so the in-app
+    // capture module (modules/capture) can snapshot terminal pixels.
+    const webgl = new WebglAddon(true);
     webgl.onContextLoss(() => {
       const cur = slot.webglAddon;
       if (cur === webgl) {
