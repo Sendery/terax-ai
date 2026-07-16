@@ -20,6 +20,11 @@ import {
 } from "./development.js";
 import { discoverTerax } from "./discovery.js";
 import {
+  detectTeraxHost,
+  teraxEnableInstructions,
+  type HostEnv,
+} from "./host.js";
+import {
   assertVisualCaptureSafe,
   runVisualQa,
   validateVisualQaRequest,
@@ -138,6 +143,10 @@ export type ExtensionDependencies = {
   createVisualBackend: (signal?: AbortSignal) => Promise<VisualBackend>;
   runVisual: typeof runVisualQa;
   readEvidence: typeof readFile;
+  /** Environment used to detect whether Pi runs inside a Terax terminal. */
+  hostEnv: HostEnv;
+  /** Platform used to build enable instructions when unavailable. */
+  platform: string;
 };
 
 const defaultDependencies: ExtensionDependencies = {
@@ -146,7 +155,48 @@ const defaultDependencies: ExtensionDependencies = {
   createVisualBackend: (signal) => createSystemWindowsVisualBackend({ signal }),
   runVisual: runVisualQa,
   readEvidence: readFile,
+  hostEnv: process.env,
+  platform: process.platform,
 };
+
+function createStatusTool(dependencies: ExtensionDependencies) {
+  return defineTool({
+    name: "terax_status",
+    label: "Terax status",
+    description:
+      "Report whether this Pi session runs inside a Terax terminal and which Pi-Terax capabilities are available. When unavailable, returns how to enable them.",
+    parameters: Type.Object({}),
+    async execute() {
+      const host = detectTeraxHost(dependencies.hostEnv);
+      const capabilities = host.available
+        ? [
+            "terax_get_state",
+            "terax_call",
+            "terax_wait",
+            "terax_development_guide",
+            "terax_visual_qa",
+          ]
+        : [];
+      const details = {
+        available: host.available,
+        inTerax: host.inTerax,
+        forced: host.forced,
+        host: {
+          termProgram: host.termProgram ?? null,
+          termProgramVersion: host.termProgramVersion ?? null,
+        },
+        capabilities,
+        enable: host.available
+          ? null
+          : teraxEnableInstructions(dependencies.platform),
+      };
+      const text = host.available
+        ? "Pi-Terax is available. Control and development tools are active."
+        : `${details.enable?.reason}\nEnable: ${details.enable?.steps.join(" ")} (command: ${details.enable?.command}). Or set TERAX_FORCE=1 to operate against a reachable Terax from this shell.`;
+      return textResult(text, details);
+    },
+  });
+}
 
 function createVisualQaTool(dependencies: ExtensionDependencies) {
   return defineTool({
@@ -218,11 +268,33 @@ export function createExtension(
   dependencies: ExtensionDependencies = defaultDependencies,
 ): (pi: ExtensionAPI) => void {
   return (pi: ExtensionAPI): void => {
-  pi.registerTool(getStateTool);
-  pi.registerTool(callTool);
-  pi.registerTool(waitTool);
-  pi.registerTool(developmentGuideTool);
-    pi.registerTool(createVisualQaTool(dependencies));
+    const host = detectTeraxHost(dependencies.hostEnv);
+
+    // A single discovery entrypoint is always present so Pi can recognize the
+    // integration and, when outside Terax, learn how to enable it.
+    pi.registerTool(createStatusTool(dependencies));
+
+    if (host.available) {
+      pi.registerTool(getStateTool);
+      pi.registerTool(callTool);
+      pi.registerTool(waitTool);
+      pi.registerTool(developmentGuideTool);
+      pi.registerTool(createVisualQaTool(dependencies));
+      return;
+    }
+
+    // Not in a Terax terminal: keep the footprint minimal and inform once at
+    // session start instead of loading control/development context.
+    if (typeof pi.on === "function" && typeof pi.sendMessage === "function") {
+      const enable = teraxEnableInstructions(dependencies.platform);
+      pi.on("session_start", () => {
+        pi.sendMessage({
+          customType: "terax-unavailable",
+          content: `${enable.reason} Run \`terax_status\` for details. To enable: ${enable.steps.join(" ")} (command: ${enable.command}).`,
+          display: true,
+        } as never);
+      });
+    }
   };
 }
 

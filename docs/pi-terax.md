@@ -2,12 +2,34 @@
 
 Pi Terax lets a Pi coding-agent package control a running Terax window through a first-party command registry and extend the Terax source tree through a bundled development skill. It is not MCP and does not expose an MCP server.
 
+## Development domains
+
+Pick the right domain before acting. The orientation is discoverable at runtime (call `terax_status` and `terax_development_guide` with `orientation`), so it does not depend on the Pi session starting inside the Terax checkout.
+
+| Goal | Skill | Extension / tools | Technology | Where the code lives |
+|---|---|---|---|---|
+| a) Control a running Terax | (none) | `terax_get_state`, `terax_call`, `terax_wait`, `app.commands` | tools only, no build | does not touch code |
+| b) Develop a Terax feature | `terax-development` | `terax_development_guide`, `terax_visual_qa` | React 19 + TypeScript, Rust/Tauri | `src/`, `src-tauri/` |
+| c) Extend the Pi bridge (new command/tool) | `terax-development` | same, plus editing the package | TypeScript + typebox + Node TCP, and the Terax registry + Rust allowlist | `packages/pi-terax/`, `src/modules/commands`, `src-tauri/src/modules/pi.rs` |
+
+### Host awareness
+
+Terax injects `TERAX_TERMINAL=1` and `TERM_PROGRAM=Terax` into every terminal it spawns. The extension detects this at activation:
+
+- Inside a Terax terminal: the full tool set is registered.
+- In any other terminal: only `terax_status` is registered (minimal footprint, no context loaded), and a one-time startup notice explains that Pi-Terax is unavailable and how to enable it (open Terax, run Pi from a Terax terminal). Set `TERAX_FORCE=1` to opt in against a reachable Terax from another shell.
+
+### Bootstrap for development
+
+The develop and extend-Pi domains work from any cwd. `app.buildInfo` reports the running binary's `repository`, `branch`, `commit`, and `channel`, so when no local checkout is present Pi can clone that exact source and create an isolated worktree, only when the task requires source changes. The bridge itself never clones; Pi performs it with its own bash under workspace authorization.
+
 ## Command Registry
 
 The frontend registry lives in `src/modules/commands`. It is separate from the command palette UI and accepts typed command requests:
 
 - `app.snapshot`
 - `app.commands`
+- `app.buildInfo`
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
@@ -22,6 +44,16 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, and settings APIs. It does not expose AI diff approval internals.
 
 `app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, and excludes AI diff approval IDs and proposed or original content.
+
+### app.buildInfo
+
+Read the running app's source provenance so a client can develop against the exact source:
+
+```json
+{ "id": "app.buildInfo" }
+```
+
+Returns `{ repository, branch, commit, channel }`. It exposes only public About-page provenance, no secrets.
 
 ### app.commands
 

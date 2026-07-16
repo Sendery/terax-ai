@@ -1,4 +1,5 @@
 export const DEVELOPMENT_CAPABILITIES = [
+  "orientation",
   "feature",
   "window",
   "setting",
@@ -27,6 +28,35 @@ const COMMON_VERIFY = [
 ];
 
 const GUIDES: Record<DevelopmentCapability, DevelopmentGuide> = {
+  orientation: {
+    capability: "orientation",
+    summary:
+      "Pick the right domain before acting. a) Control a running Terax with tools only. b) Develop a Terax product feature in source. c) Extend the Pi bridge itself (a new command or tool), which spans the frontend registry, the Rust allowlist, and this package together.",
+    inspect: [
+      "Call terax_status to learn whether this session runs inside a Terax terminal and which tools are available.",
+      "Control domain: terax_get_state, terax_call, terax_wait, and app.commands (read supported payloads). No source changes.",
+      "Develop domain: this guide's feature/window/setting/shortcut/command capabilities plus terax_visual_qa.",
+      "Provenance: app.buildInfo returns repository, branch, commit, and channel of the running binary so you can develop against the exact source.",
+    ],
+    create: [],
+    modify: [
+      "a) Control: send allowlisted commands only; never edit source for control tasks.",
+      "b) Feature: React 19 + TypeScript under src/ and Rust/Tauri under src-tauri/.",
+      "c) Extend the Pi bridge: TypeScript + typebox + Node TCP in packages/pi-terax, together with src/modules/commands/lib/registry.ts and src-tauri/src/modules/pi.rs.",
+    ],
+    tests: [
+      "Only the develop and extend-Pi domains add tests; the control domain runs no build.",
+    ],
+    invariants: [
+      "Host awareness: control and development tools are exposed only when TERAX_TERMINAL=1 (or TERM_PROGRAM=Terax), unless TERAX_FORCE=1 opts in from another shell.",
+      "Bootstrap only when a development task requires source and no checkout is present: git clone the app's repository at its commit, then create an isolated branch and worktree. Pi performs this with its own bash under workspace authorization; the bridge never clones.",
+      "Do not turn Terax into a runtime plugin host; extend it through reviewed source changes only.",
+    ],
+    verify: [
+      "terax_status reports availability and, when unavailable, how to enable it.",
+      "app.buildInfo matches the repository and commit you cloned for development.",
+    ],
+  },
   feature: {
     capability: "feature",
     summary: "Add a self-contained Terax module and keep App.tsx as coordinator.",

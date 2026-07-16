@@ -42,18 +42,31 @@ describe("Pi extension", () => {
       createVisualBackend: vi.fn(async () => ({ capture: vi.fn(), record: vi.fn(), compare: vi.fn() })),
       runVisual,
       readEvidence: vi.fn(async () => Buffer.from("png")) as ExtensionDependencies["readEvidence"],
+      hostEnv: { TERAX_TERMINAL: "1" },
     };
-    createExtension(dependencies)({ registerTool: (tool: RegisteredTool) => tools.push(tool) } as never);
+    createExtension(dependencies)({ registerTool: (tool: RegisteredTool) => tools.push(tool), on: () => {} } as never);
     return { visual: tools.find((tool) => tool.name === "terax_visual_qa"), dependencies, call, discover, runVisual };
   }
 
-  it("registers only the compact Terax tool set", () => {
+  function registerWith(env: Record<string, string | undefined>) {
     const tools: RegisteredTool[] = [];
-    extension({
+    const events: Record<string, Array<(...a: unknown[]) => unknown>> = {};
+    const messages: unknown[] = [];
+    const pi = {
       registerTool: (tool: RegisteredTool) => tools.push(tool),
-    } as never);
+      on: (event: string, handler: (...a: unknown[]) => unknown) => {
+        (events[event] ??= []).push(handler);
+      },
+      sendMessage: (message: unknown) => messages.push(message),
+    };
+    createExtension({ hostEnv: env })(pi as never);
+    return { tools, events, messages };
+  }
 
+  it("registers the full tool set inside a Terax terminal", () => {
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     expect(tools.map((tool) => tool.name)).toEqual([
+      "terax_status",
       "terax_get_state",
       "terax_call",
       "terax_wait",
@@ -62,11 +75,53 @@ describe("Pi extension", () => {
     ]);
   });
 
-  it("blocks terax_call commands outside the allowlist", async () => {
+  it("exposes only terax_status outside a Terax terminal", () => {
+    const { tools } = registerWith({ TERM_PROGRAM: "Apple_Terminal" });
+    expect(tools.map((tool) => tool.name)).toEqual(["terax_status"]);
+  });
+
+  it("default export always registers the terax_status entrypoint", () => {
     const tools: RegisteredTool[] = [];
-    extension({
-      registerTool: (tool: RegisteredTool) => tools.push(tool),
-    } as never);
+    extension({ registerTool: (t: RegisteredTool) => tools.push(t), on: () => {} } as never);
+    expect(tools.map((t) => t.name)).toContain("terax_status");
+  });
+
+  it("TERAX_FORCE restores the full set from a non-Terax shell", () => {
+    const { tools } = registerWith({
+      TERM_PROGRAM: "iTerm.app",
+      TERAX_FORCE: "1",
+    });
+    expect(tools.map((tool) => tool.name)).toContain("terax_call");
+  });
+
+  it("informs once at session start when unavailable, and stays quiet when available", async () => {
+    const outside = registerWith({ TERM_PROGRAM: "Apple_Terminal" });
+    for (const handler of outside.events.session_start ?? []) await handler();
+    expect(outside.messages.length).toBe(1);
+    expect(JSON.stringify(outside.messages[0])).toMatch(/not.+Terax/i);
+
+    const inside = registerWith({ TERAX_TERMINAL: "1" });
+    for (const handler of inside.events.session_start ?? []) await handler();
+    expect(inside.messages.length).toBe(0);
+  });
+
+  it("terax_status reports availability and enable instructions when outside", async () => {
+    const { tools } = registerWith({ TERM_PROGRAM: "Apple_Terminal" });
+    const status = tools.find((t) => t.name === "terax_status");
+    const result = await status?.execute("s1", {});
+    const details = result?.details as {
+      available: boolean;
+      inTerax: boolean;
+      enable?: { command: string; steps: string[] };
+    };
+    expect(details.available).toBe(false);
+    expect(details.inTerax).toBe(false);
+    expect(details.enable?.steps.length).toBeGreaterThan(0);
+    expect(typeof details.enable?.command).toBe("string");
+  });
+
+  it("blocks terax_call commands outside the allowlist", async () => {
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     const call = tools.find((tool) => tool.name === "terax_call");
     expect(call).toBeDefined();
 
@@ -89,11 +144,10 @@ describe("Pi extension", () => {
   });
 
   it("describes terax_call payload as an open object so hosts forward it", () => {
-    const tools: Array<{ name: string; parameters?: unknown }> = [];
-    extension({
-      registerTool: (tool: { name: string }) => tools.push(tool),
-    } as never);
-    const call = tools.find((tool) => tool.name === "terax_call");
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
+    const call = tools.find(
+      (tool) => (tool as { name: string }).name === "terax_call",
+    ) as unknown as { parameters?: unknown };
     const params = call?.parameters as {
       properties?: { payload?: Record<string, unknown> };
     };
@@ -106,10 +160,7 @@ describe("Pi extension", () => {
   });
 
   it("returns project contribution points for new windows", async () => {
-    const tools: RegisteredTool[] = [];
-    extension({
-      registerTool: (tool: RegisteredTool) => tools.push(tool),
-    } as never);
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     const guide = tools.find((tool) => tool.name === "terax_development_guide");
 
     await expect(
@@ -125,10 +176,7 @@ describe("Pi extension", () => {
   });
 
   it("rejects visual capture outside a trusted Pi project", async () => {
-    const tools: RegisteredTool[] = [];
-    extension({
-      registerTool: (tool: RegisteredTool) => tools.push(tool),
-    } as never);
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     const visual = tools.find((tool) => tool.name === "terax_visual_qa");
 
     await expect(
@@ -171,10 +219,7 @@ describe("Pi extension", () => {
 
   it("waits without touching Terax transport", async () => {
     vi.useFakeTimers();
-    const tools: RegisteredTool[] = [];
-    extension({
-      registerTool: (tool: RegisteredTool) => tools.push(tool),
-    } as never);
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     const wait = tools.find((tool) => tool.name === "terax_wait");
     const promise = wait?.execute("wait-1", { milliseconds: 50 });
     await vi.advanceTimersByTimeAsync(50);

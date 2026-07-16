@@ -7,12 +7,34 @@ import {
 describe("Terax development guides", () => {
   it("covers every supported contribution type", () => {
     expect(DEVELOPMENT_CAPABILITIES).toEqual([
+      "orientation",
       "feature",
       "window",
       "setting",
       "shortcut",
       "command",
     ]);
+  });
+
+  it("orientation maps the control vs develop vs extend-Pi domains", () => {
+    const guide = getDevelopmentGuide("orientation");
+    const text = [
+      guide.summary,
+      ...guide.inspect,
+      ...guide.modify,
+      ...guide.invariants,
+    ]
+      .join("\n")
+      .toLowerCase();
+    // a) control, b) develop features, c) extend the Pi bridge
+    expect(text).toContain("terax_get_state");
+    expect(text).toContain("terax_status");
+    expect(text).toContain("app.buildinfo");
+    expect(text).toContain("packages/pi-terax");
+    // host-awareness and bootstrap-only-when-developing invariants
+    expect(text).toContain("terax_terminal");
+    expect(text).toContain("clone");
+    expect(text).toContain("worktree");
   });
 
   it("maps native windows to the Tauri and frontend entry points", () => {

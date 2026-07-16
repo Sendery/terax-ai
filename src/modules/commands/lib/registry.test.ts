@@ -28,6 +28,12 @@ function handlers(): CommandHandlers {
     openGitDiff: vi.fn(async () => ({ tabId: 8 })),
     openSettings: vi.fn(async () => ({ opened: true })),
     setTabColor: vi.fn(async () => ({ tabId: 2 })),
+    getBuildInfo: vi.fn(() => ({
+      repository: "Sendery/terax-ai",
+      branch: "main",
+      commit: "abc1234",
+      channel: "development" as const,
+    })),
   };
 }
 
@@ -36,6 +42,14 @@ describe("describeCommands", () => {
     const catalog = describeCommands();
     const documented = catalog.commands.map((c) => c.id).sort();
     expect(documented).toEqual([...COMMAND_IDS].sort());
+  });
+
+  it("documents app.buildInfo as a no-payload read command", () => {
+    const entry = describeCommands().commands.find(
+      (c) => c.id === "app.buildInfo",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.params).toEqual([]);
   });
 
   it("exposes tab.setColor supported arguments including the color palette", () => {
@@ -62,6 +76,32 @@ describe("describeCommands", () => {
         (result.value as ReturnType<typeof describeCommands>).commands.length,
       ).toBe(COMMAND_IDS.length);
     }
+  });
+});
+
+describe("app.buildInfo command", () => {
+  it("returns build provenance from the handler", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({ id: "app.buildInfo" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toMatchObject({
+        repository: "Sendery/terax-ai",
+        commit: "abc1234",
+        channel: "development",
+      });
+    }
+    expect(h.getBuildInfo).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a payload on app.buildInfo", () => {
+    const result = validateCommandRequest({
+      id: "app.buildInfo",
+      payload: { anything: true },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_payload");
   });
 });
 
@@ -140,6 +180,7 @@ describe("command registry", () => {
     expect(PI_ALLOWED_COMMAND_IDS).toEqual([
       "app.snapshot",
       "app.commands",
+      "app.buildInfo",
       "sidebar.show",
       "sidebar.hide",
       "tab.openFile",
