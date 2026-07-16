@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { IncognitoIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { SlotMonitorIndicator } from "@/modules/slot-monitor";
 import { CwdBreadcrumb } from "./CwdBreadcrumb";
 import { WorkspaceEnvSelector } from "./WorkspaceEnvSelector";
 import type { WorkspaceEnv } from "@/modules/workspace";
@@ -67,6 +68,7 @@ export function StatusBar({
         ) : (
           <AiOpenButton onOpen={openPanel} />
         )}
+        <SlotMonitorIndicator cwd={cwd} />
       </div>
     </footer>
   );
