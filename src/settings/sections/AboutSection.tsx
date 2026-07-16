@@ -6,6 +6,9 @@ import {
   formatBuildDate,
   shortCommit,
 } from "@/lib/buildInfo";
+import { cn } from "@/lib/utils";
+import { usePreferencesStore } from "@/modules/settings/preferences";
+import { setUpdateChannel, UPDATE_CHANNELS } from "@/modules/settings/store";
 import { useUpdater } from "@/modules/updater";
 import { GithubIcon, Globe02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -34,6 +37,7 @@ export function AboutSection() {
   const [name, setName] = useState("Terax");
   const [build, setBuild] = useState("");
   const { status, check, install } = useUpdater({ autoCheck: false });
+  const updateChannel = usePreferencesStore((s) => s.updateChannel);
   const checking = status.kind === "checking";
   const downloading = status.kind === "downloading";
   const available = status.kind === "available";
@@ -57,6 +61,7 @@ export function AboutSection() {
                   : "Check for updates";
   const onUpdateClick = () => {
     if (available) void install();
+    else if (manualAvailable) void openUrl(status.info.releaseUrl);
     else void check({ manual: true });
   };
 
@@ -170,7 +175,38 @@ export function AboutSection() {
         </dd>
       </dl>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="text-[12px] font-medium">Update channel</span>
+            <span className="text-[11px] text-muted-foreground">
+              Stable tracks releases; Dev tracks the latest pre-release.
+            </span>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Update channel"
+            className="inline-flex rounded-md border border-border/60 p-0.5"
+          >
+            {UPDATE_CHANNELS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={updateChannel === c}
+                onClick={() => void setUpdateChannel(c)}
+                className={cn(
+                  "rounded px-2.5 py-1 text-[11px] capitalize transition-colors",
+                  updateChannel === c
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex gap-2">
           <Button
             size="sm"
