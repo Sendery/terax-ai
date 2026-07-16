@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FORK_NAME="Terax-ARB"
-FORK_IDENTIFIER="app.crynta.terax-arb"
+FORK_NAME="Pi-Terax"
+FORK_IDENTIFIER="app.crynta.pi-terax"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -81,11 +81,11 @@ const conf = JSON.parse(fs.readFileSync('$TAURI_CONF', 'utf8'));
 conf.productName = '$FORK_NAME';
 conf.identifier = '$FORK_IDENTIFIER';
 conf.app.windows[0].title = '$FORK_NAME';
-delete conf.plugins.updater;
+conf.bundle.createUpdaterArtifacts = false;
 fs.writeFileSync('$TAURI_CONF', JSON.stringify(conf, null, 2) + '\n');
 "
 
-sed -i '' "s/^name = \"terax\"/name = \"terax-arb\"/" "$CARGO_TOML"
+sed -i '' "s/^name = \"terax\"/name = \"pi-terax\"/" "$CARGO_TOML"
 
 if [[ -n "$VERSION" ]]; then
   echo "Setting version to $VERSION"
