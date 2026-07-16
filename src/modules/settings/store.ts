@@ -122,6 +122,7 @@ export type Preferences = {
   customInstructions: string;
   autostart: boolean;
   restoreWindowState: boolean;
+  updateChannel: UpdateChannel;
   autocompleteEnabled: boolean;
   autocompleteProvider: AutocompleteProviderId;
   autocompleteModelId: string;
@@ -172,6 +173,13 @@ const KEY_EDITOR_THEME = "editorTheme";
 const KEY_CUSTOM_INSTRUCTIONS = "customInstructions";
 const KEY_AUTOSTART = "autostart";
 const KEY_RESTORE_WINDOW = "restoreWindowState";
+const KEY_UPDATE_CHANNEL = "updateChannel";
+
+export const UPDATE_CHANNELS = ["stable", "dev"] as const;
+export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
+export function isUpdateChannel(value: unknown): value is UpdateChannel {
+  return value === "stable" || value === "dev";
+}
 const KEY_AUTOCOMPLETE_ENABLED = "autocompleteEnabled";
 const KEY_AUTOCOMPLETE_PROVIDER = "autocompleteProvider";
 const KEY_AUTOCOMPLETE_MODEL = "autocompleteModelId";
@@ -236,6 +244,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   customInstructions: "",
   autostart: false,
   restoreWindowState: true,
+  updateChannel: "stable",
   autocompleteEnabled: false,
   autocompleteProvider: "cerebras",
   autocompleteModelId: DEFAULT_AUTOCOMPLETE_MODEL.cerebras ?? "",
@@ -325,6 +334,12 @@ export async function loadPreferences(): Promise<Preferences> {
     restoreWindowState:
       get<boolean>(KEY_RESTORE_WINDOW) ??
       DEFAULT_PREFERENCES.restoreWindowState,
+    updateChannel: (() => {
+      const stored = get<unknown>(KEY_UPDATE_CHANNEL);
+      return isUpdateChannel(stored)
+        ? stored
+        : DEFAULT_PREFERENCES.updateChannel;
+    })(),
     autocompleteEnabled:
       get<boolean>(KEY_AUTOCOMPLETE_ENABLED) ??
       DEFAULT_PREFERENCES.autocompleteEnabled,
@@ -488,6 +503,10 @@ export async function setAutostart(value: boolean): Promise<void> {
 
 export async function setRestoreWindowState(value: boolean): Promise<void> {
   await writePref(KEY_RESTORE_WINDOW, value);
+}
+
+export async function setUpdateChannel(value: UpdateChannel): Promise<void> {
+  await writePref(KEY_UPDATE_CHANNEL, value);
 }
 
 export async function setAutocompleteEnabled(value: boolean): Promise<void> {
@@ -685,6 +704,7 @@ export async function onPreferencesChange(
     [KEY_CUSTOM_INSTRUCTIONS]: "customInstructions",
     [KEY_AUTOSTART]: "autostart",
     [KEY_RESTORE_WINDOW]: "restoreWindowState",
+    [KEY_UPDATE_CHANNEL]: "updateChannel",
     [KEY_AUTOCOMPLETE_ENABLED]: "autocompleteEnabled",
     [KEY_AUTOCOMPLETE_PROVIDER]: "autocompleteProvider",
     [KEY_AUTOCOMPLETE_MODEL]: "autocompleteModelId",
