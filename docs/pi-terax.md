@@ -30,6 +30,7 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `app.snapshot`
 - `app.commands`
 - `app.buildInfo`
+- `app.capture`
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
@@ -44,6 +45,16 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, and settings APIs. It does not expose AI diff approval internals.
 
 `app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, and excludes AI diff approval IDs and proposed or original content.
+
+### app.capture
+
+Rasterize a Terax surface inside the webview and persist it as a PNG in a private app-cache directory. No OS screen-capture API or permission is involved, and the capture cannot include content outside the Terax window. Targets are a closed set: `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`, works for hidden but mounted tabs), and `overlay` (topmost open menu, dialog, or popover). Capture is refused when a private terminal is in scope.
+
+```json
+{ "id": "app.capture", "payload": { "target": "pane", "tabId": 3 } }
+```
+
+Returns `{ target, path, width, height, bytes, format: "png" }`.
 
 ### app.buildInfo
 

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { WindowControls } from "@/components/WindowControls";
 import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
 import { NotificationBell } from "@/modules/agents";
-import { TabBar, type Tab, type TabColor } from "@/modules/tabs";
+import { type Tab, TabBar, type TabColor } from "@/modules/tabs";
 import {
   CommandIcon,
   Settings01Icon,
@@ -104,6 +104,7 @@ export function Header({
     <div
       ref={rootRef}
       data-tauri-drag-region
+      data-capture-target="header"
       className={`flex h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-card select-none ${
         IS_MAC ? "pr-2 pl-20" : "pr-0 pl-2"
       }`}

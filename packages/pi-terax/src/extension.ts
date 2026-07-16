@@ -26,11 +26,16 @@ import {
 } from "./host.js";
 import {
   assertVisualCaptureSafe,
+  NATIVE_CAPTURE_TARGETS,
   runVisualQa,
   validateVisualQaRequest,
   type VisualBackend,
   type VisualQaRequest,
 } from "./visual.js";
+import {
+  createNativeVisualBackend,
+  type NativeVisualBackendOptions,
+} from "./visual-native.js";
 import { createSystemWindowsVisualBackend } from "./visual-windows.js";
 
 type TextDetails = Record<string, unknown>;
@@ -141,6 +146,7 @@ export type ExtensionDependencies = {
     call: (command: TeraxCommandId, payload?: unknown) => Promise<unknown>;
   };
   createVisualBackend: (signal?: AbortSignal) => Promise<VisualBackend>;
+  createNativeBackend: (options: NativeVisualBackendOptions) => VisualBackend;
   runVisual: typeof runVisualQa;
   readEvidence: typeof readFile;
   /** Environment used to detect whether Pi runs inside a Terax terminal. */
@@ -153,6 +159,7 @@ const defaultDependencies: ExtensionDependencies = {
   discover: discoverTerax,
   createClient: (discovery, signal) => new TeraxClient(discovery, { signal }),
   createVisualBackend: (signal) => createSystemWindowsVisualBackend({ signal }),
+  createNativeBackend: createNativeVisualBackend,
   runVisual: runVisualQa,
   readEvidence: readFile,
   hostEnv: process.env,
@@ -212,6 +219,12 @@ function createVisualQaTool(dependencies: ExtensionDependencies) {
     ]),
     surface: Type.Union([Type.Literal("main"), Type.Literal("settings")]),
     name: Type.String({ minLength: 1, maxLength: 80 }),
+    target: Type.Optional(
+      Type.Union(
+        NATIVE_CAPTURE_TARGETS.map((target) => Type.Literal(target)),
+      ),
+    ),
+    tabId: Type.Optional(Type.Integer({ minimum: 1 })),
     durationSeconds: Type.Optional(Type.Number({ minimum: 1, maximum: 30 })),
     fps: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
     baselinePath: Type.Optional(Type.String({ minLength: 1 })),
@@ -229,7 +242,15 @@ function createVisualQaTool(dependencies: ExtensionDependencies) {
       if (validated.surface === "main") assertVisualCaptureSafe(snapshot);
     };
     await guard();
-    const backend = await dependencies.createVisualBackend(signal);
+    const backend =
+      validated.surface === "main"
+        ? dependencies.createNativeBackend({
+            client: client as NativeVisualBackendOptions["client"],
+            pid: discovery.pid,
+            target: validated.target ?? "window",
+            ...(validated.tabId === undefined ? {} : { tabId: validated.tabId }),
+          })
+        : await dependencies.createVisualBackend(signal);
     const result = await dependencies.runVisual(validated, {
       projectRoot: ctx.cwd,
       pid: discovery.pid,

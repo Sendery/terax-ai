@@ -140,6 +140,7 @@ fn is_allowed_command(command: &str) -> bool {
         "app.snapshot"
             | "app.commands"
             | "app.buildInfo"
+            | "app.capture"
             | "sidebar.show"
             | "sidebar.hide"
             | "tab.openFile"

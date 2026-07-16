@@ -20,6 +20,8 @@ export function MarkdownStack({ tabs, activeId, onSetMarkdownView }: Props) {
         return (
           <div
             key={t.id}
+            data-capture-target="pane"
+            data-capture-tab-id={t.id}
             className={cn(
               "absolute inset-0",
               !visible && "invisible pointer-events-none",

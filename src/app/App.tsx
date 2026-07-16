@@ -11,6 +11,7 @@ import { usePresence } from "@/lib/usePresence";
 import { quoteShellArg } from "@/lib/shellQuote";
 import { useZoom } from "@/lib/useZoom";
 import { AgentNotificationsBridge } from "@/modules/agents";
+import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
   AiMiniWindow,
@@ -1028,6 +1029,16 @@ export default function App() {
         commit: BUILD_INFO.commit,
         channel: BUILD_INFO.channel,
       }),
+      capture: async (payload) => {
+        try {
+          return await captureSurface(payload, tabsRef.current, activeId);
+        } catch (error) {
+          throw {
+            code: "command_failed",
+            message: error instanceof Error ? error.message : "Capture failed",
+          };
+        }
+      },
       showSidebar: ({ view }) => {
         showSidebar(view);
         return { visible: true, view: view ?? sidebarView };
@@ -1178,7 +1189,10 @@ export default function App() {
                   if (size.inPixels > 0) persistSidebarWidth(size.inPixels);
                 }}
               >
-                <div className="flex h-full min-h-0 flex-col border-r border-border/60 bg-card">
+                <div
+                  data-capture-target="sidebar"
+                  className="flex h-full min-h-0 flex-col border-r border-border/60 bg-card"
+                >
                   <div
                     key={sidebarView}
                     className="min-h-0 flex-1 terax-panel-in"
