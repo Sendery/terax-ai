@@ -42,6 +42,8 @@ Do not use it merely to control a running Terax instance through existing comman
 7. Never claim completion from compilation alone. Exercise the real path and inspect the result.
 8. Do not commit, merge, push, publish, or delete a worktree unless the user has authorized that action.
 9. Record implementation gotchas as they occur. Promote only verified, reusable lessons.
+10. In this Terax repository act only as the Sendery Git and GitHub identity for commits, pushes, pull requests, and reviews. Never use any other account.
+11. When self-approval is blocked because Sendery authored the pull request, record that in the pull request and still merge. Do not stall on the GitHub approval cycle.
 
 ## Phase 0a: Recognize the host and bootstrap the source
 
@@ -131,6 +133,21 @@ Before asking to merge:
 6. Merge with the requested strategy. Never infer that push is allowed from permission to commit or merge.
 
 Completion criterion: the experiment is reproducible from the recorded base commit, and no unrelated checkout was modified.
+
+### Terax delivery workflow
+
+Standard end-to-end cycle for a Terax feature. Follow it in order and act only as the Sendery identity.
+
+1. Branch and worktree from `develop`. `develop` is the integration base; do not branch from whatever branch happens to be checked out.
+2. Build and exercise the change in dev mode (`pnpm tauri dev`) together with unit and domain tests. Never rely on compilation alone.
+3. Debug and validate through the pi-terax tools (`terax_get_state`, `terax_call`, `terax_wait`, and `terax_visual_qa` where capture is supported). Record what the tools cannot do (for example, native capture is unsupported on macOS) and substitute real-data and runtime evidence, including user-provided screenshots.
+4. Document the feature for both audiences: `TERAX.md` for agents (one module entry plus any architecture note) and a human-facing note (pull request body, and `docs/` when a user guide applies).
+5. Publish a pull request against `develop` with the Sendery identity for the commit author, the push, and the pull request.
+6. Approve when possible. GitHub blocks approving your own pull request, so when Sendery is the author, record that in the pull request and skip the approval cycle rather than switching identities.
+7. Merge into `develop` with `--no-ff` so the feature lands as a discrete merge commit (`gh pr merge --merge` preserves branch history).
+8. After the branch is published, validated, and merged, propose deleting the pending worktree and remote branch in the next release. Do not delete either until the user validates.
+
+Completion criterion: the feature is merged to `develop` under the Sendery identity, documented for agents and humans, and worktree deletion is proposed but withheld pending user approval.
 
 ## Phase 1: Test-First Vertical Slices
 
