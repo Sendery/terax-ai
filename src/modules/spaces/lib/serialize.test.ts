@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PaneNode } from "@/modules/terminal/lib/panes";
 import type { Tab } from "@/modules/tabs";
+import { createCardFromUrl, createTextCard } from "@/modules/notes/lib/cards";
 import { hydrateTabs, serializeTabs, type SerializedTab } from "./serialize";
 
 function counter(start = 100): () => number {
@@ -187,6 +188,65 @@ describe("hydrateTabs", () => {
     }
     expect(new Set(ids).size).toBe(ids.length);
     expect(Math.min(...ids)).toBeGreaterThanOrEqual(100);
+  });
+
+  it("round-trips per-tab notes for terminal and editor tabs", () => {
+    const notes = [
+      createTextCard("remember to review", "Note"),
+      createCardFromUrl("https://github.com/acme/widgets/pull/42"),
+      createCardFromUrl("https://acme.atlassian.net/browse/PROJ-9"),
+    ];
+    const tabs: Tab[] = [
+      term({ notes }),
+      {
+        id: 3,
+        kind: "editor",
+        spaceId: "s1",
+        title: "app.ts",
+        path: "/a/app.ts",
+        dirty: false,
+        preview: false,
+        notes: [createCardFromUrl("https://figma.com/file/x")],
+      },
+    ];
+
+    const restored = hydrateTabs(serializeTabs(tabs), "s2", counter());
+
+    expect(restored[0].notes?.map((c) => c.kind)).toEqual([
+      "text",
+      "github-pr",
+      "jira",
+    ]);
+    expect(restored[0].notes?.[0].id).toBe(notes[0].id);
+    expect(restored[1].notes?.map((c) => c.kind)).toEqual(["figma"]);
+  });
+
+  it("drops invalid stored notes but keeps valid ones", () => {
+    const good = createTextCard("keep me");
+    const serialized = [
+      {
+        kind: "editor",
+        path: "/a/app.ts",
+        notes: [
+          good,
+          { kind: "mystery", id: "x", createdAt: 1, updatedAt: 1 },
+          { kind: "github-pr", id: "y", createdAt: 1, updatedAt: 1 }, // missing url
+          null,
+          "nope",
+        ],
+      },
+    ] as unknown as SerializedTab[];
+
+    const restored = hydrateTabs(serialized, "s1", counter());
+    expect(restored).toHaveLength(1);
+    expect(restored[0].notes?.map((c) => c.id)).toEqual([good.id]);
+  });
+
+  it("omits notes entirely when a tab has none", () => {
+    const [s] = serializeTabs([term({})]);
+    expect(s).not.toHaveProperty("notes");
+    const [restored] = hydrateTabs([s], "s1", counter());
+    expect(restored).not.toHaveProperty("notes");
   });
 
   it("returns empty for corrupted input without throwing", () => {

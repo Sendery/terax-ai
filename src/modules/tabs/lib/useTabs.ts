@@ -1,4 +1,5 @@
 import { isMarkdownPath } from "@/lib/utils";
+import type { NoteCard } from "@/modules/notes/lib/cards";
 import type { TabColor } from "./tabColors";
 import {
   findLeafCwd,
@@ -26,6 +27,8 @@ type TabBase = {
   customTitle?: string;
   /** Optional accent color for the tab, chosen from the fixed palette. */
   color?: TabColor;
+  /** Per-tab notes (Jira/GitHub PR/Notion/Figma/Obsidian/link/text cards). */
+  notes?: NoteCard[];
 };
 
 export type TerminalTab = TabBase & {
@@ -877,6 +880,23 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     );
   }, []);
 
+  /** Update a tab's notes with an immutable updater. Persisted via the space
+   * serializer, so notes survive restarts and are scoped per workspace+tab. */
+  const updateTabNotes = useCallback(
+    (id: number, updater: (notes: NoteCard[]) => NoteCard[]) => {
+      setTabs((t) =>
+        t.map((x) => {
+          if (x.id !== id) return x;
+          const current = x.notes ?? [];
+          const next = updater(current);
+          if (next === current) return x;
+          return { ...x, notes: next };
+        }),
+      );
+    },
+    [],
+  );
+
   const selectByIndex = useCallback(
     (idx: number) => {
       const t = tabs[idx];
@@ -1077,6 +1097,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     closeAiDiffTab,
     closeTab,
     updateTab,
+    updateTabNotes,
     selectByIndex,
     setLeafCwd,
     focusPane,

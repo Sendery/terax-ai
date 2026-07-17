@@ -61,6 +61,7 @@ import {
   NotesPanel,
   NOTES_MAX_WIDTH,
   NOTES_MIN_WIDTH,
+  type NotesMutator,
   useNotesPanel,
   useTabNotes,
 } from "@/modules/notes";
@@ -137,6 +138,7 @@ export default function App() {
     openCommitFileDiffTab,
     closeTab,
     updateTab,
+    updateTabNotes,
     selectByIndex,
     setLeafCwd,
     focusPane,
@@ -288,7 +290,12 @@ export default function App() {
     hideNotes: hideNotesPanel,
     persistNotesWidth,
   } = useNotesPanel();
-  const tabNotes = useTabNotes(activeId ?? null);
+  const mutateActiveTabNotes = useCallback<NotesMutator>(
+    (updater) => {
+      if (activeId != null) updateTabNotes(activeId, updater);
+    },
+    [activeId, updateTabNotes],
+  );
 
   const [newEditorOpen, setNewEditorOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -314,6 +321,7 @@ export default function App() {
   const { hasComposer, keysLoaded } = useAiBootstrap();
 
   const activeTab = tabs.find((t) => t.id === activeId);
+  const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
   const isEditorTab = activeTab?.kind === "editor";

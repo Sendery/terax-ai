@@ -19,7 +19,11 @@ export {
   NOTES_MIN_WIDTH,
   useNotesPanel,
 } from "./lib/useNotesPanel";
-export { useTabNotes, type TabNotesApi } from "./lib/useTabNotes";
+export {
+  useTabNotes,
+  type NotesMutator,
+  type TabNotesApi,
+} from "./lib/useTabNotes";
 export {
   addCard,
   moveCard,
