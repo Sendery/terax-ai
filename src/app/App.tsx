@@ -525,10 +525,25 @@ export default function App() {
     activeTab,
   ]);
 
-  const { askPopup, setAskPopup, onAskFromSelection } = useSelectionAskAi({
+  const addSelectionToNote = useCallback(() => {
+    const selection = captureActiveSelection();
+    if (!selection?.trim()) return;
+    tabNotes.addFromInput(selection);
+    showNotesPanel();
+    if (notesDetached) void openNotesWindow();
+  }, [
     captureActiveSelection,
-    askFromSelection,
-  });
+    tabNotes,
+    showNotesPanel,
+    notesDetached,
+  ]);
+
+  const { askPopup, setAskPopup, onAskFromSelection, onAddToNoteFromSelection } =
+    useSelectionAskAi({
+      captureActiveSelection,
+      askFromSelection,
+      addSelectionToNote,
+    });
   const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
@@ -720,6 +735,7 @@ export default function App() {
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
       "ai.askSelection": askFromSelection,
+      "notes.addSelection": addSelectionToNote,
       "terminal.clearActive": clearActiveTerminal,
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -748,6 +764,7 @@ export default function App() {
       toggleSourceControl,
       togglePanelAndFocus,
       askFromSelection,
+      addSelectionToNote,
       toggleSidebar,
       toggleExplorerFocus,
       zoomIn,
@@ -770,6 +787,11 @@ export default function App() {
         if (!inTerminal) return false;
         const sel = captureActiveSelection();
         return !sel || !sel.trim();
+      }
+      if (id === "notes.addSelection") {
+        // Only claim the binding when there is a selection to add; otherwise
+        // let the key fall through (never preventDefault when disabled).
+        return !captureActiveSelection()?.trim();
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -800,7 +822,7 @@ export default function App() {
       }
       return false;
     },
-    [activeTab],
+    [activeTab, captureActiveSelection],
   );
 
   useGlobalShortcuts(shortcutHandlers, { isDisabled: shortcutsDisabled });
@@ -1471,6 +1493,7 @@ export default function App() {
               x={askPopup?.x ?? 0}
               y={askPopup?.y ?? 0}
               onAsk={onAskFromSelection}
+              onAddToNote={onAddToNoteFromSelection}
               onDismiss={() => setAskPopup(null)}
             />
           ) : null}

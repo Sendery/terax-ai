@@ -8,17 +8,48 @@ export type SelectionAskAiProps = {
   x: number;
   y: number;
   onAsk: () => void;
+  onAddToNote: () => void;
   onDismiss: () => void;
 };
 
-const W = 110;
-const OFFSET = 32;
+const W = 168;
+const H = 62;
+const GAP = 10;
+
+function ActionRow({
+  label,
+  shortcutKey,
+  onClick,
+}: {
+  label: string;
+  shortcutKey: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="flex h-7 w-full items-center justify-between gap-2 px-2 text-xs hover:bg-accent"
+    >
+      <span>{label}</span>
+      <KbdGroup>
+        <Kbd className="h-4 min-w-4 px-1 text-[10px]">
+          {fmtShortcut(MOD_KEY, shortcutKey)}
+        </Kbd>
+      </KbdGroup>
+    </button>
+  );
+}
 
 export function SelectionAskAi({
   state,
   x,
   y,
   onAsk,
+  onAddToNote,
   onDismiss,
 }: SelectionAskAiProps) {
   const pos = useRef({ top: 0, left: 0 });
@@ -35,7 +66,7 @@ export function SelectionAskAi({
 
   if (open) {
     pos.current = {
-      top: Math.max(8, y - OFFSET),
+      top: Math.max(8, y - H - GAP),
       left: Math.max(8, Math.min(x - W / 2, window.innerWidth - W - 8)),
     };
   }
@@ -47,21 +78,11 @@ export function SelectionAskAi({
       style={{ top: pos.current.top, left: pos.current.left, width: W }}
       className="fixed z-50 duration-150 ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1"
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onAsk();
-        }}
-        className="flex h-7 w-full items-center justify-between gap-1.5 rounded-md border border-border/60 bg-card/95 px-2 text-xs shadow-lg backdrop-blur-md hover:border-border hover:bg-accent"
-      >
-        <span>Ask Terax</span>
-        <KbdGroup>
-          <Kbd className="h-4 min-w-4 px-1 text-[10px]">
-            {fmtShortcut(MOD_KEY, "L")}
-          </Kbd>
-        </KbdGroup>
-      </button>
+      <div className="flex flex-col overflow-hidden rounded-md border border-border/60 bg-card/95 shadow-lg backdrop-blur-md">
+        <ActionRow label="Ask Terax" shortcutKey="J" onClick={onAsk} />
+        <div className="h-px bg-border/60" />
+        <ActionRow label="Add to Note" shortcutKey="L" onClick={onAddToNote} />
+      </div>
     </div>
   );
 }
