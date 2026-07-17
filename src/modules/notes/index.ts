@@ -12,7 +12,21 @@ export {
   parseJiraIssueKey,
 } from "./lib/cards";
 export { NotesPanel } from "./NotesPanel";
+export { NotesDockedNotice } from "./NotesDockedNotice";
 export { NoteCardView } from "./NoteCardView";
+export { openNotesWindow } from "./openNotesWindow";
+export { useNotesWindowBridge } from "./lib/useNotesWindowBridge";
+export {
+  NOTES_WINDOW_LABEL,
+  NOTES_SYNC_EVENT,
+  NOTES_ACTION_EVENT,
+  NOTES_READY_EVENT,
+  NOTES_CLOSED_EVENT,
+  isNotesSyncPayload,
+  parseNotesAction,
+  type NotesAction,
+  type NotesSyncPayload,
+} from "./lib/windowBridge";
 export {
   NOTES_DEFAULT_WIDTH,
   NOTES_MAX_WIDTH,

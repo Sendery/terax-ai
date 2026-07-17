@@ -58,11 +58,14 @@ import {
   useSidebarPanel,
 } from "@/modules/sidebar";
 import {
+  NotesDockedNotice,
   NotesPanel,
   NOTES_MAX_WIDTH,
   NOTES_MIN_WIDTH,
   type NotesMutator,
+  openNotesWindow,
   useNotesPanel,
+  useNotesWindowBridge,
   useTabNotes,
 } from "@/modules/notes";
 import {
@@ -287,6 +290,7 @@ export default function App() {
     widthRef: notesWidthRef,
     notesVisible,
     toggleNotes,
+    showNotes: showNotesPanel,
     hideNotes: hideNotesPanel,
     persistNotesWidth,
   } = useNotesPanel();
@@ -296,6 +300,23 @@ export default function App() {
     },
     [activeId, updateTabNotes],
   );
+  const [notesDetached, setNotesDetached] = useState(false);
+  const detachNotes = useCallback(() => {
+    setNotesDetached(true);
+    showNotesPanel();
+    void openNotesWindow();
+  }, [showNotesPanel]);
+  const attachNotes = useCallback(() => {
+    setNotesDetached(false);
+    showNotesPanel();
+  }, [showNotesPanel]);
+  const handleToggleNotes = useCallback(() => {
+    if (notesDetached) {
+      void openNotesWindow();
+      return;
+    }
+    toggleNotes();
+  }, [notesDetached, toggleNotes]);
 
   const [newEditorOpen, setNewEditorOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -322,6 +343,14 @@ export default function App() {
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
+  useNotesWindowBridge({
+    detached: notesDetached,
+    activeTabId: activeId ?? null,
+    activeTabTitle: activeTab?.title ?? null,
+    notes: tabNotes.notes,
+    api: tabNotes,
+    onWindowClosed: attachNotes,
+  });
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
   const isEditorTab = activeTab?.kind === "editor";
@@ -1187,8 +1216,8 @@ export default function App() {
               onRename={handleRenameTab}
               onSetColor={handleSetTabColor}
               onToggleSidebar={toggleSidebar}
-              onToggleNotes={toggleNotes}
-              notesVisible={notesVisible}
+              onToggleNotes={handleToggleNotes}
+              notesVisible={notesVisible || notesDetached}
               onOpenCommandPalette={() => openCommandPalette("commands")}
               onActivateAgent={onActivateAgent}
               onActivateLocalAgent={onActivateLocalAgent}
@@ -1309,13 +1338,22 @@ export default function App() {
                   if (size.inPixels > 0) persistNotesWidth(size.inPixels);
                 }}
               >
-                <NotesPanel
-                  notes={tabNotes.notes}
-                  disabled={activeId == null}
-                  onAddFromInput={tabNotes.addFromInput}
-                  onRemove={tabNotes.remove}
-                  onHide={hideNotesPanel}
-                />
+                {notesDetached ? (
+                  <NotesDockedNotice
+                    onFocusWindow={() => void openNotesWindow()}
+                    onDock={attachNotes}
+                  />
+                ) : (
+                  <NotesPanel
+                    notes={tabNotes.notes}
+                    disabled={activeId == null}
+                    subtitle={activeTab?.title ?? null}
+                    onAddFromInput={tabNotes.addFromInput}
+                    onRemove={tabNotes.remove}
+                    onHide={hideNotesPanel}
+                    onDetach={detachNotes}
+                  />
+                )}
               </ResizablePanel>
             </ResizablePanelGroup>
           </main>

@@ -1,4 +1,9 @@
-import { Add01Icon, Cancel01Icon, Note01Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  ArrowExpandDiagonal01Icon,
+  Cancel01Icon,
+  Note01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,15 +14,24 @@ import { NoteCardView } from "./NoteCardView";
 export function NotesPanel({
   notes,
   disabled = false,
+  subtitle = null,
+  hideTitle = "Hide notes",
   onAddFromInput,
   onRemove,
   onHide,
+  onDetach,
 }: {
   notes: readonly NoteCard[];
   disabled?: boolean;
+  /** Optional context label (e.g. the owning tab title). */
+  subtitle?: string | null;
+  /** Tooltip/aria for the header dismiss button. */
+  hideTitle?: string;
   onAddFromInput: (raw: string) => void;
   onRemove: (id: string) => void;
   onHide: () => void;
+  /** When provided, shows a button to pop the panel into a floating window. */
+  onDetach?: () => void;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -40,17 +54,38 @@ export function NotesPanel({
           strokeWidth={1.9}
           className="text-muted-foreground"
         />
-        <h2 className="flex-1 text-xs font-semibold tracking-wide text-foreground">
-          Notes
+        <h2 className="flex min-w-0 flex-1 items-baseline gap-1.5 text-xs font-semibold tracking-wide text-foreground">
+          <span>Notes</span>
           {notes.length > 0 && (
-            <span className="ml-1.5 text-muted-foreground">{notes.length}</span>
+            <span className="text-muted-foreground">{notes.length}</span>
+          )}
+          {subtitle && (
+            <span className="truncate text-[11px] font-normal text-muted-foreground/80">
+              · {subtitle}
+            </span>
           )}
         </h2>
+        {onDetach && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Open notes in a floating window"
+            title="Detach to floating window"
+            onClick={onDetach}
+            className="size-6 text-muted-foreground hover:text-foreground"
+          >
+            <HugeiconsIcon
+              icon={ArrowExpandDiagonal01Icon}
+              size={13}
+              strokeWidth={2}
+            />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Hide notes panel"
-          title="Hide notes"
+          aria-label={hideTitle}
+          title={hideTitle}
           onClick={onHide}
           className="size-6 text-muted-foreground hover:text-foreground"
         >

@@ -114,6 +114,50 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Res
     Ok(())
 }
 
+/// Detachable floating notes window. Always-on-top but deliberately NOT focused
+/// on open/reuse, so the user keeps interacting with the terminal in the main
+/// window. Singleton by the stable "notes" label.
+#[tauri::command]
+async fn open_notes_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("notes") {
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        // No set_focus(): the main window keeps keyboard focus.
+        return Ok(());
+    }
+
+    let builder = WebviewWindowBuilder::new(&app, "notes", WebviewUrl::App("notes.html".into()))
+        .title("Notes")
+        .inner_size(340.0, 620.0)
+        .min_inner_size(300.0, 360.0)
+        .resizable(true)
+        .visible(false)
+        .focused(false)
+        .always_on_top(true);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    let builder = builder.decorations(false).transparent(true);
+
+    let window = builder.build().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = window.set_decorations(false);
+    }
+
+    // Guarantee an on-screen geometry regardless of any earlier saved state.
+    let _ = window.set_size(tauri::LogicalSize::new(360.0, 640.0));
+    let _ = window.center();
+    let _ = &window;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cli_dir = parse_launch_dir();
@@ -128,6 +172,9 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                // The floating notes window manages its own geometry; don't let
+                // the state plugin restore a stale/off-screen size or position.
+                .with_denylist(&["notes"])
                 .build(),
         )
         .plugin(tauri_plugin_autostart::Builder::new().build())
@@ -154,6 +201,9 @@ pub fn run() {
                     ) {
                         if let Some(settings) = handle.get_webview_window("settings") {
                             let _ = settings.close();
+                        }
+                        if let Some(notes) = handle.get_webview_window("notes") {
+                            let _ = notes.close();
                         }
                     }
                 });
@@ -240,6 +290,7 @@ pub fn run() {
             workspace::workspace_current_dir,
             get_launch_dir,
             open_settings_window,
+            open_notes_window,
             pi::external_command_respond,
             agent::agent_enable_claude_hooks,
             agent::agent_claude_hooks_status,
