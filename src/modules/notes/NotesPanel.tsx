@@ -2,7 +2,6 @@ import {
   Add01Icon,
   ArrowExpandDiagonal01Icon,
   Cancel01Icon,
-  DragDropVerticalIcon,
   Note01Icon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
@@ -14,6 +13,13 @@ import { cn } from "@/lib/utils";
 import type { NoteCard } from "./lib/cards";
 import type { NoteCardPatch } from "./lib/collection";
 import { NoteCardView } from "./NoteCardView";
+
+// Custom drag type so drop targets can recognise an in-panel note reorder
+// during dragover (when the payload value is not yet readable) and ignore
+// unrelated drags (files, text, tabs).
+const NOTE_DND_MIME = "application/x-terax-note";
+// A drag that starts on one of these should act normally, not reorder.
+const INTERACTIVE = "button, a, input, textarea, select, [contenteditable=true]";
 
 export function NotesPanel({
   notes,
@@ -60,13 +66,6 @@ export function NotesPanel({
     setDragId(null);
     setOverId(null);
   }, []);
-  const dropOn = useCallback(
-    (toIndex: number, targetId: string) => {
-      if (onMove && dragId && dragId !== targetId) onMove(dragId, toIndex);
-      endDrag();
-    },
-    [onMove, dragId, endDrag],
-  );
 
   const submit = useCallback(() => {
     const value = draft.trim();
@@ -190,57 +189,62 @@ export function NotesPanel({
             {notes.map((card, index) => (
               <li
                 key={card.id}
+                draggable={onMove ? true : undefined}
+                aria-roledescription={onMove ? "Draggable note" : undefined}
                 className={cn(
-                  "group/li relative rounded-lg",
-                  onMove && "pl-4",
+                  "rounded-lg",
+                  onMove && "cursor-grab active:cursor-grabbing",
                   onMove &&
-                    dragId &&
                     overId === card.id &&
                     dragId !== card.id &&
                     "ring-2 ring-primary/40",
                   dragId === card.id && "opacity-50",
                 )}
+                onDragStart={
+                  onMove
+                    ? (e) => {
+                        // A drag that begins on a control (edit, delete, link,
+                        // inputs) must not turn into a reorder.
+                        if (
+                          (e.target as HTMLElement).closest?.(INTERACTIVE)
+                        ) {
+                          e.preventDefault();
+                          return;
+                        }
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData(NOTE_DND_MIME, card.id);
+                        e.dataTransfer.setData("text/plain", card.id);
+                        setDragId(card.id);
+                      }
+                    : undefined
+                }
+                onDragEnd={onMove ? endDrag : undefined}
                 onDragOver={
                   onMove
                     ? (e) => {
-                        if (!dragId) return;
+                        if (!e.dataTransfer.types.includes(NOTE_DND_MIME)) {
+                          return;
+                        }
                         e.preventDefault();
                         e.dataTransfer.dropEffect = "move";
-                        setOverId(card.id);
+                        if (overId !== card.id) setOverId(card.id);
                       }
                     : undefined
                 }
                 onDrop={
                   onMove
                     ? (e) => {
+                        const draggedId =
+                          e.dataTransfer.getData(NOTE_DND_MIME) ||
+                          e.dataTransfer.getData("text/plain");
+                        if (!draggedId) return;
                         e.preventDefault();
-                        dropOn(index, card.id);
+                        if (draggedId !== card.id) onMove(draggedId, index);
+                        endDrag();
                       }
                     : undefined
                 }
               >
-                {onMove && (
-                  <div
-                    aria-hidden="true"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", card.id);
-                      const li = e.currentTarget.closest("li");
-                      if (li) e.dataTransfer.setDragImage(li, 12, 16);
-                      setDragId(card.id);
-                    }}
-                    onDragEnd={endDrag}
-                    title="Drag to reorder"
-                    className="absolute inset-y-0 left-0 z-10 flex w-4 cursor-grab items-center justify-center text-muted-foreground/40 opacity-0 transition-opacity hover:text-muted-foreground group-hover/li:opacity-100 active:cursor-grabbing"
-                  >
-                    <HugeiconsIcon
-                      icon={DragDropVerticalIcon}
-                      size={14}
-                      strokeWidth={2}
-                    />
-                  </div>
-                )}
                 <NoteCardView
                   card={card}
                   onRemove={onRemove}
