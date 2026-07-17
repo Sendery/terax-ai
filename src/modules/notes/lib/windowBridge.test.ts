@@ -82,6 +82,16 @@ describe("parseNotesAction", () => {
     expect(parsed.patch).toEqual({});
   });
 
+  it("parses cite and rejects empty/invalid text", () => {
+    expect(parseNotesAction({ type: "cite", text: "https://x" })).toEqual({
+      type: "cite",
+      text: "https://x",
+    });
+    expect(parseNotesAction({ type: "cite", text: "" })).toBeNull();
+    expect(parseNotesAction({ type: "cite" })).toBeNull();
+    expect(parseNotesAction({ type: "cite", text: 5 })).toBeNull();
+  });
+
   it("parses refresh and refresh-all", () => {
     expect(parseNotesAction({ type: "refresh", id: "a" })).toEqual({
       type: "refresh",

@@ -34,6 +34,7 @@ export type NotesAction =
   | { type: "remove"; id: string }
   | { type: "update"; id: string; patch: NoteCardPatch }
   | { type: "move"; id: string; toIndex: number }
+  | { type: "cite"; text: string }
   | { type: "refresh"; id: string }
   | { type: "refresh-all" };
 
@@ -89,6 +90,10 @@ export function parseNotesAction(value: unknown): NotesAction | null {
         typeof r.toIndex === "number" &&
         Number.isFinite(r.toIndex)
         ? { type: "move", id: r.id, toIndex: r.toIndex }
+        : null;
+    case "cite":
+      return typeof r.text === "string" && r.text
+        ? { type: "cite", text: r.text }
         : null;
     case "refresh":
       return typeof r.id === "string" && r.id

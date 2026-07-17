@@ -2,12 +2,34 @@ import { describe, expect, it } from "vitest";
 import { createCardFromUrl, createTextCard } from "./cards";
 import {
   cardAccessibleLabel,
+  cardCitation,
   cardKindLabel,
   cardTitle,
   ciStateLabel,
   jiraStatusLabel,
   prStateLabel,
 } from "./presentation";
+
+describe("cardCitation", () => {
+  it("returns the url for link-backed cards", () => {
+    expect(cardCitation(createCardFromUrl("https://example.com/x"))).toBe(
+      "https://example.com/x",
+    );
+    expect(
+      cardCitation(createCardFromUrl("https://github.com/a/b/pull/1")),
+    ).toBe("https://github.com/a/b/pull/1");
+  });
+
+  it("collapses a text note to a single line", () => {
+    expect(cardCitation(createTextCard("line one\n  line two\t x"))).toBe(
+      "line one line two x",
+    );
+  });
+
+  it("never contains a newline", () => {
+    expect(cardCitation(createTextCard("a\nb\nc")).includes("\n")).toBe(false);
+  });
+});
 
 describe("cardKindLabel", () => {
   it("maps each kind to a human label", () => {

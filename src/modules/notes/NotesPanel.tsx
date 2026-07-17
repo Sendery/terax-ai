@@ -30,6 +30,7 @@ export function NotesPanel({
   onRemove,
   onUpdate,
   onMove,
+  onCite,
   onHide,
   onDetach,
   onRefresh,
@@ -45,8 +46,10 @@ export function NotesPanel({
   onRemove: (id: string) => void;
   /** When provided, cards expose an edit affordance that persists a patch. */
   onUpdate?: (id: string, patch: NoteCardPatch) => void;
-  /** When provided, cards can be drag-reordered by their left-edge handle. */
+  /** When provided, cards can be drag-reordered by grabbing the card. */
   onMove?: (id: string, toIndex: number) => void;
+  /** When provided, cards expose a button to cite their reference in the shell. */
+  onCite?: (card: NoteCard) => void;
   onHide: () => void;
   /** When provided, shows a button to pop the panel into a floating window. */
   onDetach?: () => void;
@@ -249,6 +252,7 @@ export function NotesPanel({
                   card={card}
                   onRemove={onRemove}
                   onUpdate={onUpdate}
+                  onCite={onCite}
                   onRefresh={onRefresh}
                 />
               </li>

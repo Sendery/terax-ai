@@ -1,7 +1,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
-import { NotesPanel } from "@/modules/notes";
+import { cardCitation, type NoteCard, NotesPanel } from "@/modules/notes";
 import type { NoteCardPatch } from "@/modules/notes/lib/collection";
 import {
   isNotesSyncPayload,
@@ -59,6 +59,9 @@ export function NotesWindowApp() {
   const move = useCallback((id: string, toIndex: number) => {
     void emit(NOTES_ACTION_EVENT, { type: "move", id, toIndex });
   }, []);
+  const cite = useCallback((card: NoteCard) => {
+    void emit(NOTES_ACTION_EVENT, { type: "cite", text: cardCitation(card) });
+  }, []);
   const refresh = useCallback((id: string) => {
     void emit(NOTES_ACTION_EVENT, { type: "refresh", id });
   }, []);
@@ -79,6 +82,7 @@ export function NotesWindowApp() {
           onRemove={remove}
           onUpdate={update}
           onMove={move}
+          onCite={cite}
           onHide={dock}
           onRefresh={refresh}
           onRefreshAll={refreshAll}

@@ -98,6 +98,16 @@ export function cardTitle(card: NoteCard): string {
   }
 }
 
+/** A single-line reference for the card, suitable for typing into a shell as a
+ *  citation: the URL for link-backed cards, or the collapsed text for a note.
+ *  Never contains newlines, so writing it to a terminal cannot execute it. */
+export function cardCitation(card: NoteCard): string {
+  if (card.kind === "text") {
+    return card.body.replace(/\s+/g, " ").trim();
+  }
+  return card.url.trim();
+}
+
 /** Screen-reader label. Includes lifecycle/CI/status information so meaning is
  *  not carried by icon or color alone. */
 export function cardAccessibleLabel(card: NoteCard): string {

@@ -31,6 +31,8 @@ export function useNotesWindowBridge(opts: {
   activeTabTitle: string | null;
   notes: readonly NoteCard[];
   api: BridgeApi;
+  /** Insert a note's reference into the active shell (validated text). */
+  onCite: (text: string) => void;
   onWindowClosed: () => void;
 }): void {
   const { detached, activeTabId, activeTabTitle, notes } = opts;
@@ -48,6 +50,8 @@ export function useNotesWindowBridge(opts: {
 
   const apiRef = useRef(opts.api);
   apiRef.current = opts.api;
+  const onCiteRef = useRef(opts.onCite);
+  onCiteRef.current = opts.onCite;
   const onClosedRef = useRef(opts.onWindowClosed);
   onClosedRef.current = opts.onWindowClosed;
 
@@ -69,6 +73,9 @@ export function useNotesWindowBridge(opts: {
           break;
         case "move":
           api.move(action.id, action.toIndex);
+          break;
+        case "cite":
+          onCiteRef.current(action.text);
           break;
         case "refresh":
           void api.refresh(action.id);

@@ -58,7 +58,9 @@ import {
   useSidebarPanel,
 } from "@/modules/sidebar";
 import {
+  cardCitation,
   cardTitle,
+  type NoteCard,
   NotesDockedNotice,
   NotesPanel,
   NOTES_MAX_WIDTH,
@@ -352,12 +354,31 @@ export default function App() {
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
+  // Type a note's reference at the active shell prompt as a citation. Never
+  // executes: newlines are collapsed and no carriage return is sent.
+  const writeToActiveShell = useCallback(
+    (text: string) => {
+      if (activeLeafId === null) return;
+      const term = terminalRefs.current.get(activeLeafId);
+      if (!term) return;
+      const line = text.replace(/[\r\n]+/g, " ").trim();
+      if (!line) return;
+      term.write(line);
+      term.focus();
+    },
+    [activeLeafId],
+  );
+  const citeNoteToShell = useCallback(
+    (card: NoteCard) => writeToActiveShell(cardCitation(card)),
+    [writeToActiveShell],
+  );
   useNotesWindowBridge({
     detached: notesDetached,
     activeTabId: activeId ?? null,
     activeTabTitle: activeTab?.title ?? null,
     notes: tabNotes.notes,
     api: tabNotes,
+    onCite: writeToActiveShell,
     onWindowClosed: attachNotes,
   });
   const notesApiRef = useRef(tabNotes);
@@ -1442,6 +1463,7 @@ export default function App() {
                     onRemove={tabNotes.remove}
                     onUpdate={tabNotes.update}
                     onMove={tabNotes.move}
+                    onCite={citeNoteToShell}
                     onHide={hideNotesPanel}
                     onDetach={detachNotes}
                     onRefresh={tabNotes.refresh}

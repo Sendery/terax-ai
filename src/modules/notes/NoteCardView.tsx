@@ -4,6 +4,7 @@ import {
   CancelCircleIcon,
   CheckmarkCircle01Icon,
   Clock01Icon,
+  CommandLineIcon,
   Delete02Icon,
   Diamond02Icon,
   FigmaIcon,
@@ -145,12 +146,15 @@ export function NoteCardView({
   card,
   onRemove,
   onUpdate,
+  onCite,
   onRefresh,
 }: {
   card: NoteCard;
   onRemove: (id: string) => void;
   /** Provided to enter edit mode and persist a patch. */
   onUpdate?: (id: string, patch: NoteCardPatch) => void;
+  /** Provided to insert the card's reference into the active shell. */
+  onCite?: (card: NoteCard) => void;
   /** Provided for live cards (GitHub PR, Jira) to fetch fresh status. */
   onRefresh?: (id: string) => void | Promise<void>;
 }) {
@@ -332,6 +336,18 @@ export function NoteCardView({
       {/* Action stack: bottom-right, vertical. Refresh (top, live only) is
           spaced further from edit; edit sits above delete (bottom corner). */}
       <div className="absolute bottom-1.5 right-1.5 flex flex-col items-center">
+        {onCite && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Cite ${cardKindLabel(card)} in the shell`}
+            title="Cite in shell"
+            onClick={() => onCite(card)}
+            className="mb-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <HugeiconsIcon icon={CommandLineIcon} size={13} strokeWidth={2} />
+          </Button>
+        )}
         {isLive && onRefresh && (
           <Button
             variant="ghost"

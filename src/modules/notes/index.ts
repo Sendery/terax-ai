@@ -47,6 +47,7 @@ export {
 } from "./lib/collection";
 export {
   cardAccessibleLabel,
+  cardCitation,
   cardKindLabel,
   cardTitle,
 } from "./lib/presentation";
