@@ -7,19 +7,22 @@
 import type { NoteCard } from "./cards";
 import type { NoteCardPatch } from "./collection";
 
-export type EditableField = "title" | "body" | "note";
+export type EditableField = "title" | "body" | "url" | "note";
 
 export type EditDraft = {
   title: string;
   body: string;
+  url: string;
   note: string;
 };
 
 /** Ordered editable fields for a card kind. Text cards edit their title and
- *  body; link-backed cards edit their title and a free-form annotation. */
+ *  body; link-backed cards edit their title, URL and a free-form annotation.
+ *  Editing a link's URL updates the stored target but never re-detects the
+ *  provider (the tagged kind is fixed). */
 export function editableFields(card: NoteCard): EditableField[] {
   if (card.kind === "text") return ["title", "body"];
-  return ["title", "note"];
+  return ["title", "url", "note"];
 }
 
 /** Seed a draft from the card's current values. */
@@ -27,6 +30,7 @@ export function draftFromCard(card: NoteCard): EditDraft {
   return {
     title: card.title ?? "",
     body: card.kind === "text" ? card.body : "",
+    url: "url" in card ? card.url : "",
     note: "note" in card && card.note ? card.note : "",
   };
 }
@@ -50,6 +54,11 @@ export function buildEditPatch(card: NoteCard, draft: EditDraft): NoteCardPatch 
   if (fields.includes("body") && card.kind === "text") {
     const next = draft.body.trim();
     if (next && next !== card.body) patch.body = next;
+  }
+
+  if (fields.includes("url") && "url" in card) {
+    const next = draft.url.trim();
+    if (next && next !== card.url) patch.url = next;
   }
 
   if (fields.includes("note")) {

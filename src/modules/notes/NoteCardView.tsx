@@ -225,6 +225,18 @@ export function NoteCardView({
               className="resize-none text-sm"
             />
           )}
+          {fields.includes("url") && (
+            <Input
+              value={draft.url}
+              onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
+              placeholder="https://…"
+              aria-label="Edit link URL"
+              type="url"
+              inputMode="url"
+              spellCheck={false}
+              className="h-8 text-sm"
+            />
+          )}
           {fields.includes("note") && (
             <Textarea
               value={draft.note}
