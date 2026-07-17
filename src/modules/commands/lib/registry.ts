@@ -31,6 +31,7 @@ export const COMMAND_IDS = [
   "notes.attach",
   "notes.add",
   "notes.remove",
+  "notes.update",
   "notes.list",
 ] as const;
 
@@ -81,6 +82,13 @@ export type CommandPayloads = {
   "notes.attach": undefined;
   "notes.add": { content: string };
   "notes.remove": { id: string };
+  "notes.update": {
+    id: string;
+    title?: string;
+    body?: string;
+    url?: string;
+    note?: string;
+  };
   "notes.list": undefined;
 };
 
@@ -362,6 +370,43 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "notes.update": {
+    id: "notes.update",
+    description:
+      "Edit a note card on the active tab by id. Provide at least one field. title/note apply to any card; body applies to text notes; url applies to link cards. The card kind and provider are never changed.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the note card to edit.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "New title (empty string clears it).",
+      },
+      {
+        name: "body",
+        type: "string",
+        required: false,
+        description: "New text for a text note (ignored on link cards).",
+      },
+      {
+        name: "url",
+        type: "string",
+        required: false,
+        description: "New URL for a link card (ignored on text notes).",
+      },
+      {
+        name: "note",
+        type: "string",
+        required: false,
+        description: "New annotation for a link card (empty string clears it).",
+      },
+    ],
+  },
   "notes.list": {
     id: "notes.list",
     description: "List the note cards on the active tab.",
@@ -433,6 +478,9 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   removeNote: (
     payload: CommandPayloads["notes.remove"],
+  ) => Promise<unknown> | unknown;
+  updateNote: (
+    payload: CommandPayloads["notes.update"],
   ) => Promise<unknown> | unknown;
   listNotes: () => Promise<unknown> | unknown;
 };
@@ -672,6 +720,33 @@ export function validateCommandRequest(
     return { ok: true, value: { id, payload: { id: noteId.value } } };
   }
 
+  if (id === "notes.update") {
+    const noteId = requireString(obj, "id", id);
+    if (!noteId.ok) return noteId;
+    const patch: {
+      id: string;
+      title?: string;
+      body?: string;
+      url?: string;
+      note?: string;
+    } = { id: noteId.value };
+    for (const key of ["title", "body", "url", "note"] as const) {
+      const value = obj[key];
+      if (value === undefined) continue;
+      if (typeof value !== "string") {
+        return invalidPayload(`notes.update requires payload.${key} to be a string`);
+      }
+      patch[key] = value;
+    }
+    if (patch.title === undefined && patch.body === undefined &&
+        patch.url === undefined && patch.note === undefined) {
+      return invalidPayload(
+        "notes.update requires at least one of title, body, url or note",
+      );
+    }
+    return { ok: true, value: { id, payload: patch } };
+  }
+
   if (!validateSettingsTab(obj.tab)) {
     return invalidPayload("settings.open requires payload.tab");
   }
@@ -739,6 +814,8 @@ async function dispatchCommand(
       return handlers.addNote(request.payload);
     case "notes.remove":
       return handlers.removeNote(request.payload);
+    case "notes.update":
+      return handlers.updateNote(request.payload);
     case "notes.list":
       return handlers.listNotes();
   }

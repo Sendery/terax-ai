@@ -20,6 +20,7 @@ export const TERAX_COMMAND_IDS = [
   "notes.attach",
   "notes.add",
   "notes.remove",
+  "notes.update",
   "notes.list",
 ] as const;
 

@@ -158,6 +158,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "notes.attach"
             | "notes.add"
             | "notes.remove"
+            | "notes.update"
             | "notes.list"
     )
 }

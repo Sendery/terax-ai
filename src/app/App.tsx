@@ -61,6 +61,7 @@ import {
   cardCitation,
   cardTitle,
   type NoteCard,
+  type NoteCardPatch,
   NotesDockedNotice,
   NotesPanel,
   NOTES_MAX_WIDTH,
@@ -1234,13 +1235,28 @@ export default function App() {
         notesApiRef.current.remove(id);
         return { removed: true, id };
       },
+      updateNote: ({ id, title, body, url, note }) => {
+        const before = notesApiRef.current.notes.find((c) => c.id === id);
+        if (!before) {
+          throw { code: "command_failed", message: `No note card "${id}"` };
+        }
+        const patch: NoteCardPatch = {};
+        if (typeof title === "string") patch.title = title;
+        if (typeof body === "string") patch.body = body;
+        if (typeof url === "string") patch.url = url;
+        if (typeof note === "string") patch.note = note;
+        notesApiRef.current.update(id, patch);
+        return { updated: true, id, tabId: activeId ?? null };
+      },
       listNotes: () => ({
         tabId: activeId ?? null,
         notes: notesApiRef.current.notes.map((c) => ({
           id: c.id,
           kind: c.kind,
           title: cardTitle(c),
+          ...(c.kind === "text" ? { body: c.body } : {}),
           ...("url" in c ? { url: c.url } : {}),
+          ...("note" in c && c.note ? { note: c.note } : {}),
           ...(c.kind === "github-pr"
             ? { prState: c.prState, ciState: c.ciState }
             : {}),

@@ -49,6 +49,7 @@ function handlers(): CommandHandlers {
     attachNotes: vi.fn(() => ({ detached: false })),
     addNote: vi.fn(() => ({ id: "nc-1", kind: "text", tabId: 1 })),
     removeNote: vi.fn(() => ({ removed: true, id: "nc-1" })),
+    updateNote: vi.fn(() => ({ updated: true, id: "nc-1", tabId: 1 })),
     listNotes: vi.fn(() => ({ tabId: 1, notes: [] })),
   };
 }
@@ -86,6 +87,45 @@ describe("notes commands", () => {
     expect(validateCommandRequest({ id: "notes.remove", payload: {} }).ok).toBe(
       false,
     );
+  });
+
+  it("validates notes.update: id required, at least one field, string fields", () => {
+    expect(
+      validateCommandRequest({
+        id: "notes.update",
+        payload: { id: "a", title: "New" },
+      }).ok,
+    ).toBe(true);
+    // missing id
+    expect(
+      validateCommandRequest({ id: "notes.update", payload: { title: "x" } }).ok,
+    ).toBe(false);
+    // no editable field
+    expect(
+      validateCommandRequest({ id: "notes.update", payload: { id: "a" } }).ok,
+    ).toBe(false);
+    // non-string field
+    expect(
+      validateCommandRequest({
+        id: "notes.update",
+        payload: { id: "a", body: 5 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("dispatches notes.update with only the provided fields", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+    const res = await reg.call({
+      id: "notes.update",
+      payload: { id: "nc-1", url: "https://x/y", note: "n" },
+    });
+    expect(res.ok).toBe(true);
+    expect(h.updateNote).toHaveBeenCalledWith({
+      id: "nc-1",
+      url: "https://x/y",
+      note: "n",
+    });
   });
 
   it("dispatches notes.add and notes.remove to handlers", async () => {
@@ -352,6 +392,7 @@ describe("command registry", () => {
       "notes.attach",
       "notes.add",
       "notes.remove",
+      "notes.update",
       "notes.list",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
