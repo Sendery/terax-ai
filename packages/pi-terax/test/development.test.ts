@@ -60,6 +60,18 @@ describe("Terax development guides", () => {
     );
   });
 
+  it("references the gotcha catalog and the record-as-you-go directive in every guide", () => {
+    for (const capability of DEVELOPMENT_CAPABILITIES) {
+      const guide = getDevelopmentGuide(capability);
+      const text = guide.gotchas.join("\n");
+      expect(text).toContain(
+        "packages/pi-terax/skills/terax-development/references/gotchas.md",
+      );
+      expect(text.toLowerCase()).toContain("must be recorded");
+      expect(text.toLowerCase()).toContain("solution");
+    }
+  });
+
   it("returns isolated guide copies", () => {
     const first = getDevelopmentGuide("feature");
     first.inspect.push("mutated");

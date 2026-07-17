@@ -18,6 +18,8 @@ export type DevelopmentGuide = {
   tests: string[];
   invariants: string[];
   verify: string[];
+  /** Durable gotcha catalog reference + the record-as-you-go directive. */
+  gotchas: string[];
 };
 
 const COMMON_VERIFY = [
@@ -27,7 +29,15 @@ const COMMON_VERIFY = [
   "cd src-tauri && cargo clippy && cargo test --locked",
 ];
 
-const GUIDES: Record<DevelopmentCapability, DevelopmentGuide> = {
+// Applied to every capability guide. The durable catalog is the single place
+// where reusable Terax development gotchas and their solutions live.
+const GOTCHAS_DIRECTIVE = [
+  "Before starting, read the durable gotcha catalog: packages/pi-terax/skills/terax-development/references/gotchas.md.",
+  "Directive: every non-obvious failure or constraint you hit during development MUST be recorded as a gotcha together with its solution \u2014 trigger, failure mode, prevention, and verification.",
+  "Capture candidates immediately in the run journal (.terax/pi-development/<run>/journal.md), then promote each verified, reusable lesson into references/gotchas.md before finishing. Never leave a fixed gotcha undocumented.",
+];
+
+const GUIDES: Record<DevelopmentCapability, Omit<DevelopmentGuide, "gotchas">> = {
   orientation: {
     capability: "orientation",
     summary:
@@ -203,5 +213,8 @@ export function isDevelopmentCapability(
 export function getDevelopmentGuide(
   capability: DevelopmentCapability,
 ): DevelopmentGuide {
-  return structuredClone(GUIDES[capability]);
+  return {
+    ...structuredClone(GUIDES[capability]),
+    gotchas: [...GOTCHAS_DIRECTIVE],
+  };
 }
