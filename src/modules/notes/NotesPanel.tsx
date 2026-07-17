@@ -60,15 +60,35 @@ export function NotesPanel({
   const [draft, setDraft] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  // Source of truth for the in-flight drag. A ref is synchronous and does not
-  // depend on React state timing or on dataTransfer custom types, which are
-  // unreliable in WKWebView (Tauri/macOS).
-  const draggingIdRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  // Pointer-based reorder. WKWebView (Tauri/macOS) does not deliver reliable
+  // HTML5 drag-and-drop for DOM reordering, so we drive it with pointer events
+  // + pointer capture and resolve the drop target by coordinates.
+  const dragStateRef = useRef<{
+    id: string;
+    startIndex: number;
+    started: boolean;
+    startY: number;
+  } | null>(null);
 
   const endDrag = useCallback(() => {
-    draggingIdRef.current = null;
+    dragStateRef.current = null;
     setDragId(null);
     setOverId(null);
+  }, []);
+
+  // Index of the card whose vertical midpoint the pointer sits above.
+  const indexAtY = useCallback((clientY: number): number => {
+    const ul = listRef.current;
+    if (!ul) return -1;
+    const items = Array.from(
+      ul.querySelectorAll<HTMLElement>("li[data-note-id]"),
+    );
+    for (let i = 0; i < items.length; i += 1) {
+      const r = items[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return i;
+    }
+    return items.length - 1;
   }, []);
 
   const submit = useCallback(() => {
@@ -189,66 +209,71 @@ export function NotesPanel({
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul ref={listRef} className="flex flex-col gap-2">
             {notes.map((card, index) => (
               <li
                 key={card.id}
-                draggable={onMove ? true : undefined}
+                data-note-id={card.id}
                 aria-roledescription={onMove ? "Draggable note" : undefined}
                 className={cn(
                   "rounded-lg",
-                  onMove && "cursor-grab active:cursor-grabbing",
+                  onMove && "cursor-grab touch-none select-none active:cursor-grabbing",
                   onMove &&
                     overId === card.id &&
                     dragId !== card.id &&
                     "ring-2 ring-primary/40",
                   dragId === card.id && "opacity-50",
                 )}
-                onDragStart={
+                onPointerDown={
                   onMove
                     ? (e) => {
-                        // A drag that begins on a control (edit, delete, link,
-                        // inputs) must not turn into a reorder.
-                        if (
-                          (e.target as HTMLElement).closest?.(INTERACTIVE)
-                        ) {
-                          e.preventDefault();
+                        // Only a primary-button drag on the card body (never on
+                        // a control) starts a reorder.
+                        if (e.button !== 0) return;
+                        if ((e.target as HTMLElement).closest(INTERACTIVE)) {
                           return;
                         }
-                        draggingIdRef.current = card.id;
-                        e.dataTransfer.effectAllowed = "move";
-                        // WKWebView needs at least one setData to start a drag.
-                        e.dataTransfer.setData("text/plain", card.id);
-                        setDragId(card.id);
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        dragStateRef.current = {
+                          id: card.id,
+                          startIndex: index,
+                          started: false,
+                          startY: e.clientY,
+                        };
                       }
                     : undefined
                 }
-                onDragEnd={onMove ? endDrag : undefined}
-                onDragOver={
+                onPointerMove={
                   onMove
                     ? (e) => {
-                        // Allow the drop whenever one of our cards is in flight
-                        // (ref check works in WKWebView, where dataTransfer
-                        // types are not exposed during dragover).
-                        if (draggingIdRef.current === null) return;
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        if (overId !== card.id) setOverId(card.id);
+                        const st = dragStateRef.current;
+                        if (!st) return;
+                        if (!st.started) {
+                          if (Math.abs(e.clientY - st.startY) < 4) return;
+                          st.started = true;
+                          setDragId(st.id);
+                        }
+                        const idx = indexAtY(e.clientY);
+                        setOverId(idx >= 0 ? (notes[idx]?.id ?? null) : null);
                       }
                     : undefined
                 }
-                onDrop={
+                onPointerUp={
                   onMove
                     ? (e) => {
-                        e.preventDefault();
-                        const draggedId = draggingIdRef.current;
-                        if (draggedId && draggedId !== card.id) {
-                          onMove(draggedId, index);
+                        const st = dragStateRef.current;
+                        dragStateRef.current = null;
+                        if (st?.started) {
+                          const idx = indexAtY(e.clientY);
+                          if (idx >= 0 && idx !== st.startIndex) {
+                            onMove(st.id, idx);
+                          }
                         }
                         endDrag();
                       }
                     : undefined
                 }
+                onPointerCancel={onMove ? endDrag : undefined}
               >
                 <NoteCardView
                   card={card}
