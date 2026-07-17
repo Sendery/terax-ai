@@ -56,6 +56,9 @@ export function NotesWindowApp() {
   const update = useCallback((id: string, patch: NoteCardPatch) => {
     void emit(NOTES_ACTION_EVENT, { type: "update", id, patch });
   }, []);
+  const move = useCallback((id: string, toIndex: number) => {
+    void emit(NOTES_ACTION_EVENT, { type: "move", id, toIndex });
+  }, []);
   const refresh = useCallback((id: string) => {
     void emit(NOTES_ACTION_EVENT, { type: "refresh", id });
   }, []);
@@ -75,6 +78,7 @@ export function NotesWindowApp() {
           onAddFromInput={addFromInput}
           onRemove={remove}
           onUpdate={update}
+          onMove={move}
           onHide={dock}
           onRefresh={refresh}
           onRefreshAll={refreshAll}

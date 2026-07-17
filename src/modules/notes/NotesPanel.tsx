@@ -2,6 +2,7 @@ import {
   Add01Icon,
   ArrowExpandDiagonal01Icon,
   Cancel01Icon,
+  DragDropVerticalIcon,
   Note01Icon,
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
@@ -9,6 +10,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { NoteCard } from "./lib/cards";
 import type { NoteCardPatch } from "./lib/collection";
 import { NoteCardView } from "./NoteCardView";
@@ -21,6 +23,7 @@ export function NotesPanel({
   onAddFromInput,
   onRemove,
   onUpdate,
+  onMove,
   onHide,
   onDetach,
   onRefresh,
@@ -36,6 +39,8 @@ export function NotesPanel({
   onRemove: (id: string) => void;
   /** When provided, cards expose an edit affordance that persists a patch. */
   onUpdate?: (id: string, patch: NoteCardPatch) => void;
+  /** When provided, cards can be drag-reordered by their left-edge handle. */
+  onMove?: (id: string, toIndex: number) => void;
   onHide: () => void;
   /** When provided, shows a button to pop the panel into a floating window. */
   onDetach?: () => void;
@@ -48,6 +53,20 @@ export function NotesPanel({
     (c) => c.kind === "github-pr" || c.kind === "jira",
   );
   const [draft, setDraft] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const endDrag = useCallback(() => {
+    setDragId(null);
+    setOverId(null);
+  }, []);
+  const dropOn = useCallback(
+    (toIndex: number, targetId: string) => {
+      if (onMove && dragId && dragId !== targetId) onMove(dragId, toIndex);
+      endDrag();
+    },
+    [onMove, dragId, endDrag],
+  );
 
   const submit = useCallback(() => {
     const value = draft.trim();
@@ -168,8 +187,60 @@ export function NotesPanel({
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
-            {notes.map((card) => (
-              <li key={card.id}>
+            {notes.map((card, index) => (
+              <li
+                key={card.id}
+                className={cn(
+                  "group/li relative rounded-lg",
+                  onMove && "pl-4",
+                  onMove &&
+                    dragId &&
+                    overId === card.id &&
+                    dragId !== card.id &&
+                    "ring-2 ring-primary/40",
+                  dragId === card.id && "opacity-50",
+                )}
+                onDragOver={
+                  onMove
+                    ? (e) => {
+                        if (!dragId) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setOverId(card.id);
+                      }
+                    : undefined
+                }
+                onDrop={
+                  onMove
+                    ? (e) => {
+                        e.preventDefault();
+                        dropOn(index, card.id);
+                      }
+                    : undefined
+                }
+              >
+                {onMove && (
+                  <div
+                    aria-hidden="true"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", card.id);
+                      const li = e.currentTarget.closest("li");
+                      if (li) e.dataTransfer.setDragImage(li, 12, 16);
+                      setDragId(card.id);
+                    }}
+                    onDragEnd={endDrag}
+                    title="Drag to reorder"
+                    className="absolute inset-y-0 left-0 z-10 flex w-4 cursor-grab items-center justify-center text-muted-foreground/40 opacity-0 transition-opacity hover:text-muted-foreground group-hover/li:opacity-100 active:cursor-grabbing"
+                  >
+                    <HugeiconsIcon
+                      icon={DragDropVerticalIcon}
+                      size={14}
+                      strokeWidth={2}
+                    />
+                  </div>
+                )}
                 <NoteCardView
                   card={card}
                   onRemove={onRemove}
