@@ -23,8 +23,15 @@ export function NotesWindowApp() {
       if (isNotesSyncPayload(e.payload)) setState(e.payload);
     });
     const win = getCurrentWindow();
-    const unClose = win.onCloseRequested(() => {
-      void emit(NOTES_CLOSED_EVENT);
+    // Take control of teardown: on macOS the native close (traffic light) fires
+    // close-requested, but having a listener stops the default destroy and
+    // leaves the window open. Prevent default, tell main to re-attach, then
+    // destroy explicitly (destroy() does not re-fire close-requested).
+    const unClose = win.onCloseRequested((event) => {
+      event.preventDefault();
+      void emit(NOTES_CLOSED_EVENT).finally(() => {
+        void win.destroy();
+      });
     });
     // Ask the main window to push the current state now that we're mounted.
     void emit(NOTES_READY_EVENT);
@@ -35,7 +42,7 @@ export function NotesWindowApp() {
   }, []);
 
   const dock = useCallback(() => {
-    void emit(NOTES_CLOSED_EVENT);
+    // close() routes through onCloseRequested, which emits CLOSED and destroys.
     void getCurrentWindow().close();
   }, []);
 
