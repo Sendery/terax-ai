@@ -158,6 +158,18 @@ async fn open_notes_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Close the floating notes window if it exists (used when docking back from the
+/// main window). No-op when the window is already closed.
+#[tauri::command]
+async fn close_notes_window(app: tauri::AppHandle) -> Result<(), String> {
+    // destroy() force-closes without the close-requested round-trip; the window's
+    // own JS onCloseRequested handler otherwise swallows a Rust-initiated close().
+    if let Some(window) = app.get_webview_window("notes") {
+        let _ = window.destroy();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cli_dir = parse_launch_dir();
@@ -291,6 +303,7 @@ pub fn run() {
             get_launch_dir,
             open_settings_window,
             open_notes_window,
+            close_notes_window,
             pi::external_command_respond,
             agent::agent_enable_claude_hooks,
             agent::agent_claude_hooks_status,

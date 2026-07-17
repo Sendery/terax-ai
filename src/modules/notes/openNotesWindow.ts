@@ -5,3 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 export async function openNotesWindow(): Promise<void> {
   await invoke("open_notes_window");
 }
+
+/** Close the floating notes window (no-op if it isn't open). */
+export async function closeNotesWindow(): Promise<void> {
+  await invoke("close_notes_window");
+}

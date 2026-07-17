@@ -17,6 +17,7 @@ export const TERAX_COMMAND_IDS = [
   "notes.hide",
   "notes.toggle",
   "notes.detach",
+  "notes.attach",
   "notes.add",
   "notes.remove",
   "notes.list",

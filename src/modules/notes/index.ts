@@ -14,7 +14,7 @@ export {
 export { NotesPanel } from "./NotesPanel";
 export { NotesDockedNotice } from "./NotesDockedNotice";
 export { NoteCardView } from "./NoteCardView";
-export { openNotesWindow } from "./openNotesWindow";
+export { openNotesWindow, closeNotesWindow } from "./openNotesWindow";
 export { useNotesWindowBridge } from "./lib/useNotesWindowBridge";
 export {
   NOTES_WINDOW_LABEL,

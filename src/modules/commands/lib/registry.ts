@@ -28,6 +28,7 @@ export const COMMAND_IDS = [
   "notes.hide",
   "notes.toggle",
   "notes.detach",
+  "notes.attach",
   "notes.add",
   "notes.remove",
   "notes.list",
@@ -77,6 +78,7 @@ export type CommandPayloads = {
   "notes.hide": undefined;
   "notes.toggle": undefined;
   "notes.detach": undefined;
+  "notes.attach": undefined;
   "notes.add": { content: string };
   "notes.remove": { id: string };
   "notes.list": undefined;
@@ -329,6 +331,12 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description: "Pop the notes panel into the floating notes window.",
     params: [],
   },
+  "notes.attach": {
+    id: "notes.attach",
+    description:
+      "Dock the notes back into the panel and close the floating window.",
+    params: [],
+  },
   "notes.add": {
     id: "notes.add",
     description:
@@ -419,6 +427,7 @@ export type CommandHandlers = {
   hideNotes: () => Promise<unknown> | unknown;
   toggleNotes: () => Promise<unknown> | unknown;
   detachNotes: () => Promise<unknown> | unknown;
+  attachNotes: () => Promise<unknown> | unknown;
   addNote: (
     payload: CommandPayloads["notes.add"],
   ) => Promise<unknown> | unknown;
@@ -532,6 +541,7 @@ export function validateCommandRequest(
     id === "notes.hide" ||
     id === "notes.toggle" ||
     id === "notes.detach" ||
+    id === "notes.attach" ||
     id === "notes.list"
   ) {
     if (payload !== undefined && payload !== null) {
@@ -723,6 +733,8 @@ async function dispatchCommand(
       return handlers.toggleNotes();
     case "notes.detach":
       return handlers.detachNotes();
+    case "notes.attach":
+      return handlers.attachNotes();
     case "notes.add":
       return handlers.addNote(request.payload);
     case "notes.remove":

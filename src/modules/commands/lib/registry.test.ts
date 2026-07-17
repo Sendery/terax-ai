@@ -46,6 +46,7 @@ function handlers(): CommandHandlers {
     hideNotes: vi.fn(() => ({ visible: false })),
     toggleNotes: vi.fn(() => ({ toggled: true })),
     detachNotes: vi.fn(() => ({ detached: true })),
+    attachNotes: vi.fn(() => ({ detached: false })),
     addNote: vi.fn(() => ({ id: "nc-1", kind: "text", tabId: 1 })),
     removeNote: vi.fn(() => ({ removed: true, id: "nc-1" })),
     listNotes: vi.fn(() => ({ tabId: 1, notes: [] })),
@@ -59,6 +60,7 @@ describe("notes commands", () => {
       "notes.hide",
       "notes.toggle",
       "notes.detach",
+      "notes.attach",
       "notes.list",
     ] as const) {
       expect(validateCommandRequest({ id }).ok).toBe(true);
@@ -347,6 +349,7 @@ describe("command registry", () => {
       "notes.hide",
       "notes.toggle",
       "notes.detach",
+      "notes.attach",
       "notes.add",
       "notes.remove",
       "notes.list",

@@ -64,6 +64,7 @@ import {
   NOTES_MAX_WIDTH,
   NOTES_MIN_WIDTH,
   type NotesMutator,
+  closeNotesWindow,
   openNotesWindow,
   useNotesPanel,
   useNotesWindowBridge,
@@ -308,6 +309,13 @@ export default function App() {
     void openNotesWindow();
   }, [showNotesPanel]);
   const attachNotes = useCallback(() => {
+    setNotesDetached(false);
+    showNotesPanel();
+  }, [showNotesPanel]);
+  // Docking back from the main window must also close the floating window
+  // (re-attach alone left the undocked window open).
+  const dockBackFromMain = useCallback(() => {
+    void closeNotesWindow();
     setNotesDetached(false);
     showNotesPanel();
   }, [showNotesPanel]);
@@ -1165,6 +1173,10 @@ export default function App() {
         detachNotes();
         return { detached: true };
       },
+      attachNotes: () => {
+        dockBackFromMain();
+        return { detached: false };
+      },
       addNote: ({ content }) => {
         if (activeId == null) {
           throw { code: "command_failed", message: "No active tab" };
@@ -1211,6 +1223,7 @@ export default function App() {
       hideNotesPanel,
       handleToggleNotes,
       detachNotes,
+      dockBackFromMain,
     ],
   );
 
@@ -1396,7 +1409,7 @@ export default function App() {
                 {notesDetached ? (
                   <NotesDockedNotice
                     onFocusWindow={() => void openNotesWindow()}
-                    onDock={attachNotes}
+                    onDock={dockBackFromMain}
                   />
                 ) : (
                   <NotesPanel
