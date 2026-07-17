@@ -125,6 +125,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use a typed closed palette or enum and validate it at every external and persisted boundary.
 - **Verification:** all allowed values pass; representative unknown, differently cased, empty, and non-string values fail.
 
+### Registered lists carry exact-list tests in more than one place
+
+- **Trigger:** adding a semantic command, a shortcut, or a shortcut group.
+- **Failure mode:** the feature works at runtime but a test that asserts a whole registered list (or allowlist) fails, or a settings section silently omits the item.
+- **Prevention:** a new command spans the id union, payload map, schema, handler contract, validation, dispatch, the App handler, the Rust allowlist and the Pi package allowlist — plus the exact-list assertions in the registry tests (the command-id list and the Pi allowlist list). A new shortcut group must be added to both the group union and the ordered groups array that drives the settings render order.
+- **Verification:** run the registry and settings tests, not only type-checking, and confirm the new item renders where it is listed.
+
 ## Snapshots and Privacy
 
 ### Redact complete private entities
@@ -163,6 +170,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** active state overwhelms content or inactive state becomes indistinguishable.
 - **Prevention:** use restrained accents with deliberate active/inactive opacity and existing theme tokens where possible.
 - **Verification:** capture both states across representative light and dark themes or explain the narrower supported scope.
+
+### Drag and reorder interactions must use pointer events in WKWebView
+
+- **Trigger:** implementing drag-to-reorder or any custom drag inside the Tauri webview on macOS.
+- **Failure mode:** HTML5 drag-and-drop is unreliable in WKWebView — `dragstart` fires (the row can grab and dim) but `dragover`/`drop` never anchor to a target, so nothing reorders. Custom `dataTransfer` MIME types are not exposed in `dataTransfer.types` during `dragover`, and `getData()` for them is unreliable on `drop`.
+- **Prevention:** drive the interaction with pointer events and `setPointerCapture`. Capture on `pointerdown` (skip when the target is an interactive control via `closest("button, a, input, textarea, select, [contenteditable=true]")`), start past a small move threshold, resolve the target by comparing the pointer coordinate to each row's `getBoundingClientRect` midpoint, and apply the change on `pointerup`. Mark rows `select-none`/`touch-none` while draggable.
+- **Verification:** exercise a reorder in a running WKWebView build; unit-test the pure move/reorder function separately.
 
 ## Native and Visual Validation
 
@@ -258,6 +272,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** the reviewed version is not the version declared ready.
 - **Prevention:** rerun affected tests and review the final diff after fixes.
 - **Verification:** review evidence identifies the final worktree state, and `git diff --check` passes afterward.
+
+### macOS temp paths need realpath before path equality
+
+- **Trigger:** a test compares a path returned by code that canonicalizes with `realpath` against a path built from `os.tmpdir()`/`mkdtemp`.
+- **Failure mode:** on macOS `/var` is a symlink to `/private/var`, so the two paths differ and the assertion fails only on macOS.
+- **Prevention:** `realpath` the temporary root before deriving expected paths, or canonicalize both sides before comparing.
+- **Verification:** the path-equality test passes on both macOS and Linux.
 
 ## Catalog Maintenance
 
