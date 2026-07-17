@@ -112,7 +112,7 @@ export function serializeTabs(tabs: Tab[]): SerializedTab[] {
   for (const tab of tabs) {
     const s = serializeTab(tab);
     if (!s) continue;
-    if (tab.notes && tab.notes.length) {
+    if (tab.notes?.length) {
       const valid = tab.notes.filter(isNoteCard);
       if (valid.length) s.notes = valid;
     }

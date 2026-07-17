@@ -78,7 +78,8 @@ function firstLine(text: string): string {
 
 /** Display title for a card, deriving a sensible label when none is set. */
 export function cardTitle(card: NoteCard): string {
-  if (card.title && card.title.trim()) return card.title.trim();
+  const explicit = card.title?.trim();
+  if (explicit) return explicit;
   switch (card.kind) {
     case "text": {
       const line = firstLine(card.body);

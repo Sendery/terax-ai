@@ -95,7 +95,9 @@ export function useNotesWindowBridge(opts: {
     return () => void un.then((f) => f());
   }, []);
 
-  // Push state to the window whenever it changes while detached.
+  // Push state to the window whenever it changes while detached. The payload is
+  // read from a ref; the extra deps are intentional re-emit triggers.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps drive re-emit
   useEffect(() => {
     if (!detached) return;
     void emit(NOTES_SYNC_EVENT, payloadRef.current);
