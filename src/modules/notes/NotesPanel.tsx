@@ -6,7 +6,7 @@ import {
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -14,10 +14,6 @@ import type { NoteCard } from "./lib/cards";
 import type { NoteCardPatch } from "./lib/collection";
 import { NoteCardView } from "./NoteCardView";
 
-// Custom drag type so drop targets can recognise an in-panel note reorder
-// during dragover (when the payload value is not yet readable) and ignore
-// unrelated drags (files, text, tabs).
-const NOTE_DND_MIME = "application/x-terax-note";
 // A drag that starts on one of these should act normally, not reorder.
 const INTERACTIVE = "button, a, input, textarea, select, [contenteditable=true]";
 
@@ -64,8 +60,13 @@ export function NotesPanel({
   const [draft, setDraft] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  // Source of truth for the in-flight drag. A ref is synchronous and does not
+  // depend on React state timing or on dataTransfer custom types, which are
+  // unreliable in WKWebView (Tauri/macOS).
+  const draggingIdRef = useRef<string | null>(null);
 
   const endDrag = useCallback(() => {
+    draggingIdRef.current = null;
     setDragId(null);
     setOverId(null);
   }, []);
@@ -214,8 +215,9 @@ export function NotesPanel({
                           e.preventDefault();
                           return;
                         }
+                        draggingIdRef.current = card.id;
                         e.dataTransfer.effectAllowed = "move";
-                        e.dataTransfer.setData(NOTE_DND_MIME, card.id);
+                        // WKWebView needs at least one setData to start a drag.
                         e.dataTransfer.setData("text/plain", card.id);
                         setDragId(card.id);
                       }
@@ -225,9 +227,10 @@ export function NotesPanel({
                 onDragOver={
                   onMove
                     ? (e) => {
-                        if (!e.dataTransfer.types.includes(NOTE_DND_MIME)) {
-                          return;
-                        }
+                        // Allow the drop whenever one of our cards is in flight
+                        // (ref check works in WKWebView, where dataTransfer
+                        // types are not exposed during dragover).
+                        if (draggingIdRef.current === null) return;
                         e.preventDefault();
                         e.dataTransfer.dropEffect = "move";
                         if (overId !== card.id) setOverId(card.id);
@@ -237,12 +240,11 @@ export function NotesPanel({
                 onDrop={
                   onMove
                     ? (e) => {
-                        const draggedId =
-                          e.dataTransfer.getData(NOTE_DND_MIME) ||
-                          e.dataTransfer.getData("text/plain");
-                        if (!draggedId) return;
                         e.preventDefault();
-                        if (draggedId !== card.id) onMove(draggedId, index);
+                        const draggedId = draggingIdRef.current;
+                        if (draggedId && draggedId !== card.id) {
+                          onMove(draggedId, index);
+                        }
                         endDrag();
                       }
                     : undefined
