@@ -82,6 +82,17 @@ describe("parseNotesAction", () => {
     expect(parsed.patch).toEqual({});
   });
 
+  it("parses refresh and refresh-all", () => {
+    expect(parseNotesAction({ type: "refresh", id: "a" })).toEqual({
+      type: "refresh",
+      id: "a",
+    });
+    expect(parseNotesAction({ type: "refresh-all" })).toEqual({
+      type: "refresh-all",
+    });
+    expect(parseNotesAction({ type: "refresh" })).toBeNull();
+  });
+
   it("rejects unknown or malformed actions", () => {
     expect(parseNotesAction(null)).toBeNull();
     expect(parseNotesAction({ type: "nope" })).toBeNull();

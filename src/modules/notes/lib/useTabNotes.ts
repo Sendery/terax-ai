@@ -7,6 +7,7 @@ import {
   removeCard,
   updateCard,
 } from "./collection";
+import { fetchCardStatus } from "./fetchStatus";
 
 export type TabNotesApi = {
   notes: readonly NoteCard[];
@@ -16,7 +17,15 @@ export type TabNotesApi = {
   remove: (id: string) => void;
   update: (id: string, patch: NoteCardPatch) => void;
   move: (id: string, toIndex: number) => void;
+  /** Fetch and apply live status (GitHub PR/CI, Jira) for one card. */
+  refresh: (id: string) => Promise<void>;
+  /** Refresh every live card in the tab. */
+  refreshAll: () => Promise<void>;
 };
+
+function isLive(card: NoteCard): boolean {
+  return card.kind === "github-pr" || card.kind === "jira";
+}
 
 /** Immutable updater bound to a single tab's persisted notes. */
 export type NotesMutator = (updater: (cards: NoteCard[]) => NoteCard[]) => void;
@@ -33,14 +42,39 @@ export function useTabNotes(
   mutate: NotesMutator,
 ): TabNotesApi {
   const list = notes ?? EMPTY;
+  const applyFetched = useCallback(
+    async (card: NoteCard) => {
+      const patch = await fetchCardStatus(card);
+      if (Object.keys(patch).length > 0) {
+        mutate((cards) => updateCard(cards, card.id, patch));
+      }
+    },
+    [mutate],
+  );
+
   const addFromInput = useCallback(
     (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) return;
-      mutate((cards) => addCard(cards, createCardFromInput(trimmed)));
+      const card = createCardFromInput(trimmed);
+      mutate((cards) => addCard(cards, card));
+      // Auto-fetch live status right after adding a PR/Jira card.
+      if (isLive(card)) void applyFetched(card);
     },
-    [mutate],
+    [mutate, applyFetched],
   );
+
+  const refresh = useCallback(
+    async (id: string) => {
+      const card = list.find((c) => c.id === id);
+      if (card && isLive(card)) await applyFetched(card);
+    },
+    [list, applyFetched],
+  );
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all(list.filter(isLive).map(applyFetched));
+  }, [list, applyFetched]);
 
   const addCardCb = useCallback(
     (card: NoteCard) => mutate((cards) => addCard(cards, card)),
@@ -61,5 +95,14 @@ export function useTabNotes(
     [mutate],
   );
 
-  return { notes: list, addFromInput, addCard: addCardCb, remove, update, move };
+  return {
+    notes: list,
+    addFromInput,
+    addCard: addCardCb,
+    remove,
+    update,
+    move,
+    refresh,
+    refreshAll,
+  };
 }

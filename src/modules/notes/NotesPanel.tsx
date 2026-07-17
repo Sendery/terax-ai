@@ -3,6 +3,7 @@ import {
   ArrowExpandDiagonal01Icon,
   Cancel01Icon,
   Note01Icon,
+  RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useState } from "react";
@@ -20,6 +21,8 @@ export function NotesPanel({
   onRemove,
   onHide,
   onDetach,
+  onRefresh,
+  onRefreshAll,
 }: {
   notes: readonly NoteCard[];
   disabled?: boolean;
@@ -32,7 +35,14 @@ export function NotesPanel({
   onHide: () => void;
   /** When provided, shows a button to pop the panel into a floating window. */
   onDetach?: () => void;
+  /** Live status refresh for a single card (GitHub PR / Jira). */
+  onRefresh?: (id: string) => void | Promise<void>;
+  /** Refresh every live card. */
+  onRefreshAll?: () => void | Promise<void>;
 }) {
+  const hasLive = notes.some(
+    (c) => c.kind === "github-pr" || c.kind === "jira",
+  );
   const [draft, setDraft] = useState("");
 
   const submit = useCallback(() => {
@@ -65,6 +75,18 @@ export function NotesPanel({
             </span>
           )}
         </h2>
+        {onRefreshAll && hasLive && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh all live statuses"
+            title="Refresh statuses"
+            onClick={() => void onRefreshAll()}
+            className="size-6 text-muted-foreground hover:text-foreground"
+          >
+            <HugeiconsIcon icon={RefreshIcon} size={13} strokeWidth={2} />
+          </Button>
+        )}
         {onDetach && (
           <Button
             variant="ghost"
@@ -144,7 +166,11 @@ export function NotesPanel({
           <ul className="flex flex-col gap-2">
             {notes.map((card) => (
               <li key={card.id}>
-                <NoteCardView card={card} onRemove={onRemove} />
+                <NoteCardView
+                  card={card}
+                  onRemove={onRemove}
+                  onRefresh={onRefresh}
+                />
               </li>
             ))}
           </ul>

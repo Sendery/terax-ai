@@ -1352,6 +1352,8 @@ export default function App() {
                     onRemove={tabNotes.remove}
                     onHide={hideNotesPanel}
                     onDetach={detachNotes}
+                    onRefresh={tabNotes.refresh}
+                    onRefreshAll={tabNotes.refreshAll}
                   />
                 )}
               </ResizablePanel>

@@ -45,6 +45,12 @@ export function NotesWindowApp() {
   const remove = useCallback((id: string) => {
     void emit(NOTES_ACTION_EVENT, { type: "remove", id });
   }, []);
+  const refresh = useCallback((id: string) => {
+    void emit(NOTES_ACTION_EVENT, { type: "refresh", id });
+  }, []);
+  const refreshAll = useCallback(() => {
+    void emit(NOTES_ACTION_EVENT, { type: "refresh-all" });
+  }, []);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-card text-foreground">
@@ -58,6 +64,8 @@ export function NotesWindowApp() {
           onAddFromInput={addFromInput}
           onRemove={remove}
           onHide={dock}
+          onRefresh={refresh}
+          onRefreshAll={refreshAll}
         />
       </div>
     </div>

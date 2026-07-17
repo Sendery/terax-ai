@@ -16,6 +16,8 @@ type BridgeApi = {
   remove: (id: string) => void;
   update: (id: string, patch: NoteCardPatch) => void;
   move: (id: string, toIndex: number) => void;
+  refresh: (id: string) => void | Promise<void>;
+  refreshAll: () => void | Promise<void>;
 };
 
 /**
@@ -67,6 +69,12 @@ export function useNotesWindowBridge(opts: {
           break;
         case "move":
           api.move(action.id, action.toIndex);
+          break;
+        case "refresh":
+          void api.refresh(action.id);
+          break;
+        case "refresh-all":
+          void api.refreshAll();
           break;
       }
     });

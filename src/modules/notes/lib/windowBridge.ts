@@ -33,7 +33,9 @@ export type NotesAction =
   | { type: "add-input"; raw: string }
   | { type: "remove"; id: string }
   | { type: "update"; id: string; patch: NoteCardPatch }
-  | { type: "move"; id: string; toIndex: number };
+  | { type: "move"; id: string; toIndex: number }
+  | { type: "refresh"; id: string }
+  | { type: "refresh-all" };
 
 export function isNotesSyncPayload(v: unknown): v is NotesSyncPayload {
   if (!v || typeof v !== "object") return false;
@@ -88,6 +90,12 @@ export function parseNotesAction(value: unknown): NotesAction | null {
         Number.isFinite(r.toIndex)
         ? { type: "move", id: r.id, toIndex: r.toIndex }
         : null;
+    case "refresh":
+      return typeof r.id === "string" && r.id
+        ? { type: "refresh", id: r.id }
+        : null;
+    case "refresh-all":
+      return { type: "refresh-all" };
     default:
       return null;
   }

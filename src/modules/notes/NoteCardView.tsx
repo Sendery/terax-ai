@@ -15,10 +15,13 @@ import {
   GitPullRequestIcon,
   Link01Icon,
   LinkSquare01Icon,
+  Loading03Icon,
   Note01Icon,
   Notion01Icon,
+  RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CiState, GithubPrCard, JiraCard, NoteCard, PrState } from "./lib/cards";
@@ -130,12 +133,26 @@ function JiraMeta({ card }: { card: JiraCard }) {
 export function NoteCardView({
   card,
   onRemove,
+  onRefresh,
 }: {
   card: NoteCard;
   onRemove: (id: string) => void;
+  /** Provided for live cards (GitHub PR, Jira) to fetch fresh status. */
+  onRefresh?: (id: string) => void | Promise<void>;
 }) {
   const title = cardTitle(card);
   const isLink = card.kind !== "text";
+  const isLive = card.kind === "github-pr" || card.kind === "jira";
+  const [busy, setBusy] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh) return;
+    setBusy(true);
+    try {
+      await onRefresh(card.id);
+    } finally {
+      setBusy(false);
+    }
+  }, [onRefresh, card.id]);
 
   return (
     <article
@@ -194,6 +211,25 @@ export function NoteCardView({
         </div>
       </div>
 
+      {isLive && onRefresh && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={busy ? "Refreshing status" : `Refresh ${cardKindLabel(card)} status`}
+          title="Refresh status"
+          disabled={busy}
+          onClick={handleRefresh}
+          className="absolute right-7 top-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
+          aria-busy={busy}
+        >
+          <HugeiconsIcon
+            icon={busy ? Loading03Icon : RefreshIcon}
+            size={13}
+            strokeWidth={2}
+            className={busy ? "animate-spin" : undefined}
+          />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"
