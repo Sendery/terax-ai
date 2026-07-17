@@ -13,6 +13,13 @@ export const TERAX_COMMAND_IDS = [
   "tab.setColor",
   "git.diff.open",
   "settings.open",
+  "notes.show",
+  "notes.hide",
+  "notes.toggle",
+  "notes.detach",
+  "notes.add",
+  "notes.remove",
+  "notes.list",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];

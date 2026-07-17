@@ -11,8 +11,9 @@ import { fetchCardStatus } from "./fetchStatus";
 
 export type TabNotesApi = {
   notes: readonly NoteCard[];
-  /** Add a card from raw input (URL -> link card, otherwise free text). */
-  addFromInput: (raw: string) => void;
+  /** Add a card from raw input (URL -> link card, otherwise free text).
+   *  Returns the created card (or null when the input is blank). */
+  addFromInput: (raw: string) => NoteCard | null;
   addCard: (card: NoteCard) => void;
   remove: (id: string) => void;
   update: (id: string, patch: NoteCardPatch) => void;
@@ -53,13 +54,14 @@ export function useTabNotes(
   );
 
   const addFromInput = useCallback(
-    (raw: string) => {
+    (raw: string): NoteCard | null => {
       const trimmed = raw.trim();
-      if (!trimmed) return;
+      if (!trimmed) return null;
       const card = createCardFromInput(trimmed);
       mutate((cards) => addCard(cards, card));
       // Auto-fetch live status right after adding a PR/Jira card.
       if (isLive(card)) void applyFetched(card);
+      return card;
     },
     [mutate, applyFetched],
   );

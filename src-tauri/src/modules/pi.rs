@@ -151,6 +151,13 @@ fn is_allowed_command(command: &str) -> bool {
             | "tab.setColor"
             | "git.diff.open"
             | "settings.open"
+            | "notes.show"
+            | "notes.hide"
+            | "notes.toggle"
+            | "notes.detach"
+            | "notes.add"
+            | "notes.remove"
+            | "notes.list"
     )
 }
 

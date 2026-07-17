@@ -42,8 +42,77 @@ function handlers(): CommandHandlers {
       bytes: 1000,
       format: "png" as const,
     })),
+    showNotes: vi.fn(() => ({ visible: true })),
+    hideNotes: vi.fn(() => ({ visible: false })),
+    toggleNotes: vi.fn(() => ({ toggled: true })),
+    detachNotes: vi.fn(() => ({ detached: true })),
+    addNote: vi.fn(() => ({ id: "nc-1", kind: "text", tabId: 1 })),
+    removeNote: vi.fn(() => ({ removed: true, id: "nc-1" })),
+    listNotes: vi.fn(() => ({ tabId: 1, notes: [] })),
   };
 }
+
+describe("notes commands", () => {
+  it("accepts the no-payload notes commands", () => {
+    for (const id of [
+      "notes.show",
+      "notes.hide",
+      "notes.toggle",
+      "notes.detach",
+      "notes.list",
+    ] as const) {
+      expect(validateCommandRequest({ id }).ok).toBe(true);
+    }
+  });
+
+  it("validates notes.add content", () => {
+    expect(
+      validateCommandRequest({ id: "notes.add", payload: { content: "hi" } }).ok,
+    ).toBe(true);
+    expect(validateCommandRequest({ id: "notes.add", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({ id: "notes.add", payload: { content: "" } }).ok,
+    ).toBe(false);
+  });
+
+  it("validates notes.remove id", () => {
+    expect(
+      validateCommandRequest({ id: "notes.remove", payload: { id: "a" } }).ok,
+    ).toBe(true);
+    expect(validateCommandRequest({ id: "notes.remove", payload: {} }).ok).toBe(
+      false,
+    );
+  });
+
+  it("dispatches notes.add and notes.remove to handlers", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+    const added = await reg.call({
+      id: "notes.add",
+      payload: { content: "https://github.com/a/b/pull/1" },
+    });
+    expect(added.ok).toBe(true);
+    expect(h.addNote).toHaveBeenCalledWith({
+      content: "https://github.com/a/b/pull/1",
+    });
+    const removed = await reg.call({
+      id: "notes.remove",
+      payload: { id: "nc-1" },
+    });
+    expect(removed.ok).toBe(true);
+    expect(h.removeNote).toHaveBeenCalledWith({ id: "nc-1" });
+  });
+
+  it("does not dispatch notes.add when the payload is invalid", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+    const res = await reg.call({ id: "notes.add", payload: {} });
+    expect(res.ok).toBe(false);
+    expect(h.addNote).not.toHaveBeenCalled();
+  });
+});
 
 describe("app.capture", () => {
   it("accepts every closed capture target", () => {
@@ -274,6 +343,13 @@ describe("command registry", () => {
       "tab.setColor",
       "git.diff.open",
       "settings.open",
+      "notes.show",
+      "notes.hide",
+      "notes.toggle",
+      "notes.detach",
+      "notes.add",
+      "notes.remove",
+      "notes.list",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });

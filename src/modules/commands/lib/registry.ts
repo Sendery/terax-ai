@@ -24,6 +24,13 @@ export const COMMAND_IDS = [
   "tab.setColor",
   "git.diff.open",
   "settings.open",
+  "notes.show",
+  "notes.hide",
+  "notes.toggle",
+  "notes.detach",
+  "notes.add",
+  "notes.remove",
+  "notes.list",
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -66,6 +73,13 @@ export type CommandPayloads = {
     title?: string;
   };
   "settings.open": { tab?: SettingsTab };
+  "notes.show": undefined;
+  "notes.hide": undefined;
+  "notes.toggle": undefined;
+  "notes.detach": undefined;
+  "notes.add": { content: string };
+  "notes.remove": { id: string };
+  "notes.list": undefined;
 };
 
 export type CommandParamType = "string" | "integer" | "boolean" | "enum";
@@ -294,6 +308,57 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "notes.show": {
+    id: "notes.show",
+    description:
+      "Show the notes panel (focuses the floating window when detached).",
+    params: [],
+  },
+  "notes.hide": {
+    id: "notes.hide",
+    description: "Hide the notes panel.",
+    params: [],
+  },
+  "notes.toggle": {
+    id: "notes.toggle",
+    description: "Toggle the notes panel.",
+    params: [],
+  },
+  "notes.detach": {
+    id: "notes.detach",
+    description: "Pop the notes panel into the floating notes window.",
+    params: [],
+  },
+  "notes.add": {
+    id: "notes.add",
+    description:
+      "Add a note card to the active tab. A URL becomes a typed link card (Jira, GitHub PR, Notion, Figma, Obsidian); anything else becomes a text note.",
+    params: [
+      {
+        name: "content",
+        type: "string",
+        required: true,
+        description: "A URL or free text.",
+      },
+    ],
+  },
+  "notes.remove": {
+    id: "notes.remove",
+    description: "Remove a note card from the active tab by id.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the note card to remove.",
+      },
+    ],
+  },
+  "notes.list": {
+    id: "notes.list",
+    description: "List the note cards on the active tab.",
+    params: [],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -350,6 +415,17 @@ export type CommandHandlers = {
   openSettings: (
     payload: CommandPayloads["settings.open"],
   ) => Promise<unknown> | unknown;
+  showNotes: () => Promise<unknown> | unknown;
+  hideNotes: () => Promise<unknown> | unknown;
+  toggleNotes: () => Promise<unknown> | unknown;
+  detachNotes: () => Promise<unknown> | unknown;
+  addNote: (
+    payload: CommandPayloads["notes.add"],
+  ) => Promise<unknown> | unknown;
+  removeNote: (
+    payload: CommandPayloads["notes.remove"],
+  ) => Promise<unknown> | unknown;
+  listNotes: () => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -451,7 +527,12 @@ export function validateCommandRequest(
     id === "app.snapshot" ||
     id === "app.commands" ||
     id === "app.buildInfo" ||
-    id === "sidebar.hide"
+    id === "sidebar.hide" ||
+    id === "notes.show" ||
+    id === "notes.hide" ||
+    id === "notes.toggle" ||
+    id === "notes.detach" ||
+    id === "notes.list"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -569,6 +650,18 @@ export function validateCommandRequest(
     };
   }
 
+  if (id === "notes.add") {
+    const content = requireString(obj, "content", id);
+    if (!content.ok) return content;
+    return { ok: true, value: { id, payload: { content: content.value } } };
+  }
+
+  if (id === "notes.remove") {
+    const noteId = requireString(obj, "id", id);
+    if (!noteId.ok) return noteId;
+    return { ok: true, value: { id, payload: { id: noteId.value } } };
+  }
+
   if (!validateSettingsTab(obj.tab)) {
     return invalidPayload("settings.open requires payload.tab");
   }
@@ -622,6 +715,20 @@ async function dispatchCommand(
       return handlers.openGitDiff(request.payload);
     case "settings.open":
       return handlers.openSettings(request.payload);
+    case "notes.show":
+      return handlers.showNotes();
+    case "notes.hide":
+      return handlers.hideNotes();
+    case "notes.toggle":
+      return handlers.toggleNotes();
+    case "notes.detach":
+      return handlers.detachNotes();
+    case "notes.add":
+      return handlers.addNote(request.payload);
+    case "notes.remove":
+      return handlers.removeNote(request.payload);
+    case "notes.list":
+      return handlers.listNotes();
   }
 }
 

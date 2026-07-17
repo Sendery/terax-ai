@@ -58,6 +58,7 @@ import {
   useSidebarPanel,
 } from "@/modules/sidebar";
 import {
+  cardTitle,
   NotesDockedNotice,
   NotesPanel,
   NOTES_MAX_WIDTH,
@@ -351,6 +352,8 @@ export default function App() {
     api: tabNotes,
     onWindowClosed: attachNotes,
   });
+  const notesApiRef = useRef(tabNotes);
+  notesApiRef.current = tabNotes;
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
   const isEditorTab = activeTab?.kind === "editor";
@@ -1142,6 +1145,53 @@ export default function App() {
         void openSettingsWindow(tab);
         return { opened: true, tab: tab ?? null };
       },
+      showNotes: () => {
+        if (notesDetached) {
+          void openNotesWindow();
+          return { visible: true, detached: true };
+        }
+        showNotesPanel();
+        return { visible: true, detached: false };
+      },
+      hideNotes: () => {
+        hideNotesPanel();
+        return { visible: false };
+      },
+      toggleNotes: () => {
+        handleToggleNotes();
+        return { toggled: true, detached: notesDetached };
+      },
+      detachNotes: () => {
+        detachNotes();
+        return { detached: true };
+      },
+      addNote: ({ content }) => {
+        if (activeId == null) {
+          throw { code: "command_failed", message: "No active tab" };
+        }
+        const card = notesApiRef.current.addFromInput(content);
+        if (!card) {
+          throw { code: "command_failed", message: "Empty note content" };
+        }
+        return { id: card.id, kind: card.kind, tabId: activeId };
+      },
+      removeNote: ({ id }) => {
+        notesApiRef.current.remove(id);
+        return { removed: true, id };
+      },
+      listNotes: () => ({
+        tabId: activeId ?? null,
+        notes: notesApiRef.current.notes.map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          title: cardTitle(c),
+          ...("url" in c ? { url: c.url } : {}),
+          ...(c.kind === "github-pr"
+            ? { prState: c.prState, ciState: c.ciState }
+            : {}),
+          ...(c.kind === "jira" ? { status: c.status } : {}),
+        })),
+      }),
     }),
     [
       activeId,
@@ -1156,6 +1206,11 @@ export default function App() {
       sidebarView,
       sidebarWidthRef,
       updateTab,
+      notesDetached,
+      showNotesPanel,
+      hideNotesPanel,
+      handleToggleNotes,
+      detachNotes,
     ],
   );
 
