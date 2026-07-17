@@ -41,7 +41,7 @@ Do not use it merely to control a running Terax instance through existing comman
 6. Preserve secret, private-terminal, workspace-authorization, and approval boundaries.
 7. Never claim completion from compilation alone. Exercise the real path and inspect the result.
 8. Do not commit, merge, push, publish, or delete a worktree unless the user has authorized that action.
-9. Record implementation gotchas as they occur. Promote only verified, reusable lessons.
+9. Record implementation gotchas as they occur. Every non-obvious failure or constraint discovered during development must be written down with its solution (trigger, failure mode, prevention, verification): capture it in the run journal immediately and promote every verified, reusable lesson to the durable catalog `references/gotchas.md` before finishing. Never leave a fixed gotcha undocumented.
 10. In this Terax repository act only as the Sendery Git and GitHub identity for commits, pushes, pull requests, and reviews. Never use any other account.
 11. When self-approval is blocked because Sendery authored the pull request, record that in the pull request and still merge. Do not stall on the GitHub approval cycle.
 
@@ -321,6 +321,8 @@ Request an independent final review for cross-layer changes. Resolve all blockin
 Completion criterion: actual outputs support every completion claim, all introduced failures are fixed, and remaining baseline or platform limitations are named precisely.
 
 ## Gotcha Learning System
+
+**Directive:** the durable catalog `references/gotchas.md` is the single reference sheet for reusable Terax development gotchas and their solutions. Read it before you start, and record every gotcha you detect during development there (via the journal first). The runtime guide (`terax_development_guide`) surfaces this same directive under each capability's `gotchas` field.
 
 Use a two-tier system: a private implementation journal for candidates and a reviewed catalog for durable lessons.
 

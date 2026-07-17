@@ -44,6 +44,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** record the base branch and commit after checking cleanliness and recent history. Do not create from an uncommitted prerequisite tree.
 - **Verification:** `git merge-base --is-ancestor <required-commit> HEAD` succeeds where a required commit is known, and the journal records `git rev-parse HEAD`.
 
+### The intended base branch can move after the worktree is created
+
+- **Trigger:** branching from a shared integration branch (for example `develop`) that other work keeps merging into.
+- **Failure mode:** the branch is created correctly, but the base later fast-forwards to include prerequisites (for example a capture or visual-QA feature); the worktree silently lacks them and integration or QA behaves as if the feature were missing.
+- **Prevention:** re-read the base tip before relying on it. When required work has since landed on the intended base, rebase the feature branch onto the current base after confirming a clean tree and user approval for history changes.
+- **Verification:** `git merge-base --is-ancestor <required-commit> HEAD` succeeds after rebasing, and the run journal records the updated base commit.
+
 ### Keep all commands inside the worktree
 
 - **Trigger:** a sibling worktree is used for an experiment.
@@ -118,6 +125,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use a typed closed palette or enum and validate it at every external and persisted boundary.
 - **Verification:** all allowed values pass; representative unknown, differently cased, empty, and non-string values fail.
 
+### Registered lists carry exact-list tests in more than one place
+
+- **Trigger:** adding a semantic command, a shortcut, or a shortcut group.
+- **Failure mode:** the feature works at runtime but a test that asserts a whole registered list (or allowlist) fails, or a settings section silently omits the item.
+- **Prevention:** a new command spans the id union, payload map, schema, handler contract, validation, dispatch, the App handler, the Rust allowlist and the Pi package allowlist — plus the exact-list assertions in the registry tests (the command-id list and the Pi allowlist list). A new shortcut group must be added to both the group union and the ordered groups array that drives the settings render order.
+- **Verification:** run the registry and settings tests, not only type-checking, and confirm the new item renders where it is listed.
+
 ## Snapshots and Privacy
 
 ### Redact complete private entities
@@ -157,7 +171,56 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use restrained accents with deliberate active/inactive opacity and existing theme tokens where possible.
 - **Verification:** capture both states across representative light and dark themes or explain the narrower supported scope.
 
+### Drag and reorder interactions must use pointer events in WKWebView
+
+- **Trigger:** implementing drag-to-reorder or any custom drag inside the Tauri webview on macOS.
+- **Failure mode:** HTML5 drag-and-drop is unreliable in WKWebView — `dragstart` fires (the row can grab and dim) but `dragover`/`drop` never anchor to a target, so nothing reorders. Custom `dataTransfer` MIME types are not exposed in `dataTransfer.types` during `dragover`, and `getData()` for them is unreliable on `drop`.
+- **Prevention:** drive the interaction with pointer events and `setPointerCapture`. Capture on `pointerdown` (skip when the target is an interactive control via `closest("button, a, input, textarea, select, [contenteditable=true]")`), start past a small move threshold, resolve the target by comparing the pointer coordinate to each row's `getBoundingClientRect` midpoint, and apply the change on `pointerup`. Mark rows `select-none`/`touch-none` while draggable.
+- **Verification:** exercise a reorder in a running WKWebView build; unit-test the pure move/reorder function separately.
+
 ## Native and Visual Validation
+
+### New native windows must own their geometry
+
+- **Trigger:** adding a labeled Tauri window while `tauri-plugin-window-state` is enabled.
+- **Failure mode:** the plugin restores a stale saved size or position for the window label, overriding the builder's `inner_size`/position; the window appears blank, off-screen, or at a default size.
+- **Prevention:** exclude the label from the state plugin (`with_denylist(&["<label>"])`) and set an explicit on-screen geometry after build (`set_size` then `center`).
+- **Verification:** open the window on a fresh profile and confirm its size and on-screen position match the builder, not a previous run.
+
+### Floating helper windows must not steal focus
+
+- **Trigger:** a window is meant to float beside the main window while the user keeps typing (for example a notes or inspector window).
+- **Failure mode:** opening or reusing the window pulls keyboard focus and interrupts the terminal or editor.
+- **Prevention:** build with `focused(false)` and `always_on_top(true)`, and never call `set_focus()` on open or reuse.
+- **Verification:** open and reopen the window and confirm the main window keeps keyboard focus.
+
+### A window with a close-requested listener needs an explicit destroy
+
+- **Trigger:** a secondary window registers `onCloseRequested` (for example to notify the main window when it closes).
+- **Failure mode:** the native close button and any `close()` (including a Rust-initiated one) emit close-requested but the window never disappears — the default destroy does not run while a listener is attached, so content can re-appear elsewhere while the window stays open.
+- **Prevention:** in the handler call `preventDefault()`, run the teardown work, then `destroy()` explicitly. For an authoritative close initiated from another window, call `destroy()` from Rust so it does not depend on the target window's JS.
+- **Verification:** count real windows before and after every close path (native button, in-window dock, other-window dock) and confirm the window is gone.
+
+### JS window.destroy() requires its own capability
+
+- **Trigger:** calling `getCurrentWindow().destroy()` (or another window's `destroy()`) from the frontend.
+- **Failure mode:** the call is silently denied and the window stays open even though `close()` is allowed, because only `core:window:allow-close` was granted.
+- **Prevention:** add `core:window:allow-destroy` to the window's capability. A Rust-side `destroy()` needs no capability.
+- **Verification:** the destroy path closes the window with the capability present and fails without it.
+
+### One window owns the state; the others are synced views
+
+- **Trigger:** a panel can be detached into a separate native window while both show the same data.
+- **Failure mode:** two windows write the same store, causing lost updates, divergent state, or double persistence.
+- **Prevention:** keep the main window as the single source of truth and only writer; the secondary window emits validated, sanitized action events and renders the state pushed to it. Validate every inbound cross-window payload at the boundary.
+- **Verification:** mutate from the secondary window and confirm the change round-trips through the owner and its persistence exactly once.
+
+### Prefer in-app capture; never OS screen capture for QA
+
+- **Trigger:** collecting visual evidence during development, especially on macOS.
+- **Failure mode:** OS screen capture (for example `screencapture`) triggers a screen-recording permission prompt or firewall block and can include non-Terax content.
+- **Prevention:** use the in-app capture command (`app.capture`, DOM rasterization) only. It captures the main webview surface, so a separate native window cannot be captured this way on macOS — validate secondary windows through shared components plus a functional bridge round-trip. Window metadata via `CGWindowListCopyWindowInfo` is metadata-only and needs no screen-recording permission, so it is safe for asserting window lifecycle (open/close counts).
+- **Verification:** evidence is produced with no screen-recording prompt, and secondary-window behavior is proven by state/round-trip plus window-count checks.
 
 ### Build success is not integration success
 
@@ -253,6 +316,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** the reviewed version is not the version declared ready.
 - **Prevention:** rerun affected tests and review the final diff after fixes.
 - **Verification:** review evidence identifies the final worktree state, and `git diff --check` passes afterward.
+
+### macOS temp paths need realpath before path equality
+
+- **Trigger:** a test compares a path returned by code that canonicalizes with `realpath` against a path built from `os.tmpdir()`/`mkdtemp`.
+- **Failure mode:** on macOS `/var` is a symlink to `/private/var`, so the two paths differ and the assertion fails only on macOS.
+- **Prevention:** `realpath` the temporary root before deriving expected paths, or canonicalize both sides before comparing.
+- **Verification:** the path-equality test passes on both macOS and Linux.
 
 ## Catalog Maintenance
 

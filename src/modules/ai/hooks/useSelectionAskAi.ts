@@ -3,15 +3,18 @@ import { useCallback, useEffect, useState } from "react";
 type Params = {
   captureActiveSelection: () => string | null;
   askFromSelection: () => void;
+  addSelectionToNote: () => void;
 };
 
 /**
- * Tracks text selections inside the terminal / editor and surfaces the
- * "Ask AI" popup at the pointer. Dismisses on any click outside the AI surface.
+ * Tracks text selections inside the terminal / editor and surfaces the selection
+ * actions popup (Ask AI / Add to Note) at the pointer. Dismisses on any click
+ * outside the AI surface.
  */
 export function useSelectionAskAi({
   captureActiveSelection,
   askFromSelection,
+  addSelectionToNote,
 }: Params) {
   const [askPopup, setAskPopup] = useState<{ x: number; y: number } | null>(
     null,
@@ -61,5 +64,15 @@ export function useSelectionAskAi({
     setAskPopup(null);
   }, [askFromSelection]);
 
-  return { askPopup, setAskPopup, onAskFromSelection };
+  const onAddToNoteFromSelection = useCallback(() => {
+    addSelectionToNote();
+    setAskPopup(null);
+  }, [addSelectionToNote]);
+
+  return {
+    askPopup,
+    setAskPopup,
+    onAskFromSelection,
+    onAddToNoteFromSelection,
+  };
 }

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -284,7 +284,9 @@ describe("Terax visual QA", () => {
   });
 
   it("compares only after canonical baseline validation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "pi-terax-compare-"));
+    // realpath so the expected baseline matches the canonical path the code
+    // returns; on macOS tmpdir() is /var -> /private/var symlinked.
+    const root = await realpath(await mkdtemp(join(tmpdir(), "pi-terax-compare-")));
     const baseline = join(root, "visual-baselines", "main.png");
     await mkdir(join(root, "visual-baselines"));
     await writeFile(baseline, "baseline");

@@ -13,11 +13,13 @@ import {
   type TerminalTab,
 } from "@/modules/tabs";
 
+import { isNoteCard, type NoteCard } from "@/modules/notes/lib/cards";
+
 export type SerializedNode =
   | { kind: "leaf"; cwd?: string; active?: boolean }
   | { kind: "split"; dir: SplitDir; children: SerializedNode[] };
 
-type SerializedTabBase = { color?: TabColor };
+type SerializedTabBase = { color?: TabColor; notes?: NoteCard[] };
 
 export type SerializedTab =
   | (SerializedTabBase & {
@@ -109,7 +111,12 @@ export function serializeTabs(tabs: Tab[]): SerializedTab[] {
   const out: SerializedTab[] = [];
   for (const tab of tabs) {
     const s = serializeTab(tab);
-    if (s) out.push(s);
+    if (!s) continue;
+    if (tab.notes?.length) {
+      const valid = tab.notes.filter(isNoteCard);
+      if (valid.length) s.notes = valid;
+    }
+    out.push(s);
   }
   return out;
 }
@@ -249,7 +256,13 @@ export function hydrateTabs(
   for (const s of serialized) {
     try {
       const tab = hydrateTab(s, spaceId, allocId);
-      if (tab) out.push(tab);
+      if (!tab) continue;
+      const rawNotes = (s as { notes?: unknown }).notes;
+      if (Array.isArray(rawNotes)) {
+        const valid = rawNotes.filter(isNoteCard);
+        if (valid.length) tab.notes = valid;
+      }
+      out.push(tab);
     } catch {
       // Skip corrupted entries rather than failing the whole restore.
     }

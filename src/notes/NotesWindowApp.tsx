@@ -1,0 +1,93 @@
+import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useCallback, useEffect, useState } from "react";
+import { cardCitation, type NoteCard, NotesPanel } from "@/modules/notes";
+import type { NoteCardPatch } from "@/modules/notes/lib/collection";
+import {
+  isNotesSyncPayload,
+  NOTES_ACTION_EVENT,
+  NOTES_CLOSED_EVENT,
+  NOTES_READY_EVENT,
+  NOTES_SYNC_EVENT,
+  type NotesSyncPayload,
+} from "@/modules/notes/lib/windowBridge";
+
+const EMPTY: NotesSyncPayload = { tabId: null, tabTitle: null, notes: [] };
+
+/** Root of the detached floating notes window. Mirrors the active tab's notes
+ *  received over the bridge and forwards mutations back to the main window. */
+export function NotesWindowApp() {
+  const [state, setState] = useState<NotesSyncPayload>(EMPTY);
+
+  useEffect(() => {
+    const unSync = listen(NOTES_SYNC_EVENT, (e) => {
+      if (isNotesSyncPayload(e.payload)) setState(e.payload);
+    });
+    const win = getCurrentWindow();
+    // Take control of teardown: on macOS the native close (traffic light) fires
+    // close-requested, but having a listener stops the default destroy and
+    // leaves the window open. Prevent default, tell main to re-attach, then
+    // destroy explicitly (destroy() does not re-fire close-requested).
+    const unClose = win.onCloseRequested((event) => {
+      event.preventDefault();
+      void emit(NOTES_CLOSED_EVENT).finally(() => {
+        void win.destroy();
+      });
+    });
+    // Ask the main window to push the current state now that we're mounted.
+    void emit(NOTES_READY_EVENT);
+    return () => {
+      void unSync.then((f) => f());
+      void unClose.then((f) => f());
+    };
+  }, []);
+
+  const dock = useCallback(() => {
+    // close() routes through onCloseRequested, which emits CLOSED and destroys.
+    void getCurrentWindow().close();
+  }, []);
+
+  const addFromInput = useCallback((raw: string) => {
+    void emit(NOTES_ACTION_EVENT, { type: "add-input", raw });
+  }, []);
+  const remove = useCallback((id: string) => {
+    void emit(NOTES_ACTION_EVENT, { type: "remove", id });
+  }, []);
+  const update = useCallback((id: string, patch: NoteCardPatch) => {
+    void emit(NOTES_ACTION_EVENT, { type: "update", id, patch });
+  }, []);
+  const move = useCallback((id: string, toIndex: number) => {
+    void emit(NOTES_ACTION_EVENT, { type: "move", id, toIndex });
+  }, []);
+  const cite = useCallback((card: NoteCard) => {
+    void emit(NOTES_ACTION_EVENT, { type: "cite", text: cardCitation(card) });
+  }, []);
+  const refresh = useCallback((id: string) => {
+    void emit(NOTES_ACTION_EVENT, { type: "refresh", id });
+  }, []);
+  const refreshAll = useCallback(() => {
+    void emit(NOTES_ACTION_EVENT, { type: "refresh-all" });
+  }, []);
+
+  return (
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-card text-foreground">
+      <div data-tauri-drag-region className="h-7 shrink-0" />
+      <div className="min-h-0 flex-1">
+        <NotesPanel
+          notes={state.notes}
+          disabled={state.tabId == null}
+          subtitle={state.tabTitle}
+          hideTitle="Dock back into panel"
+          onAddFromInput={addFromInput}
+          onRemove={remove}
+          onUpdate={update}
+          onMove={move}
+          onCite={cite}
+          onHide={dock}
+          onRefresh={refresh}
+          onRefreshAll={refreshAll}
+        />
+      </div>
+    </div>
+  );
+}

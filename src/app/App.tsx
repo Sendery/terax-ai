@@ -58,6 +58,22 @@ import {
   useSidebarPanel,
 } from "@/modules/sidebar";
 import {
+  cardCitation,
+  cardTitle,
+  type NoteCard,
+  type NoteCardPatch,
+  NotesDockedNotice,
+  NotesPanel,
+  NOTES_MAX_WIDTH,
+  NOTES_MIN_WIDTH,
+  type NotesMutator,
+  closeNotesWindow,
+  openNotesWindow,
+  useNotesPanel,
+  useNotesWindowBridge,
+  useTabNotes,
+} from "@/modules/notes";
+import {
   SourceControlPanel,
   useSourceControlContext,
 } from "@/modules/source-control";
@@ -130,6 +146,7 @@ export default function App() {
     openCommitFileDiffTab,
     closeTab,
     updateTab,
+    updateTabNotes,
     selectByIndex,
     setLeafCwd,
     focusPane,
@@ -273,6 +290,46 @@ export default function App() {
     toggleExplorerFocus,
   } = useSidebarPanel(explorerRef);
 
+  const {
+    notesRef,
+    widthRef: notesWidthRef,
+    notesVisible,
+    toggleNotes,
+    showNotes: showNotesPanel,
+    hideNotes: hideNotesPanel,
+    persistNotesWidth,
+  } = useNotesPanel();
+  const mutateActiveTabNotes = useCallback<NotesMutator>(
+    (updater) => {
+      if (activeId != null) updateTabNotes(activeId, updater);
+    },
+    [activeId, updateTabNotes],
+  );
+  const [notesDetached, setNotesDetached] = useState(false);
+  const detachNotes = useCallback(() => {
+    setNotesDetached(true);
+    showNotesPanel();
+    void openNotesWindow();
+  }, [showNotesPanel]);
+  const attachNotes = useCallback(() => {
+    setNotesDetached(false);
+    showNotesPanel();
+  }, [showNotesPanel]);
+  // Docking back from the main window must also close the floating window
+  // (re-attach alone left the undocked window open).
+  const dockBackFromMain = useCallback(() => {
+    void closeNotesWindow();
+    setNotesDetached(false);
+    showNotesPanel();
+  }, [showNotesPanel]);
+  const handleToggleNotes = useCallback(() => {
+    if (notesDetached) {
+      void openNotesWindow();
+      return;
+    }
+    toggleNotes();
+  }, [notesDetached, toggleNotes]);
+
   const [newEditorOpen, setNewEditorOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [paletteInitialMode, setPaletteInitialMode] = useState<
@@ -297,6 +354,36 @@ export default function App() {
   const { hasComposer, keysLoaded } = useAiBootstrap();
 
   const activeTab = tabs.find((t) => t.id === activeId);
+  const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
+  // Type a note's reference at the active shell prompt as a citation. Never
+  // executes: newlines are collapsed and no carriage return is sent.
+  const writeToActiveShell = useCallback(
+    (text: string) => {
+      if (activeLeafId === null) return;
+      const term = terminalRefs.current.get(activeLeafId);
+      if (!term) return;
+      const line = text.replace(/[\r\n]+/g, " ").trim();
+      if (!line) return;
+      term.write(line);
+      term.focus();
+    },
+    [activeLeafId],
+  );
+  const citeNoteToShell = useCallback(
+    (card: NoteCard) => writeToActiveShell(cardCitation(card)),
+    [writeToActiveShell],
+  );
+  useNotesWindowBridge({
+    detached: notesDetached,
+    activeTabId: activeId ?? null,
+    activeTabTitle: activeTab?.title ?? null,
+    notes: tabNotes.notes,
+    api: tabNotes,
+    onCite: writeToActiveShell,
+    onWindowClosed: attachNotes,
+  });
+  const notesApiRef = useRef(tabNotes);
+  notesApiRef.current = tabNotes;
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
   const isEditorTab = activeTab?.kind === "editor";
@@ -460,10 +547,25 @@ export default function App() {
     activeTab,
   ]);
 
-  const { askPopup, setAskPopup, onAskFromSelection } = useSelectionAskAi({
+  const addSelectionToNote = useCallback(() => {
+    const selection = captureActiveSelection();
+    if (!selection?.trim()) return;
+    tabNotes.addFromInput(selection);
+    showNotesPanel();
+    if (notesDetached) void openNotesWindow();
+  }, [
     captureActiveSelection,
-    askFromSelection,
-  });
+    tabNotes,
+    showNotesPanel,
+    notesDetached,
+  ]);
+
+  const { askPopup, setAskPopup, onAskFromSelection, onAddToNoteFromSelection } =
+    useSelectionAskAi({
+      captureActiveSelection,
+      askFromSelection,
+      addSelectionToNote,
+    });
   const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
@@ -655,6 +757,7 @@ export default function App() {
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
       "ai.askSelection": askFromSelection,
+      "notes.addSelection": addSelectionToNote,
       "terminal.clearActive": clearActiveTerminal,
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -683,6 +786,7 @@ export default function App() {
       toggleSourceControl,
       togglePanelAndFocus,
       askFromSelection,
+      addSelectionToNote,
       toggleSidebar,
       toggleExplorerFocus,
       zoomIn,
@@ -705,6 +809,11 @@ export default function App() {
         if (!inTerminal) return false;
         const sel = captureActiveSelection();
         return !sel || !sel.trim();
+      }
+      if (id === "notes.addSelection") {
+        // Only claim the binding when there is a selection to add; otherwise
+        // let the key fall through (never preventDefault when disabled).
+        return !captureActiveSelection()?.trim();
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -735,7 +844,7 @@ export default function App() {
       }
       return false;
     },
-    [activeTab],
+    [activeTab, captureActiveSelection],
   );
 
   useGlobalShortcuts(shortcutHandlers, { isDisabled: shortcutsDisabled });
@@ -1088,6 +1197,72 @@ export default function App() {
         void openSettingsWindow(tab);
         return { opened: true, tab: tab ?? null };
       },
+      showNotes: () => {
+        if (notesDetached) {
+          void openNotesWindow();
+          return { visible: true, detached: true };
+        }
+        showNotesPanel();
+        return { visible: true, detached: false };
+      },
+      hideNotes: () => {
+        hideNotesPanel();
+        return { visible: false };
+      },
+      toggleNotes: () => {
+        handleToggleNotes();
+        return { toggled: true, detached: notesDetached };
+      },
+      detachNotes: () => {
+        detachNotes();
+        return { detached: true };
+      },
+      attachNotes: () => {
+        dockBackFromMain();
+        return { detached: false };
+      },
+      addNote: ({ content }) => {
+        if (activeId == null) {
+          throw { code: "command_failed", message: "No active tab" };
+        }
+        const card = notesApiRef.current.addFromInput(content);
+        if (!card) {
+          throw { code: "command_failed", message: "Empty note content" };
+        }
+        return { id: card.id, kind: card.kind, tabId: activeId };
+      },
+      removeNote: ({ id }) => {
+        notesApiRef.current.remove(id);
+        return { removed: true, id };
+      },
+      updateNote: ({ id, title, body, url, note }) => {
+        const before = notesApiRef.current.notes.find((c) => c.id === id);
+        if (!before) {
+          throw { code: "command_failed", message: `No note card "${id}"` };
+        }
+        const patch: NoteCardPatch = {};
+        if (typeof title === "string") patch.title = title;
+        if (typeof body === "string") patch.body = body;
+        if (typeof url === "string") patch.url = url;
+        if (typeof note === "string") patch.note = note;
+        notesApiRef.current.update(id, patch);
+        return { updated: true, id, tabId: activeId ?? null };
+      },
+      listNotes: () => ({
+        tabId: activeId ?? null,
+        notes: notesApiRef.current.notes.map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          title: cardTitle(c),
+          ...(c.kind === "text" ? { body: c.body } : {}),
+          ...("url" in c ? { url: c.url } : {}),
+          ...("note" in c && c.note ? { note: c.note } : {}),
+          ...(c.kind === "github-pr"
+            ? { prState: c.prState, ciState: c.ciState }
+            : {}),
+          ...(c.kind === "jira" ? { status: c.status } : {}),
+        })),
+      }),
     }),
     [
       activeId,
@@ -1102,6 +1277,12 @@ export default function App() {
       sidebarView,
       sidebarWidthRef,
       updateTab,
+      notesDetached,
+      showNotesPanel,
+      hideNotesPanel,
+      handleToggleNotes,
+      detachNotes,
+      dockBackFromMain,
     ],
   );
 
@@ -1162,6 +1343,8 @@ export default function App() {
               onRename={handleRenameTab}
               onSetColor={handleSetTabColor}
               onToggleSidebar={toggleSidebar}
+              onToggleNotes={handleToggleNotes}
+              notesVisible={notesVisible || notesDetached}
               onOpenCommandPalette={() => openCommandPalette("commands")}
               onActivateAgent={onActivateAgent}
               onActivateLocalAgent={onActivateLocalAgent}
@@ -1269,6 +1452,41 @@ export default function App() {
                   />
                 </div>
               </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id="notes"
+                panelRef={notesRef}
+                defaultSize={notesVisible ? `${notesWidthRef.current}px` : 0}
+                minSize={`${NOTES_MIN_WIDTH}px`}
+                maxSize={`${NOTES_MAX_WIDTH}px`}
+                collapsible
+                collapsedSize={0}
+                onResize={(size) => {
+                  if (size.inPixels > 0) persistNotesWidth(size.inPixels);
+                }}
+              >
+                {notesDetached ? (
+                  <NotesDockedNotice
+                    onFocusWindow={() => void openNotesWindow()}
+                    onDock={dockBackFromMain}
+                  />
+                ) : (
+                  <NotesPanel
+                    notes={tabNotes.notes}
+                    disabled={activeId == null}
+                    subtitle={activeTab?.title ?? null}
+                    onAddFromInput={tabNotes.addFromInput}
+                    onRemove={tabNotes.remove}
+                    onUpdate={tabNotes.update}
+                    onMove={tabNotes.move}
+                    onCite={citeNoteToShell}
+                    onHide={hideNotesPanel}
+                    onDetach={detachNotes}
+                    onRefresh={tabNotes.refresh}
+                    onRefreshAll={tabNotes.refreshAll}
+                  />
+                )}
+              </ResizablePanel>
             </ResizablePanelGroup>
           </main>
 
@@ -1313,6 +1531,7 @@ export default function App() {
               x={askPopup?.x ?? 0}
               y={askPopup?.y ?? 0}
               onAsk={onAskFromSelection}
+              onAddToNote={onAddToNoteFromSelection}
               onDismiss={() => setAskPopup(null)}
             />
           ) : null}

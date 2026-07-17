@@ -38,6 +38,7 @@ export type ShortcutId =
   | "view.zenMode"
   | "ai.toggle"
   | "ai.askSelection"
+  | "notes.addSelection"
   | "settings.open"
   | "sidebar.toggle"
   | "editor.undo"
@@ -51,6 +52,7 @@ export type ShortcutGroup =
   | "Terminal"
   | "Search"
   | "AI"
+  | "Notes"
   | "View"
   | "Editor";
 
@@ -252,6 +254,12 @@ export const SHORTCUTS: Shortcut[] = [
     defaultBindings: [{ [MOD_PROP]: true, key: "j" }],
   },
   {
+    id: "notes.addSelection",
+    label: "Add selection to notes",
+    group: "Notes",
+    defaultBindings: [{ [MOD_PROP]: true, key: "l" }],
+  },
+  {
     id: "sidebar.toggle",
     label: "Toggle file explorer",
     group: "View",
@@ -328,6 +336,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   "View",
   "Search",
   "AI",
+  "Notes",
   "Editor",
 ];
 

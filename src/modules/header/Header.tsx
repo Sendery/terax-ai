@@ -5,6 +5,7 @@ import { NotificationBell } from "@/modules/agents";
 import { type Tab, TabBar, type TabColor } from "@/modules/tabs";
 import {
   CommandIcon,
+  Note01Icon,
   Settings01Icon,
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
@@ -40,6 +41,8 @@ type Props = {
   /** Set or reset a tab's palette color. null clears the color. */
   onSetColor: (id: number, color: TabColor | null) => void;
   onToggleSidebar: () => void;
+  onToggleNotes: () => void;
+  notesVisible: boolean;
   onOpenCommandPalette: () => void;
   onActivateAgent: (tabId: number, leafId: number) => void;
   onActivateLocalAgent: () => void;
@@ -66,6 +69,8 @@ export function Header({
   onRename,
   onSetColor,
   onToggleSidebar,
+  onToggleNotes,
+  notesVisible,
   onOpenCommandPalette,
   onActivateAgent,
   onActivateLocalAgent,
@@ -97,6 +102,24 @@ export function Header({
       title="Settings"
     >
       <HugeiconsIcon icon={Settings01Icon} size={15} strokeWidth={1.75} />
+    </Button>
+  );
+
+  const notesButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Toggle notes panel"
+      aria-pressed={notesVisible}
+      className={`size-7 shrink-0 rounded-md hover:bg-accent hover:text-foreground ${
+        notesVisible
+          ? "bg-accent/60 text-foreground"
+          : "text-muted-foreground"
+      }`}
+      onClick={onToggleNotes}
+      title="Toggle notes"
+    >
+      <HugeiconsIcon icon={Note01Icon} size={15} strokeWidth={1.75} />
     </Button>
   );
 
@@ -174,11 +197,17 @@ export function Header({
             onActivate={onActivateAgent}
             onActivateLocal={onActivateLocalAgent}
           />
+          {notesButton}
           {settingsButton}
         </>
       )}
 
-      {!IS_MAC && settingsButton}
+      {!IS_MAC && (
+        <>
+          {notesButton}
+          {settingsButton}
+        </>
+      )}
 
       {USE_CUSTOM_WINDOW_CONTROLS && (
         <>
