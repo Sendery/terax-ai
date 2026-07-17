@@ -335,19 +335,21 @@ export function NoteCardView({
 
       {/* Action stack: bottom-right, vertical. Refresh (top, live only) is
           spaced further from edit; edit sits above delete (bottom corner). */}
+      {/* Cite lives on its own in the bottom-left corner, away from the
+          edit/delete/refresh stack in the bottom-right. */}
+      {onCite && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Cite ${cardKindLabel(card)} in the shell`}
+          title="Cite in shell"
+          onClick={() => onCite(card)}
+          className="absolute bottom-1.5 left-1.5 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <HugeiconsIcon icon={CommandLineIcon} size={13} strokeWidth={2} />
+        </Button>
+      )}
       <div className="absolute bottom-1.5 right-1.5 flex flex-col items-center">
-        {onCite && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Cite ${cardKindLabel(card)} in the shell`}
-            title="Cite in shell"
-            onClick={() => onCite(card)}
-            className="mb-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-          >
-            <HugeiconsIcon icon={CommandLineIcon} size={13} strokeWidth={2} />
-          </Button>
-        )}
         {isLive && onRefresh && (
           <Button
             variant="ghost"
@@ -356,7 +358,7 @@ export function NoteCardView({
             title="Refresh status"
             disabled={busy}
             onClick={handleRefresh}
-            className="mb-2.5 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
+            className="mb-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
             aria-busy={busy}
           >
             <HugeiconsIcon
@@ -374,7 +376,7 @@ export function NoteCardView({
             aria-label={`Edit ${cardKindLabel(card)} card`}
             title="Edit"
             onClick={startEdit}
-            className="mb-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+            className="mb-2.5 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
           >
             <HugeiconsIcon icon={PencilEdit01Icon} size={13} strokeWidth={2} />
           </Button>
