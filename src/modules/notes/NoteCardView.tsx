@@ -18,13 +18,24 @@ import {
   Loading03Icon,
   Note01Icon,
   Notion01Icon,
+  PencilEdit01Icon,
   RefreshIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { CiState, GithubPrCard, JiraCard, NoteCard, PrState } from "./lib/cards";
+import type { NoteCardPatch } from "./lib/collection";
+import {
+  buildEditPatch,
+  type EditDraft,
+  draftFromCard,
+  editableFields,
+} from "./lib/editing";
 import {
   cardAccessibleLabel,
   cardKindLabel,
@@ -133,10 +144,13 @@ function JiraMeta({ card }: { card: JiraCard }) {
 export function NoteCardView({
   card,
   onRemove,
+  onUpdate,
   onRefresh,
 }: {
   card: NoteCard;
   onRemove: (id: string) => void;
+  /** Provided to enter edit mode and persist a patch. */
+  onUpdate?: (id: string, patch: NoteCardPatch) => void;
   /** Provided for live cards (GitHub PR, Jira) to fetch fresh status. */
   onRefresh?: (id: string) => void | Promise<void>;
 }) {
@@ -144,6 +158,8 @@ export function NoteCardView({
   const isLink = card.kind !== "text";
   const isLive = card.kind === "github-pr" || card.kind === "jira";
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<EditDraft>(() => draftFromCard(card));
   const handleRefresh = useCallback(async () => {
     if (!onRefresh) return;
     setBusy(true);
@@ -153,6 +169,96 @@ export function NoteCardView({
       setBusy(false);
     }
   }, [onRefresh, card.id]);
+
+  const startEdit = useCallback(() => {
+    setDraft(draftFromCard(card));
+    setEditing(true);
+  }, [card]);
+  const cancelEdit = useCallback(() => setEditing(false), []);
+  const saveEdit = useCallback(() => {
+    const patch = buildEditPatch(card, draft);
+    if (Object.keys(patch).length > 0) onUpdate?.(card.id, patch);
+    setEditing(false);
+  }, [card, draft, onUpdate]);
+
+  if (editing) {
+    const fields = editableFields(card);
+    return (
+      <article
+        aria-label={`Editing ${cardKindLabel(card)} card`}
+        className="rounded-lg border border-primary/50 bg-card/90 p-2.5 text-sm shadow-xs"
+      >
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveEdit();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              cancelEdit();
+            }
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              saveEdit();
+            }
+          }}
+        >
+          {fields.includes("title") && (
+            <Input
+              value={draft.title}
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              placeholder="Title (optional)"
+              aria-label="Edit title"
+              className="h-8 text-sm"
+              autoFocus
+            />
+          )}
+          {fields.includes("body") && (
+            <Textarea
+              value={draft.body}
+              onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
+              placeholder="Note text"
+              aria-label="Edit note text"
+              rows={4}
+              className="resize-none text-sm"
+            />
+          )}
+          {fields.includes("note") && (
+            <Textarea
+              value={draft.note}
+              onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+              placeholder="Annotation (optional)"
+              aria-label="Edit annotation"
+              rows={3}
+              className="resize-none text-sm"
+            />
+          )}
+          <div className="flex items-center justify-end gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={cancelEdit}
+              className="h-7 px-2 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
+              className="h-7 gap-1 px-2 text-xs"
+            >
+              <HugeiconsIcon icon={Tick02Icon} size={13} strokeWidth={2} />
+              Save
+            </Button>
+          </div>
+        </form>
+      </article>
+    );
+  }
 
   return (
     <article
@@ -211,35 +317,51 @@ export function NoteCardView({
         </div>
       </div>
 
-      {isLive && onRefresh && (
+      {/* Action stack: bottom-right, vertical. Refresh (top, live only) is
+          spaced further from edit; edit sits above delete (bottom corner). */}
+      <div className="absolute bottom-1.5 right-1.5 flex flex-col items-center">
+        {isLive && onRefresh && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={busy ? "Refreshing status" : `Refresh ${cardKindLabel(card)} status`}
+            title="Refresh status"
+            disabled={busy}
+            onClick={handleRefresh}
+            className="mb-2.5 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
+            aria-busy={busy}
+          >
+            <HugeiconsIcon
+              icon={busy ? Loading03Icon : RefreshIcon}
+              size={13}
+              strokeWidth={2}
+              className={busy ? "animate-spin" : undefined}
+            />
+          </Button>
+        )}
+        {onUpdate && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Edit ${cardKindLabel(card)} card`}
+            title="Edit"
+            onClick={startEdit}
+            className="mb-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <HugeiconsIcon icon={PencilEdit01Icon} size={13} strokeWidth={2} />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
-          aria-label={busy ? "Refreshing status" : `Refresh ${cardKindLabel(card)} status`}
-          title="Refresh status"
-          disabled={busy}
-          onClick={handleRefresh}
-          className="absolute right-7 top-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
-          aria-busy={busy}
+          aria-label={`Delete ${cardKindLabel(card)} card`}
+          title="Delete"
+          onClick={() => onRemove(card.id)}
+          className="size-6 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100"
         >
-          <HugeiconsIcon
-            icon={busy ? Loading03Icon : RefreshIcon}
-            size={13}
-            strokeWidth={2}
-            className={busy ? "animate-spin" : undefined}
-          />
+          <HugeiconsIcon icon={Delete02Icon} size={13} strokeWidth={2} />
         </Button>
-      )}
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={`Delete ${cardKindLabel(card)} card`}
-        title="Delete"
-        onClick={() => onRemove(card.id)}
-        className="absolute right-1 top-1 size-6 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100"
-      >
-        <HugeiconsIcon icon={Delete02Icon} size={13} strokeWidth={2} />
-      </Button>
+      </div>
     </article>
   );
 }

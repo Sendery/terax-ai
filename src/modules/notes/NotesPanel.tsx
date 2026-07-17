@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { NoteCard } from "./lib/cards";
+import type { NoteCardPatch } from "./lib/collection";
 import { NoteCardView } from "./NoteCardView";
 
 export function NotesPanel({
@@ -19,6 +20,7 @@ export function NotesPanel({
   hideTitle = "Hide notes",
   onAddFromInput,
   onRemove,
+  onUpdate,
   onHide,
   onDetach,
   onRefresh,
@@ -32,6 +34,8 @@ export function NotesPanel({
   hideTitle?: string;
   onAddFromInput: (raw: string) => void;
   onRemove: (id: string) => void;
+  /** When provided, cards expose an edit affordance that persists a patch. */
+  onUpdate?: (id: string, patch: NoteCardPatch) => void;
   onHide: () => void;
   /** When provided, shows a button to pop the panel into a floating window. */
   onDetach?: () => void;
@@ -169,6 +173,7 @@ export function NotesPanel({
                 <NoteCardView
                   card={card}
                   onRemove={onRemove}
+                  onUpdate={onUpdate}
                   onRefresh={onRefresh}
                 />
               </li>

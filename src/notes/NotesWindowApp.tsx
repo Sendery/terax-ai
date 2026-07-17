@@ -2,6 +2,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import { NotesPanel } from "@/modules/notes";
+import type { NoteCardPatch } from "@/modules/notes/lib/collection";
 import {
   isNotesSyncPayload,
   NOTES_ACTION_EVENT,
@@ -52,6 +53,9 @@ export function NotesWindowApp() {
   const remove = useCallback((id: string) => {
     void emit(NOTES_ACTION_EVENT, { type: "remove", id });
   }, []);
+  const update = useCallback((id: string, patch: NoteCardPatch) => {
+    void emit(NOTES_ACTION_EVENT, { type: "update", id, patch });
+  }, []);
   const refresh = useCallback((id: string) => {
     void emit(NOTES_ACTION_EVENT, { type: "refresh", id });
   }, []);
@@ -70,6 +74,7 @@ export function NotesWindowApp() {
           hideTitle="Dock back into panel"
           onAddFromInput={addFromInput}
           onRemove={remove}
+          onUpdate={update}
           onHide={dock}
           onRefresh={refresh}
           onRefreshAll={refreshAll}

@@ -1418,6 +1418,7 @@ export default function App() {
                     subtitle={activeTab?.title ?? null}
                     onAddFromInput={tabNotes.addFromInput}
                     onRemove={tabNotes.remove}
+                    onUpdate={tabNotes.update}
                     onHide={hideNotesPanel}
                     onDetach={detachNotes}
                     onRefresh={tabNotes.refresh}
