@@ -56,6 +56,23 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 - `git.diff.open`
 - `settings.open`
 
+### app.capture
+
+Capture any Terax surface natively: the webview rasterizes the requested surface to a PNG persisted in a private app-cache directory. No OS screen-capture API or permission is involved on any platform, and content outside the Terax window cannot appear in the image.
+
+```json
+{ "command": "app.capture", "payload": { "target": "pane", "tabId": 3 } }
+```
+
+Targets (closed set): `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay` (topmost open menu, dialog, or popover). Returns `{ target, path, width, height, bytes, format: "png" }`.
+
+Rules and limits:
+
+- Private terminals block capture with scope-correct errors: any private tab blocks `window` and `tabstrip`, the targeted private tab blocks `pane`, and an active private tab blocks the remaining targets. Rejected captures never mutate state.
+- Hidden mounted DOM panes (editor, markdown, diff) capture fully. A hidden idle terminal has released its renderer slot and captures chrome only; call `tab.focus` first, capture, then focus back.
+- Password inputs are masked. Arbitrary selectors are rejected.
+- Prefer `terax_visual_qa` with `target`/`tabId` for QA evidence: it adds trusted-project gating, guard monitoring, and evidence management on top of this command.
+
 ### tab.setColor
 
 Assign a palette color to a tab or clear an existing one:
@@ -70,7 +87,7 @@ Pass `null` for `color` to remove the accent. Any value outside the palette -- u
 
 ## Security
 
-The extension discovers Terax through a user-cache file created at app startup, including a Windows `LOCALAPPDATA` fallback when Pi runs in WSL. The bridge binds only to `127.0.0.1`, uses a per-launch random token, validates protocol version and command IDs, and caps request frames. Private terminal details and terminal text are excluded from snapshots. Visual QA is restricted to trusted projects, binds every frame to the authenticated PID and exact Terax window identity, and refuses or aborts capture if a private terminal appears. Capture limits are 7,680 x 4,320, 16,777,216 pixels, 30 seconds, 30 FPS, 900 frames, and 512 MiB of temporary frames.
+The extension discovers Terax through a user-cache file created at app startup, including a Windows `LOCALAPPDATA` fallback when Pi runs in WSL. The bridge binds only to `127.0.0.1`, uses a per-launch random token, validates protocol version and command IDs, and caps request frames. Private terminal details and terminal text are excluded from snapshots. Visual QA is restricted to trusted projects, binds every frame to the authenticated PID and exact Terax window identity, and refuses or aborts capture if a private terminal appears. Main-surface evidence is produced by in-app rasterization (`app.capture`), which is OS-agnostic, needs no OS permissions, and structurally cannot include non-Terax content; the settings window uses the system backend. Capture limits are 7,680 x 4,320, 16,777,216 pixels, 30 seconds, 30 FPS, 900 frames, and 512 MiB of temporary frames.
 
 This package does not implement an MCP server, client, transport, or protocol path. Any MCP SDK present transitively through the Pi host or existing workspace tooling is not used by this extension.
 

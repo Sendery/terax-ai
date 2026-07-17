@@ -13,7 +13,7 @@ Validate behavior and pixels together. Use the authenticated Terax tools for sta
 
 1. Read the feature acceptance criteria and turn them into observable state, interaction, and visual checks.
 2. Call `terax_get_state` and record the initial structural state.
-3. Stop if the active tab is a private terminal. The visual tool also enforces this boundary.
+3. Stop if the active tab is a private terminal. The visual tool and the in-app capture command both enforce this boundary natively.
 4. Capture a `before` screenshot when layout change matters.
 5. Execute the feature through `terax_call`, a user-facing shortcut, or Pi's normal development tools.
 6. Call `terax_wait` only for the shortest required stabilization interval.
@@ -36,6 +36,26 @@ Use for final states, dialogs, menus, settings, and layout changes:
   "name": "sidebar-after-toggle"
 }
 ```
+
+### Native surface targets (main surface)
+
+The main surface is captured by Terax itself through the `app.capture` registry command: the webview rasterizes the requested surface, so no OS screen-capture API or permission is involved on any platform, and content outside the Terax window cannot appear in evidence. Add `target` to isolate a surface:
+
+```json
+{
+  "action": "screenshot",
+  "surface": "main",
+  "target": "pane",
+  "tabId": 3,
+  "name": "terminal-pane-after-command"
+}
+```
+
+- Targets: `window` (default), `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay`.
+- `overlay` captures the topmost open menu, dialog, or popover; with a submenu open it captures the submenu. It fails when nothing is open.
+- `pane` reaches hidden mounted tabs: DOM surfaces (editor, markdown, diff) render fully. A hidden idle terminal has released its renderer slot, so its pane shows chrome only; call `tab.focus` on it, capture, then focus back.
+- Private terminals block capture natively with scope-correct rules: any private tab blocks `window` and `tabstrip`; the targeted private tab blocks `pane`; an active private tab blocks the remaining targets. Rejected captures do not mutate state.
+- `target` is only valid with `surface: "main"`. The settings window has no command bridge and stays on the system backend.
 
 ### Video
 
@@ -92,7 +112,9 @@ Limitations: <platform or untested interaction>
 
 ## Current Platform Support
 
-The native backend is implemented on Windows and WSL. It uses Win32 `PrintWindow` frames cropped to DWM extended-frame bounds, then encodes those private frames with Windows FFmpeg. Limits are 7,680 x 4,320, 16,777,216 pixels, 30 seconds, 30 FPS, 900 frames, and 512 MiB of temporary frames. The current backend smoke produced a 626 x 413 PNG and a three-second H.264 MP4 at 15 FPS; visual inspection found no desktop, cursor, unrelated windows, black bands, or corruption. A roughly one-pixel dark contour and resize grip were native window chrome. Other platforms must add their own `VisualBackend` implementation and real smoke evidence before being documented as supported.
+- **Main surface (all platforms):** the in-app rasterization backend is OS-agnostic and verified on macOS with real captures (full window at 2x DPI including live terminal split pixels, isolated targets, hidden mounted panes, and an open context menu). Screenshots need no external tools; video and SSIM comparison use local FFmpeg.
+- **Settings surface:** captured by the system backend, implemented on Windows and WSL with Win32 `PrintWindow` frames cropped to DWM extended-frame bounds and encoded with Windows FFmpeg. Other platforms must add their own `VisualBackend` implementation and real smoke evidence before being documented as supported.
+- Shared limits: 7,680 x 4,320, 16,777,216 pixels, 30 seconds, 30 FPS, 900 frames, and 512 MiB of temporary frames.
 
 ## Completion Checklist
 

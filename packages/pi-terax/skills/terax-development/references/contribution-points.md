@@ -59,6 +59,16 @@ Add one semantic ID. Do not add a second independent key listener for the same a
 
 The registry is the semantic command API. The command palette is presentation and must not become the external control contract.
 
+## In-app visual capture
+
+- Capture module: `src/modules/capture` (targets, guard rules, rasterizer)
+- Surface anchors: `data-capture-target` attributes on Header, TabBar, StatusBar, the sidebar container, and every per-tab stack wrapper (`data-capture-tab-id`)
+- Rust persistence: `src-tauri/src/modules/capture.rs` (`capture_persist`)
+- Pi native backend: `packages/pi-terax/src/visual-native.ts`
+- Command id: `app.capture` through the standard command-and-Pi-exposure rows above
+
+New visible surfaces should add a `data-capture-target` anchor when they must be capturable in isolation. New targets require a privacy classification (see the capture gotchas section) and end-to-end refusal tests with a private terminal open.
+
 ## Required checks
 
 ```bash
