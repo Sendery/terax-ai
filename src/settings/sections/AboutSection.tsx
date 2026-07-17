@@ -6,6 +6,7 @@ import {
   formatBuildDate,
   shortCommit,
 } from "@/lib/buildInfo";
+import { IS_LINUX, IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { setUpdateChannel, UPDATE_CHANNELS } from "@/modules/settings/store";
@@ -36,13 +37,18 @@ export function AboutSection() {
   const [version, setVersion] = useState("");
   const [name, setName] = useState("Terax");
   const [build, setBuild] = useState("");
-  const { status, check, install } = useUpdater({ autoCheck: false });
+  const { status, check, install, downloadManual } = useUpdater({
+    autoCheck: false,
+  });
   const updateChannel = usePreferencesStore((s) => s.updateChannel);
   const checking = status.kind === "checking";
   const downloading = status.kind === "downloading";
   const available = status.kind === "available";
   const manualAvailable = status.kind === "manual-available";
+  const manualDownloading = status.kind === "manual-downloading";
+  const manualDone = status.kind === "manual-done";
   const ready = status.kind === "ready";
+  const revealLabel = IS_MAC ? "Finder" : "your file manager";
   const checkLabel =
     status.kind === "uptodate"
       ? "You're up to date"
@@ -50,18 +56,20 @@ export function AboutSection() {
         ? "Check failed — retry"
         : checking
           ? "Checking…"
-          : downloading
+          : downloading || manualDownloading
             ? "Downloading…"
-            : ready
-              ? "Restart to install"
-              : available
-                ? `Install v${status.update.version}`
-                : manualAvailable
-                  ? `Update to v${status.info.version}`
-                  : "Check for updates";
+            : manualDone
+              ? `Revealed in ${revealLabel}`
+              : ready
+                ? "Restart to install"
+                : available
+                  ? `Install v${status.update.version}`
+                  : manualAvailable
+                    ? `Download v${status.info.version}`
+                    : "Check for updates";
   const onUpdateClick = () => {
     if (available) void install();
-    else if (manualAvailable) void openUrl(status.info.releaseUrl);
+    else if (manualAvailable) void downloadManual();
     else void check({ manual: true });
   };
 
@@ -207,11 +215,17 @@ export function AboutSection() {
             ))}
           </div>
         </div>
+        {(updateChannel === "dev" || IS_LINUX) && (
+          <p className="text-[11px] text-muted-foreground">
+            Dev builds install manually. Terax downloads the right installer for
+            this machine and reveals it in {revealLabel}; open it to update.
+          </p>
+        )}
         <div className="flex gap-2">
           <Button
             size="sm"
             onClick={onUpdateClick}
-            disabled={checking || downloading || ready}
+            disabled={checking || downloading || manualDownloading || ready}
           >
             {checkLabel}
           </Button>
