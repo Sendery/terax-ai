@@ -76,6 +76,7 @@ const GUIDES: Record<DevelopmentCapability, DevelopmentGuide> = {
       "Keep OS access in Rust and cross the boundary through registered Tauri commands.",
       "Use @/ imports across frontend modules.",
       "Do not add comments unless the reason is non-obvious.",
+      "Give a new visible surface a data-capture-target anchor when it must be capturable in isolation by app.capture, and classify its privacy scope (see skills/terax-development/references/gotchas.md, In-App Rasterization Capture).",
     ],
     verify: COMMON_VERIFY,
   },

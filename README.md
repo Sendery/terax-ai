@@ -90,6 +90,7 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 - **Composer:** snippets via `#handle`, files via `@path`, slash commands, voice input, attach-to-agent from explorer or selection
 - **Custom agents** with their own system prompt and tool subset
 - **Plan mode** for multi-step work, generates and confirms before doing
+- **Pi integration:** first-party `@crynta/pi-terax` extension controls Terax over an authenticated local bridge, including OS-agnostic in-app visual capture of any surface (window, panes, menus, sidebar) with no screen-recording permissions and private terminals always excluded
 
 ## Install
 

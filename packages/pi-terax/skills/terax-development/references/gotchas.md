@@ -194,6 +194,50 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use literal-safe Windows commands, UTF-8 decoding, explicit path conversion, and a dedicated Windows target directory. Never assume ASCII usernames or Unix separators.
 - **Verification:** exercise at least one path with spaces or non-ASCII characters and confirm discovery identifies the intended executable.
 
+## In-App Rasterization Capture
+
+### Nested data-URL images do not survive foreignObject rasterization
+
+- **Trigger:** rendering a DOM clone through SVG foreignObject onto a canvas while any pixel content is inlined as a nested data-URL `<img>` (canvas snapshots, embedded bitmaps).
+- **Failure mode:** WebKit rasterizes the SVG before nested images load, producing blank regions (black terminals) even though the same approach appears to work in Chromium.
+- **Prevention:** never inline canvas pixels into the clone. Record each source canvas rect before cloning, strip canvases from the clone, and composite the live canvases directly onto the output 2D canvas after drawing the SVG.
+- **Verification:** capture a window containing a running terminal and inspect the PNG for actual glyph pixels, not just chrome.
+
+### Readable canvas buffers are a prerequisite, not a given
+
+- **Trigger:** compositing WebGL-backed canvases (xterm webgl renderer) into a capture.
+- **Failure mode:** `drawImage`/`toDataURL` from a WebGL canvas yields transparent pixels because the drawing buffer is cleared after compositing.
+- **Prevention:** create the WebGL context with `preserveDrawingBuffer` (WebglAddon constructor flag) or register a snapshot provider through the capture module for surfaces that cannot preserve their buffer.
+- **Verification:** terminal pixels appear in a real capture; the flag is set where the addon is constructed in the renderer pool.
+
+### Inlining computed styles bakes inherited hiding into every node
+
+- **Trigger:** capturing a surface that is mounted but hidden (inactive tabs use `visibility: hidden` and stay mounted).
+- **Failure mode:** `getComputedStyle` reports `visibility: hidden` on every descendant, so inlining styles freezes the hidden state into the clone and overriding the root has no effect. The capture renders blank.
+- **Prevention:** when the capture root is hidden, coerce `visibility: hidden` to `visible` during style inlining for the whole subtree.
+- **Verification:** capture a hidden mounted pane (open a second tab first) and confirm full content renders.
+
+### Neutralize positioning on the clone root
+
+- **Trigger:** capturing positioned or popper-managed elements (context menus, dialogs, floating overlays).
+- **Failure mode:** the element's `transform: translate(...)` or absolute insets are baked into the clone and re-apply inside the capture viewport, shifting content out of frame.
+- **Prevention:** the capture viewport already equals the element's bounding rect, so set `transform: none`, `position: static`, and `inset: auto` on the clone root.
+- **Verification:** capture an open context menu and confirm the content fills the artifact without offset bands.
+
+### Hidden idle terminals have no pixels to capture
+
+- **Trigger:** capturing the pane of a terminal tab that is hidden and has no foreground job.
+- **Failure mode:** the renderer pool releases the slot for idle hidden leaves, so no canvas exists; the buffer lives serialized in the dormant ring and the capture shows only pane chrome. This is structural, not a bug.
+- **Prevention:** for QA flows, focus the tab (`tab.focus`), capture, then restore focus. Do not attempt to force slot rebinding from the capture path.
+- **Verification:** the documented workaround produces terminal pixels; the direct hidden capture is documented as chrome-only.
+
+### Capture scope must map to privacy scope
+
+- **Trigger:** adding or changing a capture target.
+- **Failure mode:** a target leaks private-terminal information indirectly (tab titles in the tab strip, cwd in the status bar) even though the private pane itself is excluded.
+- **Prevention:** classify each target by what it can reveal: any private tab blocks whole-window targets (`window`, `tabstrip`); the targeted tab blocks `pane`; an active private tab blocks active-scoped targets (`header`, `sidebar`, `statusbar`, `active-pane`, `overlay`).
+- **Verification:** with a private terminal open and active, every affected target is rejected over the real bridge and the snapshot is unchanged afterward.
+
 ## Testing and Review
 
 ### Separate baseline failures from introduced failures
