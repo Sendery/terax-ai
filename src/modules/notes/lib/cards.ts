@@ -255,6 +255,16 @@ export function createCardFromUrl(rawUrl: string, title?: string): NoteCard {
   }
 }
 
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/** Choose the best card for raw user input: a scheme-qualified URL becomes a
+ *  link card (with provider detection); anything else becomes a text card. */
+export function createCardFromInput(raw: string): NoteCard {
+  const trimmed = raw.trim();
+  if (URL_SCHEME.test(trimmed)) return createCardFromUrl(trimmed);
+  return createTextCard(trimmed);
+}
+
 // ---------------------------------------------------------------------------
 // Validation (hydration-safe)
 // ---------------------------------------------------------------------------

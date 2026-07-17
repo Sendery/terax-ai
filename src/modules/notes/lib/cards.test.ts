@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createCardFromInput,
   createCardFromUrl,
   createTextCard,
   detectProvider,
@@ -129,6 +130,28 @@ describe("createCardFromUrl", () => {
     const card = createCardFromUrl("https://example.com/x");
     expect(card.kind).toBe("link");
     expect(isNoteCard(card)).toBe(true);
+  });
+});
+
+describe("createCardFromInput", () => {
+  it("builds a link card when the input is a URL", () => {
+    expect(createCardFromInput("https://github.com/a/b/pull/1").kind).toBe(
+      "github-pr",
+    );
+    expect(createCardFromInput("  obsidian://open?vault=v ").kind).toBe(
+      "obsidian",
+    );
+  });
+
+  it("builds a text card for free text", () => {
+    const card = createCardFromInput("remember to review the deploy");
+    expect(card.kind).toBe("text");
+    if (card.kind !== "text") throw new Error("expected text");
+    expect(card.body).toBe("remember to review the deploy");
+  });
+
+  it("treats a bare domain without scheme as text", () => {
+    expect(createCardFromInput("github.com/a/b").kind).toBe("text");
   });
 });
 

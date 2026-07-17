@@ -58,6 +58,13 @@ import {
   useSidebarPanel,
 } from "@/modules/sidebar";
 import {
+  NotesPanel,
+  NOTES_MAX_WIDTH,
+  NOTES_MIN_WIDTH,
+  useNotesPanel,
+  useTabNotes,
+} from "@/modules/notes";
+import {
   SourceControlPanel,
   useSourceControlContext,
 } from "@/modules/source-control";
@@ -272,6 +279,16 @@ export default function App() {
     persistSidebarWidth,
     toggleExplorerFocus,
   } = useSidebarPanel(explorerRef);
+
+  const {
+    notesRef,
+    widthRef: notesWidthRef,
+    notesVisible,
+    toggleNotes,
+    hideNotes: hideNotesPanel,
+    persistNotesWidth,
+  } = useNotesPanel();
+  const tabNotes = useTabNotes(activeId ?? null);
 
   const [newEditorOpen, setNewEditorOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1162,6 +1179,8 @@ export default function App() {
               onRename={handleRenameTab}
               onSetColor={handleSetTabColor}
               onToggleSidebar={toggleSidebar}
+              onToggleNotes={toggleNotes}
+              notesVisible={notesVisible}
               onOpenCommandPalette={() => openCommandPalette("commands")}
               onActivateAgent={onActivateAgent}
               onActivateLocalAgent={onActivateLocalAgent}
@@ -1268,6 +1287,27 @@ export default function App() {
                     onConnect={() => void openSettingsWindow("models")}
                   />
                 </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id="notes"
+                panelRef={notesRef}
+                defaultSize={notesVisible ? `${notesWidthRef.current}px` : 0}
+                minSize={`${NOTES_MIN_WIDTH}px`}
+                maxSize={`${NOTES_MAX_WIDTH}px`}
+                collapsible
+                collapsedSize={0}
+                onResize={(size) => {
+                  if (size.inPixels > 0) persistNotesWidth(size.inPixels);
+                }}
+              >
+                <NotesPanel
+                  notes={tabNotes.notes}
+                  disabled={activeId == null}
+                  onAddFromInput={tabNotes.addFromInput}
+                  onRemove={tabNotes.remove}
+                  onHide={hideNotesPanel}
+                />
               </ResizablePanel>
             </ResizablePanelGroup>
           </main>
