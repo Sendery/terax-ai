@@ -5,7 +5,9 @@ import {
   parseSemver,
   pickLatestRelease,
   releasesApiUrl,
+  selectPlatformAsset,
   type GithubRelease,
+  type GithubReleaseAsset,
 } from "./releases";
 
 function rel(
@@ -74,6 +76,68 @@ describe("pickLatestRelease", () => {
 
   it("returns null when a channel has no published release", () => {
     expect(pickLatestRelease([rel("v1.0.0", false)], "dev")).toBeNull();
+  });
+});
+
+describe("selectPlatformAsset", () => {
+  function asset(name: string): GithubReleaseAsset {
+    return {
+      name,
+      browser_download_url: `https://github.com/Sendery/terax-ai/releases/download/v0.9.0-dev.3/${name}`,
+    };
+  }
+  const macAssets = [asset("Terax_0.9.0-3_aarch64.dmg"), asset("Terax_0.9.0-3_x64.dmg")];
+  const allAssets = [
+    asset("Terax_0.9.0-1_aarch64.dmg"),
+    asset("Terax_0.9.0-1_x64.dmg"),
+    asset("Terax_0.9.0-1_amd64.AppImage"),
+    asset("Terax_0.9.0-1_amd64.deb"),
+    asset("Terax-0.9.0-1-1.x86_64.rpm"),
+    asset("Terax_0.9.0-1_x64-setup.exe"),
+    asset("Terax_0.9.0-1_x64_en-US.msi"),
+  ];
+
+  it("picks the apple-silicon dmg on macOS aarch64", () => {
+    expect(selectPlatformAsset(macAssets, "macos", "aarch64")?.name).toBe(
+      "Terax_0.9.0-3_aarch64.dmg",
+    );
+  });
+
+  it("picks the intel dmg on macOS x86_64", () => {
+    expect(selectPlatformAsset(macAssets, "macos", "x86_64")?.name).toBe(
+      "Terax_0.9.0-3_x64.dmg",
+    );
+  });
+
+  it("falls back to the only dmg when the arch token is absent", () => {
+    const single = [asset("Terax_0.9.0-3_universal.dmg")];
+    expect(selectPlatformAsset(single, "macos", "aarch64")?.name).toBe(
+      "Terax_0.9.0-3_universal.dmg",
+    );
+  });
+
+  it("prefers the setup exe over the msi on Windows x86_64", () => {
+    expect(selectPlatformAsset(allAssets, "windows", "x86_64")?.name).toBe(
+      "Terax_0.9.0-1_x64-setup.exe",
+    );
+  });
+
+  it("prefers the AppImage on Linux x86_64", () => {
+    expect(selectPlatformAsset(allAssets, "linux", "x86_64")?.name).toBe(
+      "Terax_0.9.0-1_amd64.AppImage",
+    );
+  });
+
+  it("returns the resolved download url alongside the name", () => {
+    expect(selectPlatformAsset(macAssets, "macos", "aarch64")?.url).toBe(
+      "https://github.com/Sendery/terax-ai/releases/download/v0.9.0-dev.3/Terax_0.9.0-3_aarch64.dmg",
+    );
+  });
+
+  it("returns null when no asset matches the platform", () => {
+    expect(selectPlatformAsset(macAssets, "windows", "x86_64")).toBeNull();
+    expect(selectPlatformAsset(undefined, "macos", "aarch64")).toBeNull();
+    expect(selectPlatformAsset([], "macos", "aarch64")).toBeNull();
   });
 });
 

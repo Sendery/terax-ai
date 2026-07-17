@@ -1,4 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { arch, platform } from "@tauri-apps/plugin-os";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { useCallback, useEffect, useState } from "react";
@@ -9,7 +12,11 @@ import {
   isNewerVersion,
   pickLatestRelease,
   releasesApiUrl,
+  selectPlatformAsset,
+  type ArchKind,
   type GithubRelease,
+  type OsKind,
+  type PlatformAsset,
   type UpdateChannel,
 } from "./lib/releases";
 
@@ -21,6 +28,24 @@ export interface ManualUpdateInfo {
   currentVersion: string;
   body: string;
   releaseUrl: string;
+  /** Running OS, or null when it cannot be determined. */
+  os: OsKind | null;
+  /** Best installer for the running OS/arch, or null when none matches. */
+  asset: PlatformAsset | null;
+}
+
+// Identify the running desktop target so we can pick the right installer.
+function currentTarget(): { os: OsKind | null; arch: ArchKind } {
+  let os: OsKind | null = null;
+  let cpu: ArchKind = "x86_64";
+  try {
+    const p = platform();
+    if (p === "macos" || p === "windows" || p === "linux") os = p;
+    cpu = arch() === "aarch64" ? "aarch64" : "x86_64";
+  } catch {
+    // Non-Tauri environment (e.g. tests) — leave defaults.
+  }
+  return { os, arch: cpu };
 }
 
 export type UpdaterStatus =
@@ -29,6 +54,8 @@ export type UpdaterStatus =
   | { kind: "uptodate" }
   | { kind: "available"; update: Update }
   | { kind: "manual-available"; info: ManualUpdateInfo }
+  | { kind: "manual-downloading"; info: ManualUpdateInfo }
+  | { kind: "manual-done"; info: ManualUpdateInfo; path: string }
   | { kind: "downloading"; downloaded: number; contentLength: number | null }
   | { kind: "ready" }
   | { kind: "error"; message: string };
@@ -54,11 +81,16 @@ async function checkReleaseViaApi(
   if (!latest) return null;
   const remote = latest.tag_name.replace(/^v/, "");
   if (!isNewerVersion(remote, current)) return null;
+  const target = currentTarget();
   return {
     version: remote,
     currentVersion: current,
     body: latest.body ?? "",
     releaseUrl: latest.html_url,
+    os: target.os,
+    asset: target.os
+      ? selectPlatformAsset(latest.assets, target.os, target.arch)
+      : null,
   };
 }
 
@@ -140,6 +172,27 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
     }
   }, [status]);
 
+  // Dev-channel and Linux updates install manually: download the matching
+  // installer, then reveal it in the OS file manager (Finder on macOS).
+  const downloadManual = useCallback(async () => {
+    if (status.kind !== "manual-available") return;
+    const { info } = status;
+    if (!info.asset) {
+      await openUrl(info.releaseUrl);
+      return;
+    }
+    setStatus({ kind: "manual-downloading", info });
+    try {
+      const path = await invoke<string>("download_release_asset", {
+        url: info.asset.url,
+      });
+      await revealItemInDir(path);
+      setStatus({ kind: "manual-done", info, path });
+    } catch (err) {
+      setStatus({ kind: "error", message: String(err) });
+    }
+  }, [status]);
+
   const dismiss = useCallback(() => {
     setStatus({ kind: "idle" });
   }, []);
@@ -149,5 +202,5 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
     void runCheck();
   }, [autoCheck, hydrated, runCheck]);
 
-  return { status, check: runCheck, install, dismiss };
+  return { status, check: runCheck, install, downloadManual, dismiss };
 }

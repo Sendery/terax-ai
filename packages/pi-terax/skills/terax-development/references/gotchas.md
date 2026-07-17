@@ -132,6 +132,15 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** a new command spans the id union, payload map, schema, handler contract, validation, dispatch, the App handler, the Rust allowlist and the Pi package allowlist — plus the exact-list assertions in the registry tests (the command-id list and the Pi allowlist list). A new shortcut group must be added to both the group union and the ordered groups array that drives the settings render order.
 - **Verification:** run the registry and settings tests, not only type-checking, and confirm the new item renders where it is listed.
 
+## Native Networking
+
+### The AI-proxy HTTP client blocks cross-host redirects
+
+- **Trigger:** adding a native `reqwest` fetch/download in `src-tauri/src/modules/net.rs` that reuses `build_safe_client`.
+- **Failure mode:** the request fails silently on any endpoint that redirects to a different host (for example a GitHub release URL redirecting `github.com` -> `*.githubusercontent.com`, or any CDN hand-off), because `build_safe_client`'s SSRF policy pins to one host's resolved IPs and stops cross-host redirects by design.
+- **Prevention:** build a purpose-specific client for downloads whose redirect policy follows only `https` and only an explicit host allowlist (e.g. `github.com` plus `*.githubusercontent.com`); derive the saved filename from the original URL, not the redirect target, and reject path separators/`..`.
+- **Verification:** exercise the real endpoint (a temporary, uncommitted integration test that downloads the actual asset confirms the redirect is followed and the full body arrives), plus unit tests for the host allowlist and filename guard.
+
 ## Snapshots and Privacy
 
 ### Redact complete private entities

@@ -38,23 +38,34 @@ function formatBytes(n: number): string {
 }
 
 export function UpdaterDialog() {
-  const { status, install, dismiss } = useUpdater();
+  const { status, install, downloadManual, dismiss } = useUpdater();
   const [copied, setCopied] = useState(false);
   const [distro, setDistro] = useState<DistroKey>("arch");
-  const manualVersion =
-    status.kind === "manual-available" ? status.info.version : "";
+  const manual =
+    status.kind === "manual-available" ||
+    status.kind === "manual-downloading" ||
+    status.kind === "manual-done"
+      ? status.info
+      : null;
+  const manualVersion = manual?.version ?? "";
   const activeCommand = distroCommand(distro, manualVersion);
 
   const open =
     status.kind === "available" ||
     status.kind === "manual-available" ||
+    status.kind === "manual-downloading" ||
+    status.kind === "manual-done" ||
     status.kind === "downloading" ||
     status.kind === "ready";
 
   if (!open) return null;
 
   const update = status.kind === "available" ? status.update : null;
-  const manual = status.kind === "manual-available" ? status.info : null;
+  const manualDownloading = status.kind === "manual-downloading";
+  const manualDone = status.kind === "manual-done";
+  const manualLinux = manual?.os === "linux";
+  const hasAsset = manual?.asset != null;
+  const revealTarget = manual?.os === "macos" ? "Finder" : "your file manager";
   const downloading = status.kind === "downloading";
   const ready = status.kind === "ready";
 
@@ -79,7 +90,9 @@ export function UpdaterDialog() {
       onOpenChange={(o) => {
         if (
           !o &&
-          (status.kind === "available" || status.kind === "manual-available")
+          (status.kind === "available" ||
+            status.kind === "manual-available" ||
+            status.kind === "manual-done")
         )
           dismiss();
       }}
@@ -91,9 +104,11 @@ export function UpdaterDialog() {
               ? "Update ready"
               : downloading
                 ? "Downloading update…"
-                : manual
-                  ? `Terax v${manual.version} is available`
-                  : `Terax v${update?.version} is available`}
+                : manualDone
+                  ? "Installer downloaded"
+                  : manual
+                    ? `Terax v${manual.version} is available`
+                    : `Terax v${update?.version} is available`}
           </DialogTitle>
           <DialogDescription>
             {ready
@@ -102,9 +117,15 @@ export function UpdaterDialog() {
                 ? progress !== null
                   ? `${progress.toFixed(0)}% — ${formatBytes(status.downloaded)}`
                   : formatBytes(status.downloaded)
-                : manual
-                  ? `You're on v${manual.currentVersion}. Pick your distro and run the command, or grab the package from GitHub.`
-                  : update?.body || "A new version is ready to install."}
+                : manualDone
+                  ? `Saved to your downloads and revealed in ${revealTarget}. Open it to finish updating.`
+                  : manualLinux
+                    ? `You're on v${manual?.currentVersion}. Dev builds install manually — pick your distro and run the command, or grab the package from GitHub.`
+                    : manual
+                      ? hasAsset
+                        ? `You're on v${manual.currentVersion}. Dev builds install manually — download the installer for this machine and open it to update.`
+                        : `You're on v${manual.currentVersion}. Download the right package from GitHub and install it manually.`
+                      : update?.body || "A new version is ready to install."}
           </DialogDescription>
         </DialogHeader>
 
@@ -114,8 +135,11 @@ export function UpdaterDialog() {
         {downloading && progress === null && (
           <Progress value={undefined} className="mt-2 animate-pulse" />
         )}
+        {manualDownloading && (
+          <Progress value={undefined} className="mt-2 animate-pulse" />
+        )}
 
-        {manual && (
+        {manualLinux && (
           <div className="mt-2 flex flex-col gap-2">
             <div className="flex gap-1 rounded-md bg-muted/40 p-1">
               {DISTROS.map((d) => (
@@ -158,16 +182,48 @@ export function UpdaterDialog() {
               </Button>
             </>
           )}
-          {manual && (
+          {(status.kind === "manual-available" ||
+            status.kind === "manual-downloading") && (
             <>
-              <Button variant="ghost" size="sm" onClick={dismiss}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={dismiss}
+                disabled={manualDownloading}
+              >
                 Later
               </Button>
               <Button
+                variant="outline"
                 size="sm"
-                onClick={() => void openUrl(manual.releaseUrl)}
+                onClick={() => void openUrl(status.info.releaseUrl)}
               >
-                Download package
+                View on GitHub
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void downloadManual()}
+                disabled={manualDownloading}
+              >
+                {manualDownloading
+                  ? "Downloading…"
+                  : hasAsset
+                    ? "Download & reveal"
+                    : "Open GitHub"}
+              </Button>
+            </>
+          )}
+          {manualDone && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void openUrl(status.info.releaseUrl)}
+              >
+                View on GitHub
+              </Button>
+              <Button size="sm" onClick={dismiss}>
+                Done
               </Button>
             </>
           )}

@@ -8,6 +8,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
+use tauri::Manager;
 
 const HEADER_BLOCKLIST: &[&str] = &[
     "host",
@@ -434,10 +435,133 @@ pub async fn ai_http_stream(
     Ok(())
 }
 
+// Hosts GitHub uses to serve release downloads. The initial
+// `github.com/<owner>/<repo>/releases/download/...` URL redirects to a
+// `*.githubusercontent.com` CDN host, so both must be allowed.
+fn is_github_download_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h == "github.com"
+        || h == "objects.githubusercontent.com"
+        || h.ends_with(".githubusercontent.com")
+}
+
+/// Derive a safe on-disk file name from a validated GitHub asset URL. Uses the
+/// final path segment and rejects anything that could escape the download
+/// directory.
+fn github_asset_file_name(url: &reqwest::Url) -> Result<String, String> {
+    let raw = url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back().map(str::to_string))
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "download url has no file name".to_string())?;
+    let name = raw.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+        || name.contains("..")
+    {
+        return Err("unsafe download file name".into());
+    }
+    Ok(name.to_string())
+}
+
+// A reqwest client for GitHub release downloads. Unlike the AI proxy client it
+// must follow the cross-host github.com -> *.githubusercontent.com redirect,
+// but it only ever follows https redirects to GitHub-owned hosts.
+fn build_github_download_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(600))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() > 10 {
+                return attempt.error("too many redirects");
+            }
+            let next = attempt.url();
+            if next.scheme() != "https" {
+                return attempt.stop();
+            }
+            match next.host_str() {
+                Some(h) if is_github_download_host(h) => attempt.follow(),
+                _ => attempt.stop(),
+            }
+        }))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Download a GitHub release asset into the OS downloads directory and return
+/// the saved path. Only https GitHub release URLs are accepted; the file name
+/// is derived from the URL and sanitized against path traversal.
+#[tauri::command]
+pub async fn download_release_asset(
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<String, String> {
+    let parsed = validate_url(&url, false)?;
+    if parsed.scheme() != "https" {
+        return Err("only https downloads are allowed".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "missing host".to_string())?
+        .to_string();
+    if !is_github_download_host(&host) {
+        return Err("only github release downloads are allowed".into());
+    }
+    if host.eq_ignore_ascii_case("github.com") && !parsed.path().contains("/releases/download/") {
+        return Err("only github release assets are allowed".into());
+    }
+    let file_name = github_asset_file_name(&parsed)?;
+
+    let client = build_github_download_client()?;
+    let resp = client.get(parsed).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("download failed: HTTP {}", resp.status().as_u16()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|e| format!("no downloads directory: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join(&file_name);
+    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::net::Ipv4Addr;
+
+    #[test]
+    fn github_download_host_allowlist() {
+        assert!(is_github_download_host("github.com"));
+        assert!(is_github_download_host("objects.githubusercontent.com"));
+        assert!(is_github_download_host("release-assets.githubusercontent.com"));
+        assert!(!is_github_download_host("evil.com"));
+        assert!(!is_github_download_host("githubusercontent.com.evil.com"));
+        assert!(!is_github_download_host("notgithub.com"));
+    }
+
+    #[test]
+    fn github_asset_file_name_extracts_and_guards() {
+        let ok = reqwest::Url::parse(
+            "https://github.com/Sendery/terax-ai/releases/download/v0.9.0-dev.3/Terax_0.9.0-3_aarch64.dmg",
+        )
+        .unwrap();
+        assert_eq!(
+            github_asset_file_name(&ok).unwrap(),
+            "Terax_0.9.0-3_aarch64.dmg"
+        );
+        let trailing =
+            reqwest::Url::parse("https://github.com/a/b/releases/download/v1/").unwrap();
+        assert!(github_asset_file_name(&trailing).is_err());
+    }
 
     #[test]
     fn metadata_ips_classified_as_blocked() {

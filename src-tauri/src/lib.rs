@@ -317,6 +317,7 @@ pub fn run() {
             net::lm_ping,
             net::ai_http_request,
             net::ai_http_stream,
+            net::download_release_asset,
             history::history_suggest,
             history::history_commands,
             history::history_record,
