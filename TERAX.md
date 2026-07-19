@@ -155,6 +155,7 @@ BYOK. Cloud providers via `@ai-sdk/*`: **OpenAI, Anthropic, Google, xAI, Cerebra
   - **Windows**: NSIS installer in `currentUser` mode (no admin required), WebView2 via `embedBootstrapper` (offline install).
 - Auto-updater configured with a public minisign key; stable release artifacts at `https://github.com/Sendery/terax-ai/releases/latest/download/latest.json`. The `dev` channel tracks the newest pre-release via the GitHub releases API of the same repository.
 - Vite injects immutable About-page build provenance from Git at build time: `Sendery/terax-ai`, source branch, full commit SHA, UTC build timestamp, and `development`/`official` channel derived from SemVer. `TERAX_BUILD_REPOSITORY`, `TERAX_BUILD_BRANCH`, `TERAX_BUILD_COMMIT`, and `TERAX_BUILD_DATE` can explicitly pin those values for detached or orchestrated builds.
+- **Pi extension in lockstep**: the app build compiles the `@crynta/pi-terax` package alongside the frontend. `pnpm build` (invoked by `beforeBuildCommand` during `tauri build`, and thus by `build:version`/`release:local`) runs `build:ext` (`pnpm --dir packages/pi-terax build`) first, so the shipped `packages/pi-terax/dist` never lags behind its source (e.g. a newly allowlisted command). `scripts/set-version.mjs` bumps `packages/pi-terax/package.json` together with the root, `tauri.conf.json`, and the Cargo manifests, keeping the extension version identical to the app version. Regression: `scripts/set-version.test.mjs`.
 
 ### Known gotchas
 
