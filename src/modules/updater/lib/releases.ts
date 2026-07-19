@@ -138,3 +138,64 @@ export function selectPlatformAsset(
 function other(arch: ArchKind): ArchKind {
   return arch === "aarch64" ? "x86_64" : "aarch64";
 }
+
+// The companion Pi extension is published as a platform-independent asset on the
+// same release, named `pi-terax-extension_<version>.tgz`.
+export const EXTENSION_ASSET_PREFIX = "pi-terax-extension_";
+export const EXTENSION_ASSET_SUFFIX = ".tgz";
+
+/** Local directory where the install snippet extracts the extension. */
+export const EXTENSION_INSTALL_DIR_POSIX =
+  "$HOME/.pi/extensions/pi-terax-extension";
+export const EXTENSION_INSTALL_DIR_WINDOWS =
+  "$HOME\\.pi\\extensions\\pi-terax-extension";
+
+/**
+ * Find the companion Pi extension tarball on a release, independent of the app
+ * installer. Returns null when the release ships no extension asset.
+ */
+export function selectExtensionAsset(
+  assets: GithubReleaseAsset[] | undefined,
+): PlatformAsset | null {
+  if (!assets || assets.length === 0) return null;
+  const match = assets.find(
+    (a) =>
+      a.name.startsWith(EXTENSION_ASSET_PREFIX) &&
+      a.name.endsWith(EXTENSION_ASSET_SUFFIX),
+  );
+  return match ? toPlatformAsset(match) : null;
+}
+
+/**
+ * Copy-pasteable install commands for the companion extension, varying by OS:
+ * a POSIX shell block for macOS/Linux (and unknown), PowerShell for Windows.
+ * Downloads the tarball, extracts it, installs runtime deps (Pi resolves local
+ * packages without an npm install step), and registers it with `pi install`.
+ */
+export function extensionInstallSnippet(
+  os: OsKind | null,
+  assetUrl: string,
+): string {
+  if (os === "windows") {
+    const dest = EXTENSION_INSTALL_DIR_WINDOWS;
+    return [
+      `$dest = "${dest}"`,
+      `$tgz = "$env:TEMP\\pi-terax-extension.tgz"`,
+      `Invoke-WebRequest -Uri "${assetUrl}" -OutFile $tgz`,
+      `Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue`,
+      `New-Item -ItemType Directory -Force -Path $dest | Out-Null`,
+      `tar -xzf $tgz -C $dest --strip-components=1`,
+      `Push-Location $dest; npm install --omit=dev; Pop-Location`,
+      `pi install $dest`,
+    ].join("\n");
+  }
+  const dest = EXTENSION_INSTALL_DIR_POSIX;
+  return [
+    `dest="${dest}"`,
+    `curl -fsSL "${assetUrl}" -o /tmp/pi-terax-extension.tgz`,
+    `rm -rf "$dest" && mkdir -p "$dest"`,
+    `tar -xzf /tmp/pi-terax-extension.tgz -C "$dest" --strip-components=1`,
+    `(cd "$dest" && npm install --omit=dev)`,
+    `pi install "$dest"`,
+  ].join("\n");
+}

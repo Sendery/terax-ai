@@ -12,6 +12,7 @@ import {
   isNewerVersion,
   pickLatestRelease,
   releasesApiUrl,
+  selectExtensionAsset,
   selectPlatformAsset,
   type ArchKind,
   type GithubRelease,
@@ -32,6 +33,15 @@ export interface ManualUpdateInfo {
   os: OsKind | null;
   /** Best installer for the running OS/arch, or null when none matches. */
   asset: PlatformAsset | null;
+  /** Companion Pi extension tarball on the same release, if published. */
+  extensionAsset: PlatformAsset | null;
+}
+
+/** Companion Pi extension download surfaced alongside an app update. */
+export interface ExtensionInfo {
+  asset: PlatformAsset;
+  os: OsKind | null;
+  version: string;
 }
 
 // Identify the running desktop target so we can pick the right installer.
@@ -52,7 +62,7 @@ export type UpdaterStatus =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "uptodate" }
-  | { kind: "available"; update: Update }
+  | { kind: "available"; update: Update; extension: ExtensionInfo | null }
   | { kind: "manual-available"; info: ManualUpdateInfo }
   | { kind: "manual-downloading"; info: ManualUpdateInfo }
   | { kind: "manual-done"; info: ManualUpdateInfo; path: string }
@@ -91,7 +101,35 @@ async function checkReleaseViaApi(
     asset: target.os
       ? selectPlatformAsset(latest.assets, target.os, target.arch)
       : null,
+    extensionAsset: selectExtensionAsset(latest.assets),
   };
+}
+
+// Resolve the companion extension download for a channel's latest release,
+// independent of the app installer path (used by the stable auto-update flow,
+// which learns of updates through the Tauri endpoint, not the GitHub API).
+async function fetchExtensionInfo(
+  channel: UpdateChannel,
+): Promise<ExtensionInfo | null> {
+  try {
+    const res = await fetch(releasesApiUrl(BUILD_INFO.repository), {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as unknown;
+    const releases = Array.isArray(data) ? (data as GithubRelease[]) : [];
+    const latest = pickLatestRelease(releases, channel);
+    if (!latest) return null;
+    const asset = selectExtensionAsset(latest.assets);
+    if (!asset) return null;
+    return {
+      asset,
+      os: currentTarget().os,
+      version: latest.tag_name.replace(/^v/, ""),
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface Options {
@@ -132,7 +170,8 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
         }
         const update = await check();
         if (update) {
-          setStatus({ kind: "available", update });
+          const extension = await fetchExtensionInfo(channel);
+          setStatus({ kind: "available", update, extension });
         } else {
           localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
           setStatus({ kind: "uptodate" });
@@ -193,6 +232,17 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
     }
   }, [status]);
 
+  // Download the companion Pi extension tarball and reveal it, independent of
+  // the app installer. The caller owns any transient UI state.
+  const downloadExtension = useCallback(
+    async (url: string): Promise<string> => {
+      const path = await invoke<string>("download_release_asset", { url });
+      await revealItemInDir(path);
+      return path;
+    },
+    [],
+  );
+
   const dismiss = useCallback(() => {
     setStatus({ kind: "idle" });
   }, []);
@@ -202,5 +252,12 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
     void runCheck();
   }, [autoCheck, hydrated, runCheck]);
 
-  return { status, check: runCheck, install, downloadManual, dismiss };
+  return {
+    status,
+    check: runCheck,
+    install,
+    downloadManual,
+    downloadExtension,
+    dismiss,
+  };
 }
