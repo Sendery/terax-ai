@@ -213,6 +213,10 @@ const loaders: Record<string, LanguageLoader> = {
 
 const yamlLoader: LanguageLoader = () =>
   import("@codemirror/legacy-modes/mode/yaml").then((m) => m.yaml);
+const cmakeLoader: LanguageLoader = () =>
+  import("@codemirror/legacy-modes/mode/cmake").then((m) => m.cmake);
+const nginxLoader: LanguageLoader = () =>
+  import("@codemirror/legacy-modes/mode/nginx").then((m) => m.nginx);
 const propertiesLoader: LanguageLoader = () =>
   import("@codemirror/legacy-modes/mode/properties").then((m) => m.properties);
 
@@ -230,8 +234,8 @@ const filenameOverrides: Record<string, LanguageLoader> = {
   "pubspec.lock": yamlLoader,
   "analysis_options.yaml": yamlLoader,
   // Build / config files with fixed names
-  "cmakelists.txt": loaders.cmake!,
-  "nginx.conf": loaders.nginx!,
+  "cmakelists.txt": cmakeLoader,
+  "nginx.conf": nginxLoader,
   ".env": propertiesLoader,
   ".editorconfig": propertiesLoader,
   ".eslintrc": jsonLoader,
