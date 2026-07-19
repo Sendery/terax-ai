@@ -139,9 +139,11 @@ See [Local Releases](docs/local-releases.md) for signing setup, Linux, Windows, 
 
 **Checks**
 ```bash
-pnpm exec tsc --noEmit                                            # frontend type-check
-cd src-tauri && cargo clippy --all-targets --locked -D warnings   # Rust lint (matches CI)
-cd src-tauri && cargo test --locked                               # Rust tests
+pnpm lint
+pnpm check-types
+pnpm test
+cd src-tauri && cargo clippy --all-targets --locked -- -D warnings   # Rust lint (matches CI)
+cd src-tauri && cargo nextest run --locked                           # or: cargo test --locked
 ```
 
 ## Tech stack
@@ -150,7 +152,7 @@ Tauri 2, Rust, `portable-pty`, React 19, TypeScript, Vite, xterm.js, CodeMirror 
 
 ## Contributing
 
-Issues and PRs are welcome! Feel free to open issues, suggest features, or submit pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+Issues and PRs are welcome! Feel free to open issues, suggest features, or submit pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [architecture docs](docs/README.md) for more details.
 
 ## License
 

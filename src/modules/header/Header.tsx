@@ -40,6 +40,8 @@ type Props = {
   onRename: (id: number, title: string) => void;
   /** Set or reset a tab's palette color. null clears the color. */
   onSetColor: (id: number, color: TabColor | null) => void;
+  /** Move a dragged tab to a new position (insertion gap index). */
+  onReorder: (fromId: number, toGapIndex: number) => void;
   onToggleSidebar: () => void;
   onToggleNotes: () => void;
   notesVisible: boolean;
@@ -68,6 +70,7 @@ export function Header({
   onPin,
   onRename,
   onSetColor,
+  onReorder,
   onToggleSidebar,
   onToggleNotes,
   notesVisible,
@@ -184,6 +187,7 @@ export function Header({
           onPin={onPin}
           onRename={onRename}
           onSetColor={onSetColor}
+          onReorder={onReorder}
           compact={compact}
         />
         <div data-tauri-drag-region className="h-full min-w-2 flex-1" />
