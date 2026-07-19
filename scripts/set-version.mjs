@@ -34,6 +34,13 @@ updates.set(
 );
 
 updates.set(
+  "packages/pi-terax/package.json",
+  updateJson("packages/pi-terax/package.json", (json) => {
+    json.version = version;
+  }),
+);
+
+updates.set(
   "src-tauri/tauri.conf.json",
   updateJson("src-tauri/tauri.conf.json", (json) => {
     json.version = version;

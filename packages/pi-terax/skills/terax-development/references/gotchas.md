@@ -104,6 +104,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** update the frontend registry, Rust allowlist, Pi package allowlist/schema, extension tests, E2E harness, and docs in one change.
 - **Verification:** invoke the command through the installed Pi client and authenticated native bridge, not directly against the React handler.
 
+### The compiled bridge artifact must ship with the app
+
+- **Trigger:** changing `packages/pi-terax/src` (for example allowlisting a new command) and then building or releasing the app.
+- **Failure mode:** `packages/pi-terax/dist` is git-ignored and only built on demand, and the app build never compiles it; a running Pi session loads a stale `dist`, so `terax_call` rejects a command whose source, Rust allowlist, and registry are all correct. The extension version also drifts from the app version.
+- **Prevention:** the root `build` script runs `build:ext` (`pnpm --dir packages/pi-terax build`) before the frontend build, so `beforeBuildCommand`/`build:version`/`release:local` always recompile the extension; `scripts/set-version.mjs` bumps `packages/pi-terax/package.json` in lockstep with the app. After building, restart the Pi session so the freshly compiled `dist` is loaded (the `terax_call` tool schema is snapshotted at Pi startup).
+- **Verification:** delete `packages/pi-terax/dist/commands.js`, run `pnpm build`, and confirm it is regenerated with the current command list; `scripts/set-version.test.mjs` asserts the lockstep version bump.
+
 ### Rejection must be side-effect free
 
 - **Trigger:** invalid enum values, malformed payloads, or nonexistent target IDs.
