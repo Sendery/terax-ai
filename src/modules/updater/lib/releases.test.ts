@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   compareSemver,
+  extensionInstallSnippet,
   isNewerVersion,
   parseSemver,
   pickLatestRelease,
   releasesApiUrl,
+  selectExtensionAsset,
   selectPlatformAsset,
   type GithubRelease,
   type GithubReleaseAsset,
@@ -138,6 +140,67 @@ describe("selectPlatformAsset", () => {
     expect(selectPlatformAsset(macAssets, "windows", "x86_64")).toBeNull();
     expect(selectPlatformAsset(undefined, "macos", "aarch64")).toBeNull();
     expect(selectPlatformAsset([], "macos", "aarch64")).toBeNull();
+  });
+});
+
+function releaseAsset(name: string): GithubReleaseAsset {
+  return {
+    name,
+    browser_download_url: `https://github.com/Sendery/terax-ai/releases/download/v0.9.0-dev.3/${name}`,
+  };
+}
+
+describe("selectExtensionAsset", () => {
+  const asset = releaseAsset;
+  const ext = asset("pi-terax-extension_0.9.0-dev.3.tgz");
+  const mixed = [
+    asset("Terax_0.9.0-3_aarch64.dmg"),
+    ext,
+    asset("latest.json"),
+  ];
+
+  it("finds the companion extension tarball regardless of other assets", () => {
+    expect(selectExtensionAsset(mixed)).toEqual({
+      name: "pi-terax-extension_0.9.0-dev.3.tgz",
+      url: "https://github.com/Sendery/terax-ai/releases/download/v0.9.0-dev.3/pi-terax-extension_0.9.0-dev.3.tgz",
+    });
+  });
+
+  it("returns null when no extension asset is present", () => {
+    expect(selectExtensionAsset([asset("Terax_0.9.0-3_aarch64.dmg")])).toBeNull();
+    expect(selectExtensionAsset(undefined)).toBeNull();
+    expect(selectExtensionAsset([])).toBeNull();
+  });
+});
+
+describe("extensionInstallSnippet", () => {
+  const url =
+    "https://github.com/Sendery/terax-ai/releases/download/v0.9.0/pi-terax-extension_0.9.0.tgz";
+
+  it("emits a bash install block for macOS and Linux", () => {
+    const mac = extensionInstallSnippet("macos", url);
+    expect(mac).toBe(extensionInstallSnippet("linux", url));
+    expect(mac).toContain("curl -fsSL");
+    expect(mac).toContain(url);
+    expect(mac).toContain("tar -xzf");
+    expect(mac).toContain("npm install --omit=dev");
+    expect(mac).toContain("pi install");
+    expect(mac).not.toContain("Invoke-WebRequest");
+  });
+
+  it("emits a PowerShell install block for Windows", () => {
+    const win = extensionInstallSnippet("windows", url);
+    expect(win).toContain("Invoke-WebRequest");
+    expect(win).toContain(url);
+    expect(win).toContain("npm install --omit=dev");
+    expect(win).toContain("pi install");
+    expect(win).not.toContain("curl -fsSL");
+  });
+
+  it("defaults to the bash block when the OS is unknown", () => {
+    expect(extensionInstallSnippet(null, url)).toBe(
+      extensionInstallSnippet("linux", url),
+    );
   });
 });
 

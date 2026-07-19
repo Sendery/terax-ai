@@ -10,6 +10,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
+import { extensionInstallSnippet } from "./lib/releases";
 import { useUpdater } from "./useUpdater";
 
 type DistroKey = "arch" | "debian" | "fedora";
@@ -38,8 +39,13 @@ function formatBytes(n: number): string {
 }
 
 export function UpdaterDialog() {
-  const { status, install, downloadManual, dismiss } = useUpdater();
+  const { status, install, downloadManual, downloadExtension, dismiss } =
+    useUpdater();
   const [copied, setCopied] = useState(false);
+  const [snippetCopied, setSnippetCopied] = useState(false);
+  const [extPhase, setExtPhase] = useState<"idle" | "downloading" | "done">(
+    "idle",
+  );
   const [distro, setDistro] = useState<DistroKey>("arch");
   const manual =
     status.kind === "manual-available" ||
@@ -68,6 +74,38 @@ export function UpdaterDialog() {
   const revealTarget = manual?.os === "macos" ? "Finder" : "your file manager";
   const downloading = status.kind === "downloading";
   const ready = status.kind === "ready";
+
+  const extension =
+    status.kind === "available"
+      ? status.extension
+      : manual?.extensionAsset
+        ? { asset: manual.extensionAsset, os: manual.os, version: manual.version }
+        : null;
+  const extensionSnippet = extension
+    ? extensionInstallSnippet(extension.os, extension.asset.url)
+    : "";
+
+  const handleDownloadExtension = async () => {
+    if (!extension) return;
+    setExtPhase("downloading");
+    try {
+      await downloadExtension(extension.asset.url);
+      setExtPhase("done");
+    } catch {
+      setExtPhase("idle");
+    }
+  };
+
+  const copySnippet = async () => {
+    if (!navigator?.clipboard?.writeText || !extension) return;
+    try {
+      await navigator.clipboard.writeText(extensionSnippet);
+      setSnippetCopied(true);
+      setTimeout(() => setSnippetCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
 
   const copyCommand = async () => {
     if (!navigator?.clipboard?.writeText) return;
@@ -166,6 +204,51 @@ export function UpdaterDialog() {
                 onClick={() => void copyCommand()}
               >
                 {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {extension && (
+          <div
+            className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3"
+            data-capture-target="updater-extension"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-[13px] font-medium">
+                  Pi extension v{extension.version}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Companion extension for Pi — install separately from Terax.
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleDownloadExtension()}
+                disabled={extPhase === "downloading"}
+                aria-label={`Download the Pi extension version ${extension.version}`}
+              >
+                {extPhase === "downloading"
+                  ? "Downloading…"
+                  : extPhase === "done"
+                    ? "Downloaded"
+                    : "Download extension"}
+              </Button>
+            </div>
+            <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+              <pre className="flex-1 select-all overflow-x-auto whitespace-pre font-mono text-[11px] leading-relaxed">
+                {extensionSnippet}
+              </pre>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 px-2 text-[11px]"
+                onClick={() => void copySnippet()}
+                aria-label="Copy the Pi extension install commands"
+              >
+                {snippetCopied ? "Copied" : "Copy"}
               </Button>
             </div>
           </div>
