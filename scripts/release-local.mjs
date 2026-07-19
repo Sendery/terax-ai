@@ -358,6 +358,14 @@ function publishRelease(options) {
       "--repo",
       options.repository,
     ]);
+    run("node", [
+      "scripts/publish-extension.mjs",
+      options.version,
+      "--tag",
+      tag,
+      "--repo",
+      options.repository,
+    ]);
     run("gh", [
       "api",
       "--method",
