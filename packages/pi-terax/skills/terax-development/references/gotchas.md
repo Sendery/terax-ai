@@ -111,6 +111,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** the root `build` script runs `build:ext` (`pnpm --dir packages/pi-terax build`) before the frontend build, so `beforeBuildCommand`/`build:version`/`release:local` always recompile the extension; `scripts/set-version.mjs` bumps `packages/pi-terax/package.json` in lockstep with the app. After building, restart the Pi session so the freshly compiled `dist` is loaded (the `terax_call` tool schema is snapshotted at Pi startup).
 - **Verification:** delete `packages/pi-terax/dist/commands.js`, run `pnpm build`, and confirm it is regenerated with the current command list; `scripts/set-version.test.mjs` asserts the lockstep version bump.
 
+### Distributed extensions must carry runtime deps in `dependencies`
+
+- **Trigger:** shipping the Pi extension outside the monorepo (git source, npm, or a release-asset tarball) so Pi installs it standalone.
+- **Failure mode:** Pi installs git/tarball extensions with `npm install --omit=dev`, which skips `devDependencies` and `peerDependencies`; a runtime import declared only as a peer/dev dep (e.g. `typebox`) is absent in the installed clone and the extension throws on load. Pi also has no source type for GitHub release assets, so a `.tgz` uploaded to a release is not auto-consumed by Pi's package manager.
+- **Prevention:** harden the published manifest (`scripts/publish-extension.mjs` / `pi-extension-lib.mjs`): promote every non-host runtime dep into `dependencies`, keep only host-provided packages (`@earendil-works/pi-coding-agent`) as peers, and drop dev scripts/deps. Deliver release-asset extensions through a Terax-driven install into a local path that Pi loads, not through Pi's git/npm auto-resolution.
+- **Verification:** `scripts/pi-extension-lib.test.mjs` asserts the hardened manifest; `node scripts/publish-extension.mjs <v> --no-upload --out-dir <dir>` then `tar tzf` confirms `dependencies.typebox` and the `pi` contract are present in the packed `package.json`.
+
 ### Rejection must be side-effect free
 
 - **Trigger:** invalid enum values, malformed payloads, or nonexistent target IDs.

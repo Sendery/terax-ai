@@ -103,6 +103,12 @@ gh release upload "$RELEASE_TAG" \
   --repo "$REPOSITORY" \
   --clobber
 
+# Companion Pi extension, aligned with this release tag (platform-independent).
+EXTENSION_VERSION="${RELEASE_TAG#v}"
+node scripts/publish-extension.mjs "$EXTENSION_VERSION" \
+  --tag "$RELEASE_TAG" \
+  --repo "$REPOSITORY"
+
 gh release view "$RELEASE_TAG" \
   --repo "$REPOSITORY" \
   --json tagName,isDraft,isPrerelease,assets,url
