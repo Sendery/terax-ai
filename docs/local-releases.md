@@ -148,6 +148,25 @@ It also preserves stable aliases used by the Nix package and writes updater URLs
 https://github.com/Sendery/terax-ai/releases/download/v<version>/...
 ```
 
+## Companion Pi extension asset
+
+Every published release also carries the companion Pi extension as a single, platform-independent asset:
+
+```text
+pi-terax-extension_<version>.tgz
+```
+
+`scripts/publish-extension.mjs` builds `packages/pi-terax`, hardens the manifest (see `docs/pi-terax.md` → Companion extension channel), `npm pack`s it, and uploads it with `--clobber`. It runs once per release from the platform-independent side of each flow:
+
+- **Stable**: `release:publish` uploads it to the draft before flipping the draft to published.
+- **Dev**: `scripts/release-dev-macos.sh` uploads it to the draft prerelease, versioned from the release tag.
+
+Because the upload is idempotent (`--clobber`), rerunning either flow for the same tag simply replaces the asset. The Terax in-app updater discovers this asset for the selected channel and offers it as an independent download with an OS-specific install snippet. To stage or inspect the asset without uploading:
+
+```bash
+node scripts/publish-extension.mjs 0.9.0 --no-upload --out-dir ./out
+```
+
 The published updater manifest is available at:
 
 ```text
