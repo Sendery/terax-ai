@@ -134,6 +134,43 @@ pnpm --filter @crynta/pi-terax build
 
 Then point Pi at the package using Pi's local package workflow or by copying the built package into a Pi package source.
 
+## Companion extension channel
+
+The extension is **not** published to the public npm or Pi registries. It ships as a private channel **inside the Terax release stream**: every published `Sendery/terax-ai` release (stable via `release:publish`, dev via `scripts/release-dev-macos.sh`) also carries the extension as a platform-independent GitHub release asset named `pi-terax-extension_<version>.tgz`, aligned with the release tag. The extension version tracks the app version in lockstep (`scripts/set-version.mjs`).
+
+Generation is handled by `scripts/publish-extension.mjs`, which builds `packages/pi-terax`, hardens the manifest for Pi's standalone install path, `npm pack`s it, and uploads it with `--clobber`. Because Pi installs git/tarball extensions with `npm install --omit=dev`, the hardened manifest renames the package to `pi-terax-extension`, promotes every runtime dependency (for example `typebox`) from a peer to a real `dependency`, keeps only the Pi host package (`@earendil-works/pi-coding-agent`) as a peer, and drops dev-only scripts and dependencies.
+
+Pi has no source type for GitHub release assets, so the extension is **Terax-driven**: the in-app updater surfaces the companion extension aligned with the selected channel (stable or dev). The update dialog shows, independently of the Terax installer:
+
+- a **Download extension** button that saves `pi-terax-extension_<version>.tgz` and reveals it in the file manager; and
+- a copy-pasteable install block that varies by OS.
+
+Install commands, macOS and Linux:
+
+```bash
+dest="$HOME/.pi/extensions/pi-terax-extension"
+curl -fsSL "<asset-url>" -o /tmp/pi-terax-extension.tgz
+rm -rf "$dest" && mkdir -p "$dest"
+tar -xzf /tmp/pi-terax-extension.tgz -C "$dest" --strip-components=1
+(cd "$dest" && npm install --omit=dev)
+pi install "$dest"
+```
+
+Install commands, Windows (PowerShell):
+
+```powershell
+$dest = "$HOME\.pi\extensions\pi-terax-extension"
+$tgz = "$env:TEMP\pi-terax-extension.tgz"
+Invoke-WebRequest -Uri "<asset-url>" -OutFile $tgz
+Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+tar -xzf $tgz -C $dest --strip-components=1
+Push-Location $dest; npm install --omit=dev; Pop-Location
+pi install $dest
+```
+
+The updater helpers (`selectExtensionAsset`, `extensionInstallSnippet`) are pure and tested in `src/modules/updater/lib/releases.test.ts`.
+
 ## Extending Terax with Pi
 
 The bundled `terax-development` skill is the supported source-extension workflow. When Pi is asked to add a feature, window, setting, shortcut, or command, it:
