@@ -211,11 +211,11 @@ export function UpdaterDialog() {
 
         {extension && (
           <div
-            className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3"
+            className="mt-3 flex min-w-0 flex-col gap-2 border-t border-border/60 pt-3"
             data-capture-target="updater-extension"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-col">
+              <div className="flex min-w-0 flex-col">
                 <span className="text-[13px] font-medium">
                   Pi extension v{extension.version}
                 </span>
@@ -226,6 +226,7 @@ export function UpdaterDialog() {
               <Button
                 variant="outline"
                 size="sm"
+                className="shrink-0"
                 onClick={() => void handleDownloadExtension()}
                 disabled={extPhase === "downloading"}
                 aria-label={`Download the Pi extension version ${extension.version}`}
@@ -237,8 +238,8 @@ export function UpdaterDialog() {
                     : "Download extension"}
               </Button>
             </div>
-            <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
-              <pre className="flex-1 select-all overflow-x-auto whitespace-pre font-mono text-[11px] leading-relaxed">
+            <div className="flex min-w-0 items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+              <pre className="min-w-0 flex-1 select-all overflow-x-auto whitespace-pre font-mono text-[11px] leading-relaxed">
                 {extensionSnippet}
               </pre>
               <Button

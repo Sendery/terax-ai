@@ -61,13 +61,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cat >"$CONFIG_FILE" <<'JSON'
-{
-  "bundle": {
-    "createUpdaterArtifacts": false
-  }
-}
-JSON
+# Rebrand the desktop identity to Pi-Terax and disable updater artifacts.
+# The override is derived from the checked-out config so window settings other
+# than the title are preserved verbatim.
+node scripts/dev-release-config.mjs src-tauri/tauri.conf.json >"$CONFIG_FILE"
 
 rm -rf \
   src-tauri/target/aarch64-apple-darwin/release/bundle \

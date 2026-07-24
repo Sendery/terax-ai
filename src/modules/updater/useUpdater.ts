@@ -106,9 +106,10 @@ async function checkReleaseViaApi(
 }
 
 // Resolve the companion extension download for a channel's latest release,
-// independent of the app installer path (used by the stable auto-update flow,
-// which learns of updates through the Tauri endpoint, not the GitHub API).
-async function fetchExtensionInfo(
+// independent of the app installer path. Used by the stable auto-update flow
+// (which learns of updates through the Tauri endpoint, not the GitHub API) and
+// by the About panel to show the version actually available for the channel.
+export async function resolveExtensionInfo(
   channel: UpdateChannel,
 ): Promise<ExtensionInfo | null> {
   try {
@@ -170,7 +171,7 @@ export function useUpdater({ autoCheck = true }: HookOptions = {}) {
         }
         const update = await check();
         if (update) {
-          const extension = await fetchExtensionInfo(channel);
+          const extension = await resolveExtensionInfo(channel);
           setStatus({ kind: "available", update, extension });
         } else {
           localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));

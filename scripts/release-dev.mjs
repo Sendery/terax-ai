@@ -5,9 +5,10 @@
  * signed and never generate updater manifests.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { developmentConfigOverride } from "./dev-release-config.mjs";
 
 const DEFAULT_REPOSITORY = "Sendery/terax-ai";
 const SEMVER = /^v?(\d+\.\d+\.\d+-[0-9A-Za-z.-]+)$/;
@@ -85,7 +86,8 @@ function main() {
     run("git", ["checkout", "--detach", release.targetCommitish], { cwd: cacheRoot });
     run("git", ["reset", "--hard", release.targetCommitish], { cwd: cacheRoot });
     run("git", ["clean", "-ffd"], { cwd: cacheRoot });
-    writeFileSync(configPath, JSON.stringify({ bundle: { createUpdaterArtifacts: false } }));
+    const baseConfig = JSON.parse(readFileSync(join(cacheRoot, "src-tauri", "tauri.conf.json"), "utf8"));
+    writeFileSync(configPath, JSON.stringify(developmentConfigOverride(baseConfig)));
     run("pnpm", ["install", "--frozen-lockfile"], { cwd: cacheRoot });
     rmSync(join(cacheRoot, plan.root), { recursive: true, force: true });
     const buildArgs = ["scripts/build-version.mjs", options.version, "--", "--bundles", plan.bundles, "--no-sign", "--config", configPath];

@@ -1,2 +1,6 @@
 export { UpdaterDialog } from "./UpdaterDialog";
-export { useUpdater } from "./useUpdater";
+export {
+  type ExtensionInfo,
+  resolveExtensionInfo,
+  useUpdater,
+} from "./useUpdater";
