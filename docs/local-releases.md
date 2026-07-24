@@ -2,7 +2,23 @@
 
 Terax releases can be built and uploaded without GitHub Actions. Builds are native: run the staging command on each operating system, then run the publication command once after every required platform fragment has been uploaded.
 
-The scripts publish to `Sendery/terax-ai` by default and create a draft release first. Nothing becomes visible to updater clients until the final publish step uploads a complete `latest.json` and changes the draft to a published release.
+The scripts publish to `Sendery/terax-ai` by default. **Stable** releases are staged as a draft first: nothing becomes visible to updater clients until the final publish step uploads a complete signed `latest.json` and flips the draft to a published release. **Development** releases skip the draft state entirely and are created directly as published GitHub **Pre-releases** (see Versioning and Development releases below).
+
+## Versioning
+
+Terax carries one visible SemVer identity across every layer and every artifact:
+
+- **Stable**: `X.Y.Z` (for example `0.9.0`), tagged `vX.Y.Z`, published as a full GitHub release.
+- **Development**: `X.Y.Z-dev.N` (for example `0.9.0-dev.6`), tagged `vX.Y.Z-dev.N`, published as a GitHub **Pre-release**.
+
+The tag without its leading `v` is the single source of truth. `scripts/set-version.mjs` writes that exact string, in lockstep, to `package.json`, `src-tauri/tauri.conf.json`, the Cargo manifest and lockfile, and `packages/pi-terax/package.json`; every uploaded asset then embeds it verbatim:
+
+- Terax installers: `Terax_X.Y.Z-dev.N_<arch>.<ext>`.
+- Companion extension: `pi-terax-extension_X.Y.Z-dev.N.tgz`.
+
+Do not introduce abbreviated forms (such as `X.Y.Z-N`), and never mix version strings across the assets of a single release.
+
+> The unified scheme and the pre-release development flow described below take effect from the next release. The existing `0.9.0-dev.*` releases predate them and may mix an abbreviated `0.9.0-N` form; leave those published assets as they are.
 
 ## Endpoint migration limitation
 
@@ -134,24 +150,37 @@ pnpm release:publish 0.9.0 --repo Sendery/terax-ai
 
 The repository must match the updater endpoint compiled into the application unless the release is only for testing.
 
-## Development releases (native, unsigned installers)
+## Development releases (published pre-releases, unsigned installers)
 
-For an existing development release, use the same command on each native host:
+Development builds are **published GitHub Pre-releases**, never drafts. They are visible in the releases list as soon as they exist, carry no signed updater manifest, and are filled incrementally per host. Being a pre-release rather than a draft is what makes them safe to publish immediately: there is no partial signed `latest.json` to gate, and every asset is content-independent and replaced idempotently.
+
+Create the pre-release once, pinned to the exact source commit, with no draft step:
 
 ```bash
-pnpm release:dev 0.9.0-dev.4
+gh release create v0.9.0-dev.6 \
+  --repo Sendery/terax-ai \
+  --target <40-char-source-commit-sha> \
+  --title "Terax v0.9.0-dev.6" \
+  --prerelease \
+  --generate-notes
 ```
 
-The command queries `Sendery/terax-ai` for the release's immutable target commit, checks that exact commit out in an isolated cache worktree, builds only the host's native formats, verifies that installers were produced, and uploads them with `--clobber`. It does **not** sign updater artifacts or publish updater manifests.
+Then, on each native host, build and upload that release's installers:
 
-Run it on Linux x86_64 for AppImage, DEB, and RPM; on Windows x86_64 for NSIS EXE and MSI; and on macOS for DMG. Cross-platform packaging is intentionally rejected because the native signing and installer toolchains are not reliably interchangeable.
+```bash
+pnpm release:dev 0.9.0-dev.6
+```
+
+The command queries `Sendery/terax-ai` for the release's immutable target commit, checks that exact commit out in an isolated cache worktree, builds only the host's native formats, verifies that installers were produced, and uploads them with `--clobber`. It does **not** sign updater artifacts, publish updater manifests, or change the release out of its pre-release state.
+
+Run it on Linux x86_64 for AppImage, DEB, and RPM; on Windows x86_64 for NSIS EXE and MSI; and on macOS for DMG. Each host produces its own architecture, so cover both macOS architectures by running once on Apple Silicon and once on an Intel Mac. Cross-OS packaging is intentionally rejected because the native signing and installer toolchains are not reliably interchangeable.
 
 Useful options:
 
 ```bash
-pnpm release:dev 0.9.0-dev.4 --no-upload # build and inspect locally
-pnpm release:dev 0.9.0-dev.4 --repo Sendery/terax-ai
-pnpm release:dev 0.9.0-dev.4 --tag v0.9.0-dev.4
+pnpm release:dev 0.9.0-dev.6 --no-upload # build and inspect locally
+pnpm release:dev 0.9.0-dev.6 --repo Sendery/terax-ai
+pnpm release:dev 0.9.0-dev.6 --tag v0.9.0-dev.6
 ```
 
 Every action is prefixed with `[release-dev]`, including the command, checkout path, selected source commit, discovered artifacts, and a final remediation hint on failure. Preserve that trace in an issue when a build fails.
@@ -178,10 +207,16 @@ Every published release also carries the companion Pi extension as a single, pla
 pi-terax-extension_<version>.tgz
 ```
 
-`scripts/publish-extension.mjs` builds `packages/pi-terax`, hardens the manifest (see `docs/pi-terax.md` → Companion extension channel), `npm pack`s it, and uploads it with `--clobber`. It runs once per release from the platform-independent side of each flow:
+The `<version>` is exactly the release version defined in Versioning, so the extension asset always matches its release's installers.
+
+`scripts/publish-extension.mjs` builds `packages/pi-terax`, hardens the manifest (see `docs/pi-terax.md` → Companion extension channel), `npm pack`s it, and uploads it with `--clobber`. Because it is platform-independent, it runs **once per release** from any single host:
 
 - **Stable**: `release:publish` uploads it to the draft before flipping the draft to published.
-- **Dev**: `scripts/release-dev-macos.sh` uploads it to the draft prerelease, versioned from the release tag.
+- **Dev**: run it once against the pre-release, using the same single version as the installers:
+
+  ```bash
+  node scripts/publish-extension.mjs 0.9.0-dev.6 --tag v0.9.0-dev.6 --repo Sendery/terax-ai
+  ```
 
 Because the upload is idempotent (`--clobber`), rerunning either flow for the same tag simply replaces the asset. The Terax in-app updater discovers this asset for the selected channel and offers it as an independent download with an OS-specific install snippet. To stage or inspect the asset without uploading:
 
