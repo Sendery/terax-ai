@@ -136,7 +136,7 @@ Then point Pi at the package using Pi's local package workflow or by copying the
 
 ## Companion extension channel
 
-The extension is **not** published to the public npm or Pi registries. It ships as a private channel **inside the Terax release stream**: every published `Sendery/terax-ai` release (stable via `release:publish`, dev via `scripts/release-dev-macos.sh`) also carries the extension as a platform-independent GitHub release asset named `pi-terax-extension_<version>.tgz`, aligned with the release tag. The extension version tracks the app version in lockstep (`scripts/set-version.mjs`).
+The extension is **not** published to the public npm or Pi registries. It ships as a private channel **inside the Terax release stream**: every published `Sendery/terax-ai` release (stable via `release:publish`, and development pre-releases via `release:dev` plus `scripts/publish-extension.mjs`) also carries the extension as a platform-independent GitHub release asset named `pi-terax-extension_<version>.tgz`. Its `<version>` is the single release version (see `docs/local-releases.md` → Versioning), tracked in lockstep with the app by `scripts/set-version.mjs`.
 
 Generation is handled by `scripts/publish-extension.mjs`, which builds `packages/pi-terax`, hardens the manifest for Pi's standalone install path, `npm pack`s it, and uploads it with `--clobber`. Because Pi installs git/tarball extensions with `npm install --omit=dev`, the hardened manifest renames the package to `pi-terax-extension`, promotes every runtime dependency (for example `typebox`) from a peer to a real `dependency`, keeps only the Pi host package (`@earendil-works/pi-coding-agent`) as a peer, and drops dev-only scripts and dependencies.
 
