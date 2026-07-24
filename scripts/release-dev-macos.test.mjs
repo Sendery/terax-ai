@@ -20,7 +20,7 @@ describe("macOS development release script", () => {
 
     expect(script).toContain("aarch64-apple-darwin");
     expect(script).toContain("x86_64-apple-darwin");
-    expect(script).toContain('"createUpdaterArtifacts": false');
+    expect(script).toContain("scripts/dev-release-config.mjs");
     expect(script).toContain("--no-sign");
     expect(script).toContain("gh release upload");
     expect(script).toContain("target_commitish");
