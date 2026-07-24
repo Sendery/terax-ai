@@ -194,6 +194,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use restrained accents with deliberate active/inactive opacity and existing theme tokens where possible.
 - **Verification:** capture both states across representative light and dark themes or explain the narrower supported scope.
 
+### Non-wrapping flex children need `min-w-0` or they blow out the container
+
+- **Trigger:** placing a `whitespace-pre`/`overflow-x-auto` block (a code `<pre>`, a long URL, a monospaced command) or any long unbreakable text inside a flex row, especially within a width-capped dialog (`sm:max-w-[440px]`).
+- **Failure mode:** a flex item defaults to `min-width: auto`, so it refuses to shrink below its content width; the long line expands the flex row past the dialog/panel max-width, and sibling buttons and the footer render outside the card. `overflow-x-auto` never engages because the box grew instead of scrolling.
+- **Prevention:** add `min-w-0` to the growing flex child (and `min-w-0` to any intermediate flex column, `shrink-0` to adjacent buttons). Then `overflow-x-auto` scrolls the content inside its box and the container keeps its intended width. **Grid caveat:** `shadcn` `DialogContent` is a CSS `grid`, and a grid item's default `min-width: auto` resolves to its content's min-content, so a long `whitespace-pre` line expands the item past the dialog's `max-w` even when the inner `<pre>` already has `min-w-0` — the `min-w-0` must also be on the direct grid item (the block placed straight inside `DialogContent`). A `flex flex-col` parent does not show this because its children stretch to (are bounded by) the container width, which is why the same code overflows inside a dialog grid but not inside a settings flex column.
+- **Verification:** render the longest realistic content (a full release-asset URL on one line) in the narrowest layout (a width-capped dialog) and confirm the box scrolls horizontally while every button and the footer stay inside the card.
+
 ### Drag and reorder interactions must use pointer events in WKWebView
 
 - **Trigger:** implementing drag-to-reorder or any custom drag inside the Tauri webview on macOS.

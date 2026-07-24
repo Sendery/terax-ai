@@ -10,7 +10,17 @@ import { IS_LINUX, IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { setUpdateChannel, UPDATE_CHANNELS } from "@/modules/settings/store";
-import { useUpdater } from "@/modules/updater";
+import {
+  type ExtensionInfo,
+  resolveExtensionInfo,
+  useUpdater,
+} from "@/modules/updater";
+import {
+  EXTENSION_PACKAGE_NAME,
+  extensionInstallSnippet,
+  extensionReleaseAssetUrl,
+  type OsKind,
+} from "@/modules/updater/lib/releases";
 import { GithubIcon, Globe02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { getName, getVersion } from "@tauri-apps/api/app";
@@ -37,6 +47,9 @@ export function AboutSection() {
   const [version, setVersion] = useState("");
   const [name, setName] = useState("Terax");
   const [build, setBuild] = useState("");
+  const [os, setOs] = useState<OsKind | null>(null);
+  const [extCopied, setExtCopied] = useState(false);
+  const [extInfo, setExtInfo] = useState<ExtensionInfo | null>(null);
   const { status, check, install, downloadManual } = useUpdater({
     autoCheck: false,
   });
@@ -81,10 +94,40 @@ export function AboutSection() {
       const a = arch();
       const platformLabel = PLATFORM_LABEL[p] ?? p;
       setBuild(`${platformLabel} · ${a}`);
+      if (p === "macos" || p === "windows" || p === "linux") setOs(p);
     } catch {
       setBuild("");
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveExtensionInfo(updateChannel).then((info) => {
+      if (!cancelled) setExtInfo(info);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [updateChannel]);
+
+  // Show the companion extension version actually available for the selected
+  // channel (matching the updater dialog); fall back to the lockstep version
+  // that shipped with this build until the channel lookup resolves.
+  const extVersion = extInfo?.version ?? version;
+  const extUrl =
+    extInfo?.asset.url ??
+    (version ? extensionReleaseAssetUrl(BUILD_INFO.repository, version) : "");
+  const extensionSnippet = extUrl ? extensionInstallSnippet(os, extUrl) : "";
+  const copyExtensionSnippet = async () => {
+    if (!navigator?.clipboard?.writeText || !extensionSnippet) return;
+    try {
+      await navigator.clipboard.writeText(extensionSnippet);
+      setExtCopied(true);
+      setTimeout(() => setExtCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -259,6 +302,42 @@ export function AboutSection() {
             )}
             %
           </p>
+        ) : null}
+      </div>
+
+      <div
+        className="flex flex-col gap-2.5 border-t border-border/60 pt-5"
+        data-capture-target="about-pi-extension"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[12px] font-medium">Pi extension</span>
+            <span className="text-[11px] text-muted-foreground">
+              <span className="font-mono">{EXTENSION_PACKAGE_NAME}</span> ships
+              in lockstep with Terax — the Check for updates button above surfaces
+              it alongside app updates. Install or update it in Pi with the
+              commands below.
+            </span>
+          </div>
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            v{extVersion || "—"}
+          </span>
+        </div>
+        {extensionSnippet ? (
+          <div className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2">
+            <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-[11px] leading-relaxed whitespace-pre select-all">
+              {extensionSnippet}
+            </pre>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-[11px]"
+              onClick={() => void copyExtensionSnippet()}
+              aria-label="Copy the Pi extension install commands"
+            >
+              {extCopied ? "Copied" : "Copy"}
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>

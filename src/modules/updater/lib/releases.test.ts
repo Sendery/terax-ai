@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compareSemver,
   extensionInstallSnippet,
+  extensionReleaseAssetUrl,
   isNewerVersion,
   parseSemver,
   pickLatestRelease,
@@ -177,21 +178,25 @@ describe("extensionInstallSnippet", () => {
   const url =
     "https://github.com/Sendery/terax-ai/releases/download/v0.9.0/pi-terax-extension_0.9.0.tgz";
 
-  it("emits a bash install block for macOS and Linux", () => {
+  it("emits a single-line bash command for macOS and Linux", () => {
     const mac = extensionInstallSnippet("macos", url);
     expect(mac).toBe(extensionInstallSnippet("linux", url));
+    expect(mac).not.toContain("\n");
     expect(mac).toContain("curl -fsSL");
     expect(mac).toContain(url);
+    expect(mac).toContain(" && ");
     expect(mac).toContain("tar -xzf");
     expect(mac).toContain("npm install --omit=dev");
     expect(mac).toContain("pi install");
     expect(mac).not.toContain("Invoke-WebRequest");
   });
 
-  it("emits a PowerShell install block for Windows", () => {
+  it("emits a single-line PowerShell command for Windows", () => {
     const win = extensionInstallSnippet("windows", url);
+    expect(win).not.toContain("\n");
     expect(win).toContain("Invoke-WebRequest");
     expect(win).toContain(url);
+    expect(win).toContain("; ");
     expect(win).toContain("npm install --omit=dev");
     expect(win).toContain("pi install");
     expect(win).not.toContain("curl -fsSL");
@@ -200,6 +205,26 @@ describe("extensionInstallSnippet", () => {
   it("defaults to the bash block when the OS is unknown", () => {
     expect(extensionInstallSnippet(null, url)).toBe(
       extensionInstallSnippet("linux", url),
+    );
+  });
+});
+
+describe("extensionReleaseAssetUrl", () => {
+  it("builds the release-asset download url from repository and version", () => {
+    expect(extensionReleaseAssetUrl("Sendery/terax-ai", "0.9.0")).toBe(
+      "https://github.com/Sendery/terax-ai/releases/download/v0.9.0/pi-terax-extension_0.9.0.tgz",
+    );
+  });
+
+  it("tolerates a leading v on the version", () => {
+    expect(extensionReleaseAssetUrl("Sendery/terax-ai", "v1.2.3")).toBe(
+      "https://github.com/Sendery/terax-ai/releases/download/v1.2.3/pi-terax-extension_1.2.3.tgz",
+    );
+  });
+
+  it("preserves pre-release version segments", () => {
+    expect(extensionReleaseAssetUrl("Sendery/terax-ai", "1.0.0-dev.3")).toBe(
+      "https://github.com/Sendery/terax-ai/releases/download/v1.0.0-dev.3/pi-terax-extension_1.0.0-dev.3.tgz",
     );
   });
 });
