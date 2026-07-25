@@ -97,7 +97,7 @@ function main() {
     if (!artifacts.length) throw new Error(`No installers were produced below ${join(cacheRoot, plan.root)}. Check the preceding build trace.`);
     trace("validated artifacts", { artifacts: artifacts.map((file) => basename(file)) });
     if (options.upload) run("gh", ["release", "upload", options.tag, ...artifacts, "--repo", options.repository, "--clobber"]);
-    trace("development release completed", { tag: options.tag, uploaded: options.upload, artifacts: artifacts.map(basename) });
+    trace("development release completed", { tag: options.tag, uploaded: options.upload, artifacts: artifacts.map((file) => basename(file)) });
   } catch (error) {
     trace("FAILED", { message: error.message, tag: options?.tag, repository: options?.repository, hint: "Keep the trace above; rerun the same command after fixing the reported prerequisite." });
     process.exitCode = 1;
