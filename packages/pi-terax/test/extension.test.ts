@@ -158,6 +158,7 @@ describe("Pi extension", () => {
       "tasks.setEnabled",
       "tasks.pauseAll",
       "tasks.resumeAll",
+      "tasks.wake",
     ]) {
       expect(isTeraxCommandId(id), id).toBe(true);
       expect(TERAX_COMMAND_IDS).toContain(id);

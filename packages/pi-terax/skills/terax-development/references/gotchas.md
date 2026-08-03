@@ -178,6 +178,29 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** join lines with the Shift+Enter sequence the foreground program negotiated (`terminal/lib/keyboardProtocol.ts`: `CSI 27;2;13~` once modifyOtherKeys is active, `ESC CR` otherwise) and never a raw newline; return the body without a trailing carriage return, then write the submitting `\r` in a separate, slightly later write. Allow the program time to boot before typing at all.
 - **Verification:** capture the pane and confirm both that the prompt shows as multiple lines and that the program actually answered. A screenshot of text in the composer is not proof it was sent.
 
+## Scheduled Background Invocation
+
+### An OS-scheduled invocation must be cheap and must not start a second app
+
+- **Trigger:** registering a LaunchAgent, systemd user timer, or Task Scheduler task that runs the app binary on a cadence.
+- **Failure mode:** running the binary while an instance is alive starts a second one. Both share the persisted store and only one owns the bridge discovery file, so state diverges and evidence stops matching. Launching a GUI on a cadence also puts a window in the user's face for nothing.
+- **Prevention:** handle the flag before building the app and exit early. Ping the running instance over the existing authenticated bridge instead of inventing a second IPC path, and treat only an explicit `ok` as a confirmation. With no instance, read a small state file the app exports with its next deadline and exit unless something is overdue. Boot minimized when it really is. Keep this guard scoped to the scheduled flag so ordinary launches are unchanged.
+- **Verification:** time the invocation with an instance alive, with a stale discovery file, and with a future and a past deadline. A stale discovery file must degrade to the file check rather than hang. Confirm no extra process appears, and note that a process matcher anchored on the binary name will not match once the flag is appended.
+
+### Prove the generated unit by registering it, not by reading it
+
+- **Trigger:** generating a launchd plist, a systemd unit, or a Task Scheduler XML.
+- **Failure mode:** the text looks right, the platform rejects it or silently never fires, and the feature appears to work until someone waits for a real trigger.
+- **Prevention:** generate the unit from the same pure function the product uses, point it at a throwaway script, register it at a one-minute cadence, and wait for a real firing. Validate the file first where the platform offers it, for example `plutil -lint`. Always unregister and delete afterwards.
+- **Verification:** the platform's own view confirms the registration and cadence, the script's log shows it fired with the expected arguments, and the exit code is zero. Then confirm it is gone.
+
+### Machine wake is privileged almost everywhere
+
+- **Trigger:** promising that a scheduled task will wake a sleeping computer.
+- **Failure mode:** the promise is only keepable on Windows. `pmset schedule` refuses without root, and a systemd user timer may not set `WakeSystem` because it needs `CAP_WAKE_ALARM`, so the unit fails to start rather than degrading.
+- **Prevention:** advertise the capability per platform and let the UI say plainly that elsewhere the task runs on the next wake. Never request a privileged wake from an unprivileged unit.
+- **Verification:** assert the capability flag matches the target platform, and assert the generated user unit does not contain the privileged key.
+
 ## Native Networking
 
 ### The AI-proxy HTTP client blocks cross-host redirects
@@ -248,6 +271,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** active state overwhelms content or inactive state becomes indistinguishable.
 - **Prevention:** use restrained accents with deliberate active/inactive opacity and existing theme tokens where possible.
 - **Verification:** capture both states across representative light and dark themes or explain the narrower supported scope.
+
+### Two collapsible sibling panels cannot both stay collapsed
+
+- **Trigger:** adding a second collapsible `ResizablePanel` beside an existing one, for example a second dock on the right edge.
+- **Failure mode:** collapsing both is impossible. The group still has to fill its axis, so the solver re-expands the neighbour and, worse, ignores that panel's own `maxSize` while doing it. The imperative `collapse()` call reports success and the panel visibly stays open at the wrong width.
+- **Prevention:** make visibility mount and unmount the panel and its handle rather than collapsing it. Visibility then lives in React state, the hook no longer needs a panel ref to hide, and the solver only ever sees panels that should occupy space.
+- **Verification:** exercise all four combinations of the two panels, including neither, and confirm the remaining space goes to the main area rather than to a neighbour that exceeds its maximum.
 
 ### Non-wrapping flex children need `min-w-0` or they blow out the container
 

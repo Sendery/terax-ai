@@ -56,6 +56,7 @@ export const COMMAND_IDS = [
   "tasks.setEnabled",
   "tasks.pauseAll",
   "tasks.resumeAll",
+  "tasks.wake",
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -135,6 +136,7 @@ export type CommandPayloads = {
   "tasks.setEnabled": { id: string; enabled: boolean };
   "tasks.pauseAll": undefined;
   "tasks.resumeAll": undefined;
+  "tasks.wake": undefined;
 };
 
 /** Optional configuration shared by tasks.add and tasks.update. */
@@ -708,6 +710,12 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description: "Release the global scheduler pause.",
     params: [],
   },
+  "tasks.wake": {
+    id: "tasks.wake",
+    description:
+      "Re-evaluate the schedule now and dispatch anything due. This is what the optional OS-level waker calls, and confirming it is how a running instance takes ownership of a wake.",
+    params: [],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -803,6 +811,7 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   pauseAllTasks: () => Promise<unknown> | unknown;
   resumeAllTasks: () => Promise<unknown> | unknown;
+  wakeTasks: () => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -916,7 +925,8 @@ export function validateCommandRequest(
     id === "tasks.toggle" ||
     id === "tasks.list" ||
     id === "tasks.pauseAll" ||
-    id === "tasks.resumeAll"
+    id === "tasks.resumeAll" ||
+    id === "tasks.wake"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -1306,6 +1316,8 @@ async function dispatchCommand(
       return handlers.pauseAllTasks();
     case "tasks.resumeAll":
       return handlers.resumeAllTasks();
+    case "tasks.wake":
+      return handlers.wakeTasks();
   }
 }
 

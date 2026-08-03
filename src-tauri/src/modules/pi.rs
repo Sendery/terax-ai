@@ -84,7 +84,7 @@ struct ClientResponse<'a> {
     error: Option<CommandError>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DiscoveryFile {
     version: u8,
@@ -92,6 +92,27 @@ struct DiscoveryFile {
     port: u16,
     token: String,
     started_at_ms: u128,
+}
+
+/// Endpoint of a running instance, for in-process callers that need to reach the
+/// app they are not part of, such as the `--wake` invocation. The discovery file
+/// is the same one Pi reads and stays 0600 in the user cache directory.
+pub(crate) struct RunningInstance {
+    pub port: u16,
+    pub token: String,
+}
+
+pub(crate) fn read_running_instance() -> Option<RunningInstance> {
+    let bytes = std::fs::read(cache_file_path().ok()?).ok()?;
+    let discovery: DiscoveryFile = serde_json::from_slice(&bytes).ok()?;
+    if discovery.version != PROTOCOL_VERSION {
+        return None;
+    }
+    // A successful ping is the liveness proof, so the pid is not needed here.
+    Some(RunningInstance {
+        port: discovery.port,
+        token: discovery.token,
+    })
 }
 
 #[derive(Debug)]
@@ -172,6 +193,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "tasks.setEnabled"
             | "tasks.pauseAll"
             | "tasks.resumeAll"
+            | "tasks.wake"
     )
 }
 
@@ -476,6 +498,7 @@ mod tests {
             "tasks.setEnabled",
             "tasks.pauseAll",
             "tasks.resumeAll",
+            "tasks.wake",
         ] {
             let line = format!(
                 r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#

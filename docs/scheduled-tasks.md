@@ -82,7 +82,34 @@ confirmation, `Max runs` can bound it, and the pause button in the panel header
 stops every schedule at once. Manual runs still work while paused.
 
 Terax only fires while it is running. Enable launch at login if you want tasks to
-keep their cadence.
+keep their cadence, or turn on the waker below.
+
+## Waking Terax when it is closed
+
+Settings has an optional **Wake Terax for scheduled tasks** toggle. It registers a
+background check with your operating system: a LaunchAgent on macOS, a systemd
+user timer on Linux, a Task Scheduler task on Windows. Turning the toggle off
+removes it again.
+
+The check runs every 15 minutes by default, adjustable from 1 to 180 minutes.
+That interval bounds how late a task can fire while Terax is closed, and both
+you and Pi can change it.
+
+Each check is deliberately cheap. It asks a running Terax to handle the wake and
+exits; one instance confirming is enough, because every instance shares the same
+tasks. If none is running it reads the next scheduled instant that Terax exported
+and exits when nothing is due. Only when something is actually overdue does it
+open Terax, minimized and without stealing focus, and Terax then stays running so
+its own clock takes over.
+
+### Waking the computer itself
+
+Only Windows can do this without administrator rights, so only there does the
+task ask to wake the machine. On macOS scheduling a wake needs root
+(`pmset schedule` refuses otherwise), and a systemd user timer may not set
+`WakeSystem` because that needs a privileged capability. On those systems a due
+task runs the next time the computer wakes, and your recovery policy decides what
+happens to anything missed in between.
 
 ## Driving it from Pi
 
@@ -90,7 +117,11 @@ Pi can manage tasks through the Terax bridge:
 
 `tasks.show`, `tasks.hide`, `tasks.toggle`, `tasks.list`, `tasks.add`,
 `tasks.update`, `tasks.remove`, `tasks.run`, `tasks.setEnabled`,
-`tasks.pauseAll`, `tasks.resumeAll`.
+`tasks.pauseAll`, `tasks.resumeAll`, `tasks.openEditor`, `tasks.wake`.
+
+`tasks.wake` re-evaluates the schedule and dispatches whatever is due. It is what
+the OS waker calls, so confirming it is how a running Terax takes ownership of a
+wake.
 
 `tasks.add` needs a name, a prompt and a schedule spec. Omit the working
 directory and the task inherits the calling session's directory, so the session

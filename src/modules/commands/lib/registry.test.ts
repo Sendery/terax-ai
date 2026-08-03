@@ -63,6 +63,7 @@ function handlers(): CommandHandlers {
     setTaskEnabled: vi.fn(() => ({ id: "st-1", enabled: false })),
     pauseAllTasks: vi.fn(() => ({ paused: true })),
     resumeAllTasks: vi.fn(() => ({ paused: false })),
+    wakeTasks: vi.fn(() => ({ dispatched: 0 })),
   };
 }
 
@@ -418,6 +419,7 @@ describe("command registry", () => {
       "tasks.setEnabled",
       "tasks.pauseAll",
       "tasks.resumeAll",
+      "tasks.wake",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });
@@ -432,6 +434,7 @@ describe("scheduled task commands", () => {
       "tasks.list",
       "tasks.pauseAll",
       "tasks.resumeAll",
+      "tasks.wake",
     ]) {
       expect(validateCommandRequest({ id }).ok).toBe(true);
       expect(validateCommandRequest({ id, payload: { x: 1 } }).ok).toBe(false);

@@ -738,7 +738,7 @@ export default function App() {
   });
   const dispatcherRef = useRef(dispatcher);
   dispatcherRef.current = dispatcher;
-  useTasksScheduler({
+  const tasksScheduler = useTasksScheduler({
     tasks: scheduled.tasks,
     paused: scheduled.paused,
     hydrated: scheduled.hydrated,
@@ -746,6 +746,8 @@ export default function App() {
     reschedule: scheduled.rescheduleOne,
     notify: notifyTask,
   });
+  const tasksSchedulerRef = useRef(tasksScheduler);
+  tasksSchedulerRef.current = tasksScheduler;
   const [taskEditorOpen, setTaskEditorOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const editingTask =
@@ -1552,6 +1554,10 @@ export default function App() {
         scheduledRef.current.rescheduleAll();
         return { paused: false };
       },
+      wakeTasks: () => {
+        const dispatched = tasksSchedulerRef.current.wakeNow();
+        return { dispatched, paused: scheduledRef.current.paused };
+      },
     }),
     [
       activeId,
@@ -1714,7 +1720,11 @@ export default function App() {
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
-              <ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
+              <ResizablePanel
+                id="workspace"
+                defaultSize="78%"
+                minSize="30%"
+              >
                 <div className="flex h-full min-h-0 flex-col">
                   <div className="relative min-h-0 flex-1">
                     <WorkspaceSurface
@@ -1754,15 +1764,15 @@ export default function App() {
                   />
                 </div>
               </ResizablePanel>
+              {notesVisible && (
+                <>
               <ResizableHandle withHandle />
               <ResizablePanel
                 id="notes"
                 panelRef={notesRef}
-                defaultSize={notesVisible ? `${notesWidthRef.current}px` : 0}
+                defaultSize={`${notesWidthRef.current}px`}
                 minSize={`${NOTES_MIN_WIDTH}px`}
                 maxSize={`${NOTES_MAX_WIDTH}px`}
-                collapsible
-                collapsedSize={0}
                 onResize={(size) => {
                   if (size.inPixels > 0) persistNotesWidth(size.inPixels);
                 }}
@@ -1789,15 +1799,17 @@ export default function App() {
                   />
                 )}
               </ResizablePanel>
+                </>
+              )}
+              {tasksVisible && (
+                <>
               <ResizableHandle withHandle />
               <ResizablePanel
                 id="tasks"
                 panelRef={tasksRef}
-                defaultSize={tasksVisible ? `${tasksWidthRef.current}px` : 0}
+                defaultSize={`${tasksWidthRef.current}px`}
                 minSize={`${TASKS_MIN_WIDTH}px`}
                 maxSize={`${TASKS_MAX_WIDTH}px`}
-                collapsible
-                collapsedSize={0}
                 onResize={(size) => {
                   if (size.inPixels > 0) persistTasksWidth(size.inPixels);
                 }}
@@ -1819,6 +1831,8 @@ export default function App() {
                   onHide={hideTasksPanel}
                 />
               </ResizablePanel>
+                </>
+              )}
             </ResizablePanelGroup>
           </main>
 

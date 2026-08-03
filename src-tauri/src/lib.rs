@@ -2,7 +2,7 @@ pub mod modules;
 
 use modules::{
     agent, agent_cli, capture, fs, git, history, net, pi, pisessions, pty, scheduler, secrets,
-    shell, slotmonit, workspace,
+    shell, slotmonit, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -172,6 +172,15 @@ async fn close_notes_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // A waker invocation is meant to be almost free. Ask a live instance to
+    // handle it, or read the exported deadline, and exit before building an app
+    // when there is nothing to do. This is the only single-instance guard: normal
+    // launches keep their existing behaviour.
+    let wake_mode = waker::is_wake_invocation();
+    if wake_mode && !waker::should_boot_for_wake() {
+        return;
+    }
+
     let cli_dir = parse_launch_dir();
     workspace::init_launch_cwd(cli_dir.as_deref());
 
@@ -203,7 +212,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .manage(pi::PiBridgeState::default())
-        .setup(|_app| {
+        .setup(move |_app| {
             // macOS skips parent() for the settings window, so tie its lifecycle
             // to the main window here instead. Other platforms keep parent().
             #[cfg(target_os = "macos")]
@@ -225,6 +234,13 @@ pub fn run() {
             }
             if let Err(err) = pi::start_bridge(_app.handle().clone()) {
                 log::warn!("pi bridge failed to start: {err}");
+            }
+            // Launched by the OS waker rather than by the user, so come up out of
+            // the way. The app stays resident and the internal clock takes over.
+            if wake_mode {
+                if let Some(main) = _app.get_webview_window("main") {
+                    let _ = main.minimize();
+                }
             }
             Ok(())
         })
@@ -299,6 +315,10 @@ pub fn run() {
             shell::shell_bg_kill,
             shell::shell_bg_list,
             scheduler::scheduler_arm,
+            waker::waker_status,
+            waker::waker_install,
+            waker::waker_uninstall,
+            waker::waker_write_state,
             pisessions::pi_session_offset,
             pisessions::pi_session_usage,
             pisessions::pi_sessions_list,

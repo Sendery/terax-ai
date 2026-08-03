@@ -124,3 +124,16 @@ export {
   type TasksSchedulerDeps,
   useTasksScheduler,
 } from "./lib/useTasksScheduler";
+export {
+  clampWakerInterval,
+  installWaker,
+  readWakerStatus,
+  uninstallWaker,
+  WAKER_DEFAULT_INTERVAL_MINUTES,
+  WAKER_MAX_INTERVAL_MINUTES,
+  WAKER_MIN_INTERVAL_MINUTES,
+  WAKER_UNAVAILABLE,
+  wakerCapabilityNote,
+  type WakerStatus,
+  writeWakeState,
+} from "./lib/waker";

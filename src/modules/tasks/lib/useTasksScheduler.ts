@@ -1,11 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { resolveMissed } from "./policies";
 import type { RunTrigger } from "./runs";
 import { dueTasks, earliestDeadline } from "./scheduling";
 import type { ScheduledTask } from "./task";
+import { writeWakeState } from "./waker";
 
 const TASK_DUE_EVENT = "terax:task-due";
 
@@ -34,15 +35,35 @@ function arm(at: number | null): void {
  * and decides what is due. Rust only sleeps and knocks, because a webview timer
  * is throttled while the window is in the background.
  */
-export function useTasksScheduler(deps: TasksSchedulerDeps): void {
+export function useTasksScheduler(deps: TasksSchedulerDeps): {
+  /** Re-evaluates and dispatches now. Used by the wake command. */
+  wakeNow: () => number;
+} {
   const depsRef = useRef(deps);
   depsRef.current = deps;
   const recoveredRef = useRef(false);
 
   const deadline = earliestDeadline(deps.tasks, deps.paused);
 
+  const dispatchDue = useCallback((): number => {
+    const d = depsRef.current;
+    if (d.paused) return 0;
+    const now = Date.now();
+    const due = dueTasks(d.tasks, now);
+    for (const task of due) {
+      d.run(task.id, "schedule");
+      d.reschedule(task.id);
+    }
+    return due.length;
+  }, []);
+
   useEffect(() => {
     arm(deadline);
+    // Exported for the optional OS waker, which reads it to decide whether
+    // booting the app is warranted at all.
+    void writeWakeState(deadline).catch(() => {
+      // The waker degrades to launching on its own cadence; never surface this.
+    });
   }, [deadline]);
 
   // Disarm on unmount so a reloaded webview does not leave a stale deadline.
@@ -52,13 +73,7 @@ export function useTasksScheduler(deps: TasksSchedulerDeps): void {
     let dispose: (() => void) | undefined;
     let cancelled = false;
     void listen<number>(TASK_DUE_EVENT, () => {
-      const d = depsRef.current;
-      if (d.paused) return;
-      const now = Date.now();
-      for (const task of dueTasks(d.tasks, now)) {
-        d.run(task.id, "schedule");
-        d.reschedule(task.id);
-      }
+      dispatchDue();
     }).then((unlisten) => {
       if (cancelled) unlisten();
       else dispose = unlisten;
@@ -67,7 +82,7 @@ export function useTasksScheduler(deps: TasksSchedulerDeps): void {
       cancelled = true;
       dispose?.();
     };
-  }, []);
+  }, [dispatchDue]);
 
   // Downtime recovery, once per session and only after hydration so the
   // persisted lastRunAt is known.
@@ -103,4 +118,6 @@ export function useTasksScheduler(deps: TasksSchedulerDeps): void {
       d.reschedule(task.id);
     }
   }, [deps.hydrated]);
+
+  return { wakeNow: dispatchDue };
 }

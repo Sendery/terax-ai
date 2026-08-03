@@ -6,6 +6,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import {
+  clampWakerInterval,
+  installWaker,
+  readWakerStatus,
+  uninstallWaker,
+  WAKER_MAX_INTERVAL_MINUTES,
+  WAKER_MIN_INTERVAL_MINUTES,
+  WAKER_UNAVAILABLE,
+  wakerCapabilityNote,
+  type WakerStatus,
+} from "@/modules/tasks";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -102,6 +113,8 @@ export function GeneralSection() {
   const terminalScrollback = usePreferencesStore((s) => s.terminalScrollback);
   const zoomLevel = usePreferencesStore((s) => s.zoomLevel);
   const agentNotifications = usePreferencesStore((s) => s.agentNotifications);
+  const [waker, setWaker] = useState<WakerStatus>(WAKER_UNAVAILABLE);
+  const [wakerBusy, setWakerBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -117,6 +130,42 @@ export function GeneralSection() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void readWakerStatus().then((status) => {
+      if (alive) setWaker(status);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const onToggleWaker = async (next: boolean) => {
+    setWakerBusy(true);
+    try {
+      setWaker(next ? await installWaker(waker.intervalMinutes) : await uninstallWaker());
+    } catch (e) {
+      console.error("waker toggle failed", e);
+      setWaker(await readWakerStatus());
+    } finally {
+      setWakerBusy(false);
+    }
+  };
+
+  const onChangeWakerInterval = async (minutes: number) => {
+    const next = clampWakerInterval(minutes);
+    setWaker((current) => ({ ...current, intervalMinutes: next }));
+    if (!waker.installed) return;
+    setWakerBusy(true);
+    try {
+      setWaker(await installWaker(next));
+    } catch (e) {
+      console.error("waker interval change failed", e);
+    } finally {
+      setWakerBusy(false);
+    }
+  };
 
   const onToggleAutostart = async (next: boolean) => {
     try {
@@ -406,6 +455,42 @@ export function GeneralSection() {
               onCheckedChange={(v) => void onToggleAutostart(v)}
             />
           </SettingRow>
+          {waker.supported && (
+            <>
+              <SettingRow
+                title="Wake Terax for scheduled tasks"
+                description={`Registers a background check every ${waker.intervalMinutes} min that opens Terax minimized only when a scheduled task is overdue. ${wakerCapabilityNote(waker)}`}
+              >
+                <Switch
+                  checked={waker.installed}
+                  disabled={wakerBusy}
+                  onCheckedChange={(v) => void onToggleWaker(v)}
+                />
+              </SettingRow>
+              <SettingRow
+                title="Wake check interval"
+                description="How often the background check runs. This bounds how late a task can fire while Terax is closed."
+              >
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    min={WAKER_MIN_INTERVAL_MINUTES}
+                    max={WAKER_MAX_INTERVAL_MINUTES}
+                    value={waker.intervalMinutes}
+                    disabled={wakerBusy}
+                    onChange={(e) =>
+                      void onChangeWakerInterval(
+                        Number.parseInt(e.target.value, 10),
+                      )
+                    }
+                    aria-label="Wake check interval in minutes"
+                    className="h-7 w-16 text-xs"
+                  />
+                  <span className="text-[10.5px] text-muted-foreground">min</span>
+                </div>
+              </SettingRow>
+            </>
+          )}
           <SettingRow
             title="Restore window position & size"
             description="Reopen the main window where you left it. Applies on next launch."
