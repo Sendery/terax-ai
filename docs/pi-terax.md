@@ -41,10 +41,37 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tab.setColor`
 - `git.diff.open`
 - `settings.open`
+- `notes.show`
+- `notes.hide`
+- `notes.toggle`
+- `notes.detach`
+- `notes.attach`
+- `notes.add`
+- `notes.remove`
+- `notes.update`
+- `notes.list`
+- `tasks.show`
+- `tasks.hide`
+- `tasks.toggle`
+- `tasks.openEditor`
+- `tasks.list`
+- `tasks.add`
+- `tasks.update`
+- `tasks.remove`
+- `tasks.run`
+- `tasks.setEnabled`
+- `tasks.pauseAll`
+- `tasks.resumeAll`
+- `tasks.wake`
 
-The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, and settings APIs. It does not expose AI diff approval internals.
+Call `app.commands` for the authoritative catalog with every payload argument,
+its type, and the closed value set of each enum. That catalog is generated from
+the same schema table the registry validates against, so it cannot drift from
+what is enforced; this list is a convenience and `app.commands` wins.
 
-`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, and excludes AI diff approval IDs and proposed or original content.
+The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, and scheduled-task APIs. It does not expose AI diff approval internals.
+
+`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. `tasks.list` returns a prompt only because asking for it is an explicit request.
 
 ### app.capture
 

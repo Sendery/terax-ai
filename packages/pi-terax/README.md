@@ -44,6 +44,8 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 `terax_call` supports:
 
 - `app.snapshot`
+- `app.commands` -- authoritative catalog of every command and payload argument
+- `app.buildInfo`
 - `app.capture` -- native in-app PNG capture of a Terax surface
 - `sidebar.show`
 - `sidebar.hide`
@@ -55,6 +57,15 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 - `tab.setColor` -- assign or clear a tab accent color
 - `git.diff.open`
 - `settings.open`
+- `notes.show`, `notes.hide`, `notes.toggle` -- the notes panel
+- `notes.detach`, `notes.attach` -- float the notes panel or dock it back
+- `notes.add`, `notes.remove`, `notes.update`, `notes.list` -- note cards on the active tab
+- `tasks.show`, `tasks.hide`, `tasks.toggle` -- the scheduled tasks panel
+- `tasks.openEditor` -- open the task editor for the user to review or complete
+- `tasks.list`, `tasks.add`, `tasks.update`, `tasks.remove` -- manage scheduled tasks
+- `tasks.run`, `tasks.setEnabled` -- run one now, or enable and disable it
+- `tasks.pauseAll`, `tasks.resumeAll` -- the global scheduler pause
+- `tasks.wake` -- re-evaluate the schedule and dispatch anything due
 
 ### app.capture
 
