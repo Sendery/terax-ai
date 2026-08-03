@@ -992,6 +992,13 @@ export function useTerminalSession({
 
   const focus = useCallback(() => focusSlot(leafId), [leafId]);
 
+  // Newline encoding a foreground program negotiated. Callers that synthesize
+  // multiline input must use this rather than a raw newline, which submits.
+  const shiftEnter = useCallback((): string => {
+    const s = sessions.get(leafId);
+    return shiftEnterSequence(s?.keyboardProtocol.modifyOtherKeys ?? 0);
+  }, [leafId]);
+
   const getBuffer = useCallback(
     (maxLines = 200): string | null => {
       const s = sessions.get(leafId);
@@ -1086,6 +1093,7 @@ export function useTerminalSession({
     () => ({
       write,
       focus,
+      shiftEnter,
       getBuffer,
       getSelection,
       applyTheme,
@@ -1101,6 +1109,7 @@ export function useTerminalSession({
     [
       write,
       focus,
+      shiftEnter,
       getBuffer,
       getSelection,
       applyTheme,

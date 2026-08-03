@@ -84,7 +84,7 @@ struct ClientResponse<'a> {
     error: Option<CommandError>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DiscoveryFile {
     version: u8,
@@ -92,6 +92,27 @@ struct DiscoveryFile {
     port: u16,
     token: String,
     started_at_ms: u128,
+}
+
+/// Endpoint of a running instance, for in-process callers that need to reach the
+/// app they are not part of, such as the `--wake` invocation. The discovery file
+/// is the same one Pi reads and stays 0600 in the user cache directory.
+pub(crate) struct RunningInstance {
+    pub port: u16,
+    pub token: String,
+}
+
+pub(crate) fn read_running_instance() -> Option<RunningInstance> {
+    let bytes = std::fs::read(cache_file_path().ok()?).ok()?;
+    let discovery: DiscoveryFile = serde_json::from_slice(&bytes).ok()?;
+    if discovery.version != PROTOCOL_VERSION {
+        return None;
+    }
+    // A successful ping is the liveness proof, so the pid is not needed here.
+    Some(RunningInstance {
+        port: discovery.port,
+        token: discovery.token,
+    })
 }
 
 #[derive(Debug)]
@@ -160,6 +181,19 @@ fn is_allowed_command(command: &str) -> bool {
             | "notes.remove"
             | "notes.update"
             | "notes.list"
+            | "tasks.show"
+            | "tasks.hide"
+            | "tasks.toggle"
+            | "tasks.openEditor"
+            | "tasks.list"
+            | "tasks.add"
+            | "tasks.update"
+            | "tasks.remove"
+            | "tasks.run"
+            | "tasks.setEnabled"
+            | "tasks.pauseAll"
+            | "tasks.resumeAll"
+            | "tasks.wake"
     )
 }
 
@@ -447,6 +481,41 @@ mod tests {
         let request = decode_request_line(line, "tok").expect("tab.setColor must be allowed");
 
         assert_eq!(request.command, "tab.setColor");
+    }
+
+    #[test]
+    fn allows_every_scheduled_task_command() {
+        for command in [
+            "tasks.show",
+            "tasks.hide",
+            "tasks.toggle",
+            "tasks.openEditor",
+            "tasks.list",
+            "tasks.add",
+            "tasks.update",
+            "tasks.remove",
+            "tasks.run",
+            "tasks.setEnabled",
+            "tasks.pauseAll",
+            "tasks.resumeAll",
+            "tasks.wake",
+        ] {
+            let line = format!(
+                r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#
+            );
+            let request = decode_request_line(line.as_bytes(), "tok")
+                .unwrap_or_else(|_| panic!("{command} must be allowed"));
+
+            assert_eq!(request.command, command);
+        }
+    }
+
+    #[test]
+    fn rejects_a_task_command_that_is_not_allowlisted() {
+        let line = br#"{"version":1,"id":"r","token":"tok","command":"tasks.wipe"}"#;
+        let err = decode_request_line(line, "tok").expect_err("unlisted command blocked");
+
+        assert_eq!(err.code(), "unknown_command");
     }
 
     #[test]

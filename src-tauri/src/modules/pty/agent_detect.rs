@@ -5,7 +5,7 @@ const ST_FINAL: u8 = b'\\';
 
 const OSC_MAX: usize = 2048;
 
-const DEFAULT_AGENTS: &[&str] = &["claude", "codex"];
+const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "pi"];
 
 // OSC 777 marker our Claude Code hooks emit via `terminalSequence`.
 const TERAX_MARKER: &[u8] = b"notify;Terax;";
@@ -288,6 +288,32 @@ mod tests {
     fn arms_on_dash_suffixed_alias() {
         let mut d = AgentDetector::new();
         assert_eq!(run(&mut d, &osc("133;C;claude-enigma")), vec![started("claude")]);
+    }
+
+    #[test]
+    fn arms_on_pi() {
+        let mut d = AgentDetector::new();
+        assert_eq!(run(&mut d, &osc("133;C;pi")), vec![started("pi")]);
+        let mut d2 = AgentDetector::new();
+        assert_eq!(
+            run(&mut d2, &osc("133;C;pi --session-id terax-st-1")),
+            vec![started("pi")]
+        );
+    }
+
+    // `pi` is two characters, so the prefix rule must not swallow every command
+    // that merely starts with those letters.
+    #[test]
+    fn does_not_arm_on_commands_merely_starting_with_pi() {
+        for cmd in [
+            "133;C;ping example.com",
+            "133;C;pip install ruff",
+            "133;C;pipx run black",
+            "133;C;pixi shell",
+        ] {
+            let mut d = AgentDetector::new();
+            assert!(run(&mut d, &osc(cmd)).is_empty(), "{cmd} must not arm");
+        }
     }
 
     #[test]

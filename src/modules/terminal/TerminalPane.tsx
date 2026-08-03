@@ -18,6 +18,9 @@ import {
 export type TerminalPaneHandle = {
   write: (data: string) => void;
   focus: () => void;
+  /** Newline encoding the foreground program negotiated, for synthesized
+   *  multiline input that must not submit early. */
+  shiftEnter: () => string;
   getBuffer: (maxLines?: number) => string | null;
   getSelection: () => string | null;
 };
@@ -84,6 +87,7 @@ export const TerminalPane = memo(
       () => ({
         write: (data: string) => session.write(data),
         focus: () => session.focus(),
+        shiftEnter: () => session.shiftEnter(),
         getBuffer: (max?: number) => session.getBuffer(max),
         getSelection: () => session.getSelection(),
       }),

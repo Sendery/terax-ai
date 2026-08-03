@@ -19,6 +19,30 @@ Keep domain logic pure and dependency-light. App and Tauri commands should coord
 
 Tabs stay mounted when switched. New tab kinds must preserve that lifecycle rule and define cleanup behavior.
 
+## Side panel
+
+- Layout composition: `src/app/App.tsx` (`ResizablePanelGroup`)
+- Visibility and width hook: `src/modules/<area>/lib/use<Area>Panel.ts`
+- Header toggle: `src/modules/header/Header.tsx`
+- Existing peers: `src/modules/notes`, `src/modules/tasks`
+
+Visibility mounts and unmounts the panel together with its handle. Do not leave a
+hidden panel collapsed: the group still has to fill its axis, so the solver
+re-expands a sibling and ignores its `maxSize`. Give the panel a
+`data-capture-target` anchor and decide its privacy scope.
+
+## Scheduled or background native work
+
+- Native timer: `src-tauri/src/modules/scheduler.rs`
+- OS-level registration: `src-tauri/src/modules/waker.rs`
+- Frontend arming and due dispatch: `src/modules/tasks/lib/useTasksScheduler.ts`
+
+Keep the schedule maths pure in the frontend and give the native side a single
+absolute deadline; a webview timer is throttled in the background. `tokio` here is
+built without the `time` feature, so park a `std::thread` on
+`Condvar::wait_timeout` rather than adding an async timer. Anything the OS invokes
+on a cadence must exit cheaply and must not start a second app instance.
+
 ## Native window
 
 - Existing opener pattern: `open_settings_window` in `src-tauri/src/lib.rs`

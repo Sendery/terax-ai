@@ -2,6 +2,8 @@ import type { SearchTarget } from "@/modules/header";
 import { MAX_PANES_PER_TAB, type Tab } from "@/modules/tabs";
 import { leafIds } from "@/modules/terminal";
 import {
+  AlarmClockIcon,
+  AlarmClockPlusIcon,
   Cancel01Icon,
   DashboardSquare01Icon,
   FileEditIcon,
@@ -11,6 +13,7 @@ import {
   KeyboardIcon,
   LayoutTwoColumnIcon,
   LayoutTwoRowIcon,
+  Note01Icon,
   PaintBoardIcon,
   Search01Icon,
   Settings01Icon,
@@ -51,6 +54,9 @@ export type CommandPaletteActionContext = {
   focusSearch: () => void;
   focusExplorerSearch: () => void;
   toggleSidebar: () => void;
+  toggleNotes: () => void;
+  toggleTasks: () => void;
+  newScheduledTask: () => void;
   toggleAi: () => void;
   askAiSelection: () => void;
   openSettings: () => void;
@@ -272,6 +278,30 @@ export function createCommandItems(
       icon: SidebarLeftIcon,
       shortcutId: "sidebar.toggle",
       run: ctx.toggleSidebar,
+    },
+    {
+      id: "notes.toggle",
+      title: "Toggle notes panel",
+      group: "View",
+      keywords: ["notes", "panel", "jira", "pr", "links"],
+      icon: Note01Icon,
+      run: ctx.toggleNotes,
+    },
+    {
+      id: "tasks.toggle",
+      title: "Toggle scheduled tasks panel",
+      group: "View",
+      keywords: ["scheduled", "tasks", "cron", "schedule", "panel", "waker"],
+      icon: AlarmClockIcon,
+      run: ctx.toggleTasks,
+    },
+    {
+      id: "tasks.new",
+      title: "New scheduled task",
+      group: "General",
+      keywords: ["scheduled", "task", "cron", "schedule", "prompt", "pi"],
+      icon: AlarmClockPlusIcon,
+      run: ctx.newScheduledTask,
     },
     {
       id: "ai.toggle",

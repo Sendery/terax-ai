@@ -238,6 +238,35 @@ export const native = {
       exit_code: number | null;
     }>("shell_bg_logs", { handle, sinceOffset: sinceOffset ?? null }),
   shellBgKill: (handle: number) => invoke<void>("shell_bg_kill", { handle }),
+  piSessionOffset: (sessionId: string) =>
+    invoke<number>("pi_session_offset", { sessionId }),
+  piSessionUsage: (sessionId: string, fromOffset: number) =>
+    invoke<{
+      usage: {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheWrite: number;
+        reasoning: number;
+        totalTokens: number;
+        costTotal: number;
+      };
+      nextOffset: number;
+      assistantMessages: number;
+      stopReason: string | null;
+      model: string | null;
+      path: string | null;
+    }>("pi_session_usage", { sessionId, fromOffset }),
+  piSessionsList: (limit?: number) =>
+    invoke<
+      {
+        id: string;
+        cwd: string | null;
+        path: string;
+        modifiedMs: number;
+        sizeBytes: number;
+      }[]
+    >("pi_sessions_list", { limit: limit ?? null }),
   shellBgList: () =>
     invoke<
       {

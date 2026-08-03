@@ -86,6 +86,25 @@ export type SnapshotTab =
       color?: TabColor;
     };
 
+/** Coordination state for a scheduled task. The prompt is deliberately absent:
+ *  a stored prompt can carry sensitive detail, and ambient snapshots are not the
+ *  place to surface it. `tasks.list` exposes it on explicit request. */
+export type SnapshotTask = {
+  id: string;
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  mode: "task" | "routine";
+  target: "headless" | "tab";
+  missed: string;
+  tabId?: number;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  runCount: number;
+  maxRuns?: number;
+  state: "running" | "queued" | "idle";
+};
+
 export type AppSnapshot = {
   version: 1;
   activeTabId: number | null;
@@ -95,6 +114,10 @@ export type AppSnapshot = {
     view: SidebarViewId;
   };
   tabs: SnapshotTab[];
+  scheduledTasks?: {
+    paused: boolean;
+    tasks: SnapshotTask[];
+  };
 };
 
 export type AppSnapshotInput = {
@@ -105,7 +128,47 @@ export type AppSnapshotInput = {
     visible: boolean;
     view: SidebarViewId;
   };
+  scheduledTasks?: {
+    paused: boolean;
+    tasks: SnapshotTaskInput[];
+  };
 };
+
+export type SnapshotTaskInput = {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: string;
+  enabled: boolean;
+  mode: "task" | "routine";
+  target: "headless" | "tab";
+  missed: string;
+  tabId?: number;
+  nextRunAt?: number | null;
+  lastRunAt?: number;
+  runCount: number;
+  maxRuns?: number;
+  running: boolean;
+  queued: boolean;
+};
+
+function serializeTask(task: SnapshotTaskInput): SnapshotTask {
+  return {
+    id: task.id,
+    name: task.name,
+    schedule: task.schedule,
+    enabled: task.enabled,
+    mode: task.mode,
+    target: task.target,
+    missed: task.missed,
+    ...(task.tabId !== undefined ? { tabId: task.tabId } : {}),
+    nextRunAt: task.nextRunAt ?? null,
+    lastRunAt: task.lastRunAt ?? null,
+    runCount: task.runCount,
+    ...(task.maxRuns !== undefined ? { maxRuns: task.maxRuns } : {}),
+    state: task.running ? "running" : task.queued ? "queued" : "idle",
+  };
+}
 
 function displayTitle(tab: Tab): string {
   return tab.customTitle ?? tab.title;
@@ -226,5 +289,13 @@ export function buildAppSnapshot(input: AppSnapshotInput): AppSnapshot {
     activeSpaceId: input.activeSpaceId,
     ...(input.sidebar ? { sidebar: input.sidebar } : {}),
     tabs: input.tabs.map(serializeTab),
+    ...(input.scheduledTasks
+      ? {
+          scheduledTasks: {
+            paused: input.scheduledTasks.paused,
+            tasks: input.scheduledTasks.tasks.map(serializeTask),
+          },
+        }
+      : {}),
   };
 }

@@ -215,3 +215,99 @@ describe("buildAppSnapshot", () => {
     expect(snapshot.tabs[2]).toMatchObject({ kind: "git-diff", color: "blue" });
   });
 });
+
+describe("scheduled tasks in the snapshot", () => {
+  const task = {
+    id: "st-1",
+    name: "Watch CI",
+    prompt: "secret internal prompt with credentials context",
+    schedule: "every:1h",
+    enabled: true,
+    mode: "task" as const,
+    target: "tab" as const,
+    missed: "runOnce",
+    tabId: 4,
+    nextRunAt: 1000,
+    lastRunAt: 500,
+    runCount: 2,
+    maxRuns: 10,
+    running: false,
+    queued: false,
+  };
+
+  it("omits scheduled tasks entirely when the feature is unused", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+    });
+    expect(snapshot.scheduledTasks).toBeUndefined();
+  });
+
+  it("never exposes a task prompt", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      scheduledTasks: { paused: false, tasks: [task] },
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("secret internal prompt");
+    expect(snapshot.scheduledTasks?.tasks[0]).not.toHaveProperty("prompt");
+  });
+
+  it("reports coordination state a caller needs", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      scheduledTasks: { paused: true, tasks: [task] },
+    });
+    expect(snapshot.scheduledTasks?.paused).toBe(true);
+    expect(snapshot.scheduledTasks?.tasks[0]).toEqual({
+      id: "st-1",
+      name: "Watch CI",
+      schedule: "every:1h",
+      enabled: true,
+      mode: "task",
+      target: "tab",
+      missed: "runOnce",
+      tabId: 4,
+      nextRunAt: 1000,
+      lastRunAt: 500,
+      runCount: 2,
+      maxRuns: 10,
+      state: "idle",
+    });
+  });
+
+  it("derives the run state from the dispatcher flags", () => {
+    const running = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      scheduledTasks: { paused: false, tasks: [{ ...task, running: true }] },
+    });
+    expect(running.scheduledTasks?.tasks[0].state).toBe("running");
+    const queued = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      scheduledTasks: { paused: false, tasks: [{ ...task, queued: true }] },
+    });
+    expect(queued.scheduledTasks?.tasks[0].state).toBe("queued");
+  });
+
+  it("normalises an unscheduled task to a null next run", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      scheduledTasks: {
+        paused: false,
+        tasks: [{ ...task, nextRunAt: null, lastRunAt: undefined }],
+      },
+    });
+    expect(snapshot.scheduledTasks?.tasks[0].nextRunAt).toBeNull();
+    expect(snapshot.scheduledTasks?.tasks[0].lastRunAt).toBeNull();
+  });
+});

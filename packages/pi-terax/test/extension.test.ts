@@ -144,6 +144,48 @@ describe("Pi extension", () => {
     expect(TERAX_COMMAND_IDS).toContain("app.commands");
   });
 
+  it("allowlists the scheduled task commands", () => {
+    for (const id of [
+      "tasks.show",
+      "tasks.hide",
+      "tasks.toggle",
+      "tasks.openEditor",
+      "tasks.list",
+      "tasks.add",
+      "tasks.update",
+      "tasks.remove",
+      "tasks.run",
+      "tasks.setEnabled",
+      "tasks.pauseAll",
+      "tasks.resumeAll",
+      "tasks.wake",
+    ]) {
+      expect(isTeraxCommandId(id), id).toBe(true);
+      expect(TERAX_COMMAND_IDS).toContain(id);
+    }
+  });
+
+  it("does not allowlist a task command the app does not implement", () => {
+    expect(isTeraxCommandId("tasks.wipe")).toBe(false);
+    expect(isTeraxCommandId("tasks.exportPrompts")).toBe(false);
+  });
+
+  it("offers every allowlisted task command through terax_call", () => {
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
+    const call = tools.find(
+      (tool) => (tool as { name: string }).name === "terax_call",
+    ) as unknown as { parameters?: unknown };
+    const params = call?.parameters as {
+      properties?: { command?: { anyOf?: { const?: string }[] } };
+    };
+    const offered = (params?.properties?.command?.anyOf ?? []).map(
+      (entry) => entry.const,
+    );
+    for (const id of TERAX_COMMAND_IDS.filter((c) => c.startsWith("tasks."))) {
+      expect(offered, id).toContain(id);
+    }
+  });
+
   it("describes terax_call payload as an open object so hosts forward it", () => {
     const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     const call = tools.find(

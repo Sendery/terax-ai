@@ -52,34 +52,17 @@ export function useNotesPanel() {
     }
   }, []);
 
-  const showNotes = useCallback(() => {
-    const panel = notesRef.current;
-    if (panel && panel.getSize().asPercentage <= 0) {
-      panel.resize(`${widthRef.current}px`);
-    }
-    persistVisible(true);
-  }, [persistVisible]);
+  // Visibility mounts and unmounts the panel rather than collapsing it. Two
+  // collapsed siblings cannot both stay at zero: the layout solver still has to
+  // fill the group, and it re-expands one of them past its own maxSize.
+  const showNotes = useCallback(() => persistVisible(true), [persistVisible]);
 
-  const hideNotes = useCallback(() => {
-    const panel = notesRef.current;
-    if (panel && panel.getSize().asPercentage > 0) panel.collapse();
-    persistVisible(false);
-  }, [persistVisible]);
+  const hideNotes = useCallback(() => persistVisible(false), [persistVisible]);
 
-  const toggleNotes = useCallback(() => {
-    const panel = notesRef.current;
-    if (!panel) {
-      persistVisible(!visible);
-      return;
-    }
-    if (panel.getSize().asPercentage <= 0) {
-      panel.resize(`${widthRef.current}px`);
-      persistVisible(true);
-    } else {
-      panel.collapse();
-      persistVisible(false);
-    }
-  }, [persistVisible, visible]);
+  const toggleNotes = useCallback(
+    () => persistVisible(!visible),
+    [persistVisible, visible],
+  );
 
   const persistNotesWidth = useCallback((next: number) => {
     widthRef.current = clampWidth(next);

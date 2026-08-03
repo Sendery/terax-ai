@@ -4,6 +4,7 @@ import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
 import { NotificationBell } from "@/modules/agents";
 import { type Tab, TabBar, type TabColor } from "@/modules/tabs";
 import {
+  AlarmClockIcon,
   CommandIcon,
   Note01Icon,
   Settings01Icon,
@@ -45,6 +46,12 @@ type Props = {
   onToggleSidebar: () => void;
   onToggleNotes: () => void;
   notesVisible: boolean;
+  onToggleTasks: () => void;
+  tasksVisible: boolean;
+  /** Number of enabled scheduled tasks, shown as a badge on the toggle. */
+  scheduledCount: number;
+  /** True while the global scheduler kill switch is engaged. */
+  scheduledPaused: boolean;
   onOpenCommandPalette: () => void;
   onActivateAgent: (tabId: number, leafId: number) => void;
   onActivateLocalAgent: () => void;
@@ -74,6 +81,10 @@ export function Header({
   onToggleSidebar,
   onToggleNotes,
   notesVisible,
+  onToggleTasks,
+  tasksVisible,
+  scheduledCount,
+  scheduledPaused,
   onOpenCommandPalette,
   onActivateAgent,
   onActivateLocalAgent,
@@ -123,6 +134,36 @@ export function Header({
       title="Toggle notes"
     >
       <HugeiconsIcon icon={Note01Icon} size={15} strokeWidth={1.75} />
+    </Button>
+  );
+
+  const tasksButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={
+        scheduledCount > 0
+          ? `Toggle scheduled tasks panel, ${scheduledCount} scheduled${
+              scheduledPaused ? ", all paused" : ""
+            }`
+          : "Toggle scheduled tasks panel"
+      }
+      aria-pressed={tasksVisible}
+      className={`relative size-7 shrink-0 rounded-md hover:bg-accent hover:text-foreground ${
+        tasksVisible ? "bg-accent/60 text-foreground" : "text-muted-foreground"
+      }`}
+      onClick={onToggleTasks}
+      title="Toggle scheduled tasks"
+    >
+      <HugeiconsIcon icon={AlarmClockIcon} size={15} strokeWidth={1.75} />
+      {scheduledCount > 0 && (
+        <span
+          aria-hidden
+          className={`absolute top-0.5 right-0.5 size-1.5 rounded-full ${
+            scheduledPaused ? "bg-amber-500" : "bg-emerald-500"
+          }`}
+        />
+      )}
     </Button>
   );
 
@@ -201,6 +242,7 @@ export function Header({
             onActivate={onActivateAgent}
             onActivateLocal={onActivateLocalAgent}
           />
+          {tasksButton}
           {notesButton}
           {settingsButton}
         </>
@@ -208,6 +250,7 @@ export function Header({
 
       {!IS_MAC && (
         <>
+          {tasksButton}
           {notesButton}
           {settingsButton}
         </>
