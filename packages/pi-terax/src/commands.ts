@@ -22,6 +22,18 @@ export const TERAX_COMMAND_IDS = [
   "notes.remove",
   "notes.update",
   "notes.list",
+  "tasks.show",
+  "tasks.hide",
+  "tasks.toggle",
+  "tasks.openEditor",
+  "tasks.list",
+  "tasks.add",
+  "tasks.update",
+  "tasks.remove",
+  "tasks.run",
+  "tasks.setEnabled",
+  "tasks.pauseAll",
+  "tasks.resumeAll",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];

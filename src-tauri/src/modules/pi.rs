@@ -160,6 +160,18 @@ fn is_allowed_command(command: &str) -> bool {
             | "notes.remove"
             | "notes.update"
             | "notes.list"
+            | "tasks.show"
+            | "tasks.hide"
+            | "tasks.toggle"
+            | "tasks.openEditor"
+            | "tasks.list"
+            | "tasks.add"
+            | "tasks.update"
+            | "tasks.remove"
+            | "tasks.run"
+            | "tasks.setEnabled"
+            | "tasks.pauseAll"
+            | "tasks.resumeAll"
     )
 }
 
@@ -447,6 +459,40 @@ mod tests {
         let request = decode_request_line(line, "tok").expect("tab.setColor must be allowed");
 
         assert_eq!(request.command, "tab.setColor");
+    }
+
+    #[test]
+    fn allows_every_scheduled_task_command() {
+        for command in [
+            "tasks.show",
+            "tasks.hide",
+            "tasks.toggle",
+            "tasks.openEditor",
+            "tasks.list",
+            "tasks.add",
+            "tasks.update",
+            "tasks.remove",
+            "tasks.run",
+            "tasks.setEnabled",
+            "tasks.pauseAll",
+            "tasks.resumeAll",
+        ] {
+            let line = format!(
+                r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#
+            );
+            let request = decode_request_line(line.as_bytes(), "tok")
+                .unwrap_or_else(|_| panic!("{command} must be allowed"));
+
+            assert_eq!(request.command, command);
+        }
+    }
+
+    #[test]
+    fn rejects_a_task_command_that_is_not_allowlisted() {
+        let line = br#"{"version":1,"id":"r","token":"tok","command":"tasks.wipe"}"#;
+        let err = decode_request_line(line, "tok").expect_err("unlisted command blocked");
+
+        assert_eq!(err.code(), "unknown_command");
     }
 
     #[test]

@@ -7,6 +7,17 @@ import {
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
 import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
+import { parseScheduleSpec } from "@/modules/tasks/lib/spec";
+import {
+  MISSED_POLICIES,
+  type MissedPolicy,
+  OVERLAP_POLICIES,
+  type OverlapPolicy,
+  TASK_MODES,
+  TASK_TARGETS,
+  type TaskMode,
+  type TaskTarget,
+} from "@/modules/tasks/lib/task";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
@@ -33,6 +44,18 @@ export const COMMAND_IDS = [
   "notes.remove",
   "notes.update",
   "notes.list",
+  "tasks.show",
+  "tasks.hide",
+  "tasks.toggle",
+  "tasks.openEditor",
+  "tasks.list",
+  "tasks.add",
+  "tasks.update",
+  "tasks.remove",
+  "tasks.run",
+  "tasks.setEnabled",
+  "tasks.pauseAll",
+  "tasks.resumeAll",
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -90,6 +113,43 @@ export type CommandPayloads = {
     note?: string;
   };
   "notes.list": undefined;
+  "tasks.show": undefined;
+  "tasks.hide": undefined;
+  "tasks.toggle": undefined;
+  "tasks.openEditor": { id?: string };
+  "tasks.list": undefined;
+  "tasks.add": TaskCommandFields & {
+    name: string;
+    prompt: string;
+    schedule: string;
+  };
+  "tasks.update": TaskCommandFields & {
+    id: string;
+    name?: string;
+    prompt?: string;
+    schedule?: string;
+    enabled?: boolean;
+  };
+  "tasks.remove": { id: string };
+  "tasks.run": { id: string };
+  "tasks.setEnabled": { id: string; enabled: boolean };
+  "tasks.pauseAll": undefined;
+  "tasks.resumeAll": undefined;
+};
+
+/** Optional configuration shared by tasks.add and tasks.update. */
+export type TaskCommandFields = {
+  cwd?: string;
+  target?: TaskTarget;
+  mode?: TaskMode;
+  missed?: MissedPolicy;
+  overlap?: OverlapPolicy;
+  sessionId?: string;
+  model?: string;
+  provider?: string;
+  thinking?: string;
+  maxRuns?: number;
+  tabId?: number;
 };
 
 export type CommandParamType = "string" | "integer" | "boolean" | "enum";
@@ -119,6 +179,142 @@ export type CommandCatalog = {
 // Single source of truth for the arguments each command accepts. Kept beside
 // the validators so a read action can report supported arguments without the
 // caller guessing, and so drift between docs and validation is visible here.
+const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
+  {
+    name: "cwd",
+    type: "string",
+    required: false,
+    description:
+      "Working directory for the run. Defaults to the active tab's directory.",
+  },
+  {
+    name: "target",
+    type: "enum",
+    required: false,
+    description:
+      "Where the run happens: a terminal tab (reused or created) or headless.",
+    values: [...TASK_TARGETS],
+  },
+  {
+    name: "mode",
+    type: "enum",
+    required: false,
+    description:
+      "task keeps one session so context accumulates; routine starts a fresh session each run.",
+    values: [...TASK_MODES],
+  },
+  {
+    name: "missed",
+    type: "enum",
+    required: false,
+    description: "What to do with occurrences missed while Terax was closed.",
+    values: [...MISSED_POLICIES],
+  },
+  {
+    name: "overlap",
+    type: "enum",
+    required: false,
+    description: "What to do when the previous run is still going.",
+    values: [...OVERLAP_POLICIES],
+  },
+  {
+    name: "sessionId",
+    type: "string",
+    required: false,
+    description:
+      "Existing Pi session to wake. Omit to let Terax own a session for the task.",
+  },
+  {
+    name: "model",
+    type: "string",
+    required: false,
+    description: "Model for the run. Omit to inherit the pi default.",
+  },
+  {
+    name: "provider",
+    type: "string",
+    required: false,
+    description: "Provider for the run. Omit to inherit the pi default.",
+  },
+  {
+    name: "thinking",
+    type: "string",
+    required: false,
+    description: "Thinking level for the run. Omit to inherit the pi default.",
+  },
+  {
+    name: "maxRuns",
+    type: "integer",
+    required: false,
+    description: "Stop after this many runs. Omit for unlimited.",
+  },
+  {
+    name: "tabId",
+    type: "integer",
+    required: false,
+    description: "Terminal tab this task belongs to, for tab runs.",
+  },
+];
+
+const SCHEDULE_DESCRIPTION =
+  "Schedule spec: manual, every:30m, every:2h, every:1d, daily:09:00, weekly:mon,wed@07:30, weekly:weekdays@08:00, weekly:weekend@10:00, days:3@06:00:2026-08-01, dates:2026-08-04,2026-08-09@12:00, once:2026-08-04T09:15.";
+
+const TASK_ADD_PARAMS: readonly CommandParamSchema[] = [
+  {
+    name: "name",
+    type: "string",
+    required: true,
+    description: "Short label shown on the card.",
+  },
+  {
+    name: "prompt",
+    type: "string",
+    required: true,
+    description: "Prompt sent to the Pi session. Multiple lines are allowed.",
+  },
+  {
+    name: "schedule",
+    type: "string",
+    required: true,
+    description: SCHEDULE_DESCRIPTION,
+  },
+  ...TASK_OPTIONAL_PARAMS,
+];
+
+const TASK_UPDATE_PARAMS: readonly CommandParamSchema[] = [
+  {
+    name: "id",
+    type: "string",
+    required: true,
+    description: "Id of the task to edit.",
+  },
+  {
+    name: "name",
+    type: "string",
+    required: false,
+    description: "New label.",
+  },
+  {
+    name: "prompt",
+    type: "string",
+    required: false,
+    description: "New prompt.",
+  },
+  {
+    name: "schedule",
+    type: "string",
+    required: false,
+    description: SCHEDULE_DESCRIPTION,
+  },
+  {
+    name: "enabled",
+    type: "boolean",
+    required: false,
+    description: "Enable or disable the task.",
+  },
+  ...TASK_OPTIONAL_PARAMS,
+];
+
 const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
   "app.snapshot": {
     id: "app.snapshot",
@@ -412,6 +608,106 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description: "List the note cards on the active tab.",
     params: [],
   },
+  "tasks.show": {
+    id: "tasks.show",
+    description: "Show the scheduled tasks panel.",
+    params: [],
+  },
+  "tasks.hide": {
+    id: "tasks.hide",
+    description: "Hide the scheduled tasks panel.",
+    params: [],
+  },
+  "tasks.toggle": {
+    id: "tasks.toggle",
+    description: "Toggle the scheduled tasks panel.",
+    params: [],
+  },
+  "tasks.openEditor": {
+    id: "tasks.openEditor",
+    description:
+      "Open the task editor so the user can review or complete a task. Omit the id to open it for a new task.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: false,
+        description: "Task to edit. Omit to start a new one.",
+      },
+    ],
+  },
+  "tasks.list": {
+    id: "tasks.list",
+    description:
+      "List scheduled tasks with their schedule, state, next run and accumulated time, tokens and cost. Includes the prompt, which app.snapshot redacts.",
+    params: [],
+  },
+  "tasks.add": {
+    id: "tasks.add",
+    description:
+      "Create a scheduled task that wakes a Pi session with a prompt. The working directory defaults to the active tab's directory, which is what a task created from a Pi session should keep so the session can be resumed.",
+    params: [...TASK_ADD_PARAMS],
+  },
+  "tasks.update": {
+    id: "tasks.update",
+    description:
+      "Edit a scheduled task by id. Provide at least one field besides the id.",
+    params: [...TASK_UPDATE_PARAMS],
+  },
+  "tasks.remove": {
+    id: "tasks.remove",
+    description: "Delete a scheduled task and its run history.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to delete.",
+      },
+    ],
+  },
+  "tasks.run": {
+    id: "tasks.run",
+    description:
+      "Run a scheduled task immediately, regardless of its schedule. Runs even while the global pause is engaged.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to run.",
+      },
+    ],
+  },
+  "tasks.setEnabled": {
+    id: "tasks.setEnabled",
+    description: "Enable or disable one scheduled task.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task.",
+      },
+      {
+        name: "enabled",
+        type: "boolean",
+        required: true,
+        description: "True to schedule it, false to stop it.",
+      },
+    ],
+  },
+  "tasks.pauseAll": {
+    id: "tasks.pauseAll",
+    description:
+      "Engage the global scheduler pause. Nothing fires on a schedule until resumed; manual runs still work.",
+    params: [],
+  },
+  "tasks.resumeAll": {
+    id: "tasks.resumeAll",
+    description: "Release the global scheduler pause.",
+    params: [],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -483,6 +779,30 @@ export type CommandHandlers = {
     payload: CommandPayloads["notes.update"],
   ) => Promise<unknown> | unknown;
   listNotes: () => Promise<unknown> | unknown;
+  showTasks: () => Promise<unknown> | unknown;
+  hideTasks: () => Promise<unknown> | unknown;
+  toggleTasks: () => Promise<unknown> | unknown;
+  openTaskEditor: (
+    payload: CommandPayloads["tasks.openEditor"],
+  ) => Promise<unknown> | unknown;
+  listTasks: () => Promise<unknown> | unknown;
+  addTask: (
+    payload: CommandPayloads["tasks.add"],
+  ) => Promise<unknown> | unknown;
+  updateTask: (
+    payload: CommandPayloads["tasks.update"],
+  ) => Promise<unknown> | unknown;
+  removeTask: (
+    payload: CommandPayloads["tasks.remove"],
+  ) => Promise<unknown> | unknown;
+  runTask: (
+    payload: CommandPayloads["tasks.run"],
+  ) => Promise<unknown> | unknown;
+  setTaskEnabled: (
+    payload: CommandPayloads["tasks.setEnabled"],
+  ) => Promise<unknown> | unknown;
+  pauseAllTasks: () => Promise<unknown> | unknown;
+  resumeAllTasks: () => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -590,7 +910,13 @@ export function validateCommandRequest(
     id === "notes.toggle" ||
     id === "notes.detach" ||
     id === "notes.attach" ||
-    id === "notes.list"
+    id === "notes.list" ||
+    id === "tasks.show" ||
+    id === "tasks.hide" ||
+    id === "tasks.toggle" ||
+    id === "tasks.list" ||
+    id === "tasks.pauseAll" ||
+    id === "tasks.resumeAll"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -599,7 +925,10 @@ export function validateCommandRequest(
   }
 
   const acceptsEmptyPayload =
-    id === "sidebar.show" || id === "tab.close" || id === "settings.open";
+    id === "sidebar.show" ||
+    id === "tab.close" ||
+    id === "settings.open" ||
+    id === "tasks.openEditor";
   const objectPayload =
     acceptsEmptyPayload && (payload === undefined || payload === null)
       ? ({ ok: true, value: {} } as const)
@@ -747,10 +1076,145 @@ export function validateCommandRequest(
     return { ok: true, value: { id, payload: patch } };
   }
 
+  if (id === "tasks.openEditor") {
+    if (obj.id !== undefined && (typeof obj.id !== "string" || obj.id === "")) {
+      return invalidPayload("tasks.openEditor requires payload.id to be a task id");
+    }
+    return {
+      ok: true,
+      value: { id, payload: { id: obj.id as string | undefined } },
+    };
+  }
+
+  if (id === "tasks.remove" || id === "tasks.run") {
+    const taskId = requireString(obj, "id", id);
+    if (!taskId.ok) return taskId;
+    return { ok: true, value: { id, payload: { id: taskId.value } } };
+  }
+
+  if (id === "tasks.setEnabled") {
+    const taskId = requireString(obj, "id", id);
+    if (!taskId.ok) return taskId;
+    if (typeof obj.enabled !== "boolean") {
+      return invalidPayload("tasks.setEnabled requires payload.enabled");
+    }
+    return {
+      ok: true,
+      value: { id, payload: { id: taskId.value, enabled: obj.enabled } },
+    };
+  }
+
+  if (id === "tasks.add" || id === "tasks.update") {
+    return validateTaskPayload(id, obj);
+  }
+
   if (!validateSettingsTab(obj.tab)) {
     return invalidPayload("settings.open requires payload.tab");
   }
   return { ok: true, value: { id, payload: { tab: obj.tab } } };
+}
+
+const TASK_STRING_FIELDS = [
+  "cwd",
+  "sessionId",
+  "model",
+  "provider",
+  "thinking",
+] as const;
+
+function validateTaskPayload(
+  id: "tasks.add" | "tasks.update",
+  obj: Record<string, unknown>,
+): CommandResult<CommandRequest> {
+  const out: Record<string, unknown> = {};
+
+  if (id === "tasks.update") {
+    const taskId = requireString(obj, "id", id);
+    if (!taskId.ok) return taskId;
+    out.id = taskId.value;
+  }
+
+  for (const key of ["name", "prompt"] as const) {
+    if (id === "tasks.add") {
+      const value = requireString(obj, key, id);
+      if (!value.ok) return value;
+      out[key] = value.value;
+    } else if (obj[key] !== undefined) {
+      if (typeof obj[key] !== "string" || obj[key] === "") {
+        return invalidPayload(`${id} requires payload.${key} to be a non-empty string`);
+      }
+      out[key] = obj[key];
+    }
+  }
+
+  if (id === "tasks.add" || obj.schedule !== undefined) {
+    const spec = requireString(obj, "schedule", id);
+    if (!spec.ok) return spec;
+    if (parseScheduleSpec(spec.value) === null) {
+      return invalidPayload(
+        `${id} requires payload.schedule to be a valid schedule spec, for example "every:30m" or "weekly:mon,wed@07:30"`,
+      );
+    }
+    out.schedule = spec.value;
+  }
+
+  if (obj.enabled !== undefined) {
+    if (id === "tasks.add") {
+      return invalidPayload("tasks.add does not accept payload.enabled");
+    }
+    if (typeof obj.enabled !== "boolean") {
+      return invalidPayload("tasks.update requires payload.enabled to be a boolean");
+    }
+    out.enabled = obj.enabled;
+  }
+
+  for (const key of TASK_STRING_FIELDS) {
+    const value = obj[key];
+    if (value === undefined) continue;
+    if (typeof value !== "string" || value === "") {
+      return invalidPayload(`${id} requires payload.${key} to be a non-empty string`);
+    }
+    out[key] = value;
+  }
+
+  const enums: readonly [string, readonly string[]][] = [
+    ["target", TASK_TARGETS],
+    ["mode", TASK_MODES],
+    ["missed", MISSED_POLICIES],
+    ["overlap", OVERLAP_POLICIES],
+  ];
+  for (const [key, allowed] of enums) {
+    const value = obj[key];
+    if (value === undefined) continue;
+    if (typeof value !== "string" || !allowed.includes(value)) {
+      return invalidPayload(
+        `${id} requires payload.${key} to be one of ${allowed.join(", ")}`,
+      );
+    }
+    out[key] = value;
+  }
+
+  for (const key of ["maxRuns", "tabId"] as const) {
+    const value = obj[key];
+    if (value === undefined) continue;
+    if (!Number.isInteger(value) || (value as number) < 0) {
+      return invalidPayload(
+        `${id} requires payload.${key} to be a non-negative integer`,
+      );
+    }
+    out[key] = value;
+  }
+
+  if (id === "tasks.update" && Object.keys(out).length <= 1) {
+    return invalidPayload(
+      "tasks.update requires at least one field besides the id",
+    );
+  }
+
+  return {
+    ok: true,
+    value: { id, payload: out } as CommandRequest,
+  };
 }
 
 export function normalizeCommandError(error: unknown): CommandError {
@@ -818,6 +1282,30 @@ async function dispatchCommand(
       return handlers.updateNote(request.payload);
     case "notes.list":
       return handlers.listNotes();
+    case "tasks.show":
+      return handlers.showTasks();
+    case "tasks.hide":
+      return handlers.hideTasks();
+    case "tasks.toggle":
+      return handlers.toggleTasks();
+    case "tasks.openEditor":
+      return handlers.openTaskEditor(request.payload);
+    case "tasks.list":
+      return handlers.listTasks();
+    case "tasks.add":
+      return handlers.addTask(request.payload);
+    case "tasks.update":
+      return handlers.updateTask(request.payload);
+    case "tasks.remove":
+      return handlers.removeTask(request.payload);
+    case "tasks.run":
+      return handlers.runTask(request.payload);
+    case "tasks.setEnabled":
+      return handlers.setTaskEnabled(request.payload);
+    case "tasks.pauseAll":
+      return handlers.pauseAllTasks();
+    case "tasks.resumeAll":
+      return handlers.resumeAllTasks();
   }
 }
 

@@ -139,12 +139,44 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** use a typed closed palette or enum and validate it at every external and persisted boundary.
 - **Verification:** all allowed values pass; representative unknown, differently cased, empty, and non-string values fail.
 
+### Command payloads must fit the schema's param types
+
+- **Trigger:** exposing a command whose natural payload is a nested object, such as a recurrence rule or a structured filter.
+- **Failure mode:** `CommandParamSchema` supports only `string`, `integer`, `boolean` and `enum`, so a nested object cannot be described. An undescribed payload is invisible to `app.commands`, which is how a caller discovers how to use the command.
+- **Prevention:** give the structure a compact, parseable textual form and accept that single string, with a pure parser and formatter that round-trip. The parser doubles as the validator: reject anything it cannot parse rather than guessing. Document every accepted form in the param description.
+- **Verification:** round-trip every supported form through parse and format, assert malformed specs are rejected, and assert each documented form is accepted by the real command validator.
+
 ### Registered lists carry exact-list tests in more than one place
 
 - **Trigger:** adding a semantic command, a shortcut, or a shortcut group.
 - **Failure mode:** the feature works at runtime but a test that asserts a whole registered list (or allowlist) fails, or a settings section silently omits the item.
 - **Prevention:** a new command spans the id union, payload map, schema, handler contract, validation, dispatch, the App handler, the Rust allowlist and the Pi package allowlist — plus the exact-list assertions in the registry tests (the command-id list and the Pi allowlist list). A new shortcut group must be added to both the group union and the ordered groups array that drives the settings render order.
 - **Verification:** run the registry and settings tests, not only type-checking, and confirm the new item renders where it is listed.
+
+## Timers and Background Work
+
+### `tokio` here has no `time` feature, so `tokio::time` does not compile
+
+- **Trigger:** adding any native timer, delay, or timeout in `src-tauri`.
+- **Failure mode:** `tokio::time::sleep`/`interval`/`timeout` fail to compile. `Cargo.toml` declares `tokio` with `default-features = false, features = ["rt"]` to keep the bundle small, and enabling `time` just to sleep widens the dependency for no product gain.
+- **Prevention:** park a dedicated `std::thread` on `Condvar::wait_timeout`. It needs no new dependency, never busy-loops, is re-armable the instant state changes, and parks at zero cost when there is nothing scheduled. Cap each wait hop (a minute is ample) so a suspended machine or a clock adjustment re-evaluates the deadline rather than overshooting it.
+- **Verification:** unit-test the pure wait computation for the idle, overdue, near-deadline, and capped-long-wait cases; then confirm on a running app that the event fires unattended at the expected instant.
+
+### A webview timer cannot be trusted to fire on time
+
+- **Trigger:** any feature that must act at a wall-clock instant, such as a scheduler, poller, or reminder.
+- **Failure mode:** `setTimeout`/`setInterval` are throttled and coalesced while the window is backgrounded or occluded (WKWebView on macOS, Chromium elsewhere), so the action lands late or not at all. The bug is invisible in a focused dev window.
+- **Prevention:** keep the schedule maths in the frontend domain, where it is pure and testable, but let Rust own the clock: hand it one absolute deadline and have it emit an event. The frontend decides what is due; the native side only sleeps and knocks. Use a coarse UI interval purely to refresh countdown text.
+- **Verification:** background the window and confirm the action still fires at its instant; assert the native side is the only component holding the deadline.
+
+## Synthesized Terminal Input
+
+### A prompt and its submitting Enter must be separate writes
+
+- **Trigger:** typing text into a TUI running in a PTY (for example sending a prompt to a coding agent already running in a tab).
+- **Failure mode:** two distinct bugs. A raw `\n` between lines submits the text truncated at the first line break. And when the whole payload including a trailing carriage return arrives as one burst, the TUI reads it as a paste and leaves it sitting in the composer unsent, which looks like the feature silently doing nothing.
+- **Prevention:** join lines with the Shift+Enter sequence the foreground program negotiated (`terminal/lib/keyboardProtocol.ts`: `CSI 27;2;13~` once modifyOtherKeys is active, `ESC CR` otherwise) and never a raw newline; return the body without a trailing carriage return, then write the submitting `\r` in a separate, slightly later write. Allow the program time to boot before typing at all.
+- **Verification:** capture the pane and confirm both that the prompt shows as multiple lines and that the program actually answered. A screenshot of text in the composer is not proof it was sent.
 
 ## Native Networking
 
@@ -155,7 +187,30 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** build a purpose-specific client for downloads whose redirect policy follows only `https` and only an explicit host allowlist (e.g. `github.com` plus `*.githubusercontent.com`); derive the saved filename from the original URL, not the redirect target, and reject path separators/`..`.
 - **Verification:** exercise the real endpoint (a temporary, uncommitted integration test that downloads the actual asset confirms the redirect is followed and the full body arrives), plus unit tests for the host allowlist and filename guard.
 
+## Reading Another Tool's Data
+
+### Read a cooperating tool's own store instead of instrumenting it
+
+- **Trigger:** needing metrics about a process Terax spawned, such as tokens, cost, model, or stop reason from a Pi run.
+- **Failure mode:** parsing the child's stdout is brittle, changes with its output format, and misses anything it does not print. Reimplementing the accounting is worse.
+- **Prevention:** read the tool's own append-only store. Pi session files (`~/.pi/agent/sessions/<project>/<ts>_<id>.jsonl`) carry a `usage` block per assistant message with `input`, `output`, `cacheRead`, `cacheWrite`, `reasoning`, `totalTokens` and `cost.total`, plus `stopReason` and `model`. Record the file's byte length before dispatching and read forward afterwards so the figures describe that one trigger rather than the whole session. Skip unparseable lines: the file is appended to live and the tail can be a partial line.
+- **Verification:** run the same task twice and assert the per-trigger figures sum to the accumulated total, and that the session file grew rather than being replaced.
+
+### Expose such a reader by identifier, never by path
+
+- **Trigger:** adding a Tauri command that reads files outside the authorized workspace, for example another tool's state directory.
+- **Failure mode:** accepting a path from the webview turns a narrow reader into arbitrary file read, bypassing workspace authorization and the secret deny-list.
+- **Prevention:** accept only an identifier, validate it against a conservative character set (alphanumerics plus `-` and `_`, length-bounded), and resolve it yourself inside the one directory the feature owns. Keep the command read-only and bound the bytes it will consume.
+- **Verification:** unit-test that traversal, separators, spaces, and shell metacharacters are rejected before the filesystem is touched.
+
 ## Snapshots and Privacy
+
+### Stored user text is not coordination state
+
+- **Trigger:** adding persisted user-authored content (a prompt, a note body, a message) to a feature that also appears in `app.snapshot`.
+- **Failure mode:** the snapshot is ambient context handed to an external caller on every poll, so free text quietly leaves the app forever after.
+- **Prevention:** put only coordination state in the snapshot (identity, schedule, enabled, counters, run state) and expose the text through a dedicated command whose call is an explicit request. Build the snapshot from a serializer that cannot see the text field, rather than deleting it afterwards.
+- **Verification:** assert the serialized snapshot string does not contain a distinctive sample of the stored text, and that the field is absent from the object rather than merely empty.
 
 ### Redact complete private entities
 
@@ -209,6 +264,20 @@ A row is complete only when implementation and verification evidence both exist.
 - **Verification:** exercise a reorder in a running WKWebView build; unit-test the pure move/reorder function separately.
 
 ## Native and Visual Validation
+
+### A rebuild can leave the previous app instance running
+
+- **Trigger:** iterating on Rust in `tauri dev`, where a file change restarts the app.
+- **Failure mode:** two instances end up alive. Both share the persisted store and only one owns the single bridge discovery file, so semantic commands can quietly land on the instance whose window you are not looking at, and evidence stops matching state.
+- **Prevention:** before trusting an observation, confirm exactly one app process is running. When restarting deliberately, kill the previous instance and the dev runner, then wait for a fresh discovery file.
+- **Verification:** count the running app processes and compare the discovery file's pid against it.
+
+### A dev build shares persisted state with the installed app
+
+- **Trigger:** running `tauri dev` for a feature that persists anything.
+- **Failure mode:** the dev instance uses the same bundle identifier, so it reads and writes the real store and the real session directories. Test data created during validation survives into the user's actual app, and destructive experiments are not sandboxed.
+- **Prevention:** treat validation data as production data. Name probe records obviously, keep them few, and delete every one when finished, including any artefacts the spawned tool created outside the app's own store.
+- **Verification:** after cleanup, read the store back through the app and confirm the collection is empty, and check the external tool's directory for leftovers.
 
 ### New native windows must own their geometry
 
@@ -316,6 +385,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** the element's `transform: translate(...)` or absolute insets are baked into the clone and re-apply inside the capture viewport, shifting content out of frame.
 - **Prevention:** the capture viewport already equals the element's bounding rect, so set `transform: none`, `position: static`, and `inset: auto` on the clone root.
 - **Verification:** capture an open context menu and confirm the content fills the artifact without offset bands.
+
+### Capture is CPU-bound and can exceed the bridge's UI response timeout
+
+- **Trigger:** requesting a capture while the machine is heavily loaded, for example with several dev servers, a Rust build, or a second app instance running.
+- **Failure mode:** every capture request fails with the bridge's `timeout` error, including tiny targets such as the header, which looks exactly like a broken capture path. Rasterizing a retina window is genuinely expensive and the bridge only waits 15 seconds for the UI to answer.
+- **Prevention:** treat a blanket capture timeout as an environment symptom first. Check the load average before concluding the feature is at fault, and collect visual evidence when the machine is not saturated. Do not raise the bridge timeout to paper over it.
+- **Verification:** reproduce the same failing capture against a build that does not contain the change under test. If both fail, the timeout is environmental and must be reported as a baseline condition, not as a regression.
 
 ### Hidden idle terminals have no pixels to capture
 

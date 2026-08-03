@@ -51,6 +51,18 @@ function handlers(): CommandHandlers {
     removeNote: vi.fn(() => ({ removed: true, id: "nc-1" })),
     updateNote: vi.fn(() => ({ updated: true, id: "nc-1", tabId: 1 })),
     listNotes: vi.fn(() => ({ tabId: 1, notes: [] })),
+    showTasks: vi.fn(() => ({ visible: true })),
+    hideTasks: vi.fn(() => ({ visible: false })),
+    toggleTasks: vi.fn(() => ({ toggled: true })),
+    openTaskEditor: vi.fn(() => ({ opened: true })),
+    listTasks: vi.fn(() => ({ paused: false, tasks: [] })),
+    addTask: vi.fn(() => ({ id: "st-1" })),
+    updateTask: vi.fn(() => ({ id: "st-1", updated: true })),
+    removeTask: vi.fn(() => ({ id: "st-1", removed: true })),
+    runTask: vi.fn(() => ({ id: "st-1", started: true })),
+    setTaskEnabled: vi.fn(() => ({ id: "st-1", enabled: false })),
+    pauseAllTasks: vi.fn(() => ({ paused: true })),
+    resumeAllTasks: vi.fn(() => ({ paused: false })),
   };
 }
 
@@ -394,8 +406,208 @@ describe("command registry", () => {
       "notes.remove",
       "notes.update",
       "notes.list",
+      "tasks.show",
+      "tasks.hide",
+      "tasks.toggle",
+      "tasks.openEditor",
+      "tasks.list",
+      "tasks.add",
+      "tasks.update",
+      "tasks.remove",
+      "tasks.run",
+      "tasks.setEnabled",
+      "tasks.pauseAll",
+      "tasks.resumeAll",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
+  });
+});
+
+describe("scheduled task commands", () => {
+  it("accepts the no-payload task commands", () => {
+    for (const id of [
+      "tasks.show",
+      "tasks.hide",
+      "tasks.toggle",
+      "tasks.list",
+      "tasks.pauseAll",
+      "tasks.resumeAll",
+    ]) {
+      expect(validateCommandRequest({ id }).ok).toBe(true);
+      expect(validateCommandRequest({ id, payload: { x: 1 } }).ok).toBe(false);
+    }
+  });
+
+  it("opens the editor with or without a task id", () => {
+    expect(validateCommandRequest({ id: "tasks.openEditor" }).ok).toBe(true);
+    expect(
+      validateCommandRequest({ id: "tasks.openEditor", payload: {} }).ok,
+    ).toBe(true);
+    expect(
+      validateCommandRequest({
+        id: "tasks.openEditor",
+        payload: { id: "st-1" },
+      }).ok,
+    ).toBe(true);
+    for (const bad of ["", 7, null]) {
+      expect(
+        validateCommandRequest({
+          id: "tasks.openEditor",
+          payload: { id: bad },
+        }).ok,
+        String(bad),
+      ).toBe(false);
+    }
+  });
+
+  it("requires a name, prompt and schedule to add a task", () => {
+    expect(validateCommandRequest({ id: "tasks.add", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({
+        id: "tasks.add",
+        payload: { name: "n", prompt: "p" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tasks.add",
+        payload: { name: "n", prompt: "p", schedule: "every:30m" },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("rejects a schedule spec it cannot parse", () => {
+    const result = validateCommandRequest({
+      id: "tasks.add",
+      payload: { name: "n", prompt: "p", schedule: "hourly" },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_payload");
+  });
+
+  it("accepts every documented schedule spec form", () => {
+    for (const schedule of [
+      "manual",
+      "every:30m",
+      "every:2h",
+      "every:1d",
+      "daily:09:00",
+      "weekly:mon,wed@07:30",
+      "weekly:weekdays@08:00",
+      "weekly:weekend@10:00",
+      "days:3@06:00:2026-08-01",
+      "dates:2026-08-04,2026-08-09@12:00",
+      "once:2026-08-04T09:15",
+    ]) {
+      const result = validateCommandRequest({
+        id: "tasks.add",
+        payload: { name: "n", prompt: "p", schedule },
+      });
+      expect(result.ok, schedule).toBe(true);
+    }
+  });
+
+  it("rejects values outside the closed enums", () => {
+    for (const payload of [
+      { target: "window" },
+      { mode: "other" },
+      { missed: "maybe" },
+      { overlap: "later" },
+    ]) {
+      const result = validateCommandRequest({
+        id: "tasks.add",
+        payload: { name: "n", prompt: "p", schedule: "every:30m", ...payload },
+      });
+      expect(result.ok, JSON.stringify(payload)).toBe(false);
+    }
+  });
+
+  it("rejects a negative or fractional run budget", () => {
+    for (const maxRuns of [-1, 1.5]) {
+      expect(
+        validateCommandRequest({
+          id: "tasks.add",
+          payload: { name: "n", prompt: "p", schedule: "every:30m", maxRuns },
+        }).ok,
+      ).toBe(false);
+    }
+  });
+
+  it("does not let tasks.add set the enabled flag", () => {
+    expect(
+      validateCommandRequest({
+        id: "tasks.add",
+        payload: {
+          name: "n",
+          prompt: "p",
+          schedule: "every:30m",
+          enabled: false,
+        },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("requires an id plus one field to update a task", () => {
+    expect(
+      validateCommandRequest({ id: "tasks.update", payload: { id: "st-1" } }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tasks.update",
+        payload: { id: "st-1", enabled: false },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("requires an id for remove, run and setEnabled", () => {
+    for (const id of ["tasks.remove", "tasks.run", "tasks.setEnabled"]) {
+      expect(validateCommandRequest({ id, payload: {} }).ok).toBe(false);
+    }
+    expect(
+      validateCommandRequest({
+        id: "tasks.setEnabled",
+        payload: { id: "st-1" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tasks.setEnabled",
+        payload: { id: "st-1", enabled: true },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("never runs a handler for a rejected task command", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const rejected = await registry.call({
+      id: "tasks.add",
+      payload: { name: "n", prompt: "p", schedule: "nonsense" },
+    });
+    expect(rejected.ok).toBe(false);
+    expect(h.addTask).not.toHaveBeenCalled();
+    const alsoRejected = await registry.call({
+      id: "tasks.update",
+      payload: { id: "st-1" },
+    });
+    expect(alsoRejected.ok).toBe(false);
+    expect(h.updateTask).not.toHaveBeenCalled();
+  });
+
+  it("describes every task command in the catalog", () => {
+    const catalog = describeCommands();
+    const ids = catalog.commands.map((c) => c.id);
+    for (const id of COMMAND_IDS.filter((c) => c.startsWith("tasks."))) {
+      expect(ids).toContain(id);
+    }
+    const add = catalog.commands.find((c) => c.id === "tasks.add");
+    expect(add?.params.find((p) => p.name === "schedule")?.required).toBe(true);
+    expect(add?.params.find((p) => p.name === "target")?.values).toEqual([
+      "headless",
+      "tab",
+    ]);
   });
 });
 

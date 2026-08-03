@@ -1,8 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, capture, fs, git, history, net, pi, pty, secrets, shell, slotmonit,
-    workspace,
+    agent, agent_cli, capture, fs, git, history, net, pi, pisessions, pty, scheduler, secrets,
+    shell, slotmonit, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -234,6 +234,7 @@ pub fn run() {
         .manage(fs::watch::FsWatchState::default())
         .manage(agent_cli::AgentCliState::default())
         .manage(history::HistoryState::default())
+        .manage(scheduler::SchedulerState::default())
         .manage(fs::grep::ContentSearchState::default())
         .manage({
             let registry = workspace::WorkspaceRegistry::default();
@@ -297,6 +298,10 @@ pub fn run() {
             shell::shell_bg_logs,
             shell::shell_bg_kill,
             shell::shell_bg_list,
+            scheduler::scheduler_arm,
+            pisessions::pi_session_offset,
+            pisessions::pi_session_usage,
+            pisessions::pi_sessions_list,
             slotmonit::slot_monit_query,
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,

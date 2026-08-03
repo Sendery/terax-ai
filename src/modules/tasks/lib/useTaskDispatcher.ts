@@ -1,0 +1,360 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { native } from "@/modules/ai/lib/native";
+
+import {
+  buildPiArgv,
+  formatCommandLine,
+  promptKeystrokes,
+  recoverCommandLine,
+  sessionIdFor,
+  type ShellFlavor,
+  SUBMIT_KEY,
+  summariseOutput,
+} from "./dispatch";
+import { admitOccurrence, type QueueState, resolveFailure } from "./policies";
+import { finishRun, newRun, type RunTrigger, type TaskRun } from "./runs";
+import { RUN_TIMEOUT_MS, type ScheduledTask } from "./task";
+
+const POLL_MS = 2_000;
+/** Time given to an interactive pi launch before the prompt is typed. */
+const LAUNCH_SETTLE_MS = 2_500;
+/** Gap between typing a prompt and pressing Enter. A TUI that receives both in
+ *  one burst treats it as a paste and leaves the prompt unsent. */
+const SUBMIT_DELAY_MS = 400;
+
+export type TabTarget = {
+  tabId: number;
+  leafId: number;
+  /** True when pi is already running in this leaf and only needs the prompt. */
+  piRunning: boolean;
+};
+
+export type DispatcherDeps = {
+  tasks: readonly ScheduledTask[];
+  paused: boolean;
+  shellFlavor: ShellFlavor;
+  recordRun: (run: TaskRun) => void;
+  markDispatched: (taskId: string, at: number) => void;
+  disableTask: (taskId: string) => void;
+  notify: (message: string, tone: "info" | "warning" | "error") => void;
+  /** Focuses or creates the terminal tab that owns this task. */
+  ensureTab: (task: ScheduledTask) => Promise<TabTarget | null>;
+  writeToLeaf: (leafId: number, data: string) => void;
+  shiftEnterFor: (leafId: number) => string;
+  /** Opens a throwaway terminal on a command line, for the recover action. */
+  openTerminalWith: (cwd: string, commandLine: string) => void;
+};
+
+export type TaskDispatcherApi = {
+  runningIds: readonly string[];
+  queuedIds: readonly string[];
+  run: (taskId: string, trigger: RunTrigger) => void;
+  recover: (run: TaskRun) => void;
+};
+
+export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
+  const [queue, setQueue] = useState<QueueState>({ running: [], pending: [] });
+  const depsRef = useRef(deps);
+  depsRef.current = deps;
+  const attemptsRef = useRef(new Map<string, number>());
+  const timersRef = useRef(new Set<number>());
+  // `settle` needs to re-dispatch a retry, but `run` is defined after it.
+  const runRef = useRef<(taskId: string, trigger: RunTrigger) => void>(() => {});
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const handle of timers) window.clearTimeout(handle);
+      timers.clear();
+    };
+  }, []);
+
+  const later = useCallback((fn: () => void, ms: number) => {
+    const handle = window.setTimeout(() => {
+      timersRef.current.delete(handle);
+      fn();
+    }, ms);
+    timersRef.current.add(handle);
+  }, []);
+
+  const release = useCallback((taskId: string) => {
+    setQueue((current) => ({
+      running: current.running.filter((slot) => slot.taskId !== taskId),
+      pending: current.pending.filter((id) => id !== taskId),
+    }));
+  }, []);
+
+  const settle = useCallback(
+    (task: ScheduledTask, run: TaskRun, ok: boolean) => {
+      const d = depsRef.current;
+      d.recordRun(run);
+      release(task.id);
+      if (ok) {
+        attemptsRef.current.delete(task.id);
+        return;
+      }
+      const attempt = (attemptsRef.current.get(task.id) ?? 0) + 1;
+      attemptsRef.current.set(task.id, attempt);
+      const outcome = resolveFailure(task, attempt);
+      if (outcome.action === "retry") {
+        d.notify(
+          `${task.name} failed, retrying in ${Math.round(outcome.delayMs / 1000)}s`,
+          "warning",
+        );
+        later(() => runRef.current(task.id, "recovery"), outcome.delayMs);
+        return;
+      }
+      attemptsRef.current.delete(task.id);
+      if (outcome.action === "disable") {
+        d.disableTask(task.id);
+        d.notify(`${task.name} disabled after repeated failures`, "error");
+      } else {
+        d.notify(`${task.name} failed`, "error");
+      }
+    },
+    [release, later],
+  );
+
+  const runHeadless = useCallback(
+    async (task: ScheduledTask, run: TaskRun, sessionId: string) => {
+      const d = depsRef.current;
+      const argv = buildPiArgv(task, sessionId, { headless: true });
+      const commandLine = formatCommandLine(argv, d.shellFlavor);
+      try {
+        // The user consented to this directory when creating the task.
+        await native.workspaceAuthorize(task.cwd);
+        // Mark where the session file ends now, so accounting measures this
+        // trigger rather than the whole session history.
+        const sessionStart = await native
+          .piSessionOffset(sessionId)
+          .catch(() => 0);
+        const handle = await native.shellBgSpawn(commandLine, task.cwd);
+        let offset = 0;
+        let output = "";
+        const poll = async () => {
+          const logs = await native.shellBgLogs(handle, offset);
+          offset = logs.next_offset;
+          output += logs.bytes;
+          if (logs.exited) {
+            const ok = logs.exit_code === 0;
+            const accounting = await native
+              .piSessionUsage(sessionId, sessionStart)
+              .catch(() => null);
+            settle(
+              task,
+              finishRun(run, {
+                status: ok ? "ok" : "failed",
+                endedAt: Date.now(),
+                exitCode: logs.exit_code ?? undefined,
+                message: summariseOutput(output, logs.exit_code),
+                ...(accounting && accounting.assistantMessages > 0
+                  ? {
+                      usage: accounting.usage,
+                      ...(accounting.stopReason
+                        ? { stopReason: accounting.stopReason }
+                        : {}),
+                      ...(accounting.model ? { model: accounting.model } : {}),
+                      ...(accounting.path
+                        ? { sessionFile: accounting.path }
+                        : {}),
+                    }
+                  : {}),
+              }),
+              ok,
+            );
+            return;
+          }
+          if (Date.now() - run.startedAt > RUN_TIMEOUT_MS) {
+            await native.shellBgKill(handle);
+            settle(
+              task,
+              finishRun(run, {
+                status: "timeout",
+                endedAt: Date.now(),
+                message: "Killed after the 30 minute run timeout.",
+              }),
+              false,
+            );
+            return;
+          }
+          later(() => void poll(), POLL_MS);
+        };
+        later(() => void poll(), POLL_MS);
+      } catch (error) {
+        settle(
+          task,
+          finishRun(run, {
+            status: "failed",
+            endedAt: Date.now(),
+            message: String(error),
+          }),
+          false,
+        );
+      }
+    },
+    [later, settle],
+  );
+
+  const runInTab = useCallback(
+    async (task: ScheduledTask, run: TaskRun, sessionId: string) => {
+      const d = depsRef.current;
+      try {
+        const target = await d.ensureTab(task);
+        if (!target) {
+          settle(
+            task,
+            finishRun(run, {
+              status: "failed",
+              endedAt: Date.now(),
+              message: "Could not open a terminal tab for this task.",
+            }),
+            false,
+          );
+          return;
+        }
+        const typePrompt = () => {
+          const keys = promptKeystrokes(task.prompt, d.shiftEnterFor(target.leafId));
+          if (keys === "") {
+            settle(
+              task,
+              finishRun(run, {
+                status: "failed",
+                endedAt: Date.now(),
+                message: "The prompt is empty, so nothing was sent.",
+              }),
+              false,
+            );
+            return;
+          }
+          d.writeToLeaf(target.leafId, keys);
+          later(() => {
+            d.writeToLeaf(target.leafId, SUBMIT_KEY);
+            // An interactive run stays live in the tab; the card reports the
+            // agent state from the terminal signal rather than an exit code.
+            settle(
+              task,
+              finishRun(run, {
+                status: "ok",
+                endedAt: Date.now(),
+                message: `Prompt sent to ${
+                  target.piRunning ? "the running session" : "a new session"
+                } in tab ${target.tabId}.`,
+              }),
+              true,
+            );
+          }, SUBMIT_DELAY_MS);
+        };
+        if (target.piRunning) {
+          typePrompt();
+          return;
+        }
+        const argv = buildPiArgv(task, sessionId, { headless: false });
+        d.writeToLeaf(
+          target.leafId,
+          `${formatCommandLine(argv, d.shellFlavor)}\r`,
+        );
+        later(typePrompt, LAUNCH_SETTLE_MS);
+      } catch (error) {
+        settle(
+          task,
+          finishRun(run, {
+            status: "failed",
+            endedAt: Date.now(),
+            message: String(error),
+          }),
+          false,
+        );
+      }
+    },
+    [later, settle],
+  );
+
+  const start = useCallback(
+    (task: ScheduledTask, trigger: RunTrigger) => {
+      const now = Date.now();
+      const sessionId = sessionIdFor(task, now);
+      const run = newRun(
+        {
+          taskId: task.id,
+          sessionId,
+          cwd: task.cwd,
+          trigger,
+          attempt: (attemptsRef.current.get(task.id) ?? 0) + 1,
+        },
+        now,
+      );
+      depsRef.current.recordRun(run);
+      depsRef.current.markDispatched(task.id, now);
+      setQueue((current) => ({
+        running: [...current.running, { taskId: task.id, startedAt: now }],
+        pending: current.pending.filter((id) => id !== task.id),
+      }));
+      if (task.target === "headless") void runHeadless(task, run, sessionId);
+      else void runInTab(task, run, sessionId);
+    },
+    [runHeadless, runInTab],
+  );
+
+  const run = useCallback(
+    (taskId: string, trigger: RunTrigger) => {
+      const d = depsRef.current;
+      const task = d.tasks.find((entry) => entry.id === taskId);
+      if (!task) return;
+      if (d.paused && trigger !== "manual") return;
+      const outcome = admitOccurrence(task, queue);
+      if (outcome.decision === "skip") {
+        if (outcome.notify) {
+          d.notify(`${task.name} skipped: ${outcome.reason}`, "warning");
+        }
+        return;
+      }
+      if (outcome.decision === "queue") {
+        setQueue((current) => ({
+          ...current,
+          pending: [...current.pending, task.id],
+        }));
+        return;
+      }
+      start(task, trigger);
+    },
+    [queue, start],
+  );
+  runRef.current = run;
+
+  // Drain the queue as soon as a slot frees up.
+  useEffect(() => {
+    if (queue.pending.length === 0) return;
+    const next = queue.pending.find(
+      (id) => !queue.running.some((slot) => slot.taskId === id),
+    );
+    if (next === undefined) return;
+    const task = depsRef.current.tasks.find((entry) => entry.id === next);
+    if (!task) {
+      setQueue((current) => ({
+        ...current,
+        pending: current.pending.filter((id) => id !== next),
+      }));
+      return;
+    }
+    start(task, "schedule");
+  }, [queue, start]);
+
+  const recover = useCallback((run: TaskRun) => {
+    const d = depsRef.current;
+    d.openTerminalWith(
+      run.cwd,
+      recoverCommandLine({ cwd: run.cwd, sessionId: run.sessionId }, d.shellFlavor),
+    );
+  }, []);
+
+  const runningIds = useMemo(
+    () => queue.running.map((slot) => slot.taskId),
+    [queue.running],
+  );
+
+  return useMemo(
+    () => ({ runningIds, queuedIds: queue.pending, run, recover }),
+    [runningIds, queue.pending, run, recover],
+  );
+}

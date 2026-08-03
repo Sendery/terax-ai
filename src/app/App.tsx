@@ -7,10 +7,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BUILD_INFO } from "@/lib/buildInfo";
 import { getLaunchDir } from "@/lib/launchDir";
+import { IS_WINDOWS } from "@/lib/platform";
 import { usePresence } from "@/lib/usePresence";
 import { quoteShellArg } from "@/lib/shellQuote";
 import { useZoom } from "@/lib/useZoom";
-import { AgentNotificationsBridge } from "@/modules/agents";
+import { AgentNotificationsBridge, useAgentStore } from "@/modules/agents";
 import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
@@ -74,6 +75,22 @@ import {
   useTabNotes,
 } from "@/modules/notes";
 import {
+  type ScheduledTask,
+  type TabTarget,
+  TASKS_MAX_WIDTH,
+  TASKS_MIN_WIDTH,
+  formatScheduleSpec,
+  TaskEditor,
+  taskInputFromCommand,
+  taskPatchFromCommand,
+  TasksPanel,
+  taskSummary,
+  useScheduledTasks,
+  useTaskDispatcher,
+  useTasksPanel,
+  useTasksScheduler,
+} from "@/modules/tasks";
+import {
   SourceControlPanel,
   useSourceControlContext,
 } from "@/modules/source-control";
@@ -108,6 +125,7 @@ import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { CloseDialogs } from "./components/CloseDialogs";
 import {
   TOGGLE_BLOCK_INPUT_EVENT,
@@ -607,6 +625,146 @@ export default function App() {
     [newTab],
   );
 
+  // Resolves the terminal leaf a scheduled task should talk to: the linked tab
+  // when it is still alive, otherwise a fresh one in the task's directory.
+  const ensureTaskTab = useCallback(
+    (task: ScheduledTask): Promise<TabTarget | null> => {
+      const linked =
+        task.tabId === undefined
+          ? undefined
+          : tabsRef.current.find(
+              (t) => t.id === task.tabId && t.kind === "terminal",
+            );
+      if (linked && linked.kind === "terminal") {
+        setActiveId(linked.id);
+        const leafId = linked.activeLeafId;
+        const agent = useAgentStore.getState().sessions[leafId];
+        return Promise.resolve({
+          tabId: linked.id,
+          leafId,
+          piRunning: agent?.agent === "pi",
+        });
+      }
+      const tabId = newTab(task.cwd);
+      if (task.color) updateTab(tabId, { color: task.color });
+      return new Promise((resolve) => {
+        // The leaf id only exists after the tab state commits and the pane
+        // registers its handle.
+        setTimeout(() => {
+          const tab = tabsRef.current.find((x) => x.id === tabId);
+          if (tab?.kind !== "terminal") {
+            resolve(null);
+            return;
+          }
+          resolve({ tabId, leafId: tab.activeLeafId, piRunning: false });
+        }, 120);
+      });
+    },
+    [newTab, updateTab, setActiveId],
+  );
+
+  const writeToLeaf = useCallback((leafId: number, data: string) => {
+    const term = terminalRefs.current.get(leafId);
+    if (!term) return;
+    term.write(data);
+  }, []);
+
+  const shiftEnterFor = useCallback((leafId: number) => {
+    return terminalRefs.current.get(leafId)?.shiftEnter() ?? "\x1b\r";
+  }, []);
+
+  const openTerminalWith = useCallback(
+    (cwd: string, commandLine: string) => {
+      const tabId = newTab(cwd);
+      setTimeout(() => {
+        const tab = tabsRef.current.find((x) => x.id === tabId);
+        if (tab?.kind !== "terminal") return;
+        const t = terminalRefs.current.get(tab.activeLeafId);
+        if (!t) return;
+        t.write(`${commandLine}\r`);
+        t.focus();
+      }, 120);
+    },
+    [newTab],
+  );
+
+  const {
+    tasksRef,
+    widthRef: tasksWidthRef,
+    tasksVisible,
+    toggleTasks,
+    showTasks: showTasksPanel,
+    hideTasks: hideTasksPanel,
+    persistTasksWidth,
+  } = useTasksPanel();
+  const scheduled = useScheduledTasks();
+  const scheduledRef = useRef(scheduled);
+  scheduledRef.current = scheduled;
+  const notifyTask = useCallback(
+    (message: string, tone: "info" | "warning" | "error") => {
+      if (tone === "error") toast.error(message);
+      else if (tone === "warning") toast.warning(message);
+      else toast(message);
+    },
+    [],
+  );
+  const markTaskDispatched = useCallback(
+    (taskId: string, at: number) => {
+      const task = scheduled.tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      scheduled.update(taskId, {
+        lastRunAt: at,
+        runCount: task.runCount + 1,
+      });
+    },
+    [scheduled],
+  );
+  const disableTaskAfterFailures = useCallback(
+    (taskId: string) => scheduled.setEnabled(taskId, false),
+    [scheduled],
+  );
+  const dispatcher = useTaskDispatcher({
+    tasks: scheduled.tasks,
+    paused: scheduled.paused,
+    shellFlavor: IS_WINDOWS ? "windows" : "posix",
+    recordRun: scheduled.recordRun,
+    markDispatched: markTaskDispatched,
+    disableTask: disableTaskAfterFailures,
+    notify: notifyTask,
+    ensureTab: ensureTaskTab,
+    writeToLeaf,
+    shiftEnterFor,
+    openTerminalWith,
+  });
+  const dispatcherRef = useRef(dispatcher);
+  dispatcherRef.current = dispatcher;
+  useTasksScheduler({
+    tasks: scheduled.tasks,
+    paused: scheduled.paused,
+    hydrated: scheduled.hydrated,
+    run: dispatcher.run,
+    reschedule: scheduled.rescheduleOne,
+    notify: notifyTask,
+  });
+  const [taskEditorOpen, setTaskEditorOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const editingTask =
+    editingTaskId === null
+      ? null
+      : (scheduled.tasks.find((t) => t.id === editingTaskId) ?? null);
+  const openNewTaskEditor = useCallback(() => {
+    setEditingTaskId(null);
+    setTaskEditorOpen(true);
+  }, []);
+  const openTaskEditor = useCallback((id: string) => {
+    setEditingTaskId(id);
+    setTaskEditorOpen(true);
+  }, []);
+  const closeTaskEditor = useCallback(() => {
+    setTaskEditorOpen(false);
+    setEditingTaskId(null);
+  }, []);
+
   const handleOpenFile = useCallback(
     (path: string, pin?: boolean) => {
       // Markdown opens in its rendered view by default; a per-tab toggle flips
@@ -985,6 +1143,9 @@ export default function App() {
   ]);
 
   const activeCwd = activeTerminalLeafCwd;
+  // Command handlers run outside render, so they read the cwd through a ref.
+  const activeCwdRef = useRef(activeCwd);
+  activeCwdRef.current = activeCwd;
 
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
@@ -1132,6 +1293,34 @@ export default function App() {
                 sidebarWidthRef.current) > 0,
             view: sidebarView,
           },
+          ...(scheduledRef.current.tasks.length > 0
+            ? {
+                scheduledTasks: {
+                  paused: scheduledRef.current.paused,
+                  tasks: scheduledRef.current.tasks.map((task) => ({
+                    id: task.id,
+                    name: task.name,
+                    prompt: task.prompt,
+                    schedule: formatScheduleSpec(task.schedule),
+                    enabled: task.enabled,
+                    mode: task.mode,
+                    target: task.target,
+                    missed: task.missed,
+                    ...(task.tabId !== undefined ? { tabId: task.tabId } : {}),
+                    nextRunAt: task.nextRunAt ?? null,
+                    ...(task.lastRunAt !== undefined
+                      ? { lastRunAt: task.lastRunAt }
+                      : {}),
+                    runCount: task.runCount,
+                    ...(task.maxRuns !== undefined
+                      ? { maxRuns: task.maxRuns }
+                      : {}),
+                    running: dispatcherRef.current.runningIds.includes(task.id),
+                    queued: dispatcherRef.current.queuedIds.includes(task.id),
+                  })),
+                },
+              }
+            : {}),
         }),
       getBuildInfo: () => ({
         repository: BUILD_INFO.repository,
@@ -1264,9 +1453,114 @@ export default function App() {
           ...(c.kind === "jira" ? { status: c.status } : {}),
         })),
       }),
+      showTasks: () => {
+        showTasksPanel();
+        return { visible: true };
+      },
+      hideTasks: () => {
+        hideTasksPanel();
+        return { visible: false };
+      },
+      toggleTasks: () => {
+        toggleTasks();
+        return { toggled: true };
+      },
+      openTaskEditor: ({ id }) => {
+        if (id !== undefined) {
+          const current = scheduledRef.current.tasks.find((t) => t.id === id);
+          if (!current) {
+            throw { code: "command_failed", message: `Task ${id} not found` };
+          }
+          openTaskEditor(id);
+        } else {
+          openNewTaskEditor();
+        }
+        showTasksPanel();
+        return { opened: true, id: id ?? null };
+      },
+      listTasks: () => {
+        const api = scheduledRef.current;
+        const now = Date.now();
+        return {
+          paused: api.paused,
+          running: dispatcherRef.current.runningIds,
+          queued: dispatcherRef.current.queuedIds,
+          tasks: api.tasks.map((task) =>
+            taskSummary(task, api.runs[task.id] ?? [], now),
+          ),
+        };
+      },
+      addTask: (payload) => {
+        const input = taskInputFromCommand(
+          payload,
+          activeCwdRef.current ?? home ?? "",
+        );
+        if ("error" in input) {
+          throw { code: "command_failed", message: input.error };
+        }
+        const created = scheduledRef.current.add(input);
+        showTasksPanel();
+        return {
+          id: created.id,
+          name: created.name,
+          cwd: created.cwd,
+          nextRunAt: created.nextRunAt ?? null,
+        };
+      },
+      updateTask: ({ id, ...fields }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const patch = taskPatchFromCommand(fields, current);
+        if ("error" in patch) {
+          throw { code: "command_failed", message: patch.error };
+        }
+        scheduledRef.current.update(id, patch);
+        return { id, updated: true };
+      },
+      removeTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        scheduledRef.current.remove(id);
+        return { id, removed: true };
+      },
+      runTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        dispatcherRef.current.run(id, "manual");
+        return { id, started: true };
+      },
+      setTaskEnabled: ({ id, enabled }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        scheduledRef.current.setEnabled(id, enabled);
+        return { id, enabled };
+      },
+      pauseAllTasks: () => {
+        scheduledRef.current.setPaused(true);
+        return { paused: true };
+      },
+      resumeAllTasks: () => {
+        scheduledRef.current.setPaused(false);
+        scheduledRef.current.rescheduleAll();
+        return { paused: false };
+      },
     }),
     [
       activeId,
+      home,
+      showTasksPanel,
+      hideTasksPanel,
+      toggleTasks,
+      openTaskEditor,
+      openNewTaskEditor,
       activeSpaceId,
       handleClose,
       handleOpenFile,
@@ -1347,6 +1641,12 @@ export default function App() {
               onToggleSidebar={toggleSidebar}
               onToggleNotes={handleToggleNotes}
               notesVisible={notesVisible || notesDetached}
+              onToggleTasks={toggleTasks}
+              tasksVisible={tasksVisible}
+              scheduledCount={
+                scheduled.tasks.filter((task) => task.enabled).length
+              }
+              scheduledPaused={scheduled.paused}
               onOpenCommandPalette={() => openCommandPalette("commands")}
               onActivateAgent={onActivateAgent}
               onActivateLocalAgent={onActivateLocalAgent}
@@ -1489,6 +1789,36 @@ export default function App() {
                   />
                 )}
               </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id="tasks"
+                panelRef={tasksRef}
+                defaultSize={tasksVisible ? `${tasksWidthRef.current}px` : 0}
+                minSize={`${TASKS_MIN_WIDTH}px`}
+                maxSize={`${TASKS_MAX_WIDTH}px`}
+                collapsible
+                collapsedSize={0}
+                onResize={(size) => {
+                  if (size.inPixels > 0) persistTasksWidth(size.inPixels);
+                }}
+              >
+                <TasksPanel
+                  tasks={scheduled.tasks}
+                  runs={scheduled.runs}
+                  now={scheduled.now}
+                  paused={scheduled.paused}
+                  runningIds={dispatcher.runningIds}
+                  queuedIds={dispatcher.queuedIds}
+                  onAdd={openNewTaskEditor}
+                  onEdit={openTaskEditor}
+                  onRemove={scheduled.remove}
+                  onToggleEnabled={scheduled.setEnabled}
+                  onRunNow={(id) => dispatcher.run(id, "manual")}
+                  onRecover={dispatcher.recover}
+                  onTogglePaused={() => scheduled.setPaused(!scheduled.paused)}
+                  onHide={hideTasksPanel}
+                />
+              </ResizablePanel>
             </ResizablePanelGroup>
           </main>
 
@@ -1556,6 +1886,18 @@ export default function App() {
           />
 
           <UpdaterDialog />
+
+          <TaskEditor
+            open={taskEditorOpen}
+            task={editingTask}
+            defaultCwd={activeCwd ?? home ?? ""}
+            onSubmit={(input) => {
+              if (editingTask) scheduled.update(editingTask.id, input);
+              else scheduled.add(input);
+              closeTaskEditor();
+            }}
+            onCancel={closeTaskEditor}
+          />
 
           <CloseDialogs
             tabs={tabs}
