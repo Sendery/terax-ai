@@ -12,7 +12,7 @@ function context(
   return {
     tabs: [],
     activeId: 1,
-    searchTarget: { kind: "none" },
+    searchTarget: null,
     explorerRoot: "/tmp",
     home: "/Users/dev",
     openNewTab: noop,
