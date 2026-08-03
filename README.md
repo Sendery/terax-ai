@@ -22,7 +22,7 @@
 
 ---
 
-Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and React 19. A native PTY backend with a WebGL renderer, an agentic AI side-panel that runs against your own keys or fully local models, plus a code editor, file explorer, source control with a git graph, and a web preview pane built in. About 7-8 MB on disk. No telemetry. No account.
+Terax is a lightweight open-source terminal-first AI-native development environment (ADE) built on Tauri 2 + Rust and React 19. A native PTY backend with a WebGL renderer, an agentic AI side-panel that runs against your own keys or fully local models, plus a code editor, file explorer, source control with a git graph, and a web preview pane built in. About 7-8 MB on disk. No telemetry. No account.
 
 ## Screenshots
 
@@ -49,15 +49,19 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 - Native PTY backend via `portable-pty` (zsh, bash, pwsh, fish, cmd)
 - Split panels (horizontal and vertical)
 - Inline search, link detection, true-color
+- Drag files from the explorer or desktop into a terminal as shell-safe quoted paths
 - Per-tab workspace environments on Windows (Local, or any installed WSL distro)
+- Spaces restore tabs, working directories, and split layouts across launches
 
 ### Code editor
 
 - CodeMirror 6 (supports all popular languages - TS/JS, Rust, Python, Go, C/C++, Java, HTML/CSS, JSON, Markdown, etc.)
 - Inline AI autocomplete with local model support
 - AI edit diffs, accept or reject hunk by hunk
+- Opt-in language server support with diagnostics, navigation, completion, formatting, and custom servers
+- Rendered Markdown plus image, video, audio, and PDF viewing
 - Vim mode
-- Ten built-in editor themes: Atom One, Aura, Copilot, GitHub Dark / Light, Gruvbox Dark, Nord, Tokyo Night, Xcode Dark / Light
+- Built-in editor themes including Kanagawa, Catppuccin, Rosé Pine, Everforest, Dracula, Solarized, Nord, Tokyo Night, GitHub, and Xcode
 
 ### Source control
 
@@ -70,6 +74,7 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 
 - Catppuccin icon theme
 - Fuzzy search, keyboard navigation, inline rename, context actions
+- Live updates when files change on disk
 - Attach files and selections directly to the AI side-panel
 
 ### Web preview
@@ -98,7 +103,8 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 - **BYOK providers:** OpenAI, Anthropic, Google (Gemini), Groq, xAI (Grok), Cerebras, OpenRouter, DeepSeek, Mistral, plus any OpenAI-compatible endpoint
 - **Local / offline:** LM Studio, MLX, Ollama
 - **Agentic workflow:** plans, sub-agents, project memory via `TERAX.md`, file read / write / edit / multi-edit / grep / glob, bash with approval gating, background processes
-- **Composer:** snippets via `#handle`, files via `@path`, slash commands, voice input, attach-to-agent from explorer or selection
+- **Coding-agent orchestration:** spawn Claude Code in a terminal, inspect its output, and send follow-up work through approval-gated tools
+- **Composer:** prompt snippets via `#handle`, files via `@path`, voice input, attach-to-agent from explorer or selection
 - **Custom agents** with their own system prompt and tool subset
 - **Plan mode** for multi-step work, generates and confirms before doing
 - **Pi integration:** first-party `@crynta/pi-terax` extension controls Terax over an authenticated local bridge, including OS-agnostic in-app visual capture of any surface (window, panes, menus, sidebar) with no screen-recording permissions and private terminals always excluded
