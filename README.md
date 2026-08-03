@@ -3,14 +3,6 @@
   <h1>Terax</h1>
 
   <p><strong>Lightweight Terminal-first AI-native dev workspace.</strong></p>
-
-  <p>
-    <img src="https://img.shields.io/github/v/release/crynta/terax-ai?label=version&color=blue" alt="version" />
-    <img src="https://img.shields.io/github/downloads/crynta/terax-ai/total?label=downloads&color=blue" alt="downloads" />
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey" alt="platform" />
-    <a href="https://discord.gg/tyveTUyEp7"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
-  </p>
-
   <p>
     <a href="https://terax.app">Website</a>
     ·
@@ -18,7 +10,30 @@
     ·
     <a href="https://github.com/crynta/Terax-website">Website's source code</a>
   </p>
+
+  <p>
+    <img src="https://img.shields.io/github/v/release/crynta/terax-ai?label=version&color=blue" alt="version" />
+    <img src="https://img.shields.io/github/downloads/crynta/terax-ai/total?label=downloads&color=blue" alt="downloads" />
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey" alt="platform" />
+    <a href="https://discord.gg/tyveTUyEp7"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+    <a href="https://www.youtube.com/@crynta"><img src="https://img.shields.io/badge/Youtube-FF0000?logo=youtube&logoColor=white" alt="YouTube" /></a>
+  </p>
 </div>
+
+<p align="center">
+  <strong>English</strong> |
+  <a href="docs/readme/README.zh-CN.md">简体中文</a> |
+  <a href="docs/readme/README.es.md">Español</a> |
+  <a href="docs/readme/README.de.md">Deutsch</a> |
+  <a href="docs/readme/README.fr.md">Français</a> |
+  <a href="docs/readme/README.ja.md">日本語</a> |
+  <a href="docs/readme/README.ko.md">한국어</a> |
+  <a href="docs/readme/README.pt-BR.md">Português</a> |
+  <a href="docs/readme/README.pl.md">Polski</a> |
+  <a href="docs/readme/README.ru.md">Русский</a> |
+  <a href="docs/readme/README.id.md">Bahasa Indonesia</a> |
+  <a href="docs/readme/README.hi.md">हिन्दी</a>
+</p>
 
 ---
 
