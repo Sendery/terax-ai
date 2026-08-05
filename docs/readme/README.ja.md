@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax は、Tauri 2 + Rust と React 19 で構築された、軽量かつオー�
 ## スクリーンショット
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="ターミナル" /><br/><sub>WebGL 描画対応のマルチタブターミナル</sub></td><td align="center"><img src="../themes.png" alt="テーマと背景画像" /><br/><sub>カスタムテーマ、プリセット、背景画像</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="ウェブプレビュー" /><br/><sub>ローカル開発サーバーのウェブプレビュー</sub></td><td align="center"><img src="../source-control.png" alt="ソース管理と Git グラフ" /><br/><sub>履歴に Git グラフを備えたソース管理パネル</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="AI ウィンドウ" /><br/><sub>コードエディター内の編集差分を伴うエージェント型 AI ワークフロー</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="ウェブプレビュー" /><br/><sub>ローカル開発サーバーのウェブプレビュー</sub></td><td align="center"><img src="../ai-workflow.png" alt="AI ウィンドウ" /><br/><sub>コードエディター内の編集差分を伴うエージェント型 AI ワークフロー</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="テーマと背景画像" style="margin-top: 12px;"/><br/><sub>カスタムテーマ、プリセット、背景画像</sub></td><td align="center"><img src="../source-control.png" alt="ソース管理と Git グラフ" style="margin-top: 12px;"/><br/><sub>履歴に Git グラフを備えたソース管理パネル</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="ターミナル" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>エディターのような入力パネルを備えたブロック型 WebGL ターミナル</sub></td></tr>
 </table>
 
 ## 機能
@@ -94,7 +94,6 @@ Terax は、Tauri 2 + Rust と React 19 で構築された、軽量かつオー�
 
 ### Windows の注意事項
 
-- 初回起動時、Terax はまだコード署名されていないため「Windows によって PC が保護されました」と表示されます。**詳細情報**、**実行**の順にクリックしてください。
 - 既定のシェル検出: `pwsh.exe`（PowerShell 7+）-> `powershell.exe`（Windows PowerShell 5.1）-> `cmd.exe`。
 - WSL はラップされた子プロセスではなく、第一級のワークスペース環境です。
 

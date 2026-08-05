@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <strong>Bahasa Indonesia</strong> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax adalah lingkungan pengembangan (ADE) ringan, sumber terbuka, berfokus pada
 ## Tangkapan layar
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="Terminal" /><br/><sub>Terminal multitab dengan perenderan WebGL</sub></td><td align="center"><img src="../themes.png" alt="Tema dan gambar latar" /><br/><sub>Tema kustom, preset, dan gambar latar</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="Pratinjau web" /><br/><sub>Pratinjau web server pengembangan lokal</sub></td><td align="center"><img src="../source-control.png" alt="Kontrol sumber dan grafik Git" /><br/><sub>Panel kontrol sumber dengan grafik Git dalam riwayat</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="Jendela AI" /><br/><sub>Alur kerja AI berbasis agen dengan diff penyuntingan di editor kode</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="Pratinjau web" /><br/><sub>Pratinjau web server pengembangan lokal</sub></td><td align="center"><img src="../ai-workflow.png" alt="Jendela AI" /><br/><sub>Alur kerja AI berbasis agen dengan diff penyuntingan di editor kode</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="Tema dan gambar latar" style="margin-top: 12px;"/><br/><sub>Tema kustom, preset, dan gambar latar</sub></td><td align="center"><img src="../source-control.png" alt="Kontrol sumber dan grafik Git" style="margin-top: 12px;"/><br/><sub>Panel kontrol sumber dengan grafik Git dalam riwayat</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Terminal WebGL berbasis blok dengan panel masukan seperti editor</sub></td></tr>
 </table>
 
 ## Fitur
@@ -94,7 +94,6 @@ Penginstal terbaru tersedia di halaman [Releases](https://github.com/crynta/tera
 
 ### Catatan Windows
 
-- Saat pertama dibuka, Windows menampilkan "Windows protected your PC" karena Terax belum ditandatangani. Klik **More info**, lalu **Run anyway**.
 - Deteksi shell default: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL adalah lingkungan ruang kerja kelas utama, bukan subproses yang dibungkus.
 

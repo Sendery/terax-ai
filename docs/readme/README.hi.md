@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <strong>हिन्दी</strong>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax एक हल्का, ओपन-सोर्स, टर्मिनल-�
 ## स्क्रीनशॉट
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="टर्मिनल" /><br/><sub>WebGL रेंडरिंग वाला मल्टी-टैब टर्मिनल</sub></td><td align="center"><img src="../themes.png" alt="थीम और बैकग्राउंड" /><br/><sub>कस्टम थीम, प्रीसेट और बैकग्राउंड इमेज</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="वेब प्रीव्यू" /><br/><sub>स्थानीय डेवलपमेंट सर्वर का वेब प्रीव्यू</sub></td><td align="center"><img src="../source-control.png" alt="सोर्स कंट्रोल और Git ग्राफ़" /><br/><sub>इतिहास में Git ग्राफ़ वाला सोर्स कंट्रोल पैनल</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="AI विंडो" /><br/><sub>कोड एडिटर में एडिट डिफ़ के साथ एजेंटिक AI वर्कफ़्लो</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="वेब प्रीव्यू" /><br/><sub>स्थानीय डेवलपमेंट सर्वर का वेब प्रीव्यू</sub></td><td align="center"><img src="../ai-workflow.png" alt="AI विंडो" /><br/><sub>कोड एडिटर में एडिट डिफ़ के साथ एजेंटिक AI वर्कफ़्लो</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="थीम और बैकग्राउंड" style="margin-top: 12px;"/><br/><sub>कस्टम थीम, प्रीसेट और बैकग्राउंड इमेज</sub></td><td align="center"><img src="../source-control.png" alt="सोर्स कंट्रोल और Git ग्राफ़" style="margin-top: 12px;"/><br/><sub>इतिहास में Git ग्राफ़ वाला सोर्स कंट्रोल पैनल</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="टर्मिनल" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>एडिटर जैसे इनपुट पैनल वाला ब्लॉक-आधारित WebGL टर्मिनल</sub></td></tr>
 </table>
 
 ## सुविधाएँ
@@ -94,7 +94,6 @@ Terax एक हल्का, ओपन-सोर्स, टर्मिनल-�
 
 ### Windows नोट्स
 
-- पहली बार चलाने पर Windows "Windows protected your PC" दिखाता है, क्योंकि Terax अभी कोड-साइन नहीं है। **More info** और फिर **Run anyway** पर क्लिक करें।
 - डिफ़ॉल्ट शेल पहचान: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`।
 - WSL एक पूर्ण वर्कस्पेस एनवायरनमेंट है, केवल लिपटा हुआ सबप्रोसेस नहीं।
 

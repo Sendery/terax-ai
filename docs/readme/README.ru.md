@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <strong>Русский</strong> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax представляет собой легковесную среду ра
 ## Снимки экрана
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="Терминал" /><br/><sub>Терминал с несколькими вкладками и рендерингом WebGL</sub></td><td align="center"><img src="../themes.png" alt="Темы и фон" /><br/><sub>Пользовательские темы, пресеты и фоновые изображения</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="Веб-предпросмотр" /><br/><sub>Предпросмотр локальных серверов разработки</sub></td><td align="center"><img src="../source-control.png" alt="Управление кодом и граф Git" /><br/><sub>Панель управления кодом с графом Git в истории</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="Окно ИИ" /><br/><sub>Рабочий процесс агентного ИИ с различиями правок в редакторе</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="Веб-предпросмотр" /><br/><sub>Предпросмотр локальных серверов разработки</sub></td><td align="center"><img src="../ai-workflow.png" alt="Окно ИИ" /><br/><sub>Рабочий процесс агентного ИИ с различиями правок в редакторе</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="Темы и фон" style="margin-top: 12px;"/><br/><sub>Пользовательские темы, пресеты и фоновые изображения</sub></td><td align="center"><img src="../source-control.png" alt="Управление кодом и граф Git" style="margin-top: 12px;"/><br/><sub>Панель управления кодом с графом Git в истории</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="Терминал" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Блочный WebGL-терминал с панелью ввода как в редакторе</sub></td></tr>
 </table>
 
 ## Возможности
@@ -94,7 +94,6 @@ Terax представляет собой легковесную среду ра
 
 ### Примечания для Windows
 
-- При первом запуске Windows покажет сообщение «Система Windows защитила ваш компьютер», поскольку Terax пока не подписан. Нажмите **Подробнее**, затем **Выполнить в любом случае**.
 - Определение shell по умолчанию: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL является полноценной рабочей средой, а не обёрнутым подпроцессом.
 

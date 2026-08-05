@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <strong>Polski</strong> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax to lekkie, otwartoźródłowe, terminalowe środowisko programistyczne (AD
 ## Zrzuty ekranu
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="Terminal" /><br/><sub>Wielokartowy terminal z renderowaniem WebGL</sub></td><td align="center"><img src="../themes.png" alt="Motywy i tło" /><br/><sub>Własne motywy, ustawienia i obrazy tła</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="Podgląd stron" /><br/><sub>Podgląd lokalnych serwerów deweloperskich</sub></td><td align="center"><img src="../source-control.png" alt="Kontrola źródeł i graf Git" /><br/><sub>Panel kontroli źródeł z grafem Git w historii</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="Okno AI" /><br/><sub>Agentowy przepływ pracy AI z różnicami zmian w edytorze</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="Podgląd stron" /><br/><sub>Podgląd lokalnych serwerów deweloperskich</sub></td><td align="center"><img src="../ai-workflow.png" alt="Okno AI" /><br/><sub>Agentowy przepływ pracy AI z różnicami zmian w edytorze</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="Motywy i tło" style="margin-top: 12px;"/><br/><sub>Własne motywy, ustawienia i obrazy tła</sub></td><td align="center"><img src="../source-control.png" alt="Kontrola źródeł i graf Git" style="margin-top: 12px;"/><br/><sub>Panel kontroli źródeł z grafem Git w historii</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Blokowy terminal WebGL z panelem wprowadzania podobnym do edytora</sub></td></tr>
 </table>
 
 ## Funkcje
@@ -94,7 +94,6 @@ Najnowsze instalatory znajdują się na stronie [Releases](https://github.com/cr
 
 ### Uwagi dla Windows
 
-- Przy pierwszym uruchomieniu Windows pokaże komunikat „System Windows ochronił ten komputer”, ponieważ Terax nie jest jeszcze podpisany. Kliknij **Więcej informacji**, a potem **Uruchom mimo to**.
 - Domyślne wykrywanie powłoki: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL jest pełnoprawnym środowiskiem obszaru roboczego, a nie opakowanym podprocesem.
 

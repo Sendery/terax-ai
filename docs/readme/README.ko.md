@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <strong>한국어</strong> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.pt-BR.md">Português</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax는 Tauri 2 + Rust와 React 19로 만든 가볍고 오픈 소스이며 터�
 ## 스크린샷
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="터미널" /><br/><sub>WebGL 렌더링을 지원하는 다중 탭 터미널</sub></td><td align="center"><img src="../themes.png" alt="테마와 배경 이미지" /><br/><sub>사용자 지정 테마, 프리셋, 배경 이미지</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="웹 미리보기" /><br/><sub>로컬 개발 서버의 웹 미리보기</sub></td><td align="center"><img src="../source-control.png" alt="소스 제어와 Git 그래프" /><br/><sub>히스토리에 Git 그래프가 포함된 소스 제어 패널</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="AI 창" /><br/><sub>코드 편집기에서 편집 차이를 보여 주는 에이전트형 AI 워크플로</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="웹 미리보기" /><br/><sub>로컬 개발 서버의 웹 미리보기</sub></td><td align="center"><img src="../ai-workflow.png" alt="AI 창" /><br/><sub>코드 편집기에서 편집 차이를 보여 주는 에이전트형 AI 워크플로</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="테마와 배경 이미지" style="margin-top: 12px;"/><br/><sub>사용자 지정 테마, 프리셋, 배경 이미지</sub></td><td align="center"><img src="../source-control.png" alt="소스 제어와 Git 그래프" style="margin-top: 12px;"/><br/><sub>히스토리에 Git 그래프가 포함된 소스 제어 패널</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="터미널" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>편집기형 입력 패널을 갖춘 블록 기반 WebGL 터미널</sub></td></tr>
 </table>
 
 ## 기능
@@ -94,7 +94,6 @@ Terax는 Tauri 2 + Rust와 React 19로 만든 가볍고 오픈 소스이며 터�
 
 ### Windows 참고 사항
 
-- 처음 실행하면 Terax가 아직 코드 서명되지 않아 "Windows의 PC 보호"가 표시됩니다. **추가 정보**를 누른 다음 **실행**을 누르세요.
 - 기본 셸 감지: `pwsh.exe`(PowerShell 7+) -> `powershell.exe`(Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL은 래핑된 하위 프로세스가 아니라 완전한 워크스페이스 환경입니다.
 

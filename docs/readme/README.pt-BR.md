@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <strong>Português</strong> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
+  <a href="../../README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.de.md">Deutsch</a> | <a href="README.fr.md">Français</a> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.id.md">Bahasa Indonesia</a> | <a href="README.hi.md">हिन्दी</a>
 </p>
 
 ---
@@ -24,9 +24,9 @@ Terax é um ambiente de desenvolvimento (ADE) leve, de código aberto, focado no
 ## Capturas de tela
 
 <table>
-  <tr><td align="center"><img src="../terminal.png" alt="Terminal" /><br/><sub>Terminal com várias abas e renderização WebGL</sub></td><td align="center"><img src="../themes.png" alt="Temas e imagem de fundo" /><br/><sub>Temas personalizados, predefinições e imagens de fundo</sub></td></tr>
-  <tr><td align="center"><img src="../web-preview.png" alt="Visualização web" /><br/><sub>Visualização de servidores de desenvolvimento locais</sub></td><td align="center"><img src="../source-control.png" alt="Controle de versão e gráfico Git" /><br/><sub>Painel de controle de versão com gráfico Git no histórico</sub></td></tr>
-  <tr><td colspan="2" align="center"><img src="../ai-workflow.png" alt="Janela de IA" /><br/><sub>Fluxo de IA com agentes e diffs de edição no editor</sub></td></tr>
+  <tr><td align="center"><img src="../web-preview.png" alt="Visualização web" /><br/><sub>Visualização de servidores de desenvolvimento locais</sub></td><td align="center"><img src="../ai-workflow.png" alt="Janela de IA" /><br/><sub>Fluxo de IA com agentes e diffs de edição no editor</sub></td></tr>
+  <tr><td align="center"><img src="../themes.png" alt="Temas e imagem de fundo" style="margin-top: 12px;"/><br/><sub>Temas personalizados, predefinições e imagens de fundo</sub></td><td align="center"><img src="../source-control.png" alt="Controle de versão e gráfico Git" style="margin-top: 12px;"/><br/><sub>Painel de controle de versão com gráfico Git no histórico</sub></td></tr>
+  <tr><td colspan="2" align="center"><img src="../terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Terminal WebGL baseado em blocos com painel de entrada semelhante a um editor</sub></td></tr>
 </table>
 
 ## Recursos
@@ -94,7 +94,6 @@ Os instaladores mais recentes estão na página de [Releases](https://github.com
 
 ### Notas para Windows
 
-- Na primeira execução, o Windows mostra "O Windows protegeu o computador" porque o Terax ainda não é assinado. Clique em **Mais informações** e em **Executar assim mesmo**.
 - Detecção de shell: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL é um ambiente de workspace de primeira classe, não um subprocesso encapsulado.
 

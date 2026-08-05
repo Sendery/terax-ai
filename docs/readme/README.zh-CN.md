@@ -23,7 +23,6 @@
 
 <p align="center">
   <a href="../../README.md">English</a> |
-  <strong>简体中文</strong> |
   <a href="README.es.md">Español</a> |
   <a href="README.de.md">Deutsch</a> |
   <a href="README.fr.md">Français</a> |
@@ -44,15 +43,15 @@ Terax 是一个轻量、开源、终端优先的 AI 原生开发环境（ADE）�
 
 <table>
   <tr>
-    <td align="center"><img src="../terminal.png" alt="终端" /><br/><sub>使用 WebGL 渲染的多标签终端</sub></td>
-    <td align="center"><img src="../themes.png" alt="主题和背景图" /><br/><sub>自定义主题、预设和背景图</sub></td>
-  </tr>
-  <tr>
     <td align="center"><img src="../web-preview.png" alt="网页预览" /><br/><sub>本地开发服务器网页预览</sub></td>
-    <td align="center"><img src="../source-control.png" alt="源代码管理和 Git 图" /><br/><sub>带历史 Git 图的源代码管理面板</sub></td>
+    <td align="center"><img src="../ai-workflow.png" alt="AI 窗口" /><br/><sub>在代码编辑器中显示编辑差异的智能体 AI 工作流</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="../ai-workflow.png" alt="AI 窗口" /><br/><sub>在代码编辑器中显示编辑差异的智能体 AI 工作流</sub></td>
+    <td align="center"><img src="../themes.png" alt="主题和背景图" style="margin-top: 12px;"/><br/><sub>自定义主题、预设和背景图</sub></td>
+    <td align="center"><img src="../source-control.png" alt="源代码管理和 Git 图" style="margin-top: 12px;"/><br/><sub>带历史 Git 图的源代码管理面板</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="../terminal.png" alt="终端" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>基于块的 WebGL 终端，配有类似编辑器的输入面板</sub></td>
   </tr>
 </table>
 
@@ -121,7 +120,6 @@ Terax 是一个轻量、开源、终端优先的 AI 原生开发环境（ADE）�
 
 ### Windows 说明
 
-- 首次启动时，Windows 会显示“Windows 已保护你的电脑”，因为 Terax 尚未进行代码签名。点击**更多信息**，然后点击**仍要运行**。
 - 默认 Shell 检测：`pwsh.exe`（PowerShell 7+）-> `powershell.exe`（Windows PowerShell 5.1）-> `cmd.exe`。
 - WSL 是一等工作区环境，而不是封装的子进程。
 

@@ -23,7 +23,6 @@
   <a href="../../README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="README.es.md">Español</a> |
-  <strong>Deutsch</strong> |
   <a href="README.fr.md">Français</a> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.ko.md">한국어</a> |
@@ -42,15 +41,15 @@ Terax ist eine leichtgewichtige, quelloffene, terminalorientierte und KI-native 
 
 <table>
   <tr>
-    <td align="center"><img src="../terminal.png" alt="Terminal" /><br/><sub>Terminal mit mehreren Tabs und WebGL-Rendering</sub></td>
-    <td align="center"><img src="../themes.png" alt="Themes und Hintergrundbild" /><br/><sub>Eigene Themes, Voreinstellungen und Hintergrundbilder</sub></td>
-  </tr>
-  <tr>
     <td align="center"><img src="../web-preview.png" alt="Webvorschau" /><br/><sub>Webvorschau lokaler Entwicklungsserver</sub></td>
-    <td align="center"><img src="../source-control.png" alt="Quellcodeverwaltung und Git-Graph" /><br/><sub>Quellcodeverwaltung mit Git-Graph im Verlauf</sub></td>
+    <td align="center"><img src="../ai-workflow.png" alt="KI-Fenster" /><br/><sub>Agentischer KI-Workflow mit Bearbeitungs-Diffs im Code-Editor</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="../ai-workflow.png" alt="KI-Fenster" /><br/><sub>Agentischer KI-Workflow mit Bearbeitungs-Diffs im Code-Editor</sub></td>
+    <td align="center"><img src="../themes.png" alt="Themes und Hintergrundbild" style="margin-top: 12px;"/><br/><sub>Eigene Themes, Voreinstellungen und Hintergrundbilder</sub></td>
+    <td align="center"><img src="../source-control.png" alt="Quellcodeverwaltung und Git-Graph" style="margin-top: 12px;"/><br/><sub>Quellcodeverwaltung mit Git-Graph im Verlauf</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="../terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Blockbasiertes WebGL-Terminal mit editorähnlichem Eingabebereich</sub></td>
   </tr>
 </table>
 
@@ -119,7 +118,6 @@ Die neuesten Installationspakete stehen auf der Seite [Releases](https://github.
 
 ### Hinweise für Windows
 
-- Beim ersten Start zeigt Windows "Der Computer wurde durch Windows geschützt", weil Terax noch nicht codesigniert ist. Klicke auf **Weitere Informationen** und dann auf **Trotzdem ausführen**.
 - Standardmäßige Shell-Erkennung: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL ist eine vollwertige Arbeitsumgebung und kein umschlossener Unterprozess.
 

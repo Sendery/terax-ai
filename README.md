@@ -21,7 +21,6 @@
 </div>
 
 <p align="center">
-  <strong>English</strong> |
   <a href="docs/readme/README.zh-CN.md">简体中文</a> |
   <a href="docs/readme/README.es.md">Español</a> |
   <a href="docs/readme/README.de.md">Deutsch</a> |
@@ -43,15 +42,15 @@ Terax is a lightweight open-source terminal-first AI-native development environm
 
 <table>
   <tr>
-    <td align="center"><img src="docs/terminal.png" alt="Terminal" /><br/><sub>Multi-tab terminal with WebGL rendering</sub></td>
-    <td align="center"><img src="docs/themes.png" alt="Themes and background image" /><br/><sub>Custom themes, presets, and background images</sub></td>
-  </tr>
-  <tr>
     <td align="center"><img src="docs/web-preview.png" alt="Web preview" /><br/><sub>Web preview of local dev servers</sub></td>
-    <td align="center"><img src="docs/source-control.png" alt="Source control and git graph" /><br/><sub>Source control panel with git graph in history</sub></td>
+    <td align="center"><img src="docs/ai-workflow.png" alt="AI window" /><br/><sub>Agentic AI workflow with edit diffs in the code editor</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="docs/ai-workflow.png" alt="AI window" /><br/><sub>Agentic AI workflow with edit diffs in the code editor</sub></td>
+    <td align="center"><img src="docs/themes.png" alt="Themes and background image" style="margin-top: 12px;"/><br/><sub>Custom themes, presets, and background images</sub></td>
+    <td align="center"><img src="docs/source-control.png" alt="Source control and git graph" style="margin-top: 12px;"/><br/><sub>Source control panel with git graph in history</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Block-based WebGL terminal with editor-like input panel</sub></td>
   </tr>
 </table>
 
@@ -130,7 +129,6 @@ Latest installers are on the [Releases](https://github.com/Sendery/terax-ai/rele
 
 ### Windows notes
 
-- On first launch Windows shows "Windows protected your PC" because Terax isn't code-signed yet. Click **More info** then **Run anyway**.
 - Default shell detection: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL is a first-class workspace environment, not a wrapped subprocess.
 

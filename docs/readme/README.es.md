@@ -22,7 +22,6 @@
 <p align="center">
   <a href="../../README.md">English</a> |
   <a href="README.zh-CN.md">简体中文</a> |
-  <strong>Español</strong> |
   <a href="README.de.md">Deutsch</a> |
   <a href="README.fr.md">Français</a> |
   <a href="README.ja.md">日本語</a> |
@@ -42,15 +41,15 @@ Terax es un entorno de desarrollo (ADE) ligero, de código abierto, centrado en 
 
 <table>
   <tr>
-    <td align="center"><img src="../terminal.png" alt="Terminal" /><br/><sub>Terminal con múltiples pestañas y renderizado WebGL</sub></td>
-    <td align="center"><img src="../themes.png" alt="Temas e imagen de fondo" /><br/><sub>Temas personalizados, preajustes e imágenes de fondo</sub></td>
-  </tr>
-  <tr>
     <td align="center"><img src="../web-preview.png" alt="Vista previa web" /><br/><sub>Vista previa web de servidores de desarrollo locales</sub></td>
-    <td align="center"><img src="../source-control.png" alt="Control de código fuente y gráfico de Git" /><br/><sub>Panel de control de código fuente con gráfico de Git en el historial</sub></td>
+    <td align="center"><img src="../ai-workflow.png" alt="Ventana de IA" /><br/><sub>Flujo de trabajo de IA con agentes y diferencias de edición en el editor</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="../ai-workflow.png" alt="Ventana de IA" /><br/><sub>Flujo de trabajo de IA con agentes y diferencias de edición en el editor</sub></td>
+    <td align="center"><img src="../themes.png" alt="Temas e imagen de fondo" style="margin-top: 12px;"/><br/><sub>Temas personalizados, preajustes e imágenes de fondo</sub></td>
+    <td align="center"><img src="../source-control.png" alt="Control de código fuente y gráfico de Git" style="margin-top: 12px;"/><br/><sub>Panel de control de código fuente con gráfico de Git en el historial</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="../terminal.png" alt="Terminal" style="border-radius: 4px; margin-top: 12px;" /><br/><sub>Terminal WebGL por bloques con panel de entrada similar a un editor</sub></td>
   </tr>
 </table>
 
@@ -119,7 +118,6 @@ Los instaladores más recientes están en la página de [Releases](https://githu
 
 ### Notas para Windows
 
-- En el primer inicio, Windows muestra "Windows protegió su PC" porque Terax aún no está firmado. Haz clic en **Más información** y después en **Ejecutar de todas formas**.
 - Detección predeterminada del shell: `pwsh.exe` (PowerShell 7+) -> `powershell.exe` (Windows PowerShell 5.1) -> `cmd.exe`.
 - WSL es un entorno de espacio de trabajo de primera clase, no un subproceso encapsulado.
 
