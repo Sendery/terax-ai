@@ -65,7 +65,8 @@ export function formatCommandLine(
   return argv.map(quote).join(" ");
 }
 
-/** Enter, sent on its own write to submit a prompt already in the composer. */
+/** Enter, sent on its own write to submit a prompt already in the composer.
+ *  `handOffPrompt` owns when it is sent and how it is confirmed. */
 export const SUBMIT_KEY = "\r";
 
 /**

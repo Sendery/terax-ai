@@ -176,6 +176,21 @@ export function interruptLeaf(leafId: number): void {
   sessions.get(leafId)?.pty?.write("\x03");
 }
 
+/**
+ * True once a full-screen TUI in this leaf has taken the terminal into raw
+ * mode, which it announces by negotiating modifyOtherKeys (pi-tui does this as
+ * soon as its input loop is live, and turns it back off when it exits).
+ *
+ * Callers that synthesize input use this instead of a timer: a shell still
+ * loading an agent swallows keystrokes, and the Enter that would submit them
+ * disappears with the rest of the burst.
+ */
+export function isLeafTuiReady(leafId: number): boolean {
+  const s = sessions.get(leafId);
+  if (!s || s.shellExited) return false;
+  return s.keyboardProtocol.modifyOtherKeys >= 1;
+}
+
 export function leafCwd(leafId: number): string | null {
   return sessions.get(leafId)?.lastCwd ?? null;
 }

@@ -114,6 +114,7 @@ import {
   disposeSession,
   findLeafCwd,
   hasLeaf,
+  isLeafTuiReady,
   leafIds,
   navigateFocusedBlocks,
   respawnSession,
@@ -689,6 +690,18 @@ export default function App() {
     return terminalRefs.current.get(leafId)?.shiftEnter() ?? "\x1b\r";
   }, []);
 
+  const isTaskLeafReady = useCallback(
+    (leafId: number) => isLeafTuiReady(leafId),
+    [],
+  );
+
+  // Enough of the screen to see an agent start a turn, without paying for the
+  // whole scrollback on every poll.
+  const readTaskLeafBuffer = useCallback(
+    (leafId: number) => terminalRefs.current.get(leafId)?.getBuffer(60) ?? null,
+    [],
+  );
+
   const openTerminalWith = useCallback(
     (cwd: string, commandLine: string) => {
       const tabId = newTab(cwd);
@@ -750,6 +763,8 @@ export default function App() {
     ensureTab: ensureTaskTab,
     writeToLeaf,
     shiftEnterFor,
+    isLeafTuiReady: isTaskLeafReady,
+    readLeafBuffer: readTaskLeafBuffer,
     openTerminalWith,
   });
   const dispatcherRef = useRef(dispatcher);

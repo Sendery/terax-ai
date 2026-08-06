@@ -106,6 +106,14 @@ export {
   summariseOutput,
 } from "./lib/dispatch";
 export {
+  HANDOFF_TIMING,
+  type HandoffIo,
+  handoffMessage,
+  handOffPrompt,
+  type HandoffResult,
+  turnStarted,
+} from "./lib/handoff";
+export {
   type DispatcherDeps,
   type TabTarget,
   type TaskDispatcherApi,

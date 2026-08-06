@@ -47,6 +47,12 @@ directory, launches `pi --session-id <id>` there, then types the prompt and
 presses Enter. Line breaks are sent as Shift+Enter so a multiline prompt arrives
 intact, and the session stays live for you to continue by hand.
 
+Typing waits for the agent's TUI to take the terminal into raw mode, rather than
+for a fixed delay: a prompt typed into a still-booting session is swallowed
+together with the Enter that would submit it, leaving the text sitting in the
+composer. After Enter, Terax checks the terminal for a started turn and presses
+Enter again if it sees none; the run card says so when it could not confirm one.
+
 ## What the card reports
 
 Time spent, tokens and cost, both for the last trigger and accumulated. These

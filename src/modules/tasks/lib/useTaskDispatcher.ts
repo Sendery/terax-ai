@@ -9,19 +9,14 @@ import {
   recoverCommandLine,
   sessionIdFor,
   type ShellFlavor,
-  SUBMIT_KEY,
   summariseOutput,
 } from "./dispatch";
+import { handoffMessage, handOffPrompt } from "./handoff";
 import { admitOccurrence, type QueueState, resolveFailure } from "./policies";
 import { finishRun, newRun, type RunTrigger, type TaskRun } from "./runs";
 import { RUN_TIMEOUT_MS, type ScheduledTask } from "./task";
 
 const POLL_MS = 2_000;
-/** Time given to an interactive pi launch before the prompt is typed. */
-const LAUNCH_SETTLE_MS = 2_500;
-/** Gap between typing a prompt and pressing Enter. A TUI that receives both in
- *  one burst treats it as a paste and leaves the prompt unsent. */
-const SUBMIT_DELAY_MS = 400;
 
 export type TabTarget = {
   tabId: number;
@@ -42,6 +37,10 @@ export type DispatcherDeps = {
   ensureTab: (task: ScheduledTask) => Promise<TabTarget | null>;
   writeToLeaf: (leafId: number, data: string) => void;
   shiftEnterFor: (leafId: number) => string;
+  /** True once an agent TUI in this leaf has the terminal in raw mode. */
+  isLeafTuiReady: (leafId: number) => boolean;
+  /** Visible terminal text of this leaf, or null when it has no live buffer. */
+  readLeafBuffer: (leafId: number) => string | null;
   /** Opens a throwaway terminal on a command line, for the recover action. */
   openTerminalWith: (cwd: string, commandLine: string) => void;
 };
@@ -77,6 +76,13 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
     }, ms);
     timersRef.current.add(handle);
   }, []);
+
+  // Same bookkeeping as `later`, for the awaited waits of a prompt hand-off:
+  // unmounting the dispatcher cancels them instead of leaving them pending.
+  const sleep = useCallback(
+    (ms: number) => new Promise<void>((resolve) => later(resolve, ms)),
+    [later],
+  );
 
   const release = useCallback((taskId: string) => {
     setQueue((current) => ({
@@ -213,48 +219,55 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
           );
           return;
         }
-        const typePrompt = () => {
-          const keys = promptKeystrokes(task.prompt, d.shiftEnterFor(target.leafId));
-          if (keys === "") {
-            settle(
-              task,
-              finishRun(run, {
-                status: "failed",
-                endedAt: Date.now(),
-                message: "The prompt is empty, so nothing was sent.",
-              }),
-              false,
-            );
-            return;
-          }
-          d.writeToLeaf(target.leafId, keys);
-          later(() => {
-            d.writeToLeaf(target.leafId, SUBMIT_KEY);
-            // An interactive run stays live in the tab; the card reports the
-            // agent state from the terminal signal rather than an exit code.
-            settle(
-              task,
-              finishRun(run, {
-                status: "ok",
-                endedAt: Date.now(),
-                message: `Prompt sent to ${
-                  target.piRunning ? "the running session" : "a new session"
-                } in tab ${target.tabId}.`,
-              }),
-              true,
-            );
-          }, SUBMIT_DELAY_MS);
-        };
-        if (target.piRunning) {
-          typePrompt();
+        if (task.prompt.trim() === "") {
+          settle(
+            task,
+            finishRun(run, {
+              status: "failed",
+              endedAt: Date.now(),
+              message: "The prompt is empty, so nothing was sent.",
+            }),
+            false,
+          );
           return;
         }
-        const argv = buildPiArgv(task, sessionId, { headless: false });
-        d.writeToLeaf(
-          target.leafId,
-          `${formatCommandLine(argv, d.shellFlavor)}\r`,
+        if (!target.piRunning) {
+          const argv = buildPiArgv(task, sessionId, { headless: false });
+          d.writeToLeaf(
+            target.leafId,
+            `${formatCommandLine(argv, d.shellFlavor)}\r`,
+          );
+        }
+        const result = await handOffPrompt(
+          {
+            write: (data) => depsRef.current.writeToLeaf(target.leafId, data),
+            isReady: () => depsRef.current.isLeafTuiReady(target.leafId),
+            readBuffer: () => depsRef.current.readLeafBuffer(target.leafId),
+            sleep,
+            now: Date.now,
+          },
+          // Resolved late: the line-break encoding depends on the keyboard
+          // protocol the agent only negotiates once its TUI is up.
+          () =>
+            promptKeystrokes(
+              task.prompt,
+              depsRef.current.shiftEnterFor(target.leafId),
+            ),
         );
-        later(typePrompt, LAUNCH_SETTLE_MS);
+        // An interactive run stays live in the tab; the card reports the agent
+        // state from the terminal signal rather than an exit code.
+        settle(
+          task,
+          finishRun(run, {
+            status: "ok",
+            endedAt: Date.now(),
+            message: handoffMessage(result, {
+              tabId: target.tabId,
+              reused: target.piRunning,
+            }),
+          }),
+          true,
+        );
       } catch (error) {
         settle(
           task,
@@ -267,7 +280,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
         );
       }
     },
-    [later, settle],
+    [sleep, settle],
   );
 
   const start = useCallback(
