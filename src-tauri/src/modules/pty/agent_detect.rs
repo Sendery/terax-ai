@@ -160,21 +160,30 @@ impl AgentDetector {
     }
 
     fn handle_osc777<F: FnMut(Transition)>(&mut self, pt: &[u8], emit: &mut F) {
-        if let Some(event) = pt.strip_prefix(TERAX_MARKER) {
-            // Self-arms so notifications work even when no shell preexec fired
-            // (bash, Windows, tmux, wrappers).
+        if let Some(marker) = pt.strip_prefix(TERAX_MARKER) {
+            // The default marker belongs to Claude Code. First-party adapters
+            // name themselves so hook-only sessions retain their own identity.
+            let (agent, event) = marker
+                .iter()
+                .position(|byte| *byte == b';')
+                .and_then(|index| match &marker[..index] {
+                    b"pi" => Some(("pi", &marker[index + 1..])),
+                    b"codex" => Some(("codex", &marker[index + 1..])),
+                    _ => None,
+                })
+                .unwrap_or(("claude", marker));
             match event {
                 b"working" => {
-                    self.ensure_armed(emit);
+                    self.ensure_armed_as(agent, emit);
                     self.set_working(emit);
                 }
                 b"attention" => {
-                    self.ensure_armed(emit);
+                    self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
                     emit(Transition::Attention);
                 }
                 b"finished" => {
-                    self.ensure_armed(emit);
+                    self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
                     emit(Transition::Finished);
                 }
@@ -206,11 +215,13 @@ impl AgentDetector {
         }
     }
 
-    fn ensure_armed<F: FnMut(Transition)>(&mut self, emit: &mut F) {
+    fn ensure_armed_as<F: FnMut(Transition)>(&mut self, agent: &str, emit: &mut F) {
         if !self.armed {
             self.armed = true;
             self.status = Status::Working;
-            emit(Transition::Started { agent: "claude".into() });
+            emit(Transition::Started {
+                agent: agent.to_string(),
+            });
         }
     }
 
@@ -348,6 +359,24 @@ mod tests {
         assert_eq!(
             run(&mut d, &osc("777;notify;Terax;attention")),
             vec![started("claude"), Transition::Attention]
+        );
+    }
+
+    #[test]
+    fn pi_marker_auto_arms_as_pi() {
+        let mut d = AgentDetector::new();
+        assert_eq!(
+            run(&mut d, &osc("777;notify;Terax;pi;working")),
+            vec![started("pi")]
+        );
+    }
+
+    #[test]
+    fn codex_session_hook_marker_auto_arms_as_codex() {
+        let mut d = AgentDetector::new();
+        assert_eq!(
+            run(&mut d, &osc("777;notify;Terax;codex;working")),
+            vec![started("codex")]
         );
     }
 

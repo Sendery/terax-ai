@@ -51,8 +51,9 @@ The main surface is captured by Terax itself through the `app.capture` registry 
 }
 ```
 
-- Targets: `window` (default), `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay`.
+- Targets: `window` (default), `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay`, `agent-monitor` (only the visible monitor panel).
 - `overlay` captures the topmost open menu, dialog, or popover; with a submenu open it captures the submenu. It fails when nothing is open.
+- `agent-monitor` is the preferred evidence target for the foldable monitor: use it only after opening the monitor and never as a substitute for whole-window capture.
 - `pane` reaches hidden mounted tabs: DOM surfaces (editor, markdown, diff) render fully. A hidden idle terminal has released its renderer slot, so its pane shows chrome only; call `tab.focus` on it, capture, then focus back.
 - Private terminals block capture natively with scope-correct rules: any private tab blocks `window` and `tabstrip`; the targeted private tab blocks `pane`; an active private tab blocks the remaining targets. Rejected captures do not mutate state.
 - `target` is only valid with `surface: "main"`. The settings window has no command bridge and stays on the system backend.

@@ -41,6 +41,9 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tab.setColor`
 - `git.diff.open`
 - `settings.open`
+- `agent-monitor.show`
+- `agent-monitor.hide`
+- `agent-monitor.toggle`
 - `notes.show`
 - `notes.hide`
 - `notes.toggle`
@@ -75,7 +78,7 @@ The registry validates command IDs and payloads before dispatch, normalizes fail
 
 ### app.capture
 
-Rasterize a Terax surface inside the webview and persist it as a PNG in a private app-cache directory. No OS screen-capture API or permission is involved, and the capture cannot include content outside the Terax window. Targets are a closed set: `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`, works for hidden but mounted tabs), and `overlay` (topmost open menu, dialog, or popover). Capture is refused when a private terminal is in scope.
+Rasterize a Terax surface inside the webview and persist it as a PNG in a private app-cache directory. No OS screen-capture API or permission is involved, and the capture cannot include content outside the Terax window. Targets are a closed set: `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`, works for hidden but mounted tabs), `overlay`, and `agent-monitor` (only when its panel is visible). `window`, `tabstrip`, and `agent-monitor` are refused if any private terminal is open; other targets are refused when a private terminal is in their scope.
 
 ```json
 { "id": "app.capture", "payload": { "target": "pane", "tabId": 3 } }

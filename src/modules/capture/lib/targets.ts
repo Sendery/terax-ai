@@ -7,6 +7,7 @@ export const CAPTURE_TARGETS = [
   "active-pane",
   "pane",
   "overlay",
+  "agent-monitor",
 ] as const;
 
 export type CaptureTarget = (typeof CAPTURE_TARGETS)[number];
@@ -60,7 +61,11 @@ export function validateCaptureRequest(input: unknown): CaptureValidation {
   return { ok: true, value: { target } };
 }
 
-const WHOLE_WINDOW_TARGETS: readonly CaptureTarget[] = ["window", "tabstrip"];
+const WHOLE_WINDOW_TARGETS: readonly CaptureTarget[] = [
+  "window",
+  "tabstrip",
+  "agent-monitor",
+];
 
 export function captureBlockReason(
   tabs: readonly TabLike[],

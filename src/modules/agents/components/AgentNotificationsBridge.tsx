@@ -2,6 +2,7 @@ import type { Tab } from "@/modules/tabs";
 import { hasLeaf, leafIdForPty } from "@/modules/terminal";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
+import { integrationForAgent } from "../lib/harnesses";
 import { maybeTriggerManagedReview } from "../lib/review";
 import { routeAgentNotification } from "../lib/route";
 import type { AgentSession, AgentSignal } from "../lib/types";
@@ -65,20 +66,27 @@ function handleSignal(sig: AgentSignal, ctx: Ctx): void {
     case "started": {
       const info = tabInfo(ctx.tabs, leafId);
       if (!info) return;
-      store.start(leafId, info.tabId, sig.agent ?? "agent");
+      const harness = integrationForAgent(sig.agent ?? "agent");
+      store.start(
+        leafId,
+        info.tabId,
+        sig.agent ?? "agent",
+        harness.integration,
+        harness.harness,
+      );
       return;
     }
     case "working":
-      store.setStatus(leafId, "working");
+      store.setStatus(leafId, "working", "working");
       return;
     case "attention": {
-      store.setStatus(leafId, "waiting");
+      store.setStatus(leafId, "waiting", "attention");
       const session = store.sessions[leafId];
       if (session) route(session, "attention", ctx);
       return;
     }
     case "finished": {
-      store.setStatus(leafId, "waiting");
+      store.setStatus(leafId, "waiting", "finished");
       const session = store.sessions[leafId];
       if (session) route(session, "finished", ctx);
       maybeTriggerManagedReview(leafId);

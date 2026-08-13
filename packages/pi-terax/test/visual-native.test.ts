@@ -134,6 +134,14 @@ describe("validateVisualQaRequest native targets", () => {
       target: "sidebar",
     });
     expect(request.target).toBe("sidebar");
+    expect(
+      validateVisualQaRequest({
+        action: "screenshot",
+        surface: "main",
+        name: "monitor",
+        target: "agent-monitor",
+      }).target,
+    ).toBe("agent-monitor");
     const pane = validateVisualQaRequest({
       action: "screenshot",
       surface: "main",

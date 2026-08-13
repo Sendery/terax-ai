@@ -64,6 +64,17 @@ describe("Pi extension", () => {
     return { tools, events, messages };
   }
 
+  async function emitLifecycle(
+    handlers: Record<string, Array<(...a: unknown[]) => unknown>>,
+    event: string,
+    isIdle: boolean,
+    mode: "tui" | "rpc" | "json" | "print" = "tui",
+  ) {
+    for (const handler of handlers[event] ?? []) {
+      await handler({ reason: "reload" }, { isIdle: () => isIdle, mode });
+    }
+  }
+
   it("registers the full tool set inside a Terax terminal", () => {
     const { tools } = registerWith({ TERAX_TERMINAL: "1" });
     expect(tools.map((tool) => tool.name)).toEqual([
@@ -102,8 +113,64 @@ describe("Pi extension", () => {
     expect(JSON.stringify(outside.messages[0])).toMatch(/not.+Terax/i);
 
     const inside = registerWith({ TERAX_TERMINAL: "1" });
-    for (const handler of inside.events.session_start ?? []) await handler();
+    await emitLifecycle(inside.events, "session_start", true);
     expect(inside.messages.length).toBe(0);
+  });
+
+  it("emits working when an active TUI session starts or reloads", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const { events } = registerWith({ TERAX_TERMINAL: "1" });
+
+      await emitLifecycle(events, "session_start", false);
+      await emitLifecycle(events, "session_start", true);
+      await emitLifecycle(events, "session_start", false, "rpc");
+
+      expect(write.mock.calls).toEqual([
+        ["\x1b]777;notify;Terax;pi;working\x07"],
+      ]);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("emits working when a TUI agent starts", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const { events } = registerWith({ TERAX_TERMINAL: "1" });
+
+      await emitLifecycle(events, "agent_start", true);
+      await emitLifecycle(events, "agent_start", true, "print");
+
+      expect(write.mock.calls).toEqual([
+        ["\x1b]777;notify;Terax;pi;working\x07"],
+      ]);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("emits finished only after a TUI agent settles idle", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const { events } = registerWith({ TERAX_TERMINAL: "1" });
+
+      await emitLifecycle(events, "agent_settled", false);
+      await emitLifecycle(events, "agent_settled", true, "json");
+      await emitLifecycle(events, "agent_settled", true);
+
+      expect(write.mock.calls).toEqual([
+        ["\x1b]777;notify;Terax;pi;finished\x07"],
+      ]);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("does not register monitor lifecycle handlers outside Terax", () => {
+    const { events } = registerWith({ TERM_PROGRAM: "Apple_Terminal" });
+    expect(events.agent_start).toBeUndefined();
+    expect(events.agent_settled).toBeUndefined();
   });
 
   it("terax_status reports availability and enable instructions when outside", async () => {
@@ -258,6 +325,26 @@ describe("Pi extension", () => {
     )).resolves.toMatchObject({ details: { surface: "main" } });
     expect(harness.dependencies.createNativeBackend).toHaveBeenCalledWith(
       expect.objectContaining({ pid: 123, target: "sidebar" }),
+    );
+    expect(harness.dependencies.createVisualBackend).not.toHaveBeenCalled();
+  });
+
+  it("routes an agent-monitor capture through Pi's native in-app backend", async () => {
+    const harness = visualHarness({ tabs: [] });
+    await harness.visual?.execute(
+      "visual-agent-monitor",
+      {
+        action: "screenshot",
+        surface: "main",
+        name: "agent-monitor",
+        target: "agent-monitor",
+      },
+      undefined,
+      undefined,
+      { cwd: "/tmp/project", isProjectTrusted: () => true },
+    );
+    expect(harness.dependencies.createNativeBackend).toHaveBeenCalledWith(
+      expect.objectContaining({ pid: 123, target: "agent-monitor" }),
     );
     expect(harness.dependencies.createVisualBackend).not.toHaveBeenCalled();
   });

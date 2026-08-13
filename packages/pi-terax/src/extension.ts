@@ -5,6 +5,7 @@ import {
   defineTool,
   type AgentToolResult,
   type ExtensionAPI,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
@@ -285,6 +286,32 @@ function createVisualQaTool(dependencies: ExtensionDependencies) {
   });
 }
 
+function emitMonitorMarker(status: "working" | "finished"): void {
+  process.stdout.write(`\x1b]777;notify;Terax;pi;${status}\x07`);
+}
+
+type AgentSettledExtensionAPI = {
+  on(
+    event: "agent_settled",
+    handler: (event: unknown, ctx: ExtensionContext) => void,
+  ): void;
+};
+
+function registerMonitorLifecycle(pi: ExtensionAPI): void {
+  pi.on("session_start", (_event, ctx) => {
+    if (ctx.mode === "tui" && !ctx.isIdle()) emitMonitorMarker("working");
+  });
+  pi.on("agent_start", (_event, ctx) => {
+    if (ctx.mode === "tui") emitMonitorMarker("working");
+  });
+  (pi as unknown as AgentSettledExtensionAPI).on(
+    "agent_settled",
+    (_event, ctx) => {
+      if (ctx.mode === "tui" && ctx.isIdle()) emitMonitorMarker("finished");
+    },
+  );
+}
+
 export function createExtension(
   dependencies: ExtensionDependencies = defaultDependencies,
 ): (pi: ExtensionAPI) => void {
@@ -296,6 +323,7 @@ export function createExtension(
     pi.registerTool(createStatusTool(dependencies));
 
     if (host.available) {
+      registerMonitorLifecycle(pi);
       pi.registerTool(getStateTool);
       pi.registerTool(callTool);
       pi.registerTool(waitTool);

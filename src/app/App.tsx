@@ -11,7 +11,14 @@ import { IS_WINDOWS } from "@/lib/platform";
 import { usePresence } from "@/lib/usePresence";
 import { quoteShellArg } from "@/lib/shellQuote";
 import { useZoom } from "@/lib/useZoom";
-import { AgentNotificationsBridge, useAgentStore } from "@/modules/agents";
+import {
+  AGENT_MONITOR_MAX_WIDTH,
+  AGENT_MONITOR_MIN_WIDTH,
+  AgentMonitorPanel,
+  AgentNotificationsBridge,
+  useAgentMonitorPanel,
+  useAgentStore,
+} from "@/modules/agents";
 import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
@@ -318,6 +325,15 @@ export default function App() {
     hideNotes: hideNotesPanel,
     persistNotesWidth,
   } = useNotesPanel();
+  const {
+    agentMonitorRef,
+    widthRef: agentMonitorWidthRef,
+    agentMonitorVisible,
+    showAgentMonitor,
+    toggleAgentMonitor,
+    hideAgentMonitor,
+    persistAgentMonitorWidth,
+  } = useAgentMonitorPanel();
   const mutateActiveTabNotes = useCallback<NotesMutator>(
     (updater) => {
       if (activeId != null) updateTabNotes(activeId, updater);
@@ -1395,6 +1411,18 @@ export default function App() {
         void openSettingsWindow(tab);
         return { opened: true, tab: tab ?? null };
       },
+      showAgentMonitor: () => {
+        showAgentMonitor();
+        return { visible: true };
+      },
+      hideAgentMonitor: () => {
+        hideAgentMonitor();
+        return { visible: false };
+      },
+      toggleAgentMonitor: () => {
+        toggleAgentMonitor();
+        return { toggled: true };
+      },
       showNotes: () => {
         if (notesDetached) {
           void openNotesWindow();
@@ -1571,6 +1599,9 @@ export default function App() {
       showTasksPanel,
       hideTasksPanel,
       toggleTasks,
+      showAgentMonitor,
+      hideAgentMonitor,
+      toggleAgentMonitor,
       openTaskEditor,
       openNewTaskEditor,
       activeSpaceId,
@@ -1655,6 +1686,8 @@ export default function App() {
               notesVisible={notesVisible || notesDetached}
               onToggleTasks={toggleTasks}
               tasksVisible={tasksVisible}
+              onToggleAgentMonitor={toggleAgentMonitor}
+              agentMonitorVisible={agentMonitorVisible}
               scheduledCount={
                 scheduled.tasks.filter((task) => task.enabled).length
               }
@@ -1805,6 +1838,29 @@ export default function App() {
                   />
                 )}
               </ResizablePanel>
+                </>
+              )}
+              {agentMonitorVisible && (
+                <>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel
+                    id="agent-monitor"
+                    panelRef={agentMonitorRef}
+                    defaultSize={`${agentMonitorWidthRef.current}px`}
+                    minSize={`${AGENT_MONITOR_MIN_WIDTH}px`}
+                    maxSize={`${AGENT_MONITOR_MAX_WIDTH}px`}
+                    onResize={(size) => {
+                      if (size.inPixels > 0) {
+                        persistAgentMonitorWidth(size.inPixels);
+                      }
+                    }}
+                  >
+                    <AgentMonitorPanel
+                      onActivate={onActivateAgent}
+                      onHide={hideAgentMonitor}
+                      tabs={tabs}
+                    />
+                  </ResizablePanel>
                 </>
               )}
               {tasksVisible && (

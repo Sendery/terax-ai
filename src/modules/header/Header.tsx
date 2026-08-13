@@ -9,6 +9,7 @@ import {
   Note01Icon,
   Settings01Icon,
   SidebarLeftIcon,
+  TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -48,6 +49,8 @@ type Props = {
   notesVisible: boolean;
   onToggleTasks: () => void;
   tasksVisible: boolean;
+  onToggleAgentMonitor: () => void;
+  agentMonitorVisible: boolean;
   /** Number of enabled scheduled tasks, shown as a badge on the toggle. */
   scheduledCount: number;
   /** True while the global scheduler kill switch is engaged. */
@@ -83,6 +86,8 @@ export function Header({
   notesVisible,
   onToggleTasks,
   tasksVisible,
+  onToggleAgentMonitor,
+  agentMonitorVisible,
   scheduledCount,
   scheduledPaused,
   onOpenCommandPalette,
@@ -134,6 +139,24 @@ export function Header({
       title="Toggle notes"
     >
       <HugeiconsIcon icon={Note01Icon} size={15} strokeWidth={1.75} />
+    </Button>
+  );
+
+  const agentMonitorButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Toggle agent monitor panel"
+      aria-pressed={agentMonitorVisible}
+      className={`size-7 shrink-0 rounded-md hover:bg-accent hover:text-foreground ${
+        agentMonitorVisible
+          ? "bg-accent/60 text-foreground"
+          : "text-muted-foreground"
+      }`}
+      onClick={onToggleAgentMonitor}
+      title="Toggle agent monitor"
+    >
+      <HugeiconsIcon icon={TerminalIcon} size={15} strokeWidth={1.75} />
     </Button>
   );
 
@@ -243,6 +266,7 @@ export function Header({
             onActivateLocal={onActivateLocalAgent}
           />
           {tasksButton}
+          {agentMonitorButton}
           {notesButton}
           {settingsButton}
         </>
@@ -251,6 +275,7 @@ export function Header({
       {!IS_MAC && (
         <>
           {tasksButton}
+          {agentMonitorButton}
           {notesButton}
           {settingsButton}
         </>
