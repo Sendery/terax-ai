@@ -172,6 +172,9 @@ fn is_allowed_command(command: &str) -> bool {
             | "tab.setColor"
             | "git.diff.open"
             | "settings.open"
+            | "agent-monitor.show"
+            | "agent-monitor.hide"
+            | "agent-monitor.toggle"
             | "notes.show"
             | "notes.hide"
             | "notes.toggle"
@@ -473,6 +476,16 @@ mod tests {
         let err = read_frame(&mut &input[..]).expect_err("frame cap");
 
         assert_eq!(err.code(), "frame_too_large");
+    }
+
+    #[test]
+    fn allows_agent_monitor_commands() {
+        for command in ["agent-monitor.show", "agent-monitor.hide", "agent-monitor.toggle"] {
+            let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
+            let request = decode_request_line(line.as_bytes(), "tok")
+                .unwrap_or_else(|_| panic!("{command} must be allowed"));
+            assert_eq!(request.command, command);
+        }
     }
 
     #[test]

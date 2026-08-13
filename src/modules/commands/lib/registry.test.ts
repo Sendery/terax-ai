@@ -34,6 +34,9 @@ function handlers(): CommandHandlers {
       commit: "abc1234",
       channel: "development" as const,
     })),
+    showAgentMonitor: vi.fn(() => ({ visible: true })),
+    hideAgentMonitor: vi.fn(() => ({ visible: false })),
+    toggleAgentMonitor: vi.fn(() => ({ toggled: true })),
     capture: vi.fn(async () => ({
       target: "window" as const,
       path: "/tmp/capture.png",
@@ -166,6 +169,35 @@ describe("notes commands", () => {
     const res = await reg.call({ id: "notes.add", payload: {} });
     expect(res.ok).toBe(false);
     expect(h.addNote).not.toHaveBeenCalled();
+  });
+});
+
+describe("agent monitor commands", () => {
+  it("accepts and dispatches the no-payload monitor controls", async () => {
+    const h = handlers() as CommandHandlers & {
+      showAgentMonitor: ReturnType<typeof vi.fn>;
+      hideAgentMonitor: ReturnType<typeof vi.fn>;
+      toggleAgentMonitor: ReturnType<typeof vi.fn>;
+    };
+    h.showAgentMonitor = vi.fn(() => ({ visible: true }));
+    h.hideAgentMonitor = vi.fn(() => ({ visible: false }));
+    h.toggleAgentMonitor = vi.fn(() => ({ toggled: true }));
+    const registry = createCommandRegistry(h);
+
+    for (const id of [
+      "agent-monitor.show",
+      "agent-monitor.hide",
+      "agent-monitor.toggle",
+    ]) {
+      expect(validateCommandRequest({ id }).ok).toBe(true);
+    }
+
+    await registry.call({ id: "agent-monitor.show" });
+    await registry.call({ id: "agent-monitor.hide" });
+    await registry.call({ id: "agent-monitor.toggle" });
+    expect(h.showAgentMonitor).toHaveBeenCalledOnce();
+    expect(h.hideAgentMonitor).toHaveBeenCalledOnce();
+    expect(h.toggleAgentMonitor).toHaveBeenCalledOnce();
   });
 });
 
@@ -398,6 +430,9 @@ describe("command registry", () => {
       "tab.setColor",
       "git.diff.open",
       "settings.open",
+      "agent-monitor.show",
+      "agent-monitor.hide",
+      "agent-monitor.toggle",
       "notes.show",
       "notes.hide",
       "notes.toggle",

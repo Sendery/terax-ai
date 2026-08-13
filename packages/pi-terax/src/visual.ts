@@ -36,6 +36,7 @@ export const NATIVE_CAPTURE_TARGETS = [
   "active-pane",
   "pane",
   "overlay",
+  "agent-monitor",
 ] as const;
 
 export type NativeCaptureTarget = (typeof NATIVE_CAPTURE_TARGETS)[number];

@@ -35,6 +35,9 @@ export const COMMAND_IDS = [
   "tab.setColor",
   "git.diff.open",
   "settings.open",
+  "agent-monitor.show",
+  "agent-monitor.hide",
+  "agent-monitor.toggle",
   "notes.show",
   "notes.hide",
   "notes.toggle",
@@ -99,6 +102,9 @@ export type CommandPayloads = {
     title?: string;
   };
   "settings.open": { tab?: SettingsTab };
+  "agent-monitor.show": undefined;
+  "agent-monitor.hide": undefined;
+  "agent-monitor.toggle": undefined;
   "notes.show": undefined;
   "notes.hide": undefined;
   "notes.toggle": undefined;
@@ -516,6 +522,21 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "agent-monitor.show": {
+    id: "agent-monitor.show",
+    description: "Show the Agent Monitor panel.",
+    params: [],
+  },
+  "agent-monitor.hide": {
+    id: "agent-monitor.hide",
+    description: "Hide the Agent Monitor panel.",
+    params: [],
+  },
+  "agent-monitor.toggle": {
+    id: "agent-monitor.toggle",
+    description: "Toggle the Agent Monitor panel.",
+    params: [],
+  },
   "notes.show": {
     id: "notes.show",
     description:
@@ -772,6 +793,9 @@ export type CommandHandlers = {
   openSettings: (
     payload: CommandPayloads["settings.open"],
   ) => Promise<unknown> | unknown;
+  showAgentMonitor: () => Promise<unknown> | unknown;
+  hideAgentMonitor: () => Promise<unknown> | unknown;
+  toggleAgentMonitor: () => Promise<unknown> | unknown;
   showNotes: () => Promise<unknown> | unknown;
   hideNotes: () => Promise<unknown> | unknown;
   toggleNotes: () => Promise<unknown> | unknown;
@@ -914,6 +938,9 @@ export function validateCommandRequest(
     id === "app.commands" ||
     id === "app.buildInfo" ||
     id === "sidebar.hide" ||
+    id === "agent-monitor.show" ||
+    id === "agent-monitor.hide" ||
+    id === "agent-monitor.toggle" ||
     id === "notes.show" ||
     id === "notes.hide" ||
     id === "notes.toggle" ||
@@ -1274,6 +1301,12 @@ async function dispatchCommand(
       return handlers.openGitDiff(request.payload);
     case "settings.open":
       return handlers.openSettings(request.payload);
+    case "agent-monitor.show":
+      return handlers.showAgentMonitor();
+    case "agent-monitor.hide":
+      return handlers.hideAgentMonitor();
+    case "agent-monitor.toggle":
+      return handlers.toggleAgentMonitor();
     case "notes.show":
       return handlers.showNotes();
     case "notes.hide":

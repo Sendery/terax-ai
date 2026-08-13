@@ -19,10 +19,11 @@ const noPrivate = [
 ];
 
 describe("isCaptureTarget", () => {
-  it("accepts every closed target id", () => {
+  it("accepts every closed target id, including the agent monitor", () => {
     for (const target of CAPTURE_TARGETS) {
       expect(isCaptureTarget(target)).toBe(true);
     }
+    expect(isCaptureTarget("agent-monitor")).toBe(true);
   });
 
   it("rejects arbitrary strings and non-strings", () => {
@@ -69,11 +70,14 @@ describe("validateCaptureRequest", () => {
 });
 
 describe("captureBlockReason", () => {
-  it("blocks window and tabstrip when any private terminal exists", () => {
+  it("blocks whole-window and agent-monitor captures when any private terminal exists", () => {
     expect(captureBlockReason(tabs, 1, { target: "window" })).toMatch(
       /private/i,
     );
     expect(captureBlockReason(tabs, 1, { target: "tabstrip" })).toMatch(
+      /private/i,
+    );
+    expect(captureBlockReason(tabs, 1, { target: "agent-monitor" })).toMatch(
       /private/i,
     );
   });
@@ -117,6 +121,9 @@ describe("captureTargetSelector", () => {
     );
     expect(captureTargetSelector({ target: "pane", tabId: 3 })).toBe(
       '[data-capture-target="pane"][data-capture-tab-id="3"]',
+    );
+    expect(captureTargetSelector({ target: "agent-monitor" })).toBe(
+      '[data-capture-target="agent-monitor"]',
     );
   });
 });

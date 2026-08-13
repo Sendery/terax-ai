@@ -75,11 +75,11 @@ Capture any Terax surface natively: the webview rasterizes the requested surface
 { "command": "app.capture", "payload": { "target": "pane", "tabId": 3 } }
 ```
 
-Targets (closed set): `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay` (topmost open menu, dialog, or popover). Returns `{ target, path, width, height, bytes, format: "png" }`.
+Targets (closed set): `window`, `header`, `sidebar`, `tabstrip`, `statusbar`, `active-pane`, `pane` (requires `tabId`), `overlay` (topmost open menu, dialog, or popover), `agent-monitor` (the visible monitor panel only). Returns `{ target, path, width, height, bytes, format: "png" }`.
 
 Rules and limits:
 
-- Private terminals block capture with scope-correct errors: any private tab blocks `window` and `tabstrip`, the targeted private tab blocks `pane`, and an active private tab blocks the remaining targets. Rejected captures never mutate state.
+- Private terminals block capture with scope-correct errors: any private tab blocks `window`, `tabstrip`, and `agent-monitor`; the targeted private tab blocks `pane`; and an active private tab blocks the remaining targets. Rejected captures never mutate state.
 - Hidden mounted DOM panes (editor, markdown, diff) capture fully. A hidden idle terminal has released its renderer slot and captures chrome only; call `tab.focus` first, capture, then focus back.
 - Password inputs are masked. Arbitrary selectors are rejected.
 - Prefer `terax_visual_qa` with `target`/`tabId` for QA evidence: it adds trusted-project gating, guard monitoring, and evidence management on top of this command.

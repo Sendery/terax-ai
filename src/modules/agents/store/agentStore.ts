@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import type {
+  AgentIntegration,
+  AgentHarness,
   AgentNotification,
   AgentSession,
+  AgentSignalKind,
   AgentStatus,
   LocalAgentState,
 } from "../lib/types";
@@ -14,8 +17,18 @@ type AgentStoreState = {
   sessions: Record<number, AgentSession>;
   localAgent: LocalAgentState;
   notifications: AgentNotification[];
-  start: (leafId: number, tabId: number, agent: string) => void;
-  setStatus: (leafId: number, status: AgentStatus) => void;
+  start: (
+    leafId: number,
+    tabId: number,
+    agent: string,
+    integration?: AgentIntegration,
+    harness?: AgentHarness,
+  ) => void;
+  setStatus: (
+    leafId: number,
+    status: AgentStatus,
+    signal?: AgentSignalKind,
+  ) => void;
   finish: (leafId: number) => void;
   setLocalAgent: (state: LocalAgentState) => void;
   pushNotification: (
@@ -30,7 +43,7 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
   localAgent: null,
   notifications: [],
 
-  start: (leafId, tabId, agent) =>
+  start: (leafId, tabId, agent, integration = "pty-detection", harness = "generic") =>
     set((s) => {
       const now = Date.now();
       return {
@@ -44,15 +57,18 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
             startedAt: now,
             lastActivityAt: now,
             attentionSince: null,
+            lastSignal: "started",
+            integration,
+            harness,
           },
         },
       };
     }),
 
-  setStatus: (leafId, status) =>
+  setStatus: (leafId, status, signal) =>
     set((s) => {
       const prev = s.sessions[leafId];
-      if (!prev || prev.status === status) return s;
+      if (!prev || (prev.status === status && signal === undefined)) return s;
       const now = Date.now();
       return {
         sessions: {
@@ -61,7 +77,8 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
             ...prev,
             status,
             lastActivityAt: now,
-            attentionSince: status === "waiting" ? now : null,
+            attentionSince: status === "waiting" && signal !== "finished" ? now : null,
+            lastSignal: signal ?? prev.lastSignal,
           },
         },
       };

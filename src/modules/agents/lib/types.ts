@@ -1,5 +1,13 @@
 export type AgentStatus = "working" | "waiting";
 
+export type AgentIntegration =
+  | "pi-extension"
+  | "claude-hook"
+  | "pty-detection";
+
+/** Explicit harness identity used for presentation, never inferred from terminal output. */
+export type AgentHarness = "pi" | "claude" | "codex" | "generic";
+
 export type AgentSource = "terminal" | "local";
 
 export type AgentSignalKind =
@@ -23,6 +31,9 @@ export type AgentSession = {
   startedAt: number;
   lastActivityAt: number;
   attentionSince: number | null;
+  lastSignal: AgentSignalKind;
+  integration: AgentIntegration;
+  harness: AgentHarness;
 };
 
 export type AgentNotification = {
