@@ -50,6 +50,9 @@ export const COMMAND_IDS = [
   "tasks.show",
   "tasks.hide",
   "tasks.toggle",
+  "history.show",
+  "history.hide",
+  "history.toggle",
   "tasks.openEditor",
   "tasks.list",
   "tasks.add",
@@ -123,6 +126,9 @@ export type CommandPayloads = {
   "tasks.show": undefined;
   "tasks.hide": undefined;
   "tasks.toggle": undefined;
+  "history.show": undefined;
+  "history.hide": undefined;
+  "history.toggle": undefined;
   "tasks.openEditor": { id?: string };
   "tasks.list": undefined;
   "tasks.add": TaskCommandFields & {
@@ -646,6 +652,22 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description: "Toggle the scheduled tasks panel.",
     params: [],
   },
+  "history.show": {
+    id: "history.show",
+    description:
+      "Show the session history panel, which graphs the transcript of the agent running in the focused terminal.",
+    params: [],
+  },
+  "history.hide": {
+    id: "history.hide",
+    description: "Hide the session history panel.",
+    params: [],
+  },
+  "history.toggle": {
+    id: "history.toggle",
+    description: "Toggle the session history panel.",
+    params: [],
+  },
   "tasks.openEditor": {
     id: "tasks.openEditor",
     description:
@@ -814,6 +836,9 @@ export type CommandHandlers = {
   showTasks: () => Promise<unknown> | unknown;
   hideTasks: () => Promise<unknown> | unknown;
   toggleTasks: () => Promise<unknown> | unknown;
+  showHistory: () => Promise<unknown> | unknown;
+  hideHistory: () => Promise<unknown> | unknown;
+  toggleHistory: () => Promise<unknown> | unknown;
   openTaskEditor: (
     payload: CommandPayloads["tasks.openEditor"],
   ) => Promise<unknown> | unknown;
@@ -950,6 +975,9 @@ export function validateCommandRequest(
     id === "tasks.show" ||
     id === "tasks.hide" ||
     id === "tasks.toggle" ||
+    id === "history.show" ||
+    id === "history.hide" ||
+    id === "history.toggle" ||
     id === "tasks.list" ||
     id === "tasks.pauseAll" ||
     id === "tasks.resumeAll" ||
@@ -1331,6 +1359,12 @@ async function dispatchCommand(
       return handlers.hideTasks();
     case "tasks.toggle":
       return handlers.toggleTasks();
+    case "history.show":
+      return handlers.showHistory();
+    case "history.hide":
+      return handlers.hideHistory();
+    case "history.toggle":
+      return handlers.toggleHistory();
     case "tasks.openEditor":
       return handlers.openTaskEditor(request.payload);
     case "tasks.list":

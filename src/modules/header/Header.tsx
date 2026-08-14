@@ -6,6 +6,7 @@ import { type Tab, TabBar, type TabColor } from "@/modules/tabs";
 import {
   AlarmClockIcon,
   CommandIcon,
+  GitBranchIcon,
   Note01Icon,
   Settings01Icon,
   SidebarLeftIcon,
@@ -51,6 +52,10 @@ type Props = {
   tasksVisible: boolean;
   onToggleAgentMonitor: () => void;
   agentMonitorVisible: boolean;
+  onToggleSessionGraph: () => void;
+  sessionGraphVisible: boolean;
+  /** Agent whose transcript the panel would show, null when none is readable. */
+  sessionGraphAgent: string | null;
   /** Number of enabled scheduled tasks, shown as a badge on the toggle. */
   scheduledCount: number;
   /** True while the global scheduler kill switch is engaged. */
@@ -88,6 +93,9 @@ export function Header({
   tasksVisible,
   onToggleAgentMonitor,
   agentMonitorVisible,
+  onToggleSessionGraph,
+  sessionGraphVisible,
+  sessionGraphAgent,
   scheduledCount,
   scheduledPaused,
   onOpenCommandPalette,
@@ -190,6 +198,32 @@ export function Header({
     </Button>
   );
 
+  const sessionGraphButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={
+        sessionGraphAgent
+          ? `Toggle session history panel for ${sessionGraphAgent}`
+          : "Toggle session history panel"
+      }
+      aria-pressed={sessionGraphVisible}
+      className={`relative size-7 shrink-0 rounded-md hover:bg-accent hover:text-foreground ${
+        sessionGraphVisible ? "bg-accent/60 text-foreground" : "text-muted-foreground"
+      }`}
+      onClick={onToggleSessionGraph}
+      title="Toggle session history"
+    >
+      <HugeiconsIcon icon={GitBranchIcon} size={15} strokeWidth={1.75} />
+      {sessionGraphAgent && (
+        <span
+          aria-hidden
+          className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500"
+        />
+      )}
+    </Button>
+  );
+
   return (
     <div
       ref={rootRef}
@@ -265,6 +299,7 @@ export function Header({
             onActivate={onActivateAgent}
             onActivateLocal={onActivateLocalAgent}
           />
+          {sessionGraphButton}
           {tasksButton}
           {agentMonitorButton}
           {notesButton}
@@ -274,6 +309,7 @@ export function Header({
 
       {!IS_MAC && (
         <>
+          {sessionGraphButton}
           {tasksButton}
           {agentMonitorButton}
           {notesButton}

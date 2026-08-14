@@ -57,6 +57,9 @@ function handlers(): CommandHandlers {
     showTasks: vi.fn(() => ({ visible: true })),
     hideTasks: vi.fn(() => ({ visible: false })),
     toggleTasks: vi.fn(() => ({ toggled: true })),
+    showHistory: vi.fn(() => ({ visible: true })),
+    hideHistory: vi.fn(() => ({ visible: false })),
+    toggleHistory: vi.fn(() => ({ toggled: true })),
     openTaskEditor: vi.fn(() => ({ opened: true })),
     listTasks: vi.fn(() => ({ paused: false, tasks: [] })),
     addTask: vi.fn(() => ({ id: "st-1" })),
@@ -445,6 +448,9 @@ describe("command registry", () => {
       "tasks.show",
       "tasks.hide",
       "tasks.toggle",
+      "history.show",
+      "history.hide",
+      "history.toggle",
       "tasks.openEditor",
       "tasks.list",
       "tasks.add",
@@ -461,11 +467,38 @@ describe("command registry", () => {
 });
 
 describe("scheduled task commands", () => {
+  it("routes the history panel commands to their handlers", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    expect((await reg.call({ id: "history.show" })).ok).toBe(true);
+    expect((await reg.call({ id: "history.hide" })).ok).toBe(true);
+    expect((await reg.call({ id: "history.toggle" })).ok).toBe(true);
+
+    expect(h.showHistory).toHaveBeenCalledTimes(1);
+    expect(h.hideHistory).toHaveBeenCalledTimes(1);
+    expect(h.toggleHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a history command that carries a payload, without running it", async () => {
+    // A rejected command must not reach the handler at all.
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const res = await reg.call({ id: "history.toggle", payload: { on: true } });
+
+    expect(res.ok).toBe(false);
+    expect(h.toggleHistory).not.toHaveBeenCalled();
+  });
+
   it("accepts the no-payload task commands", () => {
     for (const id of [
       "tasks.show",
       "tasks.hide",
       "tasks.toggle",
+      "history.show",
+      "history.hide",
+      "history.toggle",
       "tasks.list",
       "tasks.pauseAll",
       "tasks.resumeAll",

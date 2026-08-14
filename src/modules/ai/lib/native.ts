@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SessionAgent } from "@/modules/session-graph/lib/entries";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 
 export type ReadResult =
@@ -267,6 +268,37 @@ export const native = {
         sizeBytes: number;
       }[]
     >("pi_sessions_list", { limit: limit ?? null }),
+  /**
+   * Reads a transcript slice for the session-graph panel. Payloads are projected
+   * down to what a row renders, so pass the previous `nextOffset` to follow a
+   * live transcript instead of re-reading it.
+   */
+  agentSessionRead: (
+    agent: SessionAgent,
+    sessionId: string,
+    fromOffset: number,
+  ) =>
+    invoke<{
+      jsonl: string;
+      nextOffset: number;
+      totalBytes: number;
+      truncated: boolean;
+    }>("agent_session_read", { agent, sessionId, fromOffset }),
+  agentSessionsList: (agent: SessionAgent, cwd?: string, limit?: number) =>
+    invoke<
+      {
+        id: string;
+        agent: SessionAgent;
+        cwd: string | null;
+        modifiedMs: number;
+        sizeBytes: number;
+        parentSessionId: string | null;
+      }[]
+    >("agent_sessions_list", {
+      agent,
+      cwd: cwd ?? null,
+      limit: limit ?? null,
+    }),
   shellBgList: () =>
     invoke<
       {

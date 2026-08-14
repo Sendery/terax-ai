@@ -98,6 +98,14 @@ import {
   useTasksScheduler,
 } from "@/modules/tasks";
 import {
+  agentKindFromName,
+  GRAPH_MAX_WIDTH,
+  GRAPH_MIN_WIDTH,
+  SessionGraphPanel,
+  useResolvedSession,
+  useSessionGraphPanel,
+} from "@/modules/session-graph";
+import {
   SourceControlPanel,
   useSourceControlContext,
 } from "@/modules/source-control";
@@ -726,6 +734,16 @@ export default function App() {
     hideTasks: hideTasksPanel,
     persistTasksWidth,
   } = useTasksPanel();
+
+  const {
+    graphRef,
+    widthRef: graphWidthRef,
+    graphVisible,
+    hideGraph: hideGraphPanel,
+    showGraph: showGraphPanel,
+    toggleGraph: toggleGraphPanel,
+    persistGraphWidth,
+  } = useSessionGraphPanel();
   const scheduled = useScheduledTasks();
   const scheduledRef = useRef(scheduled);
   scheduledRef.current = scheduled;
@@ -1180,6 +1198,20 @@ export default function App() {
   const activeCwdRef = useRef(activeCwd);
   activeCwdRef.current = activeCwd;
 
+  // The history panel follows whichever agent the focused terminal runs. Agent
+  // detection is heuristic and reports free-form names, so it is narrowed to the
+  // two agents that actually persist a navigable transcript. Subscribed rather
+  // than read from getState so the panel re-resolves when the agent changes.
+  const activeAgentName = useAgentStore((state) =>
+    activeLeafId != null ? (state.sessions[activeLeafId]?.agent ?? null) : null,
+  );
+  const graphAgentHint = agentKindFromName(activeAgentName);
+  const {
+    agent: graphAgent,
+    sessionId: graphSessionId,
+    candidates: graphCandidates,
+  } = useResolvedSession(graphAgentHint, activeCwd);
+
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
     const meta = create({
@@ -1516,6 +1548,18 @@ export default function App() {
         toggleTasks();
         return { toggled: true };
       },
+      showHistory: () => {
+        showGraphPanel();
+        return { visible: true };
+      },
+      hideHistory: () => {
+        hideGraphPanel();
+        return { visible: false };
+      },
+      toggleHistory: () => {
+        toggleGraphPanel();
+        return { toggled: true };
+      },
       openTaskEditor: ({ id }) => {
         if (id !== undefined) {
           const current = scheduledRef.current.tasks.find((t) => t.id === id);
@@ -1617,6 +1661,9 @@ export default function App() {
       showAgentMonitor,
       hideAgentMonitor,
       toggleAgentMonitor,
+      showGraphPanel,
+      hideGraphPanel,
+      toggleGraphPanel,
       openTaskEditor,
       openNewTaskEditor,
       activeSpaceId,
@@ -1703,6 +1750,9 @@ export default function App() {
               tasksVisible={tasksVisible}
               onToggleAgentMonitor={toggleAgentMonitor}
               agentMonitorVisible={agentMonitorVisible}
+              onToggleSessionGraph={toggleGraphPanel}
+              sessionGraphVisible={graphVisible}
+              sessionGraphAgent={graphAgent}
               scheduledCount={
                 scheduled.tasks.filter((task) => task.enabled).length
               }
@@ -1906,6 +1956,29 @@ export default function App() {
                   onRecover={dispatcher.recover}
                   onTogglePaused={() => scheduled.setPaused(!scheduled.paused)}
                   onHide={hideTasksPanel}
+                />
+              </ResizablePanel>
+                </>
+              )}
+              {graphVisible && (
+                <>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id="session-graph"
+                panelRef={graphRef}
+                defaultSize={`${graphWidthRef.current}px`}
+                minSize={`${GRAPH_MIN_WIDTH}px`}
+                maxSize={`${GRAPH_MAX_WIDTH}px`}
+                onResize={(size) => {
+                  if (size.inPixels > 0) persistGraphWidth(size.inPixels);
+                }}
+              >
+                <SessionGraphPanel
+                  agent={graphAgent}
+                  sessionId={graphSessionId}
+                  candidates={graphCandidates}
+                  subtitle={activeTab?.title ?? null}
+                  onHide={hideGraphPanel}
                 />
               </ResizablePanel>
                 </>
