@@ -1,8 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, capture, fs, git, history, net, pi, pisessions, pty, scheduler, secrets,
-    shell, slotmonit, waker, workspace,
+    agent, agent_cli, agentsessions, capture, fs, git, history, net, pi, pisessions, pty, scheduler,
+    secrets, shell, slotmonit, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -322,6 +322,9 @@ pub fn run() {
             pisessions::pi_session_offset,
             pisessions::pi_session_usage,
             pisessions::pi_sessions_list,
+            agentsessions::agent_session_read,
+            agentsessions::agent_sessions_list,
+            agentsessions::agent_session_branch,
             slotmonit::slot_monit_query,
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,

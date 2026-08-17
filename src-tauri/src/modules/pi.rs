@@ -187,6 +187,9 @@ fn is_allowed_command(command: &str) -> bool {
             | "tasks.show"
             | "tasks.hide"
             | "tasks.toggle"
+            | "history.show"
+            | "history.hide"
+            | "history.toggle"
             | "tasks.openEditor"
             | "tasks.list"
             | "tasks.add"
@@ -502,6 +505,9 @@ mod tests {
             "tasks.show",
             "tasks.hide",
             "tasks.toggle",
+            "history.show",
+            "history.hide",
+            "history.toggle",
             "tasks.openEditor",
             "tasks.list",
             "tasks.add",
