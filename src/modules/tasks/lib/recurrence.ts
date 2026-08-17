@@ -66,6 +66,34 @@ function instantOn(
   return new Date(year, month - 1, day, time.hour, time.minute, 0, 0).getTime();
 }
 
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** Local calendar date of an instant, in the format a `date` input expects. */
+export function toDateInput(at: number): string {
+  const date = new Date(at);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Local wall-clock time of an instant, in the format a `time` input expects. */
+export function toTimeInput(at: number): string {
+  const date = new Date(at);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * The instant a date field and a time field describe together, or null while
+ * either is incomplete. Editing hours must never be able to produce a wrong
+ * instant from a half typed date, so both are validated before combining.
+ */
+export function fromDateAndTime(date: string, time: string): number | null {
+  const day = parseDate(date);
+  const clock = parseTime(time);
+  if (!day || !clock) return null;
+  return instantOn(day.year, day.month, day.day, clock);
+}
+
 function startOfDay(value: number): Date {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);

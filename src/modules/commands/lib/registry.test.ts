@@ -757,3 +757,32 @@ describe("tab.setColor command", () => {
     );
   });
 });
+
+describe("task agent payloads", () => {
+  it("accepts the three supported agent CLIs", () => {
+    for (const agent of ["pi", "claude", "codex"]) {
+      expect(
+        validateCommandRequest({
+          id: "tasks.add",
+          payload: { name: "n", prompt: "p", schedule: "every:5m", agent },
+        }).ok,
+      ).toBe(true);
+    }
+  });
+
+  it("rejects an agent outside the closed set", () => {
+    const result = validateCommandRequest({
+      id: "tasks.add",
+      payload: { name: "n", prompt: "p", schedule: "every:5m", agent: "gemini" },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_payload");
+  });
+
+  it("documents the agent argument in the catalog", () => {
+    const add = describeCommands().commands.find((c) => c.id === "tasks.add");
+    const agent = add?.params.find((param) => param.name === "agent");
+    expect(agent?.type).toBe("enum");
+    expect(agent?.values).toEqual(["pi", "claude", "codex"]);
+  });
+});

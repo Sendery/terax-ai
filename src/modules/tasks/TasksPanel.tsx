@@ -28,6 +28,8 @@ export function TasksPanel({
   queuedIds,
   onAdd,
   onEdit,
+  onClone,
+  onRegenerateSeed,
   onRemove,
   onToggleEnabled,
   onRunNow,
@@ -43,6 +45,8 @@ export function TasksPanel({
   queuedIds: readonly string[];
   onAdd: () => void;
   onEdit: (id: string) => void;
+  onClone?: (id: string) => void;
+  onRegenerateSeed?: (id: string) => void;
   onRemove: (id: string) => void;
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
@@ -70,6 +74,8 @@ export function TasksPanel({
         onToggleEnabled={onToggleEnabled}
         onRunNow={onRunNow}
         onEdit={onEdit}
+        onClone={onClone}
+        onRegenerateSeed={onRegenerateSeed}
         onRemove={onRemove}
         onRecover={onRecover}
       />

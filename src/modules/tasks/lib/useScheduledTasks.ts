@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  cloneTask,
   moveTask,
+  recentTaskDefaults,
+  regenerateSeed,
   removeTask as removeFromList,
   reschedule,
   setTaskEnabled,
+  type TaskDefaults,
   type TaskPatch,
   updateTask as patchList,
   upsertTask,
@@ -32,6 +36,13 @@ export type ScheduledTasksApi = {
   now: number;
   add: (input: TaskInput) => ScheduledTask;
   update: (id: string, patch: TaskPatch) => void;
+  /** Copies a task, disabled, so it can be edited before it runs. Returns null
+   *  when the source task is gone. */
+  clone: (id: string) => ScheduledTask | null;
+  /** Points a task at a brand new agent session. */
+  regenerate: (id: string) => void;
+  /** Parameters a new task should start from, or null on an empty list. */
+  defaults: TaskDefaults | null;
   remove: (id: string) => void;
   setEnabled: (id: string, enabled: boolean) => void;
   move: (id: string, toIndex: number) => void;
@@ -100,6 +111,23 @@ export function useScheduledTasks(): ScheduledTasksApi {
     });
   }, []);
 
+  const tasksRef = useRef<readonly ScheduledTask[]>([]);
+  tasksRef.current = tasks;
+
+  const clone = useCallback((id: string) => {
+    const source = tasksRef.current.find((task) => task.id === id);
+    if (!source) return null;
+    const copy = cloneTask(source, Date.now(), tasksRef.current);
+    setTasks((current) => upsertTask(current, copy));
+    return copy;
+  }, []);
+
+  const regenerate = useCallback((id: string) => {
+    setTasks((current) =>
+      current.map((task) => (task.id === id ? regenerateSeed(task) : task)),
+    );
+  }, []);
+
   const remove = useCallback((id: string) => {
     setTasks((current) => removeFromList(current, id));
     setRuns((current) => {
@@ -142,6 +170,8 @@ export function useScheduledTasks(): ScheduledTasksApi {
     setTasks((current) => current.map((task) => reschedule(task, stamp)));
   }, []);
 
+  const defaults = useMemo(() => recentTaskDefaults(tasks), [tasks]);
+
   return useMemo(
     () => ({
       tasks,
@@ -151,6 +181,9 @@ export function useScheduledTasks(): ScheduledTasksApi {
       now,
       add,
       update,
+      clone,
+      regenerate,
+      defaults,
       remove,
       setEnabled,
       move,
@@ -167,6 +200,9 @@ export function useScheduledTasks(): ScheduledTasksApi {
       now,
       add,
       update,
+      clone,
+      regenerate,
+      defaults,
       remove,
       setEnabled,
       move,

@@ -7,6 +7,7 @@ import {
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
 import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
+import { TASK_AGENTS, type TaskAgent } from "@/modules/tasks/lib/agents";
 import { parseScheduleSpec } from "@/modules/tasks/lib/spec";
 import {
   MISSED_POLICIES,
@@ -150,6 +151,7 @@ export type TaskCommandFields = {
   cwd?: string;
   target?: TaskTarget;
   mode?: TaskMode;
+  agent?: TaskAgent;
   missed?: MissedPolicy;
   overlap?: OverlapPolicy;
   sessionId?: string;
@@ -212,6 +214,14 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     values: [...TASK_MODES],
   },
   {
+    name: "agent",
+    type: "enum",
+    required: false,
+    description:
+      "Agent CLI the run drives. pi and claude can be pinned to a session; codex mints its own ids and can only resume its most recent session in the directory.",
+    values: [...TASK_AGENTS],
+  },
+  {
     name: "missed",
     type: "enum",
     required: false,
@@ -236,19 +246,20 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     name: "model",
     type: "string",
     required: false,
-    description: "Model for the run. Omit to inherit the pi default.",
+    description:
+      "Model for the run, passed verbatim to the agent CLI. Omit to inherit its default.",
   },
   {
     name: "provider",
     type: "string",
     required: false,
-    description: "Provider for the run. Omit to inherit the pi default.",
+    description: "Provider for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "thinking",
     type: "string",
     required: false,
-    description: "Thinking level for the run. Omit to inherit the pi default.",
+    description: "Thinking level for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "maxRuns",
@@ -1217,6 +1228,7 @@ function validateTaskPayload(
   const enums: readonly [string, readonly string[]][] = [
     ["target", TASK_TARGETS],
     ["mode", TASK_MODES],
+    ["agent", TASK_AGENTS],
     ["missed", MISSED_POLICIES],
     ["overlap", OVERLAP_POLICIES],
   ];
