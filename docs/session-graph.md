@@ -159,6 +159,20 @@ from a dev build and bound to that build's PID.
 | 10 | Branch/fork control in the header, truncated tool names | `20260814T002739.097Z-10-fase4-ramas-y-forks-yHyIiw` |
 | 11 | A real rewind in a live session: purple elbow into a tinted spur lane | `20260814T005425.451Z-11-final-fase5-GwjIq9` |
 
+### Unified QA build
+
+`Pi-Terax_0.9.0-dev.10_aarch64.dmg` in `.terax/releases/` is the build to test:
+one artefact containing every branch consolidated on `qa` (`8b4e1df`) — this
+panel, the per-task agent work, `preview.open`, and the Pi-Terax product name.
+
+Verified: `CFBundleShortVersionString` is `0.9.0-dev.10` and the identifier stays
+`app.crynta.terax`, so it updates in place over an existing install. Its contents
+cannot be checked by listing files or running `strings`: Tauri v2 embeds the
+frontend compressed inside the binary, and `Contents/Resources` holds only the
+icon. Compare vite chunk names from the build log instead, or run the app.
+
+**Close every other Terax instance before validating anything persisted.**
+
 Not captured, because the bridge cannot open a menu: the branch switcher popover,
 the outline popover, and the entry context menu. Those are the items to walk
 manually from the checklist above.
