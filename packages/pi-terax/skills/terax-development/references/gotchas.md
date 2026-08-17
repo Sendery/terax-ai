@@ -422,6 +422,12 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** every capture request fails with the bridge's `timeout` error, including tiny targets such as the header, which looks exactly like a broken capture path. Rasterizing a retina window is genuinely expensive and the bridge only waits 15 seconds for the UI to answer.
 - **Prevention:** treat a blanket capture timeout as an environment symptom first. Check the load average before concluding the feature is at fault, and collect visual evidence when the machine is not saturated. Do not raise the bridge timeout to paper over it.
 - **Verification:** reproduce the same failing capture against a build that does not contain the change under test. If both fail, the timeout is environmental and must be reported as a baseline condition, not as a regression.
+### Iframe content is invisible to in-app capture
+
+- **Trigger:** capturing a preview tab (or any surface embedding an `<iframe>`).
+- **Failure mode:** the artifact shows the pane chrome and address bar with a blank body, which reads as a broken page even when the embedded app is running and interactive. The DOM clone cannot rasterize another document's content.
+- **Prevention:** treat preview panes as functionally verifiable only. Prove the embedded app works through its own surface (health endpoint, websocket client count, an API round-trip such as an image export) plus the semantic snapshot showing the tab id, url, and title.
+- **Verification:** the snapshot lists the preview tab with the expected url and title, and an action routed through the embedded client returns real data.
 
 ### Hidden idle terminals have no pixels to capture
 
@@ -438,6 +444,27 @@ A row is complete only when implementation and verification evidence both exist.
 - **Verification:** with a private terminal open and active, every affected target is rejected over the real bridge and the snapshot is unchanged afterward.
 
 ## Testing and Review
+
+### Never run a formatter with `--write` over existing files
+
+- **Trigger:** fixing lint or format findings on a file you touched (for example `biome check --write src/app/App.tsx`).
+- **Failure mode:** files that are not formatted at baseline get hundreds of lines of unrelated reformatting, which buries the real change and breaks diff review.
+- **Prevention:** format only new files. On existing files, apply the edit by hand in the surrounding style, then compare diagnostics with the base branch and require parity rather than zero.
+- **Verification:** `git diff --stat` shows only intended files and line counts, and `biome check <changed files>` reports the same findings as the base checkout.
+
+### Visual-QA evidence lands in the Pi project, not in the Terax worktree
+
+- **Trigger:** running `terax_visual_qa` while the Pi session's working directory is a different repository than the Terax checkout under development.
+- **Failure mode:** artifacts are written to `<pi-project>/.terax/visual-qa/`, where `.terax/` is usually not ignored, so screenshots and videos appear as untracked files in an unrelated repository and can be committed by accident.
+- **Prevention:** after capturing, move the run into the feature worktree's ignored evidence path (`.terax/pi-development/<run>/evidence/`) and remove the directory created in the Pi project.
+- **Verification:** `git status --short` is clean of `.terax` in the Pi project, and `git status` in the worktree does not list the evidence because `.terax/pi-development/` is ignored.
+
+### A development instance hijacks the Pi discovery file
+
+- **Trigger:** running `pnpm tauri dev` while a release Terax is open and a Pi session is bridged to it.
+- **Failure mode:** both apps write the same per-user discovery file, so Pi tools silently target the dev instance; after the dev app exits, the file points at a dead process and the release app is unreachable until it is restarted.
+- **Prevention:** copy the discovery file before starting a dev instance and restore it after cleanup. Re-read it whenever bridge results look like they came from the wrong window.
+- **Verification:** the restored file's pid matches the still-running release process, and a bridge call reaches it.
 
 ### Separate baseline failures from introduced failures
 

@@ -50,7 +50,7 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
-import type { PreviewPaneHandle } from "@/modules/preview";
+import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
@@ -1421,6 +1421,19 @@ export default function App() {
         handleOpenFile(path, pin);
         return { opened: true };
       },
+      openPreview: ({ url, title }) => {
+        const existing = tabsRef.current.find(
+          (t) => t.kind === "preview" && samePreviewUrl(t.url, url),
+        );
+        const tabId = existing?.id ?? openPreviewTab(url);
+        if (existing) {
+          useSpaces.getState().setActive(existing.spaceId);
+          setActiveId(existing.id);
+        }
+        const customTitle = title?.trim();
+        if (customTitle) updateTab(tabId, { customTitle });
+        return { tabId, url, created: !existing };
+      },
       focusTab: ({ tabId }) => {
         const tab = tabsRef.current.find((t) => t.id === tabId);
         if (!tab) {
@@ -1671,6 +1684,7 @@ export default function App() {
       handleOpenFile,
       hideSidebar,
       openGitDiffTab,
+      openPreviewTab,
       setActiveId,
       showSidebar,
       sidebarRef,

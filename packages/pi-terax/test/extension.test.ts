@@ -206,6 +206,11 @@ describe("Pi extension", () => {
     expect(TERAX_COMMAND_IDS).toContain("tab.setColor");
   });
 
+  it("accepts preview.open as an allowlisted command", () => {
+    expect(isTeraxCommandId("preview.open")).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain("preview.open");
+  });
+
   it("exposes app.commands as the payload discovery command", () => {
     expect(isTeraxCommandId("app.commands")).toBe(true);
     expect(TERAX_COMMAND_IDS).toContain("app.commands");
