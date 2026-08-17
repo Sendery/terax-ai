@@ -122,15 +122,11 @@ whose directory has transcripts.
 
 ## Running two builds at once
 
-Dev builds and the dev-release build deliberately share the bundle identifier
-`app.crynta.terax`, so they also share
-`~/Library/Application Support/app.crynta.terax/` — which is where
-`terax-session-marks.json` lives.
-
-Two Terax instances open at the same time therefore **overwrite each other's key
-points**, the same way they do with scheduled tasks. When validating marks, run
-one instance at a time, or the checklist item "marks survive a reload" will fail
-for a reason that has nothing to do with the panel.
+Key points persist to `terax-session-marks.json`, in the store directory every
+Terax build shares. Two instances open at once overwrite each other's marks, so
+validate them with a single instance running — otherwise the checklist item
+"marks survive a reload" fails for a reason unrelated to the panel. See the
+single-instance store note in `TERAX.md` for the full scope.
 
 ## Capturing evidence
 
