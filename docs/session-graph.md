@@ -120,6 +120,18 @@ whose directory has transcripts.
 - [ ] A turn that carried only an attachment renders `(no text)` rather than a
       blank row.
 
+## Running two builds at once
+
+Dev builds and the dev-release build deliberately share the bundle identifier
+`app.crynta.terax`, so they also share
+`~/Library/Application Support/app.crynta.terax/` — which is where
+`terax-session-marks.json` lives.
+
+Two Terax instances open at the same time therefore **overwrite each other's key
+points**, the same way they do with scheduled tasks. When validating marks, run
+one instance at a time, or the checklist item "marks survive a reload" will fail
+for a reason that has nothing to do with the panel.
+
 ## Capturing evidence
 
 Use `terax_visual_qa`. Two things make captures fail in a dev build, both
