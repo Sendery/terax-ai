@@ -302,6 +302,13 @@ A row is complete only when implementation and verification evidence both exist.
 
 ## Driving External Agent CLIs
 
+### A bare model pattern can be ambiguous across configured providers
+
+- **Trigger:** offering model presets, or defaulting a model, for a CLI that resolves `--model` as a pattern rather than an exact id.
+- **Failure mode:** the pattern matches the same model under several configured providers and the run dies immediately with "is ambiguous across providers". On a single-provider development machine the same preset looks fine, so the failure only appears for users with more than one provider.
+- **Prevention:** qualify the preset with its provider (`provider/pattern`), which stays version agnostic while resolving to one model. Keep a custom free-text value available for anything the presets do not cover.
+- **Verification:** run one real non-interactive invocation per preset shape and confirm the CLI resolved a model instead of rejecting the pattern.
+
 ### Session pinning differs per agent CLI and cannot be assumed
 
 - **Trigger:** launching pi, claude, or codex on behalf of a scheduled or automated run and expecting the same session to continue.
