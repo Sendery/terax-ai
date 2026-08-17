@@ -165,6 +165,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "sidebar.show"
             | "sidebar.hide"
             | "tab.openFile"
+            | "preview.open"
             | "tab.focus"
             | "tab.close"
             | "tab.rename"

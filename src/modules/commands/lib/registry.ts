@@ -4,6 +4,7 @@ import {
   type CaptureRequest,
   validateCaptureRequest,
 } from "@/modules/capture";
+import { isLoopbackPreviewUrl } from "@/modules/preview";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
 import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
@@ -28,6 +29,7 @@ export const COMMAND_IDS = [
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",
+  "preview.open",
   "tab.focus",
   "tab.close",
   "tab.rename",
@@ -89,6 +91,7 @@ export type CommandPayloads = {
   "sidebar.show": { view?: SidebarViewId };
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
+  "preview.open": { url: string; title?: string };
   "tab.focus": { tabId: number };
   "tab.close": { tabId?: number };
   "tab.rename": { tabId: number; title: string };
@@ -394,6 +397,27 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         type: "boolean",
         required: false,
         description: "Pin the tab instead of opening it as a preview.",
+      },
+    ],
+  },
+  "preview.open": {
+    id: "preview.open",
+    description:
+      "Open (or focus) a web preview tab for a loopback URL. Only http(s) URLs on localhost/127.0.0.1/[::1] are accepted.",
+    params: [
+      {
+        description:
+          "Loopback URL to load, including scheme (e.g. http://localhost:5173).",
+        name: "url",
+        required: true,
+        type: "string",
+      },
+      {
+        description:
+          "Custom tab title; defaults to a title derived from the URL.",
+        name: "title",
+        required: false,
+        type: "string",
       },
     ],
   },
@@ -772,6 +796,9 @@ export type CommandHandlers = {
   openFile: (
     payload: CommandPayloads["tab.openFile"],
   ) => Promise<unknown> | unknown;
+  openPreview: (
+    payload: CommandPayloads["preview.open"],
+  ) => Promise<unknown> | unknown;
   focusTab: (
     payload: CommandPayloads["tab.focus"],
   ) => Promise<unknown> | unknown;
@@ -882,6 +909,17 @@ function requireNumber(
     return invalidPayload(`${id} requires payload.${key}`);
   }
   return { ok: true, value: value as number };
+}
+
+function validateOptionalString(
+  value: unknown,
+  id: CommandId,
+  key: string,
+): CommandResult<string | undefined> {
+  if (value === undefined || typeof value === "string") {
+    return { ok: true, value };
+  }
+  return invalidPayload(`${id} requires payload.${key} to be a string`);
 }
 
 function validateOptionalBoolean(
@@ -999,6 +1037,22 @@ export function validateCommandRequest(
     };
   }
 
+  if (id === "preview.open") {
+    if (!isLoopbackPreviewUrl(obj.url)) {
+      return invalidPayload(
+        obj.url === undefined || obj.url === null || obj.url === ""
+          ? "preview.open requires payload.url"
+          : "preview.open requires payload.url to be an http(s) loopback URL",
+      );
+    }
+    const title = validateOptionalString(obj.title, id, "title");
+    if (!title.ok) return title;
+    return {
+      ok: true,
+      value: { id, payload: { url: obj.url, title: title.value } },
+    };
+  }
+
   if (id === "tab.focus" || id === "tab.resetTitle") {
     const tabId = requireNumber(obj, "tabId", id);
     if (!tabId.ok) return tabId;
@@ -1100,12 +1154,18 @@ export function validateCommandRequest(
       const value = obj[key];
       if (value === undefined) continue;
       if (typeof value !== "string") {
-        return invalidPayload(`notes.update requires payload.${key} to be a string`);
+        return invalidPayload(
+          `notes.update requires payload.${key} to be a string`,
+        );
       }
       patch[key] = value;
     }
-    if (patch.title === undefined && patch.body === undefined &&
-        patch.url === undefined && patch.note === undefined) {
+    if (
+      patch.title === undefined &&
+      patch.body === undefined &&
+      patch.url === undefined &&
+      patch.note === undefined
+    ) {
       return invalidPayload(
         "notes.update requires at least one of title, body, url or note",
       );
@@ -1287,6 +1347,8 @@ async function dispatchCommand(
       return handlers.hideSidebar();
     case "tab.openFile":
       return handlers.openFile(request.payload);
+    case "preview.open":
+      return handlers.openPreview(request.payload);
     case "tab.focus":
       return handlers.focusTab(request.payload);
     case "tab.close":

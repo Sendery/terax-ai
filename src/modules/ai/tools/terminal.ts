@@ -1,3 +1,4 @@
+import { isLoopbackPreviewUrl } from "@/modules/preview";
 import { tool } from "ai";
 import { z } from "zod";
 import { checkShellCommand } from "../lib/security";
@@ -71,27 +72,10 @@ export function buildTerminalTools(ctx: ToolContext) {
           ),
       }),
       execute: async ({ url }) => {
-        let parsed: URL;
-        try {
-          parsed = new URL(url);
-        } catch {
-          return { error: "invalid URL", url };
-        }
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          return { error: "only http/https URLs are allowed", url };
-        }
-        const host = parsed.hostname;
-        const isLocal =
-          host === "localhost" ||
-          host === "127.0.0.1" ||
-          host === "0.0.0.0" ||
-          host === "[::1]" ||
-          host === "::1" ||
-          host.endsWith(".localhost");
-        if (!isLocal) {
+        if (!isLoopbackPreviewUrl(url)) {
           return {
             error:
-              "open_preview is restricted to localhost URLs. Ask the user to paste the external URL into the preview address bar instead.",
+              "open_preview is restricted to http(s) localhost URLs. Ask the user to paste the external URL into the preview address bar instead.",
             url,
           };
         }

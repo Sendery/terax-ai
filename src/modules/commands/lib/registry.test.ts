@@ -21,6 +21,11 @@ function handlers(): CommandHandlers {
     showSidebar: vi.fn(async () => ({ visible: true, view: "explorer" })),
     hideSidebar: vi.fn(async () => ({ visible: false })),
     openFile: vi.fn(async () => ({ tabId: 7 })),
+    openPreview: vi.fn(async () => ({
+      tabId: 12,
+      url: "http://localhost:19432/",
+      created: true,
+    })),
     focusTab: vi.fn(async () => ({ tabId: 2 })),
     closeTab: vi.fn(async () => ({ requested: true })),
     renameTab: vi.fn(async () => ({ tabId: 2 })),
@@ -86,7 +91,8 @@ describe("notes commands", () => {
 
   it("validates notes.add content", () => {
     expect(
-      validateCommandRequest({ id: "notes.add", payload: { content: "hi" } }).ok,
+      validateCommandRequest({ id: "notes.add", payload: { content: "hi" } })
+        .ok,
     ).toBe(true);
     expect(validateCommandRequest({ id: "notes.add", payload: {} }).ok).toBe(
       false,
@@ -114,7 +120,8 @@ describe("notes commands", () => {
     ).toBe(true);
     // missing id
     expect(
-      validateCommandRequest({ id: "notes.update", payload: { title: "x" } }).ok,
+      validateCommandRequest({ id: "notes.update", payload: { title: "x" } })
+        .ok,
     ).toBe(false);
     // no editable field
     expect(
@@ -275,6 +282,95 @@ describe("app.capture", () => {
   });
 });
 
+describe("preview.open command", () => {
+  it("accepts loopback http(s) URLs", () => {
+    for (const url of [
+      "http://localhost:19432/",
+      "http://127.0.0.1:5173/canvas",
+      "https://localhost:8443",
+    ]) {
+      expect(
+        validateCommandRequest({ id: "preview.open", payload: { url } }).ok,
+        url,
+      ).toBe(true);
+    }
+  });
+
+  it("requires payload.url", () => {
+    expect(validateCommandRequest({ id: "preview.open", payload: {} })).toEqual(
+      {
+        ok: false,
+        error: {
+          code: "invalid_payload",
+          message: "preview.open requires payload.url",
+        },
+      },
+    );
+    expect(
+      validateCommandRequest({ id: "preview.open", payload: undefined }).ok,
+    ).toBe(false);
+  });
+
+  it("rejects non-loopback and non-http URLs", () => {
+    for (const url of [
+      "http://example.com",
+      "https://localhost.evil.com/",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "localhost:19432",
+      42,
+    ]) {
+      const result = validateCommandRequest({
+        id: "preview.open",
+        payload: { url },
+      });
+      expect(result.ok, String(url)).toBe(false);
+    }
+  });
+
+  it("passes an optional title through and rejects a non-string title", () => {
+    expect(
+      validateCommandRequest({
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: "Excalidraw" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: "Excalidraw" },
+      },
+    });
+    expect(
+      validateCommandRequest({
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: 7 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("dispatches valid requests and never calls the handler on rejection", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const ok = await registry.call({
+      id: "preview.open",
+      payload: { url: "http://localhost:19432/" },
+    });
+    expect(ok).toEqual({
+      ok: true,
+      value: { tabId: 12, url: "http://localhost:19432/", created: true },
+    });
+    expect(h.openPreview).toHaveBeenCalledTimes(1);
+
+    const rejected = await registry.call({
+      id: "preview.open",
+      payload: { url: "http://example.com" },
+    });
+    expect(rejected.ok).toBe(false);
+    expect(h.openPreview).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("describeCommands", () => {
   it("documents a schema entry for every command id", () => {
     const catalog = describeCommands();
@@ -423,6 +519,7 @@ describe("command registry", () => {
       "sidebar.show",
       "sidebar.hide",
       "tab.openFile",
+      "preview.open",
       "tab.focus",
       "tab.close",
       "tab.rename",
