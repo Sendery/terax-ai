@@ -524,6 +524,228 @@ pub fn agent_sessions_list(
     Ok(out)
 }
 
+/// Entries of a transcript reduced to what branching needs: the tree links and
+/// the raw line, so the new file is written byte-identical except for its
+/// re-chained parent.
+struct RawEntry {
+    id: String,
+    parent_id: Option<String>,
+    kind: String,
+    line: String,
+}
+
+fn read_raw_entries(text: &str) -> Vec<RawEntry> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            continue;
+        };
+        let kind = value["type"].as_str().unwrap_or_default().to_string();
+        if kind == "session" {
+            continue;
+        }
+        let Some(id) = value["id"].as_str() else {
+            continue;
+        };
+        out.push(RawEntry {
+            id: id.to_string(),
+            parent_id: value["parentId"].as_str().map(String::from),
+            kind,
+            line: trimmed.to_string(),
+        });
+    }
+    out
+}
+
+/// Builds the contents of a session containing only the path from the root to
+/// `entry_id`, the way pi's own `createBranchedSession` does.
+///
+/// `label` entries are dropped because they are user bookmarks rather than
+/// conversation, and removing them requires re-chaining the retained path so no
+/// child is left pointing at an entry that is no longer there.
+pub fn build_branched_session(
+    text: &str,
+    entry_id: &str,
+    new_session_id: &str,
+    cwd: &str,
+    parent_session_path: &str,
+    timestamp: &str,
+) -> Result<String, String> {
+    let entries = read_raw_entries(text);
+    let by_id: std::collections::HashMap<&str, &RawEntry> =
+        entries.iter().map(|e| (e.id.as_str(), e)).collect();
+    if !by_id.contains_key(entry_id) {
+        return Err("Entry not found".to_string());
+    }
+
+    // Walk child -> root, guarded against a cycle in a corrupt file.
+    let mut path: Vec<&RawEntry> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut cursor = Some(entry_id);
+    while let Some(id) = cursor {
+        if !seen.insert(id) {
+            break;
+        }
+        let Some(entry) = by_id.get(id) else { break };
+        path.push(entry);
+        cursor = entry.parent_id.as_deref();
+    }
+    path.reverse();
+
+    let mut out = String::new();
+    let header = serde_json::json!({
+        "type": "session",
+        "version": 3,
+        "id": new_session_id,
+        "timestamp": timestamp,
+        "cwd": cwd,
+        "parentSession": parent_session_path,
+    });
+    out.push_str(&serde_json::to_string(&header).map_err(|e| e.to_string())?);
+    out.push('\n');
+
+    let mut previous: Option<String> = None;
+    for entry in path {
+        if entry.kind == "label" {
+            continue;
+        }
+        let mut value: serde_json::Value =
+            serde_json::from_str(&entry.line).map_err(|e| e.to_string())?;
+        match &previous {
+            Some(parent) => value["parentId"] = serde_json::Value::String(parent.clone()),
+            None => value["parentId"] = serde_json::Value::Null,
+        }
+        out.push_str(&serde_json::to_string(&value).map_err(|e| e.to_string())?);
+        out.push('\n');
+        previous = Some(entry.id.clone());
+    }
+
+    Ok(out)
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchedSession {
+    pub session_id: String,
+    pub path: String,
+    pub entry_count: usize,
+}
+
+/// Writes a new session file holding the path from the root to one entry.
+///
+/// Additive by construction: the original transcript is only read, and the new
+/// file is created exclusively so an existing session can never be overwritten.
+/// This is the safe way to "branch from here" while an agent is running, because
+/// a live agent owns its file and holds its leaf in memory.
+///
+/// pi only: Claude's transcript format and resume flags differ, and it has no
+/// equivalent of `--session <path>`.
+#[tauri::command]
+pub fn agent_session_branch(
+    session_id: String,
+    entry_id: String,
+) -> Result<BranchedSession, String> {
+    if !is_safe_session_id(&session_id) || !is_safe_session_id(&entry_id) {
+        return Err("Invalid id".to_string());
+    }
+    let Some(source) = find_session_file(AgentKind::Pi, &session_id) else {
+        return Err("Session not found".to_string());
+    };
+
+    let metadata = std::fs::metadata(&source).map_err(|e| e.to_string())?;
+    if metadata.len() > MAX_SLICE_BYTES {
+        return Err("Transcript too large to branch".to_string());
+    }
+    let text = std::fs::read_to_string(&source).map_err(|e| e.to_string())?;
+
+    let (cwd, _) = read_header(&source, AgentKind::Pi);
+    let cwd = cwd.unwrap_or_default();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let new_session_id = format!("terax-branch-{}", now.as_millis());
+    let timestamp = format_rfc3339(now.as_secs());
+    let file_timestamp = timestamp.replace([':', '.'], "-");
+
+    let contents = build_branched_session(
+        &text,
+        &entry_id,
+        &new_session_id,
+        &cwd,
+        &source.to_string_lossy(),
+        &timestamp,
+    )?;
+
+    let Some(dir) = source.parent() else {
+        return Err("Session directory not found".to_string());
+    };
+    let target = dir.join(format!("{file_timestamp}_{new_session_id}.jsonl"));
+
+    // create_new: never clobber an existing transcript.
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|e| e.to_string())?;
+    use std::io::Write as _;
+    file.write_all(contents.as_bytes()).map_err(|e| e.to_string())?;
+
+    Ok(BranchedSession {
+        session_id: new_session_id,
+        path: target.to_string_lossy().to_string(),
+        entry_count: contents.lines().count().saturating_sub(1),
+    })
+}
+
+/// Minimal RFC3339 formatter, to avoid pulling a date dependency for one string.
+fn format_rfc3339(secs: u64) -> String {
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    let (h, m, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+
+    let mut year = 1970_i64;
+    let mut remaining = days as i64;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let len = if leap { 366 } else { 365 };
+        if remaining < len {
+            break;
+        }
+        remaining -= len;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let months = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut month = 0;
+    while month < 12 && remaining >= months[month] {
+        remaining -= months[month];
+        month += 1;
+    }
+    format!(
+        "{year:04}-{:02}-{:02}T{h:02}:{m:02}:{s:02}.000Z",
+        month + 1,
+        remaining + 1
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -813,6 +1035,103 @@ mod tests {
         assert_eq!(cwd.as_deref(), Some("/w"));
         assert_eq!(parent, None);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A rewind: `a3` has two children, and `a5` is the tip of the abandoned one.
+    const BRANCHY: &str = r#"{"type":"session","version":3,"id":"s1","timestamp":"2026-08-01T00:00:00.000Z","cwd":"/w"}
+{"type":"message","id":"a1","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"first"}]}}
+{"type":"message","id":"a2","parentId":"a1","message":{"role":"assistant","content":[]}}
+{"type":"label","id":"lbl","parentId":"a2","targetId":"a1","label":"keep"}
+{"type":"message","id":"a3","parentId":"lbl","message":{"role":"assistant","content":[]}}
+{"type":"message","id":"a4","parentId":"a3","message":{"role":"toolResult","content":[]}}
+{"type":"message","id":"a5","parentId":"a4","message":{"role":"assistant","content":[]}}
+{"type":"message","id":"a6","parentId":"a3","message":{"role":"user","content":[{"type":"text","text":"retry"}]}}
+"#;
+
+    fn branch(entry: &str) -> Vec<serde_json::Value> {
+        build_branched_session(BRANCHY, entry, "new1", "/w", "/old.jsonl", "2026-08-14T00:00:00.000Z")
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn keeps_only_the_path_from_the_root_to_the_chosen_entry() {
+        let lines = branch("a5");
+
+        let ids: Vec<&str> = lines[1..].iter().map(|v| v["id"].as_str().unwrap()).collect();
+        // a6 is on the other branch and must not travel with it.
+        assert_eq!(ids, vec!["a1", "a2", "a3", "a4", "a5"]);
+    }
+
+    #[test]
+    fn re_chains_the_path_after_dropping_a_label() {
+        // `a3` hung off the label. Copying it verbatim would orphan the subtree.
+        let lines = branch("a5");
+
+        let parents: Vec<Option<&str>> = lines[1..]
+            .iter()
+            .map(|v| v["parentId"].as_str())
+            .collect();
+        assert_eq!(parents, vec![None, Some("a1"), Some("a2"), Some("a3"), Some("a4")]);
+    }
+
+    #[test]
+    fn writes_a_header_that_points_back_at_the_session_it_came_from() {
+        let lines = branch("a6");
+
+        assert_eq!(lines[0]["type"], "session");
+        assert_eq!(lines[0]["id"], "new1");
+        assert_eq!(lines[0]["cwd"], "/w");
+        assert_eq!(lines[0]["parentSession"], "/old.jsonl");
+        assert_eq!(lines[0]["version"], 3);
+    }
+
+    #[test]
+    fn preserves_the_message_bodies_verbatim() {
+        // Branching must not truncate: this file is what the agent will resume.
+        let lines = branch("a1");
+
+        assert_eq!(lines[1]["message"]["content"][0]["text"], "first");
+    }
+
+    #[test]
+    fn branches_from_the_other_side_of_a_rewind() {
+        let lines = branch("a6");
+
+        let ids: Vec<&str> = lines[1..].iter().map(|v| v["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, vec!["a1", "a2", "a3", "a6"]);
+    }
+
+    #[test]
+    fn refuses_an_entry_that_is_not_in_the_transcript() {
+        assert!(build_branched_session(BRANCHY, "nope", "n", "/w", "/o", "t").is_err());
+    }
+
+    #[test]
+    fn survives_a_parent_cycle_instead_of_looping_forever() {
+        let cyclic = "{\"type\":\"message\",\"id\":\"c1\",\"parentId\":\"c2\"}\n\
+             {\"type\":\"message\",\"id\":\"c2\",\"parentId\":\"c1\"}";
+
+        let out = build_branched_session(cyclic, "c1", "n", "/w", "/o", "t").unwrap();
+
+        assert_eq!(out.lines().count(), 3);
+    }
+
+    #[test]
+    fn refuses_unsafe_ids_before_touching_the_filesystem() {
+        assert!(agent_session_branch("../x".into(), "a1".into()).is_err());
+        assert!(agent_session_branch("s1".into(), "../x".into()).is_err());
+    }
+
+    #[test]
+    fn formats_a_timestamp_pi_can_parse() {
+        // Cross-checked against `date -u -r` rather than computed by hand.
+        assert_eq!(format_rfc3339(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(format_rfc3339(1_776_124_800), "2026-04-14T00:00:00.000Z");
+        // A leap day, where a naive 365-day year drifts.
+        assert_eq!(format_rfc3339(1_709_164_800), "2024-02-29T00:00:00.000Z");
     }
 
     #[test]

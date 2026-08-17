@@ -324,6 +324,7 @@ pub fn run() {
             pisessions::pi_sessions_list,
             agentsessions::agent_session_read,
             agentsessions::agent_sessions_list,
+            agentsessions::agent_session_branch,
             slotmonit::slot_monit_query,
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,

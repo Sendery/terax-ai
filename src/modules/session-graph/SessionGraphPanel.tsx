@@ -17,6 +17,18 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+import { toast } from "sonner";
+
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { native } from "@/modules/ai/lib/native";
+
+import { availableActions, resumeCommand } from "./lib/actions";
 import { branchOptions, sessionLineage } from "./lib/branches";
 import {
   collapseByDensity,
@@ -261,6 +273,50 @@ export function SessionGraphPanel({
       setDraftLabel(existing);
     },
     [],
+  );
+
+  /**
+   * Runs an action on one entry. Everything that writes asks first, and the
+   * original transcript is never modified: branching creates a new session.
+   */
+  const runAction = useCallback(
+    async (actionId: string, nodeId: string) => {
+      if (!agent || !activeSessionId) return;
+
+      if (actionId === "resume") {
+        const command = resumeCommand(agent, activeSessionId);
+        if (!command) {
+          toast.error("This session id cannot be resumed from a command line.");
+          return;
+        }
+        await navigator.clipboard.writeText(command);
+        toast.success("Resume command copied", { description: command });
+        return;
+      }
+
+      if (actionId === "branch") {
+        const confirmed = window.confirm(
+          "Create a new session containing the history up to this point?\n\n" +
+            "The current session is not modified.",
+        );
+        if (!confirmed) return;
+        try {
+          const created = await native.agentSessionBranch(activeSessionId, nodeId);
+          const command = resumeCommand("pi", created.sessionId);
+          if (command) await navigator.clipboard.writeText(command);
+          toast.success(`Branched ${created.entryCount} entries`, {
+            description: command
+              ? `${created.sessionId} — resume command copied`
+              : created.sessionId,
+          });
+        } catch (cause) {
+          toast.error("Could not branch this session", {
+            description: cause instanceof Error ? cause.message : String(cause),
+          });
+        }
+      }
+    },
+    [agent, activeSessionId],
   );
 
   const commitLabel = useCallback(() => {
@@ -563,8 +619,16 @@ export function SessionGraphPanel({
                       ? { backgroundColor: `${TONE_COLOR.user}0f` }
                       : undefined;
 
+                  const actions = agent
+                    ? availableActions(agent, row.node, {
+                        codeSnapshotFiles: parsed?.codeSnapshots.get(row.node.id)?.length ?? 0,
+                      })
+                    : [];
+
                   return (
                     <li key={row.node.id}>
+                      <ContextMenu>
+                      <ContextMenuTrigger asChild>
                       <div
                         className={cn(
                           "group flex w-full items-center gap-1 pr-1",
@@ -703,6 +767,40 @@ export function SessionGraphPanel({
                           )
                         )}
                       </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-72">
+                        <ContextMenuItem
+                          onSelect={() =>
+                            startEditing(row.node.id, marks.marks.get(row.node.id)?.label ?? "")
+                          }
+                        >
+                          {mark ? "Edit key point" : "Mark this point"}
+                        </ContextMenuItem>
+                        {mark && (
+                          <ContextMenuItem onSelect={() => marks.remove(row.node.id)}>
+                            Remove key point
+                          </ContextMenuItem>
+                        )}
+                        <ContextMenuSeparator />
+                        {actions.map((action) => (
+                          <ContextMenuItem
+                            key={action.id}
+                            disabled={!action.enabled}
+                            title={action.reason}
+                            onSelect={() => void runAction(action.id, row.node.id)}
+                          >
+                            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                              <span className="truncate">{action.label}</span>
+                              {action.detail && (
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {action.detail}
+                                </span>
+                              )}
+                            </span>
+                          </ContextMenuItem>
+                        ))}
+                      </ContextMenuContent>
+                      </ContextMenu>
                     </li>
                   );
                 })}

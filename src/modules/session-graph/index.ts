@@ -64,3 +64,9 @@ export {
   sessionLineage,
   type SessionLink,
 } from "./lib/branches";
+export {
+  type ActionId,
+  availableActions,
+  resumeCommand,
+  type SessionAction,
+} from "./lib/actions";

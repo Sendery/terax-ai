@@ -11,6 +11,15 @@
 
 const LEADING_TAG = /^<[a-z][a-z0-9-]*>/i;
 
+/**
+ * Tags that wrap something the *user* did, not something the harness injected.
+ *
+ * `!git status` typed at the prompt is recorded as `<bash-input>`; it is a turn a
+ * person took and must stay a milestone. Its `<bash-stdout>` counterpart is
+ * output and stays collapsed.
+ */
+const USER_INITIATED_TAGS = new Set(["bash-input"]);
+
 const INJECTED_PREFIXES = [
   "base directory for this skill:",
   "[your previous response had no visible output",
@@ -21,7 +30,8 @@ const INJECTED_PREFIXES = [
 export function isSyntheticUserText(text: string): boolean {
   const trimmed = text.trimStart();
   if (!trimmed) return false;
-  if (LEADING_TAG.test(trimmed)) return true;
+  const tag = trimmed.match(LEADING_TAG);
+  if (tag) return !USER_INITIATED_TAGS.has(tag[0].slice(1, -1).toLowerCase());
   const lowered = trimmed.toLowerCase();
   return INJECTED_PREFIXES.some((prefix) => lowered.startsWith(prefix));
 }

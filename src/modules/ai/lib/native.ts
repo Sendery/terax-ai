@@ -284,6 +284,16 @@ export const native = {
       totalBytes: number;
       truncated: boolean;
     }>("agent_session_read", { agent, sessionId, fromOffset }),
+  /**
+   * Writes a new pi session holding the path from the root to one entry, and
+   * returns it. Additive: the original transcript is only read, so this is safe
+   * while an agent is running.
+   */
+  agentSessionBranch: (sessionId: string, entryId: string) =>
+    invoke<{ sessionId: string; path: string; entryCount: number }>(
+      "agent_session_branch",
+      { sessionId, entryId },
+    ),
   agentSessionsList: (agent: SessionAgent, cwd?: string, limit?: number) =>
     invoke<
       {

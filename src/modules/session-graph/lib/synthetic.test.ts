@@ -26,6 +26,16 @@ describe("isSyntheticUserText", () => {
     }
   });
 
+  it("keeps a command the user typed at the prompt", () => {
+    // `!git status` is recorded as <bash-input>. It is a turn a person took, so
+    // hiding it would drop a real action from the overview.
+    expect(isSyntheticUserText("<bash-input>git status</bash-input>")).toBe(false);
+  });
+
+  it("still treats the output of that command as machine text", () => {
+    expect(isSyntheticUserText("<bash-stdout>On branch main…</bash-stdout>")).toBe(true);
+  });
+
   it("keeps a real request written by a person", () => {
     for (const text of [
       "Approach this as the design lead at a small studio",
