@@ -60,18 +60,24 @@ export type ModelPreset = {
 };
 
 /**
- * Short, fuzzy-friendly model names each CLI resolves. Deliberately curated
- * rather than discovered: spawning an agent to list models on every editor
- * open would be slow and would need workspace authorization. A task can always
- * carry a custom value instead.
+ * Short model names each CLI resolves. Deliberately curated rather than
+ * discovered: spawning an agent to list models on every editor open would be
+ * slow and would need workspace authorization. A task can always carry a custom
+ * value instead.
+ *
+ * Pi's presets are provider qualified on purpose. `--model` takes a pattern,
+ * and a bare pattern that several configured providers can satisfy is rejected
+ * at run time ("is ambiguous across providers"), which would turn a preset into
+ * a guaranteed failure on any machine with more than one provider. Qualifying
+ * the provider keeps the preset both unambiguous and version agnostic.
  */
 const MODEL_PRESETS: Record<TaskAgent, readonly ModelPreset[]> = {
   pi: [
-    { value: "sonnet", label: "Claude Sonnet" },
-    { value: "opus", label: "Claude Opus" },
-    { value: "haiku", label: "Claude Haiku" },
-    { value: "gpt-5", label: "GPT-5" },
-    { value: "gemini", label: "Gemini" },
+    { value: "anthropic/sonnet", label: "Claude Sonnet" },
+    { value: "anthropic/opus", label: "Claude Opus" },
+    { value: "anthropic/haiku", label: "Claude Haiku" },
+    { value: "openai/gpt-5", label: "GPT-5" },
+    { value: "google/gemini", label: "Gemini" },
   ],
   claude: [
     { value: "sonnet", label: "Sonnet" },

@@ -55,6 +55,8 @@ export const COMMAND_IDS = [
   "tasks.list",
   "tasks.add",
   "tasks.update",
+  "tasks.clone",
+  "tasks.reseed",
   "tasks.remove",
   "tasks.run",
   "tasks.setEnabled",
@@ -138,6 +140,8 @@ export type CommandPayloads = {
     schedule?: string;
     enabled?: boolean;
   };
+  "tasks.clone": { id: string };
+  "tasks.reseed": { id: string };
   "tasks.remove": { id: string };
   "tasks.run": { id: string };
   "tasks.setEnabled": { id: string; enabled: boolean };
@@ -688,6 +692,32 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       "Edit a scheduled task by id. Provide at least one field besides the id.",
     params: [...TASK_UPDATE_PARAMS],
   },
+  "tasks.clone": {
+    id: "tasks.clone",
+    description:
+      "Duplicate a scheduled task. The copy keeps the schedule, agent, model, directory and policies, starts with no run history and its own session, and lands disabled so it cannot fire before it has been reviewed. Opens it in the editor.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to duplicate.",
+      },
+    ],
+  },
+  "tasks.reseed": {
+    id: "tasks.reseed",
+    description:
+      "Point a task at a brand new agent session, so its next run starts with no accumulated context. Schedule, run budget and history are untouched.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to reseed.",
+      },
+    ],
+  },
   "tasks.remove": {
     id: "tasks.remove",
     description: "Delete a scheduled task and its run history.",
@@ -834,6 +864,12 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   updateTask: (
     payload: CommandPayloads["tasks.update"],
+  ) => Promise<unknown> | unknown;
+  cloneTask: (
+    payload: CommandPayloads["tasks.clone"],
+  ) => Promise<unknown> | unknown;
+  reseedTask: (
+    payload: CommandPayloads["tasks.reseed"],
   ) => Promise<unknown> | unknown;
   removeTask: (
     payload: CommandPayloads["tasks.remove"],
@@ -1134,7 +1170,12 @@ export function validateCommandRequest(
     };
   }
 
-  if (id === "tasks.remove" || id === "tasks.run") {
+  if (
+    id === "tasks.remove" ||
+    id === "tasks.run" ||
+    id === "tasks.clone" ||
+    id === "tasks.reseed"
+  ) {
     const taskId = requireString(obj, "id", id);
     if (!taskId.ok) return taskId;
     return { ok: true, value: { id, payload: { id: taskId.value } } };
@@ -1351,6 +1392,10 @@ async function dispatchCommand(
       return handlers.addTask(request.payload);
     case "tasks.update":
       return handlers.updateTask(request.payload);
+    case "tasks.clone":
+      return handlers.cloneTask(request.payload);
+    case "tasks.reseed":
+      return handlers.reseedTask(request.payload);
     case "tasks.remove":
       return handlers.removeTask(request.payload);
     case "tasks.run":

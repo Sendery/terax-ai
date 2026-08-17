@@ -39,8 +39,9 @@ export type ScheduledTasksApi = {
   /** Copies a task, disabled, so it can be edited before it runs. Returns null
    *  when the source task is gone. */
   clone: (id: string) => ScheduledTask | null;
-  /** Points a task at a brand new agent session. */
-  regenerate: (id: string) => void;
+  /** Points a task at a brand new agent session. Returns the new seed, since
+   *  the updated task is not readable until React commits the state. */
+  regenerate: (id: string) => string | null;
   /** Parameters a new task should start from, or null on an empty list. */
   defaults: TaskDefaults | null;
   remove: (id: string) => void;
@@ -123,9 +124,13 @@ export function useScheduledTasks(): ScheduledTasksApi {
   }, []);
 
   const regenerate = useCallback((id: string) => {
+    const source = tasksRef.current.find((task) => task.id === id);
+    if (!source) return null;
+    const next = regenerateSeed(source);
     setTasks((current) =>
-      current.map((task) => (task.id === id ? regenerateSeed(task) : task)),
+      current.map((task) => (task.id === id ? next : task)),
     );
+    return next.seed ?? null;
   }, []);
 
   const remove = useCallback((id: string) => {

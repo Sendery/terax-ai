@@ -52,6 +52,14 @@ describe("task agents", () => {
     expect(agentModelPresets("claude").map((p) => p.value)).toContain("sonnet");
   });
 
+  it("qualifies pi presets by provider, since a bare pattern can be ambiguous", () => {
+    // pi rejects a --model pattern several configured providers can satisfy,
+    // so an unqualified preset would fail every run on a multi provider setup.
+    for (const preset of agentModelPresets("pi")) {
+      expect(preset.value).toMatch(/^[a-z0-9-]+\/[a-z0-9.-]+$/);
+    }
+  });
+
   it("mints a UUID session seed so every agent can accept it", () => {
     const seed = newSessionSeed();
     expect(seed).toMatch(

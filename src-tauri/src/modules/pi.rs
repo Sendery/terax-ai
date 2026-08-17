@@ -191,6 +191,8 @@ fn is_allowed_command(command: &str) -> bool {
             | "tasks.list"
             | "tasks.add"
             | "tasks.update"
+            | "tasks.clone"
+            | "tasks.reseed"
             | "tasks.remove"
             | "tasks.run"
             | "tasks.setEnabled"
@@ -506,6 +508,8 @@ mod tests {
             "tasks.list",
             "tasks.add",
             "tasks.update",
+            "tasks.clone",
+            "tasks.reseed",
             "tasks.remove",
             "tasks.run",
             "tasks.setEnabled",

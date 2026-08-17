@@ -1593,6 +1593,34 @@ export default function App() {
         scheduledRef.current.update(id, patch);
         return { id, updated: true };
       },
+      cloneTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const copy = scheduledRef.current.clone(id);
+        if (!copy) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        setEditingTaskId(copy.id);
+        setTaskEditorOpen(true);
+        showTasksPanel();
+        // The copy is disabled on purpose: it exists to be edited first.
+        return {
+          id: copy.id,
+          source: id,
+          name: copy.name,
+          enabled: copy.enabled,
+        };
+      },
+      reseedTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const seed = scheduledRef.current.regenerate(id);
+        return { id, seed, reseeded: seed !== null };
+      },
       removeTask: ({ id }) => {
         const current = scheduledRef.current.tasks.find((t) => t.id === id);
         if (!current) {

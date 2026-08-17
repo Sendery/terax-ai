@@ -61,6 +61,8 @@ function handlers(): CommandHandlers {
     listTasks: vi.fn(() => ({ paused: false, tasks: [] })),
     addTask: vi.fn(() => ({ id: "st-1" })),
     updateTask: vi.fn(() => ({ id: "st-1", updated: true })),
+    cloneTask: vi.fn(() => ({ id: "st-2", source: "st-1", enabled: false })),
+    reseedTask: vi.fn(() => ({ id: "st-1", reseeded: true })),
     removeTask: vi.fn(() => ({ id: "st-1", removed: true })),
     runTask: vi.fn(() => ({ id: "st-1", started: true })),
     setTaskEnabled: vi.fn(() => ({ id: "st-1", enabled: false })),
@@ -449,6 +451,8 @@ describe("command registry", () => {
       "tasks.list",
       "tasks.add",
       "tasks.update",
+      "tasks.clone",
+      "tasks.reseed",
       "tasks.remove",
       "tasks.run",
       "tasks.setEnabled",
@@ -784,5 +788,33 @@ describe("task agent payloads", () => {
     const agent = add?.params.find((param) => param.name === "agent");
     expect(agent?.type).toBe("enum");
     expect(agent?.values).toEqual(["pi", "claude", "codex"]);
+  });
+});
+
+describe("tasks.clone and tasks.reseed", () => {
+  it("are exposed to Pi", () => {
+    expect(PI_ALLOWED_COMMAND_IDS).toContain("tasks.clone");
+    expect(PI_ALLOWED_COMMAND_IDS).toContain("tasks.reseed");
+  });
+
+  it("require the id of an existing task", () => {
+    for (const id of ["tasks.clone", "tasks.reseed"] as const) {
+      expect(validateCommandRequest({ id, payload: { id: "st-1" } }).ok).toBe(
+        true,
+      );
+      for (const bad of [undefined, {}, { id: "" }, { id: 7 }]) {
+        expect(validateCommandRequest({ id, payload: bad }).ok).toBe(false);
+      }
+    }
+  });
+
+  it("describes both in the catalog", () => {
+    const catalog = describeCommands().commands;
+    for (const id of ["tasks.clone", "tasks.reseed"]) {
+      const command = catalog.find((entry) => entry.id === id);
+      expect(command?.params).toEqual([
+        expect.objectContaining({ name: "id", type: "string", required: true }),
+      ]);
+    }
   });
 });
