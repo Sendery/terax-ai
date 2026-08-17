@@ -667,7 +667,7 @@ export default function App() {
         return Promise.resolve({
           tabId: linked.id,
           leafId,
-          piRunning: agent?.agent === "pi",
+          agentRunning: agent?.agent === task.agent,
         });
       }
       const tabId = newTab(task.cwd);
@@ -681,7 +681,7 @@ export default function App() {
             resolve(null);
             return;
           }
-          resolve({ tabId, leafId: tab.activeLeafId, piRunning: false });
+          resolve({ tabId, leafId: tab.activeLeafId, agentRunning: false });
         }, 120);
       });
     },
@@ -756,12 +756,20 @@ export default function App() {
     [],
   );
   const markTaskDispatched = useCallback(
-    (taskId: string, at: number) => {
+    (taskId: string, at: number, sessionId: string) => {
       const task = scheduled.tasks.find((t) => t.id === taskId);
       if (!task) return;
+      // A task that accumulates context remembers the session this run created,
+      // so the next run knows to resume it instead of creating it again.
+      const owns =
+        task.mode === "task" &&
+        !task.sessions.some((session) => session.id === sessionId);
       scheduled.update(taskId, {
         lastRunAt: at,
         runCount: task.runCount + 1,
+        ...(owns
+          ? { sessions: [{ id: sessionId, cwd: task.cwd }, ...task.sessions] }
+          : {}),
       });
     },
     [scheduled],
@@ -806,6 +814,21 @@ export default function App() {
   const openNewTaskEditor = useCallback(() => {
     setEditingTaskId(null);
     setTaskEditorOpen(true);
+  }, []);
+  const cloneTaskAndEdit = useCallback(
+    (id: string) => {
+      const copy = scheduledRef.current.clone(id);
+      if (!copy) return;
+      setEditingTaskId(copy.id);
+      setTaskEditorOpen(true);
+      toast(`${copy.name} created, disabled until you enable it`);
+    },
+    [],
+  );
+  const regenerateTaskSeed = useCallback((id: string) => {
+    const task = scheduledRef.current.tasks.find((t) => t.id === id);
+    scheduledRef.current.regenerate(id);
+    if (task) toast(`${task.name} will start a new session on its next run`);
   }, []);
   const openTaskEditor = useCallback((id: string) => {
     setEditingTaskId(id);
@@ -1627,6 +1650,34 @@ export default function App() {
         scheduledRef.current.update(id, patch);
         return { id, updated: true };
       },
+      cloneTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const copy = scheduledRef.current.clone(id);
+        if (!copy) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        setEditingTaskId(copy.id);
+        setTaskEditorOpen(true);
+        showTasksPanel();
+        // The copy is disabled on purpose: it exists to be edited first.
+        return {
+          id: copy.id,
+          source: id,
+          name: copy.name,
+          enabled: copy.enabled,
+        };
+      },
+      reseedTask: ({ id }) => {
+        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const seed = scheduledRef.current.regenerate(id);
+        return { id, seed, reseeded: seed !== null };
+      },
       removeTask: ({ id }) => {
         const current = scheduledRef.current.tasks.find((t) => t.id === id);
         if (!current) {
@@ -1964,6 +2015,8 @@ export default function App() {
                   queuedIds={dispatcher.queuedIds}
                   onAdd={openNewTaskEditor}
                   onEdit={openTaskEditor}
+                  onClone={cloneTaskAndEdit}
+                  onRegenerateSeed={regenerateTaskSeed}
                   onRemove={scheduled.remove}
                   onToggleEnabled={scheduled.setEnabled}
                   onRunNow={(id) => dispatcher.run(id, "manual")}
@@ -2069,6 +2122,7 @@ export default function App() {
             open={taskEditorOpen}
             task={editingTask}
             defaultCwd={activeCwd ?? home ?? ""}
+            defaults={scheduled.defaults}
             onSubmit={(input) => {
               if (editingTask) scheduled.update(editingTask.id, input);
               else scheduled.add(input);

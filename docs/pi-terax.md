@@ -60,6 +60,8 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tasks.list`
 - `tasks.add`
 - `tasks.update`
+- `tasks.clone`
+- `tasks.reseed`
 - `tasks.remove`
 - `tasks.run`
 - `tasks.setEnabled`

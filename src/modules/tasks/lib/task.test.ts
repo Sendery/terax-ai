@@ -44,6 +44,28 @@ describe("createTask", () => {
     expect(task.maxRuns).toBeUndefined();
     expect(task.createdAt).toBe(NOW);
     expect(task.sessions).toEqual([]);
+    expect(task.agent).toBe("pi");
+    expect(task.seed).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("accepts an explicit agent and keeps a caller supplied seed", () => {
+    const task = createTask(
+      {
+        name: "Nightly",
+        prompt: "go",
+        cwd: "/tmp",
+        schedule: { kind: "manual" },
+        agent: "codex",
+        seed: "11111111-2222-4333-8444-555555555555",
+      },
+      NOW,
+    );
+    expect(task.agent).toBe("codex");
+    expect(task.seed).toBe("11111111-2222-4333-8444-555555555555");
+  });
+
+  it("gives two tasks created together distinct seeds", () => {
+    expect(base().seed).not.toBe(base().seed);
   });
 
   it("trims the name and keeps the prompt verbatim", () => {
@@ -131,6 +153,10 @@ describe("isScheduledTask", () => {
       { ...base(), sessions: [{ id: "abc" }] },
       { ...base(), color: "chartreuse" },
       { ...base(), tabId: -2 },
+      { ...base(), agent: "gemini" },
+      { ...base(), agent: "" },
+      { ...base(), agent: undefined },
+      { ...base(), seed: "" },
     ];
     for (const candidate of invalid) {
       expect(isScheduledTask(candidate)).toBe(false);
@@ -143,6 +169,7 @@ describe("isScheduledTask", () => {
     delete (task as Record<string, unknown>).color;
     delete (task as Record<string, unknown>).lastRunAt;
     delete (task as Record<string, unknown>).nextRunAt;
+    delete (task as Record<string, unknown>).seed;
     expect(isScheduledTask(task)).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import { isLoopbackPreviewUrl } from "@/modules/preview";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
 import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
+import { TASK_AGENTS, type TaskAgent } from "@/modules/tasks/lib/agents";
 import { parseScheduleSpec } from "@/modules/tasks/lib/spec";
 import {
   MISSED_POLICIES,
@@ -59,6 +60,8 @@ export const COMMAND_IDS = [
   "tasks.list",
   "tasks.add",
   "tasks.update",
+  "tasks.clone",
+  "tasks.reseed",
   "tasks.remove",
   "tasks.run",
   "tasks.setEnabled",
@@ -146,6 +149,8 @@ export type CommandPayloads = {
     schedule?: string;
     enabled?: boolean;
   };
+  "tasks.clone": { id: string };
+  "tasks.reseed": { id: string };
   "tasks.remove": { id: string };
   "tasks.run": { id: string };
   "tasks.setEnabled": { id: string; enabled: boolean };
@@ -159,6 +164,7 @@ export type TaskCommandFields = {
   cwd?: string;
   target?: TaskTarget;
   mode?: TaskMode;
+  agent?: TaskAgent;
   missed?: MissedPolicy;
   overlap?: OverlapPolicy;
   sessionId?: string;
@@ -221,6 +227,14 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     values: [...TASK_MODES],
   },
   {
+    name: "agent",
+    type: "enum",
+    required: false,
+    description:
+      "Agent CLI the run drives. pi and claude can be pinned to a session; codex mints its own ids and can only resume its most recent session in the directory.",
+    values: [...TASK_AGENTS],
+  },
+  {
     name: "missed",
     type: "enum",
     required: false,
@@ -245,19 +259,20 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     name: "model",
     type: "string",
     required: false,
-    description: "Model for the run. Omit to inherit the pi default.",
+    description:
+      "Model for the run, passed verbatim to the agent CLI. Omit to inherit its default.",
   },
   {
     name: "provider",
     type: "string",
     required: false,
-    description: "Provider for the run. Omit to inherit the pi default.",
+    description: "Provider for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "thinking",
     type: "string",
     required: false,
-    description: "Thinking level for the run. Omit to inherit the pi default.",
+    description: "Thinking level for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "maxRuns",
@@ -723,6 +738,32 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       "Edit a scheduled task by id. Provide at least one field besides the id.",
     params: [...TASK_UPDATE_PARAMS],
   },
+  "tasks.clone": {
+    id: "tasks.clone",
+    description:
+      "Duplicate a scheduled task. The copy keeps the schedule, agent, model, directory and policies, starts with no run history and its own session, and lands disabled so it cannot fire before it has been reviewed. Opens it in the editor.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to duplicate.",
+      },
+    ],
+  },
+  "tasks.reseed": {
+    id: "tasks.reseed",
+    description:
+      "Point a task at a brand new agent session, so its next run starts with no accumulated context. Schedule, run budget and history are untouched.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to reseed.",
+      },
+    ],
+  },
   "tasks.remove": {
     id: "tasks.remove",
     description: "Delete a scheduled task and its run history.",
@@ -875,6 +916,12 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   updateTask: (
     payload: CommandPayloads["tasks.update"],
+  ) => Promise<unknown> | unknown;
+  cloneTask: (
+    payload: CommandPayloads["tasks.clone"],
+  ) => Promise<unknown> | unknown;
+  reseedTask: (
+    payload: CommandPayloads["tasks.reseed"],
   ) => Promise<unknown> | unknown;
   removeTask: (
     payload: CommandPayloads["tasks.remove"],
@@ -1211,7 +1258,12 @@ export function validateCommandRequest(
     };
   }
 
-  if (id === "tasks.remove" || id === "tasks.run") {
+  if (
+    id === "tasks.remove" ||
+    id === "tasks.run" ||
+    id === "tasks.clone" ||
+    id === "tasks.reseed"
+  ) {
     const taskId = requireString(obj, "id", id);
     if (!taskId.ok) return taskId;
     return { ok: true, value: { id, payload: { id: taskId.value } } };
@@ -1305,6 +1357,7 @@ function validateTaskPayload(
   const enums: readonly [string, readonly string[]][] = [
     ["target", TASK_TARGETS],
     ["mode", TASK_MODES],
+    ["agent", TASK_AGENTS],
     ["missed", MISSED_POLICIES],
     ["overlap", OVERLAP_POLICIES],
   ];
@@ -1435,6 +1488,10 @@ async function dispatchCommand(
       return handlers.addTask(request.payload);
     case "tasks.update":
       return handlers.updateTask(request.payload);
+    case "tasks.clone":
+      return handlers.cloneTask(request.payload);
+    case "tasks.reseed":
+      return handlers.reseedTask(request.payload);
     case "tasks.remove":
       return handlers.removeTask(request.payload);
     case "tasks.run":

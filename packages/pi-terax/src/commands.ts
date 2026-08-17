@@ -36,6 +36,8 @@ export const TERAX_COMMAND_IDS = [
   "tasks.list",
   "tasks.add",
   "tasks.update",
+  "tasks.clone",
+  "tasks.reseed",
   "tasks.remove",
   "tasks.run",
   "tasks.setEnabled",

@@ -81,6 +81,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** validate with the public domain predicate. Ignore invalid optional values while preserving the rest of the entry.
 - **Verification:** tests include valid, absent, legacy, invalid-string, and non-string values.
 
+### A newly required field must be filled before the hydration guard runs
+
+- **Trigger:** promoting a field to required in a persisted domain type, for example an agent, kind, or version discriminator.
+- **Failure mode:** every entry written by an older build fails the type guard and is dropped, so the user silently loses stored data on the first launch of the new build.
+- **Prevention:** migrate the raw record before validating it. Fill only absent fields with the documented legacy default, and keep rejecting records that carry a value the current build does not accept.
+- **Verification:** tests hydrate a record with the field deleted (kept, defaulted) and a record with an unsupported value (dropped).
+
 ### Transformations can silently drop metadata
 
 - **Trigger:** switching a tab or document between rendered and editable representations, or converting one tagged-union variant to another.
@@ -293,7 +300,37 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** drive the interaction with pointer events and `setPointerCapture`. Capture on `pointerdown` (skip when the target is an interactive control via `closest("button, a, input, textarea, select, [contenteditable=true]")`), start past a small move threshold, resolve the target by comparing the pointer coordinate to each row's `getBoundingClientRect` midpoint, and apply the change on `pointerup`. Mark rows `select-none`/`touch-none` while draggable.
 - **Verification:** exercise a reorder in a running WKWebView build; unit-test the pure move/reorder function separately.
 
+## Driving External Agent CLIs
+
+### A bare model pattern can be ambiguous across configured providers
+
+- **Trigger:** offering model presets, or defaulting a model, for a CLI that resolves `--model` as a pattern rather than an exact id.
+- **Failure mode:** the pattern matches the same model under several configured providers and the run dies immediately with "is ambiguous across providers". On a single-provider development machine the same preset looks fine, so the failure only appears for users with more than one provider.
+- **Prevention:** qualify the preset with its provider (`provider/pattern`), which stays version agnostic while resolving to one model. Keep a custom free-text value available for anything the presets do not cover.
+- **Verification:** run one real non-interactive invocation per preset shape and confirm the CLI resolved a model instead of rejecting the pattern.
+
+### Session pinning differs per agent CLI and cannot be assumed
+
+- **Trigger:** launching pi, claude, or codex on behalf of a scheduled or automated run and expecting the same session to continue.
+- **Failure mode:** one shared argv shape breaks two of the three. `pi --session-id` creates the session if missing and is idempotent; `claude --session-id <uuid>` requires a UUID and fails with "Session ID is already in use" on the second run, so continuation needs `--resume`; codex mints its own ids and offers no way to pin one, so the only continuation is `resume --last`, scoped to the directory.
+- **Prevention:** declare each CLI's session capability in one module and branch the argv builder on it. Record the session a run actually created on the task, and use that record — not a timestamp or a guess — to decide between creating and resuming.
+- **Verification:** unit-test the argv for each agent in both modes and both first-run and resume states, and confirm the flags against the installed CLI's `--help` before encoding them.
+
 ## Native and Visual Validation
+
+### Only one Terax dev server can run at a time, across every worktree
+
+- **Trigger:** starting `tauri dev` from a second worktree while another one is already running.
+- **Failure mode:** the Vite dev server is pinned to a single port with `strictPort`, so the second run aborts in `beforeDevCommand` and the native build appears to fail for an unrelated reason.
+- **Prevention:** check who owns the dev port before starting, and stop the other instance rather than editing the port in a worktree that will be committed.
+- **Verification:** the dev log reports the real cause, and the port is confirmed free before the run.
+
+### A pinned `RUSTUP_TOOLCHAIN` in the environment overrides the project toolchain
+
+- **Trigger:** running a native build from an agent session that exports `RUSTUP_TOOLCHAIN`.
+- **Failure mode:** cargo resolves an older compiler than the project expects and a dependency refuses to build with a `requires rustc <newer>` error that looks like a dependency problem.
+- **Prevention:** run native builds with the variable cleared so the project's own toolchain selection applies.
+- **Verification:** the failing command succeeds unchanged once the variable is removed from the environment.
 
 ### A rebuild can leave the previous app instance running
 

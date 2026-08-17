@@ -1,3 +1,5 @@
+import { isTaskAgent, type TaskAgent } from "./agents";
+
 /** Retained run history per task. Conversation content is never stored here:
  *  it stays in the Pi session file, reachable through the recover action. */
 export const MAX_RUNS_PER_TASK = 50;
@@ -34,6 +36,9 @@ export type TaskRun = {
   id: string;
   taskId: string;
   sessionId: string;
+  /** Agent CLI this run drove. Absent on runs recorded before agents existed,
+   *  which were always pi. */
+  agent?: TaskAgent;
   /** Session file backing the recover action. */
   sessionFile?: string;
   cwd: string;
@@ -56,6 +61,7 @@ export type RunSeed = {
   cwd: string;
   trigger: RunTrigger;
   attempt: number;
+  agent?: TaskAgent;
   sessionFile?: string;
 };
 
@@ -112,6 +118,7 @@ export function newRun(seed: RunSeed, now = Date.now()): TaskRun {
     attempt: seed.attempt,
     startedAt: now,
     status: "running",
+    ...optional("agent", seed.agent),
     ...optional("sessionFile", seed.sessionFile),
   };
 }
@@ -207,6 +214,7 @@ export function isTaskRun(value: unknown): value is TaskRun {
   if (value.exitCode !== undefined && !Number.isInteger(value.exitCode)) {
     return false;
   }
+  if (value.agent !== undefined && !isTaskAgent(value.agent)) return false;
   for (const key of ["sessionFile", "stopReason", "model", "message"]) {
     const field = value[key];
     if (field !== undefined && typeof field !== "string") return false;

@@ -143,7 +143,7 @@ describe("taskAccessibleLabel", () => {
       make({ nextRunAt: NOW + 3_600_000 }),
       NOW,
     );
-    expect(label).toBe("Watch CI, Every hour, enabled, in 1h");
+    expect(label).toBe("Watch CI, Every hour, Pi, enabled, in 1h");
   });
 
   it("announces the disabled state instead of relying on colour", () => {
@@ -151,7 +151,7 @@ describe("taskAccessibleLabel", () => {
       make({ enabled: false, nextRunAt: null }),
       NOW,
     );
-    expect(label).toBe("Watch CI, Every hour, disabled, not scheduled");
+    expect(label).toBe("Watch CI, Every hour, Pi, disabled, not scheduled");
   });
 
   it("announces a spent run budget", () => {
@@ -160,12 +160,19 @@ describe("taskAccessibleLabel", () => {
       NOW,
     );
     expect(label).toBe(
-      "Watch CI, Every hour, enabled, run budget spent, not scheduled",
+      "Watch CI, Every hour, Pi, enabled, run budget spent, not scheduled",
     );
   });
 
   it("announces a run in progress", () => {
     const label = taskAccessibleLabel(make(), NOW, { running: true });
     expect(label).toContain("running now");
+  });
+
+  it("announces which agent the task drives, since the card shows it", () => {
+    expect(taskAccessibleLabel(make({ agent: "claude" }), NOW)).toContain(
+      "Claude Code",
+    );
+    expect(taskAccessibleLabel(make({ agent: "codex" }), NOW)).toContain("Codex");
   });
 });
