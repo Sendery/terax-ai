@@ -406,7 +406,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           theme={themeExt}
           extensions={extensions}
           height="100%"
-          className="flex-1 min-h-0 overflow-hidden"
+          className="terax-code-editor flex-1 min-h-0 overflow-hidden"
           basicSetup={{
             lineNumbers: true,
             highlightActiveLineGutter: true,
