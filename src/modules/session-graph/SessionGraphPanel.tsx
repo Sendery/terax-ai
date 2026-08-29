@@ -3,6 +3,7 @@ import {
   ArrowUp01Icon,
   Bookmark02Icon,
   Cancel01Icon,
+  ComputerTerminal01Icon,
   GitBranchIcon,
   ListViewIcon,
   RefreshIcon,
@@ -39,7 +40,9 @@ import {
 } from "./lib/density";
 import type { SessionAgent } from "./lib/entries";
 import type { SessionCandidate } from "./lib/pickSession";
+import type { SessionSourceGroup } from "./lib/terminalSources";
 import { SessionBranchSwitcher } from "./SessionBranchSwitcher";
+import { SessionSourcePicker } from "./SessionSourcePicker";
 import { MARK_ACCENT_CLASS, MARK_CHIP_CLASS } from "./lib/markStyles";
 import { nodeGlyph, toneForToolName, TONE_COLOR } from "./lib/nodeGlyph";
 import {
@@ -70,6 +73,8 @@ export function SessionGraphPanel({
   agent,
   sessionId,
   candidates = [],
+  sources = [],
+  boundTerminalKey = null,
   subtitle,
   onHide,
 }: {
@@ -77,27 +82,39 @@ export function SessionGraphPanel({
   sessionId: string | null;
   /** Sessions found for this directory, used to walk the fork tree. */
   candidates?: readonly SessionCandidate[];
+  /** Every open terminal with its transcripts, for the session picker. */
+  sources?: readonly SessionSourceGroup[];
+  /** Key of the terminal the panel currently follows. */
+  boundTerminalKey?: string | null;
   subtitle: string | null;
   onHide: () => void;
 }) {
-  // Opening a forked session, or following an abandoned branch, is local
-  // navigation: it must not change which terminal the panel is bound to.
-  const [sessionOverride, setSessionOverride] = useState<string | null>(null);
+  // Two ways to leave the transcript the focused terminal resolves to.
+  //
+  // Fork navigation is local: it belongs to the terminal in view, so rebinding
+  // to another terminal drops it. A session picked by hand is pinned: the user
+  // asked for that transcript specifically and it survives focus changes until
+  // they follow the focused terminal again.
+  const [selection, setSelection] = useState<{
+    id: string;
+    agent: SessionAgent | null;
+    pinned: boolean;
+  } | null>(null);
   const [branchHead, setBranchHead] = useState<string | null>(null);
 
-  const activeSessionId = sessionOverride ?? sessionId;
+  const activeSessionId = selection?.id ?? sessionId;
+  const activeAgent = selection?.agent ?? agent;
+  const pinned = selection?.pinned ?? false;
 
   useEffect(() => {
-    // Binding to a different terminal discards local navigation: the branch and
-    // the forked session being viewed belong to the previous transcript.
     void sessionId;
-    setSessionOverride(null);
+    setSelection((current) => (current?.pinned ? current : null));
     setBranchHead(null);
     setSelectedId(null);
   }, [sessionId]);
 
   const { graph, parsed, loading, error, live, reload } = useSessionTranscript(
-    agent,
+    activeAgent,
     activeSessionId,
     branchHead,
   );
@@ -150,6 +167,11 @@ export function SessionGraphPanel({
     [marks.marks, rowIndexByNodeId, graph.rows.length],
   );
 
+  const totalSessions = useMemo(
+    () => sources.reduce((sum, source) => sum + source.sessions.length, 0),
+    [sources],
+  );
+
   const spurCount = graph.branches.filter((branch) => !branch.isActive).length;
 
   const forks = useMemo(
@@ -157,23 +179,34 @@ export function SessionGraphPanel({
     [parsed, branchHead],
   );
 
+  // A pinned session belongs to another terminal, so its forks live in that
+  // terminal's directory, not the bound one's.
+  const lineageCandidates = useMemo(() => {
+    if (!activeSessionId) return candidates;
+    const owning = sources.find((source) =>
+      source.sessions.some((session) => session.id === activeSessionId),
+    );
+    return owning ? owning.sessions : candidates;
+  }, [sources, candidates, activeSessionId]);
+
   const lineage = useMemo(
     () =>
       activeSessionId
         ? sessionLineage(
-            candidates.map((candidate) => ({
+            lineageCandidates.map((candidate) => ({
               id: candidate.id,
               parentSessionId: candidate.parentSessionId ?? null,
             })),
             activeSessionId,
           )
         : { parentId: null, childIds: [] },
-    [candidates, activeSessionId],
+    [lineageCandidates, activeSessionId],
   );
 
   const candidateById = useMemo(
-    () => new Map(candidates.map((candidate) => [candidate.id, candidate])),
-    [candidates],
+    () =>
+      new Map(lineageCandidates.map((candidate) => [candidate.id, candidate])),
+    [lineageCandidates],
   );
 
   // Only the visible slice is mounted: each row carries an inline SVG, and a
@@ -379,6 +412,51 @@ export function SessionGraphPanel({
             <Button
               variant="ghost"
               size="icon"
+              aria-label={`Inspect a session from any open terminal, ${totalSessions} available`}
+              title="Sessions of the open terminals"
+              className={cn(
+                "size-6",
+                pinned
+                  ? "text-sky-600 dark:text-sky-400"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <HugeiconsIcon
+                icon={ComputerTerminal01Icon}
+                size={13}
+                strokeWidth={2}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-auto p-0">
+            <SessionSourcePicker
+              sources={sources}
+              boundTerminalKey={boundTerminalKey}
+              activeSessionId={activeSessionId}
+              pinned={pinned}
+              onFollowFocused={() => {
+                setSelection(null);
+                setBranchHead(null);
+                setSelectedId(null);
+              }}
+              onPickSession={(session) => {
+                setSelection(
+                  session.id === sessionId
+                    ? null
+                    : { id: session.id, agent: session.agent, pinned: true },
+                );
+                setBranchHead(null);
+                setSelectedId(null);
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
               aria-label={`Switch branch or forked session, ${forks.length} rewind points`}
               title="Branches and forks"
               className={cn(
@@ -406,7 +484,9 @@ export function SessionGraphPanel({
                 return found ? [found] : [];
               })}
               onOpenSession={(id) => {
-                setSessionOverride(id === sessionId ? null : id);
+                setSelection(
+                  id === sessionId ? null : { id, agent: activeAgent, pinned },
+                );
                 setBranchHead(null);
                 setSelectedId(null);
               }}
@@ -516,18 +596,22 @@ export function SessionGraphPanel({
               on branch ×
             </button>
           )}
-          {sessionOverride && (
+          {selection && (
             <button
               type="button"
               onClick={() => {
-                setSessionOverride(null);
+                setSelection(null);
                 setBranchHead(null);
                 setSelectedId(null);
               }}
-              title="Return to the session of this terminal"
+              title={
+                selection.pinned
+                  ? "Follow the focused terminal again"
+                  : "Return to the session of this terminal"
+              }
               className="cursor-pointer rounded-sm border border-sky-500/40 bg-sky-500/12 px-1 text-sky-600 dark:text-sky-300"
             >
-              forked ×
+              {selection.pinned ? "pinned ×" : "forked ×"}
             </button>
           )}
           <span>
@@ -550,7 +634,7 @@ export function SessionGraphPanel({
             </p>
           ) : graph.rows.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              {agent && sessionId
+              {activeAgent && activeSessionId
                 ? "No history in this session yet."
                 : "Select an agent terminal to see its history."}
             </p>
