@@ -24,6 +24,15 @@ export {
 export { agentKindFromName } from "./lib/agentKind";
 export { pickSession, type SessionCandidate } from "./lib/pickSession";
 export { useResolvedSession } from "./lib/useResolvedSession";
+export {
+  buildSessionGroups,
+  collectTerminalSources,
+  nextTerminalBinding,
+  type SessionSourceGroup,
+  type TerminalBinding,
+  type TerminalSource,
+  terminalSourceKey,
+} from "./lib/terminalSources";
 export { useSessionTranscript } from "./lib/useSessionTranscript";
 export {
   GRAPH_MAX_WIDTH,

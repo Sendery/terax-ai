@@ -103,6 +103,9 @@ import {
   GRAPH_MAX_WIDTH,
   GRAPH_MIN_WIDTH,
   SessionGraphPanel,
+  collectTerminalSources,
+  nextTerminalBinding,
+  type TerminalBinding,
   useResolvedSession,
   useSessionGraphPanel,
 } from "@/modules/session-graph";
@@ -1266,11 +1269,54 @@ export default function App() {
     activeLeafId != null ? (state.sessions[activeLeafId]?.agent ?? null) : null,
   );
   const graphAgentHint = agentKindFromName(activeAgentName);
+
+  const terminalTabs = useMemo(
+    () => tabs.filter((tab) => tab.kind === "terminal"),
+    [tabs],
+  );
+  const terminalSources = useMemo(
+    () =>
+      collectTerminalSources(
+        terminalTabs.map((tab) => ({
+          id: tab.id,
+          title: tab.title,
+          cwd: tab.cwd ?? null,
+          activeLeafId: tab.activeLeafId,
+          paneTree: tab.paneTree,
+        })),
+      ),
+    [terminalTabs],
+  );
+
+  // The panel follows the focused terminal, but focus moves to editors and
+  // diagrams constantly and those own no transcript, so the last terminal is
+  // held rather than blanking the panel mid-read.
+  const focusedTerminal = useMemo(
+    () =>
+      activeTab?.kind === "terminal" && activeCwd
+        ? {
+            tabId: activeTab.id,
+            leafId: activeTab.activeLeafId,
+            tabTitle: activeTab.title,
+            cwd: activeCwd,
+          }
+        : null,
+    [activeTab, activeCwd],
+  );
+  const terminalBindingRef = useRef<TerminalBinding | null>(null);
+  terminalBindingRef.current = nextTerminalBinding(
+    terminalBindingRef.current,
+    focusedTerminal,
+    terminalTabs.map((tab) => tab.id),
+  );
+  const graphBinding = terminalBindingRef.current;
+
   const {
     agent: graphAgent,
     sessionId: graphSessionId,
     candidates: graphCandidates,
-  } = useResolvedSession(graphAgentHint, activeCwd);
+    groups: graphSourceGroups,
+  } = useResolvedSession(graphAgentHint, graphBinding, terminalSources);
 
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
@@ -2119,25 +2165,31 @@ export default function App() {
               )}
               {graphVisible && (
                 <>
-              <ResizableHandle withHandle />
-              <ResizablePanel
-                id="session-graph"
-                panelRef={graphRef}
-                defaultSize={`${graphWidthRef.current}px`}
-                minSize={`${GRAPH_MIN_WIDTH}px`}
-                maxSize={`${GRAPH_MAX_WIDTH}px`}
-                onResize={(size) => {
-                  if (size.inPixels > 0) persistGraphWidth(size.inPixels);
-                }}
-              >
-                <SessionGraphPanel
-                  agent={graphAgent}
-                  sessionId={graphSessionId}
-                  candidates={graphCandidates}
-                  subtitle={activeTab?.title ?? null}
-                  onHide={hideGraphPanel}
-                />
-              </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel
+                    id="session-graph"
+                    panelRef={graphRef}
+                    defaultSize={`${graphWidthRef.current}px`}
+                    minSize={`${GRAPH_MIN_WIDTH}px`}
+                    maxSize={`${GRAPH_MAX_WIDTH}px`}
+                    onResize={(size) => {
+                      if (size.inPixels > 0) persistGraphWidth(size.inPixels);
+                    }}
+                  >
+                    <SessionGraphPanel
+                      agent={graphAgent}
+                      sessionId={graphSessionId}
+                      candidates={graphCandidates}
+                      sources={graphSourceGroups}
+                      boundTerminalKey={
+                        graphBinding
+                          ? `${graphBinding.tabId}:${graphBinding.leafId}`
+                          : null
+                      }
+                      subtitle={graphBinding?.tabTitle ?? null}
+                      onHide={hideGraphPanel}
+                    />
+                  </ResizablePanel>
                 </>
               )}
             </ResizablePanelGroup>
