@@ -34,6 +34,7 @@ import {
   Cancel01Icon,
   Clock01Icon,
   ComputerTerminal02Icon,
+  Flowchart01Icon,
   GitBranchIcon,
   GitCompareIcon,
   Globe02Icon,
@@ -596,6 +597,16 @@ export function TabIcon({ tab }: { tab: Tab }) {
     return (
       <HugeiconsIcon
         icon={Globe02Icon}
+        size={14}
+        strokeWidth={2}
+        className="shrink-0"
+      />
+    );
+  }
+  if (tab.kind === "mermaid") {
+    return (
+      <HugeiconsIcon
+        icon={Flowchart01Icon}
         size={14}
         strokeWidth={2}
         className="shrink-0"

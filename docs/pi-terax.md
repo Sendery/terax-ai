@@ -34,6 +34,9 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
+- `preview.open`
+- `mermaid.open`
+- `mermaid.update`
 - `tab.focus`
 - `tab.close`
 - `tab.rename`
@@ -76,7 +79,33 @@ what is enforced; this list is a convenience and `app.commands` wins.
 
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, and scheduled-task APIs. It does not expose AI diff approval internals.
 
-`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. `tasks.list` returns a prompt only because asking for it is an explicit request.
+`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. `tasks.list` returns a prompt only because asking for it is an explicit request.
+
+### mermaid.open
+
+Open Mermaid source in Terax's split editor and live diagram preview. Markdown fences are removed automatically. Source is limited to 48 KiB UTF-8; the authenticated bridge accepts frames up to 384 KiB so JSON escaping cannot make an otherwise valid maximum-size source exceed the transport cap.
+
+```json
+{ "id": "mermaid.open", "payload": { "source": "flowchart LR\nA-->B", "title": "Build flow" } }
+```
+
+Sources up to 24 KiB use CodeMirror with a debounced live preview. Larger valid sources remain editable and persist normally through a lightweight text editor, but live preview pauses to keep the UI responsive. The preview uses Mermaid strict security, locks flowchart configuration against source directives, disables HTML flowchart labels, discards stale async results, and displays SVG as an inert image rather than injecting it as HTML. `title` is optional and limited to 80 characters.
+
+### mermaid.update
+
+Replace the source of a Mermaid tab previously opened by Pi or identified through
+the redacted snapshot. The command updates only a tab whose kind is `mermaid`,
+clears stale private visual-layout metadata, and never returns the source.
+
+```json
+{ "id": "mermaid.update", "payload": { "tabId": 13, "source": "flowchart LR\nA-->C", "title": "Build flow v2" } }
+```
+
+`source` follows the same fence normalization and 48 KiB UTF-8 limit as
+`mermaid.open`. `title` is optional; omitting it preserves the current title. The
+command does not focus the tab automatically; call `tab.focus` when the updated
+diagram should become active. Visual undo/redo is transient UI state and is not
+persisted, returned through Pi, or included in snapshots.
 
 ### app.capture
 
@@ -133,7 +162,7 @@ Rust owns the external listener in `src-tauri/src/modules/pi.rs`.
 - Port: ephemeral per app launch
 - Auth: per-launch random token
 - Discovery file: user cache directory, `terax-ai/pi-bridge.json`
-- Frame cap: 64 KiB
+- Frame cap: 384 KiB
 - Request timeout: 5 seconds for frame IO, 15 seconds for UI response
 
 Rust validates protocol version, token, frame size, and command allowlist, then emits a Tauri event to the React bridge. React executes the frontend registry command and replies through the `external_command_respond` Tauri command.

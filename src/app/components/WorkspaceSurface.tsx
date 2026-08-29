@@ -1,15 +1,17 @@
-import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 import { AiDiffStack, EditorStack, GitDiffStack } from "@/modules/editor";
 import { GitHistoryStack } from "@/modules/git-history";
 import { MarkdownStack } from "@/modules/markdown";
+import { MermaidStack } from "@/modules/mermaid";
 import { PreviewStack } from "@/modules/preview";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
+import type { ComponentProps } from "react";
 
 type TerminalStackProps = ComponentProps<typeof TerminalStack>;
 type EditorStackProps = ComponentProps<typeof EditorStack>;
 type PreviewStackProps = ComponentProps<typeof PreviewStack>;
+type MermaidStackProps = ComponentProps<typeof MermaidStack>;
 type AiDiffStackProps = ComponentProps<typeof AiDiffStack>;
 type GitHistoryStackProps = ComponentProps<typeof GitHistoryStack>;
 
@@ -34,6 +36,8 @@ type Props = {
   onOpenCommitFile: GitHistoryStackProps["onOpenCommitFile"];
   onGitHistorySearchHandle: GitHistoryStackProps["onSearchHandle"];
   onSetMarkdownView: EditorStackProps["onSetMarkdownView"];
+  onMermaidSourceChange: MermaidStackProps["onSourceChange"];
+  onMermaidVisualLayoutChange: MermaidStackProps["onVisualLayoutChange"];
 };
 
 /**
@@ -62,12 +66,15 @@ export function WorkspaceSurface({
   onOpenCommitFile,
   onGitHistorySearchHandle,
   onSetMarkdownView,
+  onMermaidSourceChange,
+  onMermaidVisualLayoutChange,
 }: Props) {
   const kind = activeTab?.kind;
   const isTerminalTab = kind === "terminal";
   const isEditorTab = kind === "editor";
   const isPreviewTab = kind === "preview";
   const isMarkdownTab = kind === "markdown";
+  const isMermaidTab = kind === "mermaid";
   const isAiDiffTab = kind === "ai-diff";
   const isGitDiffTab = kind === "git-diff" || kind === "git-commit-file";
   const isGitHistoryTab = kind === "git-history";
@@ -134,6 +141,20 @@ export function WorkspaceSurface({
           tabs={tabs}
           activeId={activeId}
           onSetMarkdownView={onSetMarkdownView}
+        />
+      </div>
+      <div
+        className={cn(
+          "absolute inset-0 px-3 pt-2 pb-2",
+          !isMermaidTab && "invisible pointer-events-none",
+        )}
+        aria-hidden={!isMermaidTab}
+      >
+        <MermaidStack
+          tabs={tabs.filter((tab) => tab.kind === "mermaid")}
+          activeId={activeId}
+          onSourceChange={onMermaidSourceChange}
+          onVisualLayoutChange={onMermaidVisualLayoutChange}
         />
       </div>
       <div

@@ -58,6 +58,16 @@ The main surface is captured by Terax itself through the `app.capture` registry 
 - Private terminals block capture natively with scope-correct rules: any private tab blocks `window` and `tabstrip`; the targeted private tab blocks `pane`; an active private tab blocks the remaining targets. Rejected captures do not mutate state.
 - `target` is only valid with `surface: "main"`. The settings window has no command bridge and stays on the system backend.
 
+### Mermaid editor
+
+Place the editor in a deterministic state through the authenticated command, wait for the debounced render, verify the redacted snapshot, then capture the pane by returned `tabId`:
+
+```json
+{ "command": "mermaid.open", "payload": { "source": "flowchart LR\nA-->B", "title": "Visual QA" } }
+```
+
+Check the CodeMirror source, split handle, up-to-date status, rendered diagram, zoom controls, and absence of clipping. Also exercise invalid syntax and recovery; while invalid, the UI may retain the last valid preview but must label it as stale. `app.snapshot` must never expose diagram source.
+
 ### Video
 
 Use for animations, focus behavior, drag/resize, multi-step transitions, and regressions that only appear over time:

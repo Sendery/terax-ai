@@ -26,6 +26,14 @@ function handlers(): CommandHandlers {
       url: "http://localhost:19432/",
       created: true,
     })),
+    openMermaid: vi.fn(async () => ({
+      tabId: 13,
+      title: "Mermaid diagram",
+    })),
+    updateMermaid: vi.fn(async () => ({
+      tabId: 13,
+      title: "Updated diagram",
+    })),
     focusTab: vi.fn(async () => ({ tabId: 2 })),
     closeTab: vi.fn(async () => ({ requested: true })),
     renameTab: vi.fn(async () => ({ tabId: 2 })),
@@ -79,6 +87,122 @@ function handlers(): CommandHandlers {
     wakeTasks: vi.fn(() => ({ dispatched: 0 })),
   };
 }
+
+describe("mermaid.open", () => {
+  it("validates source and an optional title", () => {
+    expect(
+      validateCommandRequest({
+        id: "mermaid.open",
+        payload: { source: "flowchart LR\nA-->B", title: "Build flow" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "mermaid.open",
+        payload: { source: "flowchart LR\nA-->B", title: "Build flow" },
+      },
+    });
+    expect(
+      validateCommandRequest({
+        id: "mermaid.open",
+        payload: { source: "   " },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("normalizes fenced terminal selections before dispatch", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({
+      id: "mermaid.open",
+      payload: { source: "```mermaid\r\nflowchart TD\r\nA-->B\r\n```" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.openMermaid).toHaveBeenCalledWith({
+      source: "flowchart TD\nA-->B",
+      title: undefined,
+    });
+  });
+
+  it("documents source as required and title as optional", () => {
+    const entry = describeCommands().commands.find(
+      (command) => command.id === "mermaid.open",
+    );
+    expect(entry?.params).toEqual([
+      expect.objectContaining({
+        name: "source",
+        type: "string",
+        required: true,
+      }),
+      expect.objectContaining({
+        name: "title",
+        type: "string",
+        required: false,
+      }),
+    ]);
+  });
+});
+
+describe("mermaid.update", () => {
+  it("validates a target tab, normalizes source, and dispatches without exposing source", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({
+      id: "mermaid.update",
+      payload: {
+        tabId: 13,
+        source: "```mermaid\r\nflowchart TD\r\nA-->C\r\n```",
+        title: "Updated diagram",
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: { tabId: 13, title: "Updated diagram" },
+    });
+    expect(h.updateMermaid).toHaveBeenCalledWith({
+      tabId: 13,
+      source: "flowchart TD\nA-->C",
+      title: "Updated diagram",
+    });
+    expect(JSON.stringify(result)).not.toContain("flowchart");
+  });
+
+  it("rejects a missing tab id, empty source, and oversized source", () => {
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { source: "flowchart LR\nA-->B" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { tabId: 13, source: "   " },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { tabId: 13, source: "A".repeat(48 * 1024 + 1) },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("documents tab id and source as required and title as optional", () => {
+    const entry = describeCommands().commands.find(
+      (command) => command.id === "mermaid.update",
+    );
+    expect(
+      entry?.params.map(({ name, required }) => ({ name, required })),
+    ).toEqual([
+      { name: "tabId", required: true },
+      { name: "source", required: true },
+      { name: "title", required: false },
+    ]);
+  });
+});
 
 describe("notes commands", () => {
   it("accepts the no-payload notes commands", () => {
@@ -525,6 +649,8 @@ describe("command registry", () => {
       "sidebar.hide",
       "tab.openFile",
       "preview.open",
+      "mermaid.open",
+      "mermaid.update",
       "tab.focus",
       "tab.close",
       "tab.rename",
@@ -723,7 +849,8 @@ describe("scheduled task commands", () => {
 
   it("requires an id plus one field to update a task", () => {
     expect(
-      validateCommandRequest({ id: "tasks.update", payload: { id: "st-1" } }).ok,
+      validateCommandRequest({ id: "tasks.update", payload: { id: "st-1" } })
+        .ok,
     ).toBe(false);
     expect(
       validateCommandRequest({
@@ -907,7 +1034,12 @@ describe("task agent payloads", () => {
   it("rejects an agent outside the closed set", () => {
     const result = validateCommandRequest({
       id: "tasks.add",
-      payload: { name: "n", prompt: "p", schedule: "every:5m", agent: "gemini" },
+      payload: {
+        name: "n",
+        prompt: "p",
+        schedule: "every:5m",
+        agent: "gemini",
+      },
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("invalid_payload");

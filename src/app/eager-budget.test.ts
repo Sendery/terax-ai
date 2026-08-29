@@ -22,4 +22,11 @@ describe("startup bundle budget", () => {
   it("settings window does not eagerly pull editor/AI/markdown stacks", () => {
     expect(heavyEagerHits("src/settings/main.tsx")).toEqual([]);
   });
+
+  it("Mermaid source mode does not eagerly pull the visual DnD editor", () => {
+    const { hits } = traceEager("src/modules/mermaid/MermaidStack.tsx", [
+      "@dnd-kit",
+    ]);
+    expect([...hits.entries()]).toEqual([]);
+  });
 });

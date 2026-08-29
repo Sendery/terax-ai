@@ -75,6 +75,15 @@ Terax is a lightweight open-source terminal (ADE) built on Tauri 2 + Rust and Re
 - Auto-detects local dev servers and opens them in a preview tab
 - External URL preview via a native child webview
 
+### Mermaid diagrams
+
+- Dedicated Mermaid tab: source editor and live diagram preview side by side
+- Select Mermaid code anywhere in Terax and open it in the editor
+- Visual mode for flowcharts and sequence diagrams: drag nodes, reorder
+  participants and messages, and edit them with forms, keyboard included
+- Every Mermaid format stays editable as source; visual mode never rewrites
+  what it does not fully understand
+
 ### Themes and customization
 
 - Custom themes built in-app, switch between bundled presets and your own

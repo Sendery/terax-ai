@@ -211,6 +211,16 @@ describe("Pi extension", () => {
     expect(TERAX_COMMAND_IDS).toContain("preview.open");
   });
 
+  it("accepts mermaid.open as an allowlisted command", () => {
+    expect(isTeraxCommandId("mermaid.open")).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain("mermaid.open");
+  });
+
+  it("accepts mermaid.update as an allowlisted command", () => {
+    expect(isTeraxCommandId("mermaid.update")).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain("mermaid.update");
+  });
+
   it("exposes app.commands as the payload discovery command", () => {
     expect(isTeraxCommandId("app.commands")).toBe(true);
     expect(TERAX_COMMAND_IDS).toContain("app.commands");

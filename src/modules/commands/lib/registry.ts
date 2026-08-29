@@ -4,6 +4,7 @@ import {
   type CaptureRequest,
   validateCaptureRequest,
 } from "@/modules/capture";
+import { validateMermaidSource } from "@/modules/mermaid";
 import { isLoopbackPreviewUrl } from "@/modules/preview";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
@@ -31,6 +32,8 @@ export const COMMAND_IDS = [
   "sidebar.hide",
   "tab.openFile",
   "preview.open",
+  "mermaid.open",
+  "mermaid.update",
   "tab.focus",
   "tab.close",
   "tab.rename",
@@ -98,6 +101,8 @@ export type CommandPayloads = {
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
   "preview.open": { url: string; title?: string };
+  "mermaid.open": { source: string; title?: string };
+  "mermaid.update": { tabId: number; source: string; title?: string };
   "tab.focus": { tabId: number };
   "tab.close": { tabId?: number };
   "tab.rename": { tabId: number; title: string };
@@ -439,6 +444,53 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         name: "title",
         required: false,
         type: "string",
+      },
+    ],
+  },
+  "mermaid.open": {
+    id: "mermaid.open",
+    description:
+      "Open Mermaid source in a live split editor and diagram preview tab.",
+    params: [
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description: "Mermaid source, with or without a fenced mermaid block.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Optional tab title, limited to 80 characters.",
+      },
+    ],
+  },
+  "mermaid.update": {
+    id: "mermaid.update",
+    description:
+      "Replace the source of an existing Mermaid tab without exposing its contents.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description:
+          "Id of the Mermaid tab returned by mermaid.open or app.snapshot.",
+      },
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description:
+          "Replacement Mermaid source, with or without a fenced block.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description:
+          "Optional replacement tab title, limited to 80 characters.",
       },
     ],
   },
@@ -862,6 +914,12 @@ export type CommandHandlers = {
   openPreview: (
     payload: CommandPayloads["preview.open"],
   ) => Promise<unknown> | unknown;
+  openMermaid: (
+    payload: CommandPayloads["mermaid.open"],
+  ) => Promise<unknown> | unknown;
+  updateMermaid: (
+    payload: CommandPayloads["mermaid.update"],
+  ) => Promise<unknown> | unknown;
   focusTab: (
     payload: CommandPayloads["tab.focus"],
   ) => Promise<unknown> | unknown;
@@ -1125,6 +1183,49 @@ export function validateCommandRequest(
     return {
       ok: true,
       value: { id, payload: { url: obj.url, title: title.value } },
+    };
+  }
+
+  if (id === "mermaid.open") {
+    const rawSource = requireString(obj, "source", id);
+    if (!rawSource.ok) return rawSource;
+    const source = validateMermaidSource(rawSource.value);
+    if (!source.ok) return invalidPayload(source.message);
+    const rawTitle = validateOptionalString(obj.title, id, "title");
+    if (!rawTitle.ok) return rawTitle;
+    const title = rawTitle.value?.trim() || undefined;
+    if (title && title.length > 80) {
+      return invalidPayload(
+        "mermaid.open requires payload.title to be at most 80 characters",
+      );
+    }
+    return {
+      ok: true,
+      value: { id, payload: { source: source.source, title } },
+    };
+  }
+
+  if (id === "mermaid.update") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    const rawSource = requireString(obj, "source", id);
+    if (!rawSource.ok) return rawSource;
+    const source = validateMermaidSource(rawSource.value);
+    if (!source.ok) return invalidPayload(source.message);
+    const rawTitle = validateOptionalString(obj.title, id, "title");
+    if (!rawTitle.ok) return rawTitle;
+    const title = rawTitle.value?.trim() || undefined;
+    if (title && title.length > 80) {
+      return invalidPayload(
+        "mermaid.update requires payload.title to be at most 80 characters",
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { tabId: tabId.value, source: source.source, title },
+      },
     };
   }
 
@@ -1430,6 +1531,10 @@ async function dispatchCommand(
       return handlers.openFile(request.payload);
     case "preview.open":
       return handlers.openPreview(request.payload);
+    case "mermaid.open":
+      return handlers.openMermaid(request.payload);
+    case "mermaid.update":
+      return handlers.updateMermaid(request.payload);
     case "tab.focus":
       return handlers.focusTab(request.payload);
     case "tab.close":

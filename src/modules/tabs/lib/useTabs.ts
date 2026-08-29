@@ -1,6 +1,5 @@
 import { isMarkdownPath } from "@/lib/utils";
 import type { NoteCard } from "@/modules/notes/lib/cards";
-import type { TabColor } from "./tabColors";
 import {
   findLeafCwd,
   hasLeaf,
@@ -14,7 +13,15 @@ import {
   splitLeaf,
 } from "@/modules/terminal/lib/panes";
 import { disposeSession } from "@/modules/terminal/lib/useTerminalSession";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { replaceMermaidTab } from "./mermaidTabMutation";
+import type { TabColor } from "./tabColors";
 
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
@@ -71,6 +78,19 @@ export type MarkdownTab = TabBase & {
   path: string;
 };
 
+export type MermaidVisualLayout = {
+  kind: "flowchart";
+  positions: Record<string, { x: number; y: number }>;
+};
+
+export type MermaidTab = TabBase & {
+  id: number;
+  kind: "mermaid";
+  title: string;
+  source: string;
+  visualLayout?: MermaidVisualLayout;
+};
+
 export type AiDiffStatus = "pending" | "approved" | "rejected";
 
 export type AiDiffTab = TabBase & {
@@ -121,6 +141,7 @@ export type Tab =
   | EditorTab
   | PreviewTab
   | MarkdownTab
+  | MermaidTab
   | AiDiffTab
   | GitDiffTab
   | GitHistoryTab
@@ -173,6 +194,14 @@ export function applyTabPatch(tab: Tab, patch: TabPatch): Tab {
     };
   }
   if (tab.kind === "markdown") {
+    return {
+      ...tab,
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...customTitlePatch,
+      ...colorPatch,
+    };
+  }
+  if (tab.kind === "mermaid") {
     return {
       ...tab,
       ...(patch.title !== undefined && { title: patch.title }),
@@ -720,6 +749,58 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     return targetId;
   }, []);
 
+  const newMermaidTab = useCallback(
+    (source: string, title = "Mermaid diagram") => {
+      const id = nextIdRef.current++;
+      startTransition(() => {
+        setTabs((curr) => [
+          ...curr,
+          {
+            id,
+            kind: "mermaid",
+            spaceId: activeSpaceIdRef.current,
+            title,
+            source,
+          } satisfies MermaidTab,
+        ]);
+        setActiveId(id);
+      });
+      return id;
+    },
+    [],
+  );
+
+  const updateMermaidSource = useCallback((id: number, source: string) => {
+    setTabs((curr) =>
+      curr.map((tab) =>
+        tab.id === id && tab.kind === "mermaid" ? { ...tab, source } : tab,
+      ),
+    );
+  }, []);
+
+  const replaceMermaidTabContent = useCallback(
+    (id: number, source: string, title?: string) => {
+      const result = replaceMermaidTab(tabsRef.current, id, source, title);
+      if (!result.updated) return false;
+      setTabs(result.tabs);
+      return true;
+    },
+    [],
+  );
+
+  const updateMermaidVisualLayout = useCallback(
+    (id: number, visualLayout: MermaidVisualLayout | undefined) => {
+      setTabs((curr) =>
+        curr.map((tab) =>
+          tab.id === id && tab.kind === "mermaid"
+            ? { ...tab, visualLayout }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
   const setMarkdownView = useCallback(
     (id: number, mode: "rendered" | "raw") => {
       setTabs((curr) =>
@@ -1114,6 +1195,10 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newMermaidTab,
+    updateMermaidSource,
+    replaceMermaidTabContent,
+    updateMermaidVisualLayout,
     setMarkdownView,
     openAiDiffTab,
     openGitDiffTab,
