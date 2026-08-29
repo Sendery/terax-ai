@@ -56,6 +56,7 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
     },
   },
   build: {
+    // Tauri uses Chromium on Windows; keep the release output deterministic.
     target:
       process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome120" : "es2022",
     chunkSizeWarningLimit: 1500,

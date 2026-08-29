@@ -45,6 +45,14 @@ export type SnapshotTab =
     }
   | {
       id: number;
+      kind: "mermaid";
+      spaceId: string;
+      title: string;
+      sourceCharacters: number;
+      color?: TabColor;
+    }
+  | {
+      id: number;
       kind: "ai-diff";
       spaceId: string;
       title: string;
@@ -225,6 +233,17 @@ function serializeTab(tab: Tab): SnapshotTab {
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       path: tab.path,
+      ...(tab.color ? { color: tab.color } : {}),
+    };
+  }
+
+  if (tab.kind === "mermaid") {
+    return {
+      id: tab.id,
+      kind: "mermaid",
+      spaceId: tab.spaceId,
+      title: displayTitle(tab),
+      sourceCharacters: tab.source.length,
       ...(tab.color ? { color: tab.color } : {}),
     };
   }

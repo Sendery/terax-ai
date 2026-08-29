@@ -1,5 +1,8 @@
 export const PROTOCOL_VERSION = 1;
-export const MAX_FRAME_BYTES = 64 * 1024;
+// A 48 KiB UTF-8 Mermaid source can expand to six JSON bytes per source byte
+// when it contains escaped control characters. Keep a bounded margin for the
+// authenticated request envelope and optional title.
+export const MAX_FRAME_BYTES = 384 * 1024;
 
 export type TeraxResponse =
   | {

@@ -1,31 +1,34 @@
-export { TabBar, TabIcon } from "./TabBar";
-export { labelFor } from "./lib/tabLabel";
 export {
-  TAB_COLORS,
+  isTabColor,
   TAB_COLOR_CSS,
   TAB_COLOR_LABEL,
-  isTabColor,
-  tabAccessibleLabel,
+  TAB_COLORS,
   type TabColor,
+  tabAccessibleLabel,
 } from "./lib/tabColors";
+export { labelFor } from "./lib/tabLabel";
+export { waitForMermaidTabReplacement } from "./lib/mermaidTabMutation";
 export {
-  MAX_PANES_PER_TAB,
-  DEFAULT_SPACE_ID,
-  useTabs,
-  nextActiveInSpace,
-  applyTabPatch,
-  applyMarkdownView,
-  type Tab,
-  type TerminalTab,
-  type EditorTab,
-  type PreviewTab,
-  type MarkdownTab,
+  type AiDiffStatus,
   type AiDiffTab,
+  applyMarkdownView,
+  applyTabPatch,
+  DEFAULT_SPACE_ID,
+  type EditorTab,
+  type GitCommitFileDiffTab,
   type GitDiffTab,
   type GitHistoryTab,
-  type GitCommitFileDiffTab,
-  type AiDiffStatus,
+  MAX_PANES_PER_TAB,
+  type MarkdownTab,
+  type MermaidTab,
+  type MermaidVisualLayout,
+  nextActiveInSpace,
+  type PreviewTab,
+  type Tab,
   type TabPatch,
+  type TerminalTab,
+  useTabs,
 } from "./lib/useTabs";
-export { useWorkspaceCwd } from "./lib/useWorkspaceCwd";
 export { useWindowTitle } from "./lib/useWindowTitle";
+export { useWorkspaceCwd } from "./lib/useWorkspaceCwd";
+export { TabBar, TabIcon } from "./TabBar";

@@ -50,6 +50,9 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
+- `preview.open`
+- `mermaid.open`
+- `mermaid.update`
 - `tab.focus`
 - `tab.close`
 - `tab.rename`
@@ -66,6 +69,29 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 - `tasks.run`, `tasks.setEnabled` -- run one now, or enable and disable it
 - `tasks.pauseAll`, `tasks.resumeAll` -- the global scheduler pause
 - `tasks.wake` -- re-evaluate the schedule and dispatch anything due
+
+### mermaid.open
+
+Open Mermaid source in an editable split view:
+
+```json
+{ "command": "mermaid.open", "payload": { "source": "flowchart LR\nA-->B", "title": "Build flow" } }
+```
+
+Source is limited to 48 KiB UTF-8 and is intentionally omitted from `app.snapshot`. Live preview is available through 24 KiB; larger sources remain editable and persistent while preview pauses to keep Terax responsive. The authenticated protocol allows 384 KiB frames to accommodate worst-case JSON escaping of a valid source.
+
+### mermaid.update
+
+Replace the source of an existing Mermaid tab using the `tabId` returned by
+`mermaid.open` or reported by `app.snapshot`:
+
+```json
+{ "command": "mermaid.update", "payload": { "tabId": 13, "source": "flowchart LR\nA-->C", "title": "Build flow v2" } }
+```
+
+The source uses the same normalization and 48 KiB limit as `mermaid.open`.
+Updates are rejected for missing or non-Mermaid tabs, stale visual layout is
+cleared, the source is never returned, and the tab is not focused implicitly.
 
 ### app.capture
 

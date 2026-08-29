@@ -1,19 +1,21 @@
-import {
-  isLeaf,
-  type PaneNode,
-  type SplitDir,
-} from "@/modules/terminal/lib/panes";
+import { validateMermaidDraftSource } from "@/modules/mermaid";
+import { isNoteCard, type NoteCard } from "@/modules/notes/lib/cards";
 import {
   type EditorTab,
   isTabColor,
   type MarkdownTab,
+  type MermaidTab,
+  type MermaidVisualLayout,
   type PreviewTab,
   type Tab,
   type TabColor,
   type TerminalTab,
 } from "@/modules/tabs";
-
-import { isNoteCard, type NoteCard } from "@/modules/notes/lib/cards";
+import {
+  isLeaf,
+  type PaneNode,
+  type SplitDir,
+} from "@/modules/terminal/lib/panes";
 
 export type SerializedNode =
   | { kind: "leaf"; cwd?: string; active?: boolean }
@@ -30,7 +32,53 @@ export type SerializedTab =
     })
   | (SerializedTabBase & { kind: "editor"; path: string })
   | (SerializedTabBase & { kind: "preview"; url: string })
-  | (SerializedTabBase & { kind: "markdown"; path: string });
+  | (SerializedTabBase & { kind: "markdown"; path: string })
+  | (SerializedTabBase & {
+      kind: "mermaid";
+      title: string;
+      source: string;
+      visualLayout?: MermaidVisualLayout;
+    });
+
+const MAX_MERMAID_LAYOUT_NODES = 256;
+const MAX_MERMAID_LAYOUT_COORDINATE = 100_000;
+const MERMAID_VISUAL_ID = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+function validateMermaidVisualLayout(
+  value: unknown,
+): MermaidVisualLayout | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const candidate = value as { kind?: unknown; positions?: unknown };
+  if (
+    candidate.kind !== "flowchart" ||
+    !candidate.positions ||
+    typeof candidate.positions !== "object" ||
+    Array.isArray(candidate.positions)
+  ) {
+    return;
+  }
+  const entries = Object.entries(candidate.positions);
+  if (entries.length > MAX_MERMAID_LAYOUT_NODES) return;
+  const positions: MermaidVisualLayout["positions"] = {};
+  for (const [id, point] of entries) {
+    if (!MERMAID_VISUAL_ID.test(id) || !point || typeof point !== "object") {
+      return;
+    }
+    const { x, y } = point as { x?: unknown; y?: unknown };
+    if (
+      typeof x !== "number" ||
+      typeof y !== "number" ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      Math.abs(x) > MAX_MERMAID_LAYOUT_COORDINATE ||
+      Math.abs(y) > MAX_MERMAID_LAYOUT_COORDINATE
+    ) {
+      return;
+    }
+    positions[id] = { x, y };
+  }
+  return { kind: "flowchart", positions };
+}
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -67,6 +115,7 @@ export function isSerializableTab(tab: Tab): boolean {
     case "editor":
     case "preview":
     case "markdown":
+    case "mermaid":
       return true;
     default:
       return false;
@@ -102,6 +151,16 @@ function serializeTab(tab: Tab): SerializedTab | null {
         path: tab.path,
         ...(tab.color !== undefined && { color: tab.color }),
       };
+    case "mermaid": {
+      const visualLayout = validateMermaidVisualLayout(tab.visualLayout);
+      return {
+        kind: "mermaid",
+        title: tab.customTitle ?? tab.title,
+        source: tab.source,
+        ...(visualLayout && { visualLayout }),
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
+    }
     default:
       return null;
   }
@@ -223,6 +282,28 @@ function hydrateTab(
         path: s.path,
         ...color,
       } satisfies MarkdownTab;
+    case "mermaid": {
+      if (typeof s.source !== "string") return null;
+      const source = validateMermaidDraftSource(s.source);
+      if (!source.ok) return null;
+      const title =
+        typeof s.title === "string" && s.title.trim()
+          ? s.title.trim().slice(0, 80)
+          : "Mermaid diagram";
+      const visualLayout = validateMermaidVisualLayout(
+        (s as { visualLayout?: unknown }).visualLayout,
+      );
+      return {
+        id: allocId(),
+        kind: "mermaid",
+        spaceId,
+        cold: true,
+        title,
+        source: source.source,
+        ...(visualLayout && { visualLayout }),
+        ...color,
+      } satisfies MermaidTab;
+    }
     default:
       return null;
   }

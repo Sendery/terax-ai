@@ -50,6 +50,7 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
+import { validateMermaidSource } from "@/modules/mermaid";
 import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -112,6 +113,7 @@ import {
 import { StatusBar } from "@/modules/statusbar";
 import {
   useTabs,
+  waitForMermaidTabReplacement,
   useWindowTitle,
   useWorkspaceCwd,
   DEFAULT_SPACE_ID,
@@ -151,6 +153,24 @@ import { WorkspaceSurface } from "./components/WorkspaceSurface";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 
+function waitForMermaidPane(tabId: number, timeoutMs = 5_000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (document.querySelector(`[data-mermaid-tab-id="${tabId}"]`)) {
+        resolve();
+        return;
+      }
+      if (performance.now() >= deadline) {
+        reject(new Error(`Mermaid tab ${tabId} did not mount in time`));
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 export default function App() {
   const {
     tabs,
@@ -173,6 +193,10 @@ export default function App() {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newMermaidTab,
+    updateMermaidSource,
+    replaceMermaidTabContent,
+    updateMermaidVisualLayout,
     setMarkdownView,
     openAiDiffTab,
     closeAiDiffTab,
@@ -196,6 +220,8 @@ export default function App() {
   // (e.g. cdInNewTab) read the latest pane state instead of a stale closure.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   const activeTerminalTab = useMemo(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -610,6 +636,17 @@ export default function App() {
       askFromSelection,
       addSelectionToNote,
     });
+  const onOpenMermaidFromSelection = useCallback(() => {
+    const selection = captureActiveSelection();
+    if (!selection) return;
+    const source = validateMermaidSource(selection);
+    if (!source.ok) {
+      toast.error(source.message);
+      return;
+    }
+    newMermaidTab(source.source);
+    setAskPopup(null);
+  }, [captureActiveSelection, newMermaidTab, setAskPopup]);
   const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
@@ -1379,7 +1416,7 @@ export default function App() {
       getSnapshot: () =>
         buildAppSnapshot({
           tabs: tabsRef.current,
-          activeTabId: activeId,
+          activeTabId: activeIdRef.current,
           activeSpaceId,
           sidebar: {
             visible:
@@ -1424,7 +1461,11 @@ export default function App() {
       }),
       capture: async (payload) => {
         try {
-          return await captureSurface(payload, tabsRef.current, activeId);
+          return await captureSurface(
+            payload,
+            tabsRef.current,
+            activeIdRef.current,
+          );
         } catch (error) {
           throw {
             code: "command_failed",
@@ -1457,12 +1498,44 @@ export default function App() {
         if (customTitle) updateTab(tabId, { customTitle });
         return { tabId, url, created: !existing };
       },
+      openMermaid: async ({ source, title }) => {
+        const tabId = newMermaidTab(source, title ?? "Mermaid diagram");
+        await waitForMermaidPane(tabId);
+        return { tabId, title: title ?? "Mermaid diagram" };
+      },
+      updateMermaid: async ({ tabId, source, title }) => {
+        const tab = tabsRef.current.find((candidate) => candidate.id === tabId);
+        if (!tab || tab.kind !== "mermaid") {
+          throw {
+            code: "command_failed",
+            message: `Mermaid tab ${tabId} not found`,
+          };
+        }
+        const updated = replaceMermaidTabContent(tabId, source, title);
+        if (!updated) {
+          throw {
+            code: "command_failed",
+            message: `Mermaid tab ${tabId} could not be updated`,
+          };
+        }
+        const committed = await waitForMermaidTabReplacement(
+          () => tabsRef.current,
+          tabId,
+          source,
+          title,
+        );
+        return {
+          tabId,
+          title: committed.customTitle ?? committed.title,
+        };
+      },
       focusTab: ({ tabId }) => {
         const tab = tabsRef.current.find((t) => t.id === tabId);
         if (!tab) {
           throw { code: "command_failed", message: `Tab ${tabId} not found` };
         }
         useSpaces.getState().setActive(tab.spaceId);
+        activeIdRef.current = tabId;
         setActiveId(tabId);
         return { tabId, spaceId: tab.spaceId };
       },
@@ -1736,6 +1809,7 @@ export default function App() {
       hideSidebar,
       openGitDiffTab,
       openPreviewTab,
+      newMermaidTab,
       setActiveId,
       showSidebar,
       sidebarRef,
@@ -1917,6 +1991,8 @@ export default function App() {
                       onOpenCommitFile={openCommitFileDiffTab}
                       onGitHistorySearchHandle={setGitHistoryHandle}
                       onSetMarkdownView={setMarkdownView}
+                      onMermaidSourceChange={updateMermaidSource}
+                      onMermaidVisualLayoutChange={updateMermaidVisualLayout}
                     />
                   </div>
 
@@ -2095,6 +2171,7 @@ export default function App() {
               y={askPopup?.y ?? 0}
               onAsk={onAskFromSelection}
               onAddToNote={onAddToNoteFromSelection}
+              onOpenMermaid={onOpenMermaidFromSelection}
               onDismiss={() => setAskPopup(null)}
             />
           ) : null}

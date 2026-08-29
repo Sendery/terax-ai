@@ -7,6 +7,8 @@ export const TERAX_COMMAND_IDS = [
   "sidebar.hide",
   "tab.openFile",
   "preview.open",
+  "mermaid.open",
+  "mermaid.update",
   "tab.focus",
   "tab.close",
   "tab.rename",

@@ -1,6 +1,6 @@
+import type { Tab } from "@/modules/tabs";
 import { describe, expect, it } from "vitest";
 import { buildAppSnapshot } from "./snapshot";
-import type { Tab } from "@/modules/tabs";
 
 describe("buildAppSnapshot", () => {
   it("serializes useful app state without terminal buffers or private tab details", () => {
@@ -213,6 +213,39 @@ describe("buildAppSnapshot", () => {
       color: "orange",
     });
     expect(snapshot.tabs[2]).toMatchObject({ kind: "git-diff", color: "blue" });
+  });
+
+  it("reports a Mermaid tab without exposing its source", () => {
+    const source = "flowchart LR\nPrivateNode --> PublicNode";
+    const tabs: Tab[] = [
+      {
+        id: 9,
+        kind: "mermaid",
+        spaceId: "default",
+        title: "Architecture",
+        source,
+        visualLayout: {
+          kind: "flowchart",
+          positions: { PrivateLayoutNode: { x: 120, y: 240 } },
+        },
+      },
+    ];
+
+    const snapshot = buildAppSnapshot({
+      tabs,
+      activeTabId: 9,
+      activeSpaceId: "default",
+    });
+
+    expect(snapshot.tabs[0]).toEqual({
+      id: 9,
+      kind: "mermaid",
+      spaceId: "default",
+      title: "Architecture",
+      sourceCharacters: source.length,
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("PrivateNode");
+    expect(JSON.stringify(snapshot)).not.toContain("PrivateLayoutNode");
   });
 });
 

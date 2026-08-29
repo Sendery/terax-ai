@@ -15,7 +15,9 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
-pub const MAX_FRAME_BYTES: usize = 64 * 1024;
+// Mirrors packages/pi-terax: a 48 KiB source can expand sixfold when JSON
+// escapes control characters, plus the authenticated request envelope.
+pub const MAX_FRAME_BYTES: usize = 384 * 1024;
 const FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const UI_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 const EVENT_EXTERNAL_COMMAND: &str = "terax:external-command";
@@ -166,6 +168,8 @@ fn is_allowed_command(command: &str) -> bool {
             | "sidebar.hide"
             | "tab.openFile"
             | "preview.open"
+            | "mermaid.open"
+            | "mermaid.update"
             | "tab.focus"
             | "tab.close"
             | "tab.rename"
@@ -485,6 +489,33 @@ mod tests {
     }
 
     #[test]
+    fn accepts_an_exact_cap_frame_excluding_the_newline_delimiter() {
+        let mut input = vec![b'a'; MAX_FRAME_BYTES];
+        input.push(b'\n');
+
+        let frame = read_frame(&mut &input[..]).expect("exact-cap frame");
+        assert_eq!(frame.len(), MAX_FRAME_BYTES);
+    }
+
+    #[test]
+    fn accepts_worst_case_maximum_mermaid_source_frame() {
+        let source = "\u{1}".repeat(48 * 1024);
+        let mut frame = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "id": "r-max",
+            "token": "tok",
+            "command": "mermaid.open",
+            "payload": { "source": source },
+        }))
+        .expect("serialize request");
+        frame.push(b'\n');
+
+        let decoded = read_frame(&mut &frame[..]).expect("accepted Mermaid request frame");
+        let request = decode_request_line(&decoded, "tok").expect("valid Mermaid request");
+        assert_eq!(request.command, "mermaid.open");
+    }
+
+    #[test]
     fn allows_agent_monitor_commands() {
         for command in ["agent-monitor.show", "agent-monitor.hide", "agent-monitor.toggle"] {
             let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
@@ -500,6 +531,23 @@ mod tests {
         let request = decode_request_line(line, "tok").expect("tab.setColor must be allowed");
 
         assert_eq!(request.command, "tab.setColor");
+    }
+
+    #[test]
+    fn allows_mermaid_open_command() {
+        let line = br#"{"version":1,"id":"r3","token":"tok","command":"mermaid.open","payload":{"source":"flowchart LR\nA-->B"}}"#;
+        let request = decode_request_line(line, "tok").expect("mermaid.open must be allowed");
+
+        assert_eq!(request.command, "mermaid.open");
+    }
+
+    #[test]
+    fn allows_mermaid_update_command() {
+        let line = br#"{"version":1,"id":"r4","token":"tok","command":"mermaid.update","payload":{"tabId":3,"source":"flowchart LR\nA-->C"}}"#;
+        let request =
+            decode_request_line(line, "tok").expect("mermaid.update must be allowed");
+
+        assert_eq!(request.command, "mermaid.update");
     }
 
     #[test]
