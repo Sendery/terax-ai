@@ -863,7 +863,7 @@ export default function App() {
     [],
   );
   const regenerateTaskSeed = useCallback((id: string) => {
-    const task = scheduledRef.current.tasks.find((t) => t.id === id);
+    const task = scheduledRef.current.readTasks().find((t) => t.id === id);
     scheduledRef.current.regenerate(id);
     if (task) toast(`${task.name} will start a new session on its next run`);
   }, []);
@@ -1424,11 +1424,11 @@ export default function App() {
                 sidebarWidthRef.current) > 0,
             view: sidebarView,
           },
-          ...(scheduledRef.current.tasks.length > 0
+          ...(scheduledRef.current.readTasks().length > 0
             ? {
                 scheduledTasks: {
                   paused: scheduledRef.current.paused,
-                  tasks: scheduledRef.current.tasks.map((task) => ({
+                  tasks: scheduledRef.current.readTasks().map((task) => ({
                     id: task.id,
                     name: task.name,
                     prompt: task.prompt,
@@ -1671,7 +1671,9 @@ export default function App() {
       },
       openTaskEditor: ({ id }) => {
         if (id !== undefined) {
-          const current = scheduledRef.current.tasks.find((t) => t.id === id);
+          const current = scheduledRef.current
+            .readTasks()
+            .find((t) => t.id === id);
           if (!current) {
             throw { code: "command_failed", message: `Task ${id} not found` };
           }
@@ -1712,7 +1714,9 @@ export default function App() {
         };
       },
       updateTask: ({ id, ...fields }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1724,7 +1728,9 @@ export default function App() {
         return { id, updated: true };
       },
       cloneTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1744,7 +1750,9 @@ export default function App() {
         };
       },
       reseedTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1752,7 +1760,9 @@ export default function App() {
         return { id, seed, reseeded: seed !== null };
       },
       removeTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1760,7 +1770,9 @@ export default function App() {
         return { id, removed: true };
       },
       runTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1768,7 +1780,9 @@ export default function App() {
         return { id, started: true };
       },
       setTaskEnabled: ({ id, enabled }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }

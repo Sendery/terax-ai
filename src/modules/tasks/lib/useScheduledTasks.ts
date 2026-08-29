@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createStateMirror, type StateMirror } from "./stateMirror";
 
 import {
   cloneTask,
@@ -34,6 +35,10 @@ export type ScheduledTasksApi = {
   hydrated: boolean;
   /** Coarse clock driving countdown labels. */
   now: number;
+  /** Latest task list, including mutations React has not rendered yet.
+   *  Handlers driven from outside React, such as the Pi command bridge, must
+   *  read through this instead of `tasks`. */
+  readTasks: () => readonly ScheduledTask[];
   add: (input: TaskInput) => ScheduledTask;
   update: (id: string, patch: TaskPatch) => void;
   /** Copies a task, disabled, so it can be edited before it runs. Returns null
@@ -97,59 +102,92 @@ export function useScheduledTasks(): ScheduledTasksApi {
     return () => window.clearInterval(handle);
   }, [needsTick]);
 
-  const add = useCallback((input: TaskInput) => {
-    const created = reschedule(createTask(input), Date.now());
-    setTasks((current) => upsertTask(current, created));
-    return created;
-  }, []);
+  const mirrorRef = useRef<StateMirror<readonly ScheduledTask[]> | null>(null);
+  if (!mirrorRef.current) {
+    mirrorRef.current = createStateMirror<readonly ScheduledTask[]>(tasks);
+  }
+  const mirror = mirrorRef.current;
+  mirror.sync(tasks);
 
-  const update = useCallback((id: string, patch: TaskPatch) => {
-    setTasks((current) => {
-      const stamp = Date.now();
-      return patchList(current, id, patch).map((task) =>
-        task.id === id ? reschedule(task, stamp) : task,
+  const readTasks = useCallback(() => mirror.read(), [mirror]);
+  const commitTasks = useCallback(
+    (next: (current: readonly ScheduledTask[]) => readonly ScheduledTask[]) =>
+      setTasks(mirror.commit(next)),
+    [mirror],
+  );
+
+  const add = useCallback(
+    (input: TaskInput) => {
+      const created = reschedule(createTask(input), Date.now());
+      commitTasks((current) => upsertTask(current, created));
+      return created;
+    },
+    [commitTasks],
+  );
+
+  const update = useCallback(
+    (id: string, patch: TaskPatch) => {
+      commitTasks((current) => {
+        const stamp = Date.now();
+        return patchList(current, id, patch).map((task) =>
+          task.id === id ? reschedule(task, stamp) : task,
+        );
+      });
+    },
+    [commitTasks],
+  );
+
+  const clone = useCallback(
+    (id: string) => {
+      const current = mirror.read();
+      const source = current.find((task) => task.id === id);
+      if (!source) return null;
+      const copy = cloneTask(source, Date.now(), current);
+      commitTasks((list) => upsertTask(list, copy));
+      return copy;
+    },
+    [commitTasks, mirror],
+  );
+
+  const regenerate = useCallback(
+    (id: string) => {
+      const source = mirror.read().find((task) => task.id === id);
+      if (!source) return null;
+      const next = regenerateSeed(source);
+      commitTasks((list) => list.map((task) => (task.id === id ? next : task)));
+      return next.seed ?? null;
+    },
+    [commitTasks, mirror],
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      commitTasks((current) => removeFromList(current, id));
+      setRuns((current) => {
+        if (!(id in current)) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    },
+    [commitTasks],
+  );
+
+  const setEnabled = useCallback(
+    (id: string, enabled: boolean) => {
+      commitTasks((current) =>
+        setTaskEnabled(current, id, enabled, Date.now()),
       );
-    });
-  }, []);
+    },
+    [commitTasks],
+  );
 
-  const tasksRef = useRef<readonly ScheduledTask[]>([]);
-  tasksRef.current = tasks;
-
-  const clone = useCallback((id: string) => {
-    const source = tasksRef.current.find((task) => task.id === id);
-    if (!source) return null;
-    const copy = cloneTask(source, Date.now(), tasksRef.current);
-    setTasks((current) => upsertTask(current, copy));
-    return copy;
-  }, []);
-
-  const regenerate = useCallback((id: string) => {
-    const source = tasksRef.current.find((task) => task.id === id);
-    if (!source) return null;
-    const next = regenerateSeed(source);
-    setTasks((current) =>
-      current.map((task) => (task.id === id ? next : task)),
-    );
-    return next.seed ?? null;
-  }, []);
-
-  const remove = useCallback((id: string) => {
-    setTasks((current) => removeFromList(current, id));
-    setRuns((current) => {
-      if (!(id in current)) return current;
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-  }, []);
-
-  const setEnabled = useCallback((id: string, enabled: boolean) => {
-    setTasks((current) => setTaskEnabled(current, id, enabled, Date.now()));
-  }, []);
-
-  const move = useCallback((id: string, toIndex: number) => {
-    setTasks((current) => moveTask(current, id, toIndex));
-  }, []);
+  const move = useCallback(
+    (id: string, toIndex: number) => {
+      commitTasks((current) => moveTask(current, id, toIndex));
+    },
+    [commitTasks],
+  );
 
   const setPaused = useCallback((next: boolean) => {
     setPausedState(next);
@@ -163,17 +201,22 @@ export function useScheduledTasks(): ScheduledTasksApi {
     }));
   }, []);
 
-  const rescheduleOne = useCallback((id: string) => {
-    const stamp = Date.now();
-    setTasks((current) =>
-      current.map((task) => (task.id === id ? reschedule(task, stamp) : task)),
-    );
-  }, []);
+  const rescheduleOne = useCallback(
+    (id: string) => {
+      const stamp = Date.now();
+      commitTasks((current) =>
+        current.map((task) =>
+          task.id === id ? reschedule(task, stamp) : task,
+        ),
+      );
+    },
+    [commitTasks],
+  );
 
   const rescheduleAll = useCallback(() => {
     const stamp = Date.now();
-    setTasks((current) => current.map((task) => reschedule(task, stamp)));
-  }, []);
+    commitTasks((current) => current.map((task) => reschedule(task, stamp)));
+  }, [commitTasks]);
 
   const defaults = useMemo(() => recentTaskDefaults(tasks), [tasks]);
 
@@ -184,6 +227,7 @@ export function useScheduledTasks(): ScheduledTasksApi {
       paused,
       hydrated,
       now,
+      readTasks,
       add,
       update,
       clone,
@@ -203,6 +247,7 @@ export function useScheduledTasks(): ScheduledTasksApi {
       paused,
       hydrated,
       now,
+      readTasks,
       add,
       update,
       clone,
