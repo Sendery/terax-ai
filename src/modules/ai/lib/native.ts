@@ -95,6 +95,16 @@ export type GitPushResult = {
   pushed: boolean;
 };
 
+export type GitRefKind = "branch" | "remote" | "tag" | "other";
+
+export type GitRef = {
+  /** Branch, remote branch or tag name, without its ref prefix. */
+  name: string;
+  kind: GitRefKind;
+  /** True when HEAD points here. */
+  isHead: boolean;
+};
+
 export type GitLogEntry = {
   sha: string;
   shortSha: string;
@@ -103,6 +113,9 @@ export type GitLogEntry = {
   timestampSecs: number;
   parents: string[];
   subject: string;
+  /** Commit message beyond the subject. Empty when there is none. */
+  body: string;
+  refs: GitRef[];
   filesChanged: number;
   insertions: number;
   deletions: number;
