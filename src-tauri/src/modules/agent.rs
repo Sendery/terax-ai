@@ -11,9 +11,19 @@ const OWNED_MARKERS: [&str; 2] = ["notify;Terax;", "terax;notify"];
 
 // Gated on TERAX_TERMINAL; no-op outside Terax. Returns the sequence via
 // `terminalSequence` because hooks lost /dev/tty access in v2.1.139.
+//
+// The hook payload arrives on stdin as JSON. `message` is the only field that
+// says why the agent stopped, so it is pulled out and appended to the marker;
+// without it a notification can only report that something happened.
+// Extraction is plain sed/tr/cut rather than jq, which a user's shell is not
+// guaranteed to have, and a miss degrades to an event with no text.
+//
+// The captured text is spliced into a JSON string and then into an OSC
+// payload, so quotes, backslashes and control bytes are removed outright:
+// that makes both layers safe without a second round of escaping.
 fn hook_cmd(event: &str) -> String {
     format!(
-        r#"[ -n "$TERAX_TERMINAL" ] && printf '{{"terminalSequence":"\\u001b]777;notify;Terax;{event}\\u0007"}}' || true"#
+        r#"[ -n "$TERAX_TERMINAL" ] && m=$(sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tr -d '\000-\037\\"' | cut -c1-160) && printf '{{"terminalSequence":"\\u001b]777;notify;Terax;{event};%s\\u0007"}}' "$m" || true"#
     )
 }
 
@@ -117,6 +127,38 @@ pub fn agent_claude_hooks_status() -> bool {
     HOOK_EVENTS
         .iter()
         .all(|(_, m)| content.contains(&format!("notify;Terax;{m}")))
+}
+
+#[cfg(test)]
+mod message_tests {
+    use super::*;
+
+    #[test]
+    fn the_notification_hook_forwards_what_claude_said() {
+        let cmd = hook_cmd("attention");
+
+        // Claude puts the reason it stopped in `message`; without it a
+        // notification can only say that something happened.
+        assert!(cmd.contains("message"));
+        assert!(cmd.contains("notify;Terax;attention;"));
+    }
+
+    #[test]
+    fn strips_what_would_break_the_json_or_the_escape_sequence() {
+        let cmd = hook_cmd("attention");
+
+        // The text is spliced into a JSON string and then into an OSC payload.
+        // Removing quotes, backslashes and control bytes is what makes both
+        // safe without a second layer of escaping.
+        assert!(cmd.contains("tr -d"));
+        assert!(cmd.contains("cut -c1-"));
+    }
+
+    #[test]
+    fn stays_a_no_op_outside_terax() {
+        assert!(hook_cmd("finished").contains("TERAX_TERMINAL"));
+        assert!(hook_cmd("finished").ends_with("|| true"));
+    }
 }
 
 #[cfg(test)]

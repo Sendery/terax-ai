@@ -5,6 +5,8 @@ export {
   TAB_COLORS,
   type TabColor,
   tabAccessibleLabel,
+  tabColorStyle,
+  type TabColorStyle,
 } from "./lib/tabColors";
 export { labelFor } from "./lib/tabLabel";
 export { waitForMermaidTabReplacement } from "./lib/mermaidTabMutation";
