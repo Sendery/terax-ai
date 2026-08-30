@@ -7,6 +7,7 @@ If a guide conflicts with `TERAX.md`, `TERAX.md` wins.
 ## Getting started
 
 - [TERAX.md](../TERAX.md) - the architecture source of truth; read this first
+- [CHANGELOG.md](../CHANGELOG.md) - what landed on `qa`, by commit
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - how to contribute, quality bar, project layout
 
 ## Architecture guides
