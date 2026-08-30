@@ -8,13 +8,17 @@ import { cn } from "@/lib/utils";
 import {
   CheckmarkCircle02Icon,
   Loading03Icon,
+  Logout03Icon,
   Notification01Icon,
   Notification03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
+import { tabColorStyle } from "@/modules/tabs";
 import { AgentIcon } from "../lib/agentIcon";
+import { NOTIFICATION_LABEL } from "../lib/describeEvent";
+import { claudeHooksFooter } from "../lib/hooksFooter";
 import type { AgentNotification, AgentStatus } from "../lib/types";
 import { useAgentStore } from "../store/agentStore";
 
@@ -68,11 +72,36 @@ function StatusRow({
   );
 }
 
-const NOTIF_LABEL: Record<AgentNotification["kind"], string> = {
-  attention: "needs input",
-  finished: "finished",
-  error: "failed",
-};
+function KindMark({ kind }: { kind: AgentNotification["kind"] }) {
+  if (kind === "turn-end") {
+    return (
+      <HugeiconsIcon
+        icon={CheckmarkCircle02Icon}
+        size={15}
+        strokeWidth={1.75}
+        className="text-muted-foreground"
+      />
+    );
+  }
+  if (kind === "exited") {
+    return (
+      <HugeiconsIcon
+        icon={Logout03Icon}
+        size={14}
+        strokeWidth={1.9}
+        className="text-muted-foreground"
+      />
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "size-1.5 rounded-full",
+        kind === "error" ? "bg-destructive" : "bg-primary",
+      )}
+    />
+  );
+}
 
 function NotificationRow({
   n,
@@ -81,35 +110,53 @@ function NotificationRow({
   n: AgentNotification;
   onClick: () => void;
 }) {
+  const detail = n.text ?? n.tabTitle;
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent"
+      className={cn(
+        "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent",
+        !n.read && "bg-accent/30",
+      )}
     >
-      <span className="flex w-4 shrink-0 items-center justify-center">
-        {n.kind === "finished" ? (
-          <HugeiconsIcon
-            icon={CheckmarkCircle02Icon}
-            size={15}
-            strokeWidth={1.75}
-            className="text-muted-foreground"
-          />
-        ) : (
+      <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
+        <KindMark kind={n.kind} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm text-foreground">
+            {n.agent}{" "}
+            <span className="text-muted-foreground">
+              {NOTIFICATION_LABEL[n.kind]}
+            </span>
+          </span>
+        </span>
+        {/* The agent's own words when it reported any, otherwise the tab it
+            happened in, so a row always says where to go. */}
+        {detail ? (
+          <span className="truncate text-[11px] leading-snug text-muted-foreground">
+            {detail}
+          </span>
+        ) : null}
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <span className="text-[10px] tabular-nums text-muted-foreground">
+          {relativeTime(n.at)}
+        </span>
+        {n.tabTitle ? (
           <span
-            className={cn(
-              "size-1.5 rounded-full",
-              n.kind === "error" ? "bg-destructive" : "bg-primary",
-            )}
-          />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-        {n.agent}{" "}
-        <span className="text-muted-foreground">{NOTIF_LABEL[n.kind]}</span>
-      </span>
-      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-        {relativeTime(n.at)}
+            className="inline-flex max-w-[110px] items-center gap-1 rounded border px-1 text-[9.5px] leading-[14px] text-muted-foreground"
+            style={
+              n.tabColor
+                ? tabColorStyle(n.tabColor, false)
+                : { borderColor: "var(--border)" }
+            }
+            title={`in ${n.tabTitle}`}
+          >
+            <span className="truncate">{n.tabTitle}</span>
+          </span>
+        ) : null}
       </span>
     </button>
   );
@@ -119,6 +166,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
   const [open, setOpen] = useState(false);
   const [hooksReady, setHooksReady] = useState<boolean | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [installFailed, setInstallFailed] = useState(false);
   const sessions = useAgentStore((s) => s.sessions);
   const localAgent = useAgentStore((s) => s.localAgent);
   const notifications = useAgentStore((s) => s.notifications);
@@ -152,15 +200,23 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
 
   const enableClaudeHooks = async () => {
     setInstalling(true);
+    setInstallFailed(false);
     try {
       await invoke("agent_enable_claude_hooks");
       setHooksReady(true);
     } catch {
       setHooksReady(false);
+      setInstallFailed(true);
     } finally {
       setInstalling(false);
     }
   };
+
+  const footer = claudeHooksFooter({
+    installed: hooksReady,
+    installing,
+    failed: installFailed,
+  });
 
   const activate = (tabId: number, leafId: number) => {
     onActivate(tabId, leafId);
@@ -253,7 +309,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
         )}
 
         <div className="border-t flex justify-center border-border/60 p-1">
-          {hooksReady ? (
+          {footer.kind === "ready" ? (
             <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground">
               <HugeiconsIcon
                 icon={CheckmarkCircle02Icon}
@@ -279,7 +335,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
               {installing ? "Enabling..." : "Enable Claude Code alerts"}
             </button>
           )}
-          {hooksReady === false && !installing ? (
+          {footer.error ? (
             <p className="px-2 pt-1 text-[11px] text-destructive">
               Could not update Claude Code config.
             </p>

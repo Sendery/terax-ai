@@ -46,7 +46,7 @@ export function LocalAgentNotificationsBridge() {
     if (was === status) return;
 
     const fire = (
-      kind: "attention" | "finished" | "error",
+      kind: "attention" | "turn-end" | "error",
       title: string,
       body?: string,
     ) =>
@@ -67,7 +67,7 @@ export function LocalAgentNotificationsBridge() {
     } else if (status === "error") {
       fire("error", "Terax run failed", error ?? undefined);
     } else if (status === "idle" && isBusy(was)) {
-      fire("finished", "Terax finished", "Your task is ready");
+      fire("turn-end", "Terax finished its turn", "Your task is ready");
     }
   }, [status, error]);
 

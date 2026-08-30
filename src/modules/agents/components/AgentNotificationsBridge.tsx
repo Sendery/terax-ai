@@ -1,11 +1,13 @@
 import type { Tab } from "@/modules/tabs";
-import { hasLeaf, leafIdForPty } from "@/modules/terminal";
+import { leafIdForPty } from "@/modules/terminal";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { integrationForAgent } from "../lib/harnesses";
 import { maybeTriggerManagedReview } from "../lib/review";
+import { describeAgentEvent } from "../lib/describeEvent";
+import { findAgentTab } from "../lib/tabTarget";
 import { routeAgentNotification } from "../lib/route";
-import type { AgentSession, AgentSignal } from "../lib/types";
+import type { AgentSession, AgentSignal, NotificationKind } from "../lib/types";
 import { useWindowFocus } from "../lib/useWindowFocus";
 import { useAgentStore } from "../store/agentStore";
 import { useManagedAgentsStore } from "../store/managedAgentsStore";
@@ -18,41 +20,36 @@ type Ctx = {
   onActivate: Activate;
 };
 
-function tabInfo(
-  tabs: Tab[],
-  leafId: number,
-): { tabId: number; title: string } | null {
-  for (const t of tabs) {
-    if (t.kind === "terminal" && hasLeaf(t.paneTree, leafId)) {
-      return { tabId: t.id, title: t.title };
-    }
-  }
-  return null;
-}
-
 function route(
   session: AgentSession,
-  kind: "attention" | "finished",
+  kind: NotificationKind,
   ctx: Ctx,
+  text?: string | null,
 ): void {
-  const info = tabInfo(ctx.tabs, session.leafId);
-  const heading =
-    kind === "attention"
-      ? `${session.agent} needs your input`
-      : `${session.agent} finished`;
+  const info = findAgentTab(ctx.tabs, session.leafId);
+  const described = describeAgentEvent({
+    kind,
+    agent: session.agent,
+    text,
+    tabTitle: info?.title ?? "",
+  });
 
   routeAgentNotification({
     source: "terminal",
     agent: session.agent,
     kind,
-    title: heading,
-    body: info?.title,
+    title: described.title,
+    body: described.body,
     focused: ctx.focused,
     visible: ctx.activeId === session.tabId,
-    // Stop fires every turn, so finished only updates the bell; attention toasts.
+    // A turn ends on every reply, so only a genuine block toasts; the rest
+    // land in the bell where they can be read in order.
     allowToast: kind === "attention",
     tabId: session.tabId,
     leafId: session.leafId,
+    ...(text ? { text } : {}),
+    tabTitle: info?.title ?? "",
+    tabColor: info?.color ?? null,
     onActivate: () => ctx.onActivate(session.tabId, session.leafId),
   });
 }
@@ -64,7 +61,7 @@ function handleSignal(sig: AgentSignal, ctx: Ctx): void {
 
   switch (sig.kind) {
     case "started": {
-      const info = tabInfo(ctx.tabs, leafId);
+      const info = findAgentTab(ctx.tabs, leafId);
       if (!info) return;
       const harness = integrationForAgent(sig.agent ?? "agent");
       store.start(
@@ -82,20 +79,25 @@ function handleSignal(sig: AgentSignal, ctx: Ctx): void {
     case "attention": {
       store.setStatus(leafId, "waiting", "attention");
       const session = store.sessions[leafId];
-      if (session) route(session, "attention", ctx);
+      if (session) route(session, "attention", ctx, sig.text);
       return;
     }
     case "finished": {
       store.setStatus(leafId, "waiting", "finished");
       const session = store.sessions[leafId];
-      if (session) route(session, "finished", ctx);
+      if (session) route(session, "turn-end", ctx, sig.text);
       maybeTriggerManagedReview(leafId);
       return;
     }
-    case "exited":
+    case "exited": {
+      // The agent process ending is the only event that means the work is
+      // over, so it is reported separately from a turn handing back.
+      const session = store.sessions[leafId];
+      if (session) route(session, "exited", ctx);
       store.finish(leafId);
       useManagedAgentsStore.getState().remove(leafId);
       return;
+    }
   }
 }
 

@@ -10,6 +10,11 @@ const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "pi"];
 // OSC 777 marker our Claude Code hooks emit via `terminalSequence`.
 const TERAX_MARKER: &[u8] = b"notify;Terax;";
 
+/// Upper bound on the text an agent may attach to a signal. A notification
+/// shows a line, not a transcript, and the payload arrives over a terminal
+/// stream any process can write to.
+pub const MAX_SIGNAL_TEXT: usize = 160;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
     Ground,
@@ -28,8 +33,10 @@ enum Status {
 pub enum Transition {
     Started { agent: String },
     Working,
-    Attention,
-    Finished,
+    /// The agent is blocked on the user. `text` is what it said it needs.
+    Attention { text: Option<String> },
+    /// The agent ended a turn. `text` is its closing line, when it reported one.
+    Finished { text: Option<String> },
     Exited,
 }
 
@@ -38,20 +45,65 @@ pub struct AgentSignal {
     pub id: u32,
     pub kind: &'static str,
     pub agent: Option<String>,
+    /// Line the agent attached to the event, already bounded and stripped of
+    /// control characters. Absent when it reported none.
+    pub text: Option<String>,
 }
 
 impl Transition {
     pub fn into_signal(self, id: u32) -> AgentSignal {
         match self {
-            Transition::Started { agent } => {
-                AgentSignal { id, kind: "started", agent: Some(agent) }
-            }
-            Transition::Working => AgentSignal { id, kind: "working", agent: None },
-            Transition::Attention => AgentSignal { id, kind: "attention", agent: None },
-            Transition::Finished => AgentSignal { id, kind: "finished", agent: None },
-            Transition::Exited => AgentSignal { id, kind: "exited", agent: None },
+            Transition::Started { agent } => AgentSignal {
+                id,
+                kind: "started",
+                agent: Some(agent),
+                text: None,
+            },
+            Transition::Working => AgentSignal {
+                id,
+                kind: "working",
+                agent: None,
+                text: None,
+            },
+            Transition::Attention { text } => AgentSignal {
+                id,
+                kind: "attention",
+                agent: None,
+                text,
+            },
+            Transition::Finished { text } => AgentSignal {
+                id,
+                kind: "finished",
+                agent: None,
+                text,
+            },
+            Transition::Exited => AgentSignal {
+                id,
+                kind: "exited",
+                agent: None,
+                text: None,
+            },
         }
     }
+}
+
+/// Splits `<event>` from an optional `;<text>` tail.
+///
+/// The text is the rest of the payload, so it may contain the field separator.
+/// It arrives over a terminal stream any process can write to, so it is
+/// stripped of control characters and bounded before it reaches the UI.
+fn split_event_text(payload: &[u8]) -> (&[u8], Option<String>) {
+    let Some(index) = payload.iter().position(|byte| *byte == b';') else {
+        return (payload, None);
+    };
+    let (event, rest) = (&payload[..index], &payload[index + 1..]);
+    let text: String = String::from_utf8_lossy(rest)
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(MAX_SIGNAL_TEXT)
+        .collect();
+    let text = text.trim().to_string();
+    (event, if text.is_empty() { None } else { Some(text) })
 }
 
 pub struct AgentDetector {
@@ -172,6 +224,7 @@ impl AgentDetector {
                     _ => None,
                 })
                 .unwrap_or(("claude", marker));
+            let (event, text) = split_event_text(event);
             match event {
                 b"working" => {
                     self.ensure_armed_as(agent, emit);
@@ -180,12 +233,12 @@ impl AgentDetector {
                 b"attention" => {
                     self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
-                    emit(Transition::Attention);
+                    emit(Transition::Attention { text });
                 }
                 b"finished" => {
                     self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
-                    emit(Transition::Finished);
+                    emit(Transition::Finished { text });
                 }
                 _ => {}
             }
@@ -235,7 +288,7 @@ impl AgentDetector {
     fn generic_attention<F: FnMut(Transition)>(&mut self, emit: &mut F) {
         if self.armed {
             self.status = Status::Waiting;
-            emit(Transition::Attention);
+            emit(Transition::Attention { text: None });
         }
     }
 
@@ -347,10 +400,10 @@ mod tests {
     fn terax_marker_drives_status() {
         let mut d = AgentDetector::new();
         run(&mut d, &osc("133;C;claude"));
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention { text: None }]);
         assert_eq!(run(&mut d, &osc("777;notify;Terax;working")), vec![Transition::Working]);
         assert!(run(&mut d, &osc("777;notify;Terax;working")).is_empty());
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;finished")), vec![Transition::Finished]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;finished")), vec![Transition::Finished { text: None }]);
     }
 
     #[test]
@@ -358,7 +411,7 @@ mod tests {
         let mut d = AgentDetector::new();
         assert_eq!(
             run(&mut d, &osc("777;notify;Terax;attention")),
-            vec![started("claude"), Transition::Attention]
+            vec![started("claude"), Transition::Attention { text: None }]
         );
     }
 
@@ -385,8 +438,8 @@ mod tests {
         let mut d = AgentDetector::new();
         assert!(run(&mut d, &osc("777;notify;Other;ready")).is_empty());
         run(&mut d, &osc("133;C;codex"));
-        assert_eq!(run(&mut d, &osc("777;notify;Codex;ready")), vec![Transition::Attention]);
-        assert_eq!(run(&mut d, &osc("9;needs you")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Codex;ready")), vec![Transition::Attention { text: None }]);
+        assert_eq!(run(&mut d, &osc("9;needs you")), vec![Transition::Attention { text: None }]);
         assert!(run(&mut d, &osc("9;4;1;50")).is_empty());
     }
 
@@ -438,6 +491,106 @@ mod tests {
         seq.extend(std::iter::repeat_n(b'x', OSC_MAX + 100));
         seq.extend_from_slice(&[ESC, ST_FINAL]);
         assert!(run(&mut d, &seq).is_empty());
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention { text: None }]);
+    }
+}
+
+#[cfg(test)]
+mod message_tests {
+    use super::*;
+
+    fn osc_seq(body: &str) -> Vec<u8> {
+        let mut v = vec![ESC, OSC_INTRO];
+        v.extend_from_slice(body.as_bytes());
+        v.push(BEL);
+        v
+    }
+
+    fn feed(d: &mut AgentDetector, bytes: &[u8]) -> Vec<Transition> {
+        let mut out = Vec::new();
+        d.process(bytes, |t| out.push(t));
+        out
+    }
+
+    #[test]
+    fn carries_the_text_a_hook_reported() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(
+            &mut d,
+            &osc_seq("777;notify;Terax;attention;Claude needs your permission to use Bash"),
+        );
+
+        assert_eq!(
+            out,
+            vec![
+                Transition::Started { agent: "claude".into() },
+                Transition::Attention {
+                    text: Some("Claude needs your permission to use Bash".into())
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_semicolons_inside_the_text() {
+        // The message is the rest of the payload, so it may contain the field
+        // separator without being cut short.
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished;built; ran tests"));
+
+        assert_eq!(
+            out.last(),
+            Some(&Transition::Finished { text: Some("built; ran tests".into()) })
+        );
+    }
+
+    #[test]
+    fn tolerates_an_event_with_no_text() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished"));
+
+        assert_eq!(out.last(), Some(&Transition::Finished { text: None }));
+    }
+
+    #[test]
+    fn treats_an_empty_text_as_none() {
+        // A hook whose extraction found nothing still emits the trailing
+        // separator; that must not surface as an empty line in the UI.
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished;"));
+
+        assert_eq!(out.last(), Some(&Transition::Finished { text: None }));
+    }
+
+    #[test]
+    fn reads_text_for_a_named_adapter() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;pi;attention;pick a branch"));
+
+        assert_eq!(
+            out,
+            vec![
+                Transition::Started { agent: "pi".into() },
+                Transition::Attention { text: Some("pick a branch".into()) }
+            ]
+        );
+    }
+
+    #[test]
+    fn bounds_a_long_message() {
+        let mut d = AgentDetector::new();
+        let long = "x".repeat(400);
+
+        let out = feed(&mut d, &osc_seq(&format!("777;notify;Terax;attention;{long}")));
+
+        let Some(Transition::Attention { text: Some(text) }) = out.last() else {
+            panic!("expected attention with text");
+        };
+        assert_eq!(text.chars().count(), MAX_SIGNAL_TEXT);
     }
 }
