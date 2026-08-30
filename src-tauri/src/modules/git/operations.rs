@@ -10,7 +10,8 @@ use crate::modules::git::process::{
 };
 use crate::modules::git::types::{
     DiscardEntry, GitChangedFile, GitCommitFileChange, GitCommitResult, GitDiffContentResult,
-    GitDiffResult, GitLogEntry, GitOutput, GitPanelSnapshot, GitPushResult, GitRepoInfo,
+    GitDiffResult, GitLogEntry, GitOutput, GitPanelSnapshot, GitPushResult, GitRef,
+    GitRefKind, GitRepoInfo,
     GitStatusSnapshot, TextSource, DEFAULT_TIMEOUT_SECS, NETWORK_TIMEOUT_SECS,
 };
 use crate::modules::git::utils::{
@@ -563,7 +564,10 @@ pub fn push(
     })
 }
 
-const LOG_FORMAT: &str = "%H%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%s";
+// Records are framed with \x1e because %b is multi-line; fields inside a
+// record use \x1f. %D carries the decorations and must come before %s so the
+// body can stay last, where the --shortstat line lands after it.
+const LOG_FORMAT: &str = "%x1e%H%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%D%x1f%s%x1f%b";
 const MAX_LOG_LIMIT: u32 = 200;
 
 pub fn log(
@@ -587,22 +591,46 @@ pub fn log(
         }
         _ => None,
     };
-    let mut args: Vec<&OsStr> = vec![
-        OsStr::new("log"),
-        OsStr::new("--no-color"),
-        OsStr::new("--shortstat"),
-        OsStr::new(&count_arg),
-        OsStr::new(&format_arg),
-    ];
-    if let Some(spec) = cursor.as_deref() {
-        args.push(OsStr::new(spec));
-    }
-    let output = run_git(
+    // Without --diff-merges a merge prints no --shortstat line at all, so every
+    // merge in the view reads as an empty commit. Diffing against the first
+    // parent is what a merge brought in, which is the number a history view
+    // wants. The option landed in git 2.31, so a git that rejects it falls back
+    // to the old behaviour rather than failing the whole view.
+    let build_args = |with_diff_merges: bool| {
+        let mut args: Vec<&OsStr> = vec![
+            OsStr::new("log"),
+            OsStr::new("--no-color"),
+            OsStr::new("--decorate=full"),
+            OsStr::new("--shortstat"),
+        ];
+        if with_diff_merges {
+            args.push(OsStr::new("--diff-merges=first-parent"));
+        }
+        args.push(OsStr::new(&count_arg));
+        args.push(OsStr::new(&format_arg));
+        if let Some(spec) = cursor.as_deref() {
+            args.push(OsStr::new(spec));
+        }
+        args
+    };
+
+    let mut output = run_git(
         &repo_root.workspace,
         Some(&repo_root.git_path),
-        args,
+        build_args(true),
         DEFAULT_TIMEOUT_SECS,
     )?;
+    if output.exit_code != Some(0)
+        && !output.timed_out
+        && String::from_utf8_lossy(&output.stderr).contains("diff-merges")
+    {
+        output = run_git(
+            &repo_root.workspace,
+            Some(&repo_root.git_path),
+            build_args(false),
+            DEFAULT_TIMEOUT_SECS,
+        )?;
+    }
     if output.timed_out {
         return Err(GitError::TimedOut("git log"));
     }
@@ -618,59 +646,147 @@ pub fn log(
         return ensure_success(&output, "git log failed").map(|_| Vec::new());
     }
     let stdout = std::str::from_utf8(&output.stdout).unwrap_or("");
-    let mut entries: Vec<GitLogEntry> = Vec::with_capacity(bounded as usize);
-    // Lines we get back interleave:
-    //   <sha>\x1f<author>\x1f<email>\x1f<ts>\x1f<parents>\x1f<subject>
-    //   <blank>
-    //    5 files changed, 12 insertions(+), 3 deletions(-)
-    // Commits without diffstats (root commits, merges with no changes) just
-    // skip the shortstat line. Detect commit headers by the presence of
-    // the unit-separator we put in the format.
-    for raw_line in stdout.lines() {
-        let line = raw_line.trim_end_matches('\r');
-        if line.is_empty() {
+    Ok(parse_log_records(stdout))
+}
+
+/// Splits `git log` output into commits.
+///
+/// Each record starts with \x1e and holds unit-separated fields, the last of
+/// which is the body. `--shortstat` prints its line after the body, so the tail
+/// of that field is inspected for the exact shape git emits and stripped.
+fn parse_log_records(stdout: &str) -> Vec<GitLogEntry> {
+    let mut entries: Vec<GitLogEntry> = Vec::new();
+    for record in stdout.split('\x1e').skip(1) {
+        let mut fields = record.splitn(8, '\x1f');
+        let sha = fields.next().unwrap_or("").trim().to_string();
+        if !sha_is_safe(&sha) {
             continue;
         }
-        if line.contains('\x1f') {
-            let mut fields = line.splitn(6, '\x1f');
-            let sha = fields.next().unwrap_or("").to_string();
-            if !sha_is_safe(&sha) {
+        let author = fields.next().unwrap_or("").to_string();
+        let author_email = fields.next().unwrap_or("").to_string();
+        let timestamp_secs = fields
+            .next()
+            .unwrap_or("0")
+            .trim()
+            .parse::<i64>()
+            .unwrap_or(0);
+        let parents: Vec<String> = fields
+            .next()
+            .unwrap_or("")
+            .split_ascii_whitespace()
+            .map(str::to_string)
+            .collect();
+        let refs = parse_decorations(fields.next().unwrap_or(""));
+        let subject = fields.next().unwrap_or("").to_string();
+        let (body, stat) = split_body_and_shortstat(fields.next().unwrap_or(""));
+        let (files_changed, insertions, deletions) =
+            stat.map_or((0, 0, 0), parse_shortstat);
+        let short_sha = sha.chars().take(7).collect::<String>();
+        entries.push(GitLogEntry {
+            sha,
+            short_sha,
+            author,
+            author_email,
+            timestamp_secs,
+            parents,
+            subject,
+            body,
+            refs,
+            files_changed,
+            insertions,
+            deletions,
+        });
+    }
+    entries
+}
+
+/// True for the exact line `--shortstat` emits, so a body line that merely
+/// mentions changed files is not mistaken for one.
+fn is_shortstat_line(line: &str) -> bool {
+    let mut parts = line.trim().split(", ");
+    let Some(files) = parts.next() else {
+        return false;
+    };
+    let Some(count) = files
+        .strip_suffix(" file changed")
+        .or_else(|| files.strip_suffix(" files changed"))
+    else {
+        return false;
+    };
+    if count.is_empty() || !count.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    parts.all(|part| {
+        part.strip_suffix(" insertions(+)")
+            .or_else(|| part.strip_suffix(" insertion(+)"))
+            .or_else(|| part.strip_suffix(" deletions(-)"))
+            .or_else(|| part.strip_suffix(" deletion(-)"))
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    })
+}
+
+fn split_body_and_shortstat(tail: &str) -> (String, Option<&str>) {
+    let mut lines: Vec<&str> = tail.lines().collect();
+    let mut stat = None;
+    while let Some(last) = lines.last() {
+        if last.trim().is_empty() {
+            lines.pop();
+            continue;
+        }
+        if stat.is_none() && is_shortstat_line(last) {
+            stat = Some(*last);
+            lines.pop();
+            continue;
+        }
+        break;
+    }
+    (lines.join("\n").trim_end().to_string(), stat)
+}
+
+/// Turns `%D` output into typed refs.
+///
+/// `--decorate=full` keeps the ref path, so a local branch named `origin/x` is
+/// never mistaken for a remote one. `refs/remotes/<remote>/HEAD` is dropped: it
+/// is a symbolic pointer at another ref already listed, not a place to go.
+fn parse_decorations(raw: &str) -> Vec<GitRef> {
+    let mut refs = Vec::new();
+    for piece in raw.split(", ") {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        let (is_head, target) = match piece.strip_prefix("HEAD -> ") {
+            Some(rest) => (true, rest.trim()),
+            None if piece == "HEAD" => {
+                refs.push(GitRef {
+                    name: "HEAD".to_string(),
+                    kind: GitRefKind::Other,
+                    is_head: true,
+                });
                 continue;
             }
-            let author = fields.next().unwrap_or("").to_string();
-            let author_email = fields.next().unwrap_or("").to_string();
-            let timestamp = fields.next().unwrap_or("0").parse::<i64>().unwrap_or(0);
-            let parents_raw = fields.next().unwrap_or("");
-            let parents: Vec<String> = parents_raw
-                .split_ascii_whitespace()
-                .map(|s| s.to_string())
-                .collect();
-            let subject = fields.next().unwrap_or("").to_string();
-            let short_sha = sha.chars().take(7).collect::<String>();
-            entries.push(GitLogEntry {
-                sha,
-                short_sha,
-                author,
-                author_email,
-                timestamp_secs: timestamp,
-                parents,
-                subject,
-                files_changed: 0,
-                insertions: 0,
-                deletions: 0,
-            });
+            None => (false, piece),
+        };
+        let target = target.strip_prefix("tag: ").unwrap_or(target);
+        let (kind, name) = if let Some(name) = target.strip_prefix("refs/heads/") {
+            (GitRefKind::Branch, name)
+        } else if let Some(name) = target.strip_prefix("refs/remotes/") {
+            (GitRefKind::Remote, name)
+        } else if let Some(name) = target.strip_prefix("refs/tags/") {
+            (GitRefKind::Tag, name)
+        } else {
+            (GitRefKind::Other, target)
+        };
+        if name.is_empty() || (kind == GitRefKind::Remote && name.ends_with("/HEAD")) {
             continue;
         }
-        if let Some(current) = entries.last_mut() {
-            if line.contains("file changed") || line.contains("files changed") {
-                let (files, ins, del) = parse_shortstat(line);
-                current.files_changed = files;
-                current.insertions = ins;
-                current.deletions = del;
-            }
-        }
+        refs.push(GitRef {
+            name: name.to_string(),
+            kind,
+            is_head,
+        });
     }
-    Ok(entries)
+    refs
 }
 
 pub fn show_commit_diff(
@@ -1148,5 +1264,171 @@ mod tests {
             "fatal: your current branch 'main' does not have any commits yet"
         )));
         assert!(!looks_like_no_head(&mk("fatal: pathspec did not match")));
+    }
+}
+
+#[cfg(test)]
+mod log_parse_tests {
+    use super::*;
+
+    fn record(fields: &[&str]) -> String {
+        format!("\x1e{}", fields.join("\x1f"))
+    }
+
+    #[test]
+    fn parses_a_plain_commit() {
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "ada@example.com",
+            "1700000000",
+            "b".repeat(40).as_str(),
+            "",
+            "do the thing",
+            "",
+        ]) + "\n\n 3 files changed, 12 insertions(+), 4 deletions(-)\n";
+
+        let entries = parse_log_records(&out);
+
+        assert_eq!(entries.len(), 1);
+        let e = &entries[0];
+        assert_eq!(e.short_sha, "aaaaaaa");
+        assert_eq!(e.author, "Ada");
+        assert_eq!(e.subject, "do the thing");
+        assert_eq!(e.parents, vec!["b".repeat(40)]);
+        assert_eq!((e.files_changed, e.insertions, e.deletions), (3, 12, 4));
+        assert!(e.body.is_empty());
+        assert!(e.refs.is_empty());
+    }
+
+    #[test]
+    fn keeps_a_multi_line_body_without_the_diffstat() {
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "ada@example.com",
+            "1700000000",
+            "",
+            "",
+            "subject",
+            "first paragraph\n\nsecond paragraph\n",
+        ]) + "\n 1 file changed, 2 insertions(+)\n";
+
+        let entries = parse_log_records(&out);
+
+        assert_eq!(entries[0].body, "first paragraph\n\nsecond paragraph");
+        assert_eq!(entries[0].files_changed, 1);
+    }
+
+    #[test]
+    fn keeps_a_body_line_that_merely_looks_like_a_diffstat() {
+        // Only the exact shape git emits is stripped, and only from the tail.
+        let body = "we saw 3 files changed here\n";
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "a@e.com",
+            "1",
+            "",
+            "",
+            "subject",
+            body,
+        ]) + "\n 2 files changed, 1 insertion(+)\n";
+
+        let entries = parse_log_records(&out);
+
+        assert_eq!(entries[0].body, "we saw 3 files changed here");
+        assert_eq!(entries[0].files_changed, 2);
+    }
+
+    #[test]
+    fn reads_branches_remotes_and_tags_from_full_decorations() {
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "a@e.com",
+            "1",
+            "",
+            "HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1.2.0",
+            "subject",
+            "",
+        ]);
+
+        let refs = &parse_log_records(&out)[0].refs;
+
+        assert_eq!(refs.len(), 3);
+        assert_eq!(refs[0].name, "main");
+        assert_eq!(refs[0].kind, GitRefKind::Branch);
+        assert!(refs[0].is_head);
+        assert_eq!(refs[1].name, "origin/main");
+        assert_eq!(refs[1].kind, GitRefKind::Remote);
+        assert!(!refs[1].is_head);
+        assert_eq!(refs[2].name, "v1.2.0");
+        assert_eq!(refs[2].kind, GitRefKind::Tag);
+    }
+
+    #[test]
+    fn reports_a_detached_head() {
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "a@e.com",
+            "1",
+            "",
+            "HEAD",
+            "subject",
+            "",
+        ]);
+
+        let refs = &parse_log_records(&out)[0].refs;
+
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].name, "HEAD");
+        assert_eq!(refs[0].kind, GitRefKind::Other);
+        assert!(refs[0].is_head);
+    }
+
+    #[test]
+    fn drops_the_origin_head_pointer_that_names_no_commit_of_its_own() {
+        let out = record(&[
+            "a".repeat(40).as_str(),
+            "Ada",
+            "a@e.com",
+            "1",
+            "",
+            "refs/remotes/origin/HEAD, refs/remotes/origin/main",
+            "subject",
+            "",
+        ]);
+
+        let refs = &parse_log_records(&out)[0].refs;
+
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].name, "origin/main");
+    }
+
+    #[test]
+    fn parses_several_commits_including_one_without_a_diffstat() {
+        let out = record(&[
+            "a".repeat(40).as_str(), "A", "a@e.com", "1", "", "", "first", "",
+        ]) + "\n\n 1 file changed, 1 insertion(+)\n"
+            + &record(&[
+                "b".repeat(40).as_str(), "B", "b@e.com", "2", "", "", "second", "",
+            ])
+            + "\n";
+
+        let entries = parse_log_records(&out);
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].files_changed, 1);
+        assert_eq!(entries[1].files_changed, 0);
+        assert_eq!(entries[1].subject, "second");
+    }
+
+    #[test]
+    fn skips_a_record_whose_sha_is_not_a_sha() {
+        let out = record(&["not-a-sha", "A", "a@e.com", "1", "", "", "s", ""]);
+
+        assert!(parse_log_records(&out).is_empty());
     }
 }

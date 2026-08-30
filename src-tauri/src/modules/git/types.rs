@@ -95,6 +95,29 @@ pub struct GitCommitFileChange {
     pub is_binary: bool,
 }
 
+/// What a decoration on a commit points at. `git log --decorate=full` spells
+/// these out as ref paths, so they are distinguished here rather than guessed
+/// from a short name: a local branch may legitimately be called `origin/x`.
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitRefKind {
+    Branch,
+    Remote,
+    Tag,
+    /// Detached HEAD, or a ref namespace the view does not model.
+    Other,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRef {
+    /// Display name: the branch, remote branch or tag, without its ref prefix.
+    pub name: String,
+    pub kind: GitRefKind,
+    /// True when HEAD points here, so the view can mark the checked-out ref.
+    pub is_head: bool,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitLogEntry {
@@ -105,6 +128,10 @@ pub struct GitLogEntry {
     pub timestamp_secs: i64,
     pub parents: Vec<String>,
     pub subject: String,
+    /// Commit message beyond the subject, trailing whitespace trimmed.
+    pub body: String,
+    /// Branches, remote branches and tags pointing at this commit.
+    pub refs: Vec<GitRef>,
     pub files_changed: u32,
     pub insertions: u32,
     pub deletions: u32,
