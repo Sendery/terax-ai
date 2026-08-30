@@ -39,6 +39,15 @@ function handlers(): CommandHandlers {
     renameTab: vi.fn(async () => ({ tabId: 2 })),
     resetTabTitle: vi.fn(async () => ({ tabId: 2 })),
     openGitDiff: vi.fn(async () => ({ tabId: 8 })),
+    openGitHistory: vi.fn(async () => ({ tabId: 21 })),
+    openCommitFile: vi.fn(async () => ({ tabId: 22 })),
+    searchContent: vi.fn(async () => ({
+      hits: [{ path: "/repo/a.ts", rel: "a.ts", line: 3, text: "TODO" }],
+      truncated: false,
+      filesScanned: 12,
+    })),
+    moveTab: vi.fn(async () => ({ tabId: 4, index: 0 })),
+    setTabPinned: vi.fn(async () => ({ tabId: 4, pinned: true })),
     openSettings: vi.fn(async () => ({ opened: true })),
     setTabColor: vi.fn(async () => ({ tabId: 2 })),
     getBuildInfo: vi.fn(() => ({
@@ -656,7 +665,12 @@ describe("command registry", () => {
       "tab.rename",
       "tab.resetTitle",
       "tab.setColor",
+      "tab.move",
+      "tab.setPinned",
       "git.diff.open",
+      "git.history.open",
+      "git.commitFile.open",
+      "search.content",
       "settings.open",
       "agent-monitor.show",
       "agent-monitor.hide",
@@ -1078,5 +1092,201 @@ describe("tasks.clone and tasks.reseed", () => {
         expect.objectContaining({ name: "id", type: "string", required: true }),
       ]);
     }
+  });
+});
+
+describe("surfaces that had no bridge command", () => {
+  it("opens the git history graph for a repository", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "git.history.open",
+      payload: { repoRoot: "/repo", branch: "main" },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 21 } });
+    expect(h.openGitHistory).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      branch: "main",
+    });
+  });
+
+  it("requires a repository root for the history graph", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({ id: "git.history.open", payload: {} });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("opens a file as it was at a commit", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "git.commitFile.open",
+      payload: {
+        repoRoot: "/repo",
+        sha: "0123456789abcdef0123456789abcdef01234567",
+        path: "src/main.ts",
+      },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 22 } });
+    expect(h.openCommitFile).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      sha: "0123456789abcdef0123456789abcdef01234567",
+      path: "src/main.ts",
+      originalPath: null,
+      subject: undefined,
+    });
+  });
+
+  it("rejects a commit that is not a hexadecimal sha", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "git.commitFile.open",
+      payload: { repoRoot: "/repo", sha: "HEAD~1; rm -rf /", path: "a.ts" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("carries a rename through to the commit file tab", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    await reg.call({
+      id: "git.commitFile.open",
+      payload: {
+        repoRoot: "/repo",
+        sha: "abc1234",
+        path: "src/new.ts",
+        originalPath: "src/old.ts",
+        subject: "rename it",
+      },
+    });
+
+    expect(h.openCommitFile).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      sha: "abc1234",
+      path: "src/new.ts",
+      originalPath: "src/old.ts",
+      subject: "rename it",
+    });
+  });
+
+  it("searches file contents under a root", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "search.content",
+      payload: { query: "TODO", root: "/repo", maxResults: 5 },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        hits: [{ path: "/repo/a.ts", rel: "a.ts", line: 3, text: "TODO" }],
+        truncated: false,
+        filesScanned: 12,
+      },
+    });
+    expect(h.searchContent).toHaveBeenCalledWith({
+      query: "TODO",
+      root: "/repo",
+      caseInsensitive: undefined,
+      maxResults: 5,
+    });
+  });
+
+  it("rejects an empty search query", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "search.content",
+      payload: { query: "   ", root: "/repo" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("keeps the search result cap inside the supported range", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    for (const maxResults of [0, 501]) {
+      expect(
+        await reg.call({
+          id: "search.content",
+          payload: { query: "TODO", root: "/repo", maxResults },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
+    }
+  });
+
+  it("reorders a tab within its strip", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "tab.move",
+      payload: { tabId: 4, index: 0 },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 4, index: 0 } });
+    expect(h.moveTab).toHaveBeenCalledWith({ tabId: 4, index: 0 });
+  });
+
+  it("refuses a negative destination index", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "tab.move",
+      payload: { tabId: 4, index: -1 },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("pins a preview tab so the next file does not replace it", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "tab.setPinned",
+      payload: { tabId: 4, pinned: true },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 4, pinned: true } });
+    expect(h.setTabPinned).toHaveBeenCalledWith({ tabId: 4, pinned: true });
+  });
+
+  it("requires the pinned flag to be a boolean", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "tab.setPinned",
+      payload: { tabId: 4, pinned: "yes" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
   });
 });

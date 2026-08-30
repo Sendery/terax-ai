@@ -42,7 +42,12 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tab.rename`
 - `tab.resetTitle`
 - `tab.setColor`
+- `tab.move`
+- `tab.setPinned`
 - `git.diff.open`
+- `git.history.open`
+- `git.commitFile.open`
+- `search.content`
 - `settings.open`
 - `agent-monitor.show`
 - `agent-monitor.hide`
@@ -106,6 +111,58 @@ clears stale private visual-layout metadata, and never returns the source.
 command does not focus the tab automatically; call `tab.focus` when the updated
 diagram should become active. Visual undo/redo is transient UI state and is not
 persisted, returned through Pi, or included in snapshots.
+
+### git.history.open
+
+Open the commit graph for a repository. An already open graph for the same
+repository is focused instead of duplicated.
+
+```json
+{ "id": "git.history.open", "payload": { "repoRoot": "/repo", "branch": "main" } }
+```
+
+`branch` only titles the tab. The result reports `{ tabId }`.
+
+### git.commitFile.open
+
+Open a file's diff as it was at one commit.
+
+```json
+{ "id": "git.commitFile.open", "payload": { "repoRoot": "/repo", "sha": "0a1b2c3", "path": "src/main.ts" } }
+```
+
+`sha` must be 7 to 40 hexadecimal characters: it reaches git as an argument, so
+revision expressions such as `HEAD~1` are rejected rather than resolved. Pass
+`originalPath` when the commit renamed the file and `subject` to show the commit
+message in the tab. A tab already open for the same repository, commit and path
+is focused instead of duplicated.
+
+### search.content
+
+Search file contents under a root with a regular expression, honoring
+`.gitignore`.
+
+```json
+{ "id": "search.content", "payload": { "query": "TODO\\(", "root": "/repo", "maxResults": 20 } }
+```
+
+Returns `{ hits, truncated, filesScanned }` where each hit is
+`{ path, rel, line, text }`. This command reads; it opens no tab. Follow it with
+`tab.openFile` to open a hit. The root and every hit pass the same read
+deny-list the in-app AI tools use, so a match can never reveal a path the agent
+is not allowed to read. `maxResults` is 1 to 500 and defaults to 50.
+
+### tab.move and tab.setPinned
+
+```json
+{ "id": "tab.move", "payload": { "tabId": 4, "index": 0 } }
+{ "id": "tab.setPinned", "payload": { "tabId": 4, "pinned": true } }
+```
+
+`index` is counted inside the tab's own space and is clamped to that strip.
+`tab.setPinned` applies to editor tabs: a space has exactly one preview slot,
+the tab the next opened file replaces, so unpinning a tab pins whichever tab
+held the slot.
 
 ### app.capture
 

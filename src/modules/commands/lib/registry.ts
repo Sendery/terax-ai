@@ -39,7 +39,12 @@ export const COMMAND_IDS = [
   "tab.rename",
   "tab.resetTitle",
   "tab.setColor",
+  "tab.move",
+  "tab.setPinned",
   "git.diff.open",
+  "git.history.open",
+  "git.commitFile.open",
+  "search.content",
   "settings.open",
   "agent-monitor.show",
   "agent-monitor.hide",
@@ -108,12 +113,28 @@ export type CommandPayloads = {
   "tab.rename": { tabId: number; title: string };
   "tab.resetTitle": { tabId: number };
   "tab.setColor": { tabId: number; color: TabColor | null };
+  "tab.move": { tabId: number; index: number };
+  "tab.setPinned": { tabId: number; pinned: boolean };
   "git.diff.open": {
     repoRoot: string;
     path: string;
     mode: "-" | "+";
     originalPath?: string | null;
     title?: string;
+  };
+  "git.history.open": { repoRoot: string; branch?: string };
+  "git.commitFile.open": {
+    repoRoot: string;
+    sha: string;
+    path: string;
+    originalPath?: string | null;
+    subject?: string;
+  };
+  "search.content": {
+    query: string;
+    root: string;
+    caseInsensitive?: boolean;
+    maxResults?: number;
   };
   "settings.open": { tab?: SettingsTab };
   "agent-monitor.show": undefined;
@@ -568,6 +589,46 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "tab.move": {
+    id: "tab.move",
+    description:
+      "Reorder a tab within its own space, by destination index in that space's strip.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to move.",
+      },
+      {
+        name: "index",
+        type: "integer",
+        required: true,
+        description:
+          "Zero-based destination index inside the tab's space. Clamped to the strip.",
+      },
+    ],
+  },
+  "tab.setPinned": {
+    id: "tab.setPinned",
+    description:
+      "Pin or unpin an editor tab. A pinned tab keeps its slot; an unpinned one is the single preview slot the next opened file replaces.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the editor tab.",
+      },
+      {
+        name: "pinned",
+        type: "boolean",
+        required: true,
+        description:
+          "true to pin the tab, false to return it to the preview slot.",
+      },
+    ],
+  },
   "git.diff.open": {
     id: "git.diff.open",
     description: "Open a git diff tab for a file.",
@@ -603,6 +664,96 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         type: "string",
         required: false,
         description: "Custom tab title.",
+      },
+    ],
+  },
+  "git.history.open": {
+    id: "git.history.open",
+    description:
+      "Open the commit graph for a repository. An already open graph for the same repository is focused instead of duplicated.",
+    params: [
+      {
+        name: "repoRoot",
+        type: "string",
+        required: true,
+        description: "Repository root path.",
+      },
+      {
+        name: "branch",
+        type: "string",
+        required: false,
+        description: "Branch name, used only to title the tab.",
+      },
+    ],
+  },
+  "git.commitFile.open": {
+    id: "git.commitFile.open",
+    description:
+      "Open a file's diff as it was at one commit. Reuses an open tab for the same repository, commit and path.",
+    params: [
+      {
+        name: "repoRoot",
+        type: "string",
+        required: true,
+        description: "Repository root path.",
+      },
+      {
+        name: "sha",
+        type: "string",
+        required: true,
+        description:
+          "Commit sha, 7 to 40 hexadecimal characters. Revision expressions are not accepted.",
+      },
+      {
+        name: "path",
+        type: "string",
+        required: true,
+        description: "File path relative to the repo, as of that commit.",
+      },
+      {
+        name: "originalPath",
+        type: "string",
+        required: false,
+        nullable: true,
+        description: "Previous path when the commit renamed the file.",
+      },
+      {
+        name: "subject",
+        type: "string",
+        required: false,
+        description: "Commit subject line, shown as context in the tab.",
+      },
+    ],
+  },
+  "search.content": {
+    id: "search.content",
+    description:
+      "Search file contents under a root with a regular expression, honoring .gitignore. Returns matches; it does not open a tab. Pair it with tab.openFile to open a hit.",
+    params: [
+      {
+        name: "query",
+        type: "string",
+        required: true,
+        description: "Regular expression in the ripgrep dialect.",
+      },
+      {
+        name: "root",
+        type: "string",
+        required: true,
+        description:
+          "Directory to search under. Must be an authorized workspace path.",
+      },
+      {
+        name: "caseInsensitive",
+        type: "boolean",
+        required: false,
+        description: "Match without regard to case.",
+      },
+      {
+        name: "maxResults",
+        type: "integer",
+        required: false,
+        description: "Maximum hits to return, 1 to 500. Defaults to 50.",
       },
     ],
   },
@@ -938,6 +1089,19 @@ export type CommandHandlers = {
   openGitDiff: (
     payload: CommandPayloads["git.diff.open"],
   ) => Promise<unknown> | unknown;
+  openGitHistory: (
+    payload: CommandPayloads["git.history.open"],
+  ) => Promise<unknown> | unknown;
+  openCommitFile: (
+    payload: CommandPayloads["git.commitFile.open"],
+  ) => Promise<unknown> | unknown;
+  searchContent: (
+    payload: CommandPayloads["search.content"],
+  ) => Promise<unknown> | unknown;
+  moveTab: (payload: CommandPayloads["tab.move"]) => Promise<unknown> | unknown;
+  setTabPinned: (
+    payload: CommandPayloads["tab.setPinned"],
+  ) => Promise<unknown> | unknown;
   openSettings: (
     payload: CommandPayloads["settings.open"],
   ) => Promise<unknown> | unknown;
@@ -1271,6 +1435,131 @@ export function validateCommandRequest(
     };
   }
 
+  if (id === "tab.move") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    const index = requireNumber(obj, "index", id);
+    if (!index.ok) return index;
+    if (index.value < 0) {
+      return invalidPayload("tab.move requires payload.index to be at least 0");
+    }
+    return {
+      ok: true,
+      value: { id, payload: { tabId: tabId.value, index: index.value } },
+    };
+  }
+
+  if (id === "tab.setPinned") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    if (typeof obj.pinned !== "boolean") {
+      return invalidPayload(
+        "tab.setPinned requires payload.pinned to be a boolean",
+      );
+    }
+    return {
+      ok: true,
+      value: { id, payload: { tabId: tabId.value, pinned: obj.pinned } },
+    };
+  }
+
+  if (id === "git.history.open") {
+    const repoRoot = requireString(obj, "repoRoot", id);
+    if (!repoRoot.ok) return repoRoot;
+    const branch = validateOptionalString(obj.branch, id, "branch");
+    if (!branch.ok) return branch;
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { repoRoot: repoRoot.value, branch: branch.value },
+      },
+    };
+  }
+
+  if (id === "git.commitFile.open") {
+    const repoRoot = requireString(obj, "repoRoot", id);
+    if (!repoRoot.ok) return repoRoot;
+    const sha = requireString(obj, "sha", id);
+    if (!sha.ok) return sha;
+    // A sha reaches git as an argument, so only a literal object name is
+    // accepted here. Revision expressions such as HEAD~1 or @{u} are not.
+    if (!/^[0-9a-fA-F]{7,40}$/.test(sha.value)) {
+      return invalidPayload(
+        "git.commitFile.open requires payload.sha to be 7 to 40 hexadecimal characters",
+      );
+    }
+    const path = requireString(obj, "path", id);
+    if (!path.ok) return path;
+    if (
+      obj.originalPath !== undefined &&
+      obj.originalPath !== null &&
+      typeof obj.originalPath !== "string"
+    ) {
+      return invalidPayload(
+        "git.commitFile.open requires payload.originalPath to be a string",
+      );
+    }
+    const subject = validateOptionalString(obj.subject, id, "subject");
+    if (!subject.ok) return subject;
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          repoRoot: repoRoot.value,
+          sha: sha.value,
+          path: path.value,
+          originalPath: (obj.originalPath as string | null | undefined) ?? null,
+          subject: subject.value,
+        },
+      },
+    };
+  }
+
+  if (id === "search.content") {
+    const query = requireString(obj, "query", id);
+    if (!query.ok) return query;
+    if (!query.value.trim()) {
+      return invalidPayload(
+        "search.content requires a non-empty payload.query",
+      );
+    }
+    const root = requireString(obj, "root", id);
+    if (!root.ok) return root;
+    if (
+      obj.caseInsensitive !== undefined &&
+      typeof obj.caseInsensitive !== "boolean"
+    ) {
+      return invalidPayload(
+        "search.content requires payload.caseInsensitive to be a boolean",
+      );
+    }
+    let maxResults: number | undefined;
+    if (obj.maxResults !== undefined) {
+      const parsed = requireNumber(obj, "maxResults", id);
+      if (!parsed.ok) return parsed;
+      if (parsed.value < 1 || parsed.value > 500) {
+        return invalidPayload(
+          "search.content requires payload.maxResults between 1 and 500",
+        );
+      }
+      maxResults = parsed.value;
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          query: query.value,
+          root: root.value,
+          caseInsensitive: obj.caseInsensitive as boolean | undefined,
+          maxResults,
+        },
+      },
+    };
+  }
+
   if (id === "git.diff.open") {
     const repoRoot = requireString(obj, "repoRoot", id);
     if (!repoRoot.ok) return repoRoot;
@@ -1547,6 +1836,16 @@ async function dispatchCommand(
       return handlers.setTabColor(request.payload);
     case "git.diff.open":
       return handlers.openGitDiff(request.payload);
+    case "git.history.open":
+      return handlers.openGitHistory(request.payload);
+    case "git.commitFile.open":
+      return handlers.openCommitFile(request.payload);
+    case "search.content":
+      return handlers.searchContent(request.payload);
+    case "tab.move":
+      return handlers.moveTab(request.payload);
+    case "tab.setPinned":
+      return handlers.setTabPinned(request.payload);
     case "settings.open":
       return handlers.openSettings(request.payload);
     case "agent-monitor.show":

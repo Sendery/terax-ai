@@ -302,6 +302,60 @@ export function reorderTabsByGap(
   return next;
 }
 
+/**
+ * Moves a tab to a destination index inside its own space.
+ *
+ * Spaces share one array, so the index is counted over the tab's own strip;
+ * splicing by absolute position would drag it into a neighbouring space. The
+ * index is clamped, so a caller does not have to know the strip's length.
+ */
+export function moveTabToIndex(
+  tabs: readonly Tab[],
+  tabId: number,
+  index: number,
+): { tabs: Tab[]; index: number | null } {
+  const moved = tabs.find((t) => t.id === tabId);
+  if (!moved) return { tabs: tabs as Tab[], index: null };
+  const sameSpace = tabs.filter((t) => t.spaceId === moved.spaceId);
+  const from = sameSpace.findIndex((t) => t.id === tabId);
+  const target = Math.max(0, Math.min(Math.trunc(index), sameSpace.length - 1));
+  if (target === from) return { tabs: tabs as Tab[], index: target };
+
+  const anchor = sameSpace[target];
+  const next = tabs.filter((t) => t.id !== tabId);
+  const anchorIdx = next.findIndex((t) => t.id === anchor.id);
+  next.splice(target > from ? anchorIdx + 1 : anchorIdx, 0, moved);
+  return { tabs: next, index: target };
+}
+
+/**
+ * Pins an editor tab, or returns it to the preview slot.
+ *
+ * A space has exactly one preview slot: the tab the next opened file replaces.
+ * Unpinning therefore pins whichever tab held the slot, otherwise two tabs
+ * would claim it and the next open would replace an unpredictable one.
+ */
+export function setTabPinnedInList(
+  tabs: readonly Tab[],
+  tabId: number,
+  pinned: boolean,
+): { tabs: Tab[]; changed: boolean } {
+  const target = tabs.find((t) => t.id === tabId);
+  if (target?.kind !== "editor") {
+    return { tabs: tabs as Tab[], changed: false };
+  }
+  return {
+    tabs: tabs.map((t) => {
+      if (t.id === tabId) return { ...t, preview: !pinned };
+      if (!pinned && t.kind === "editor" && t.spaceId === target.spaceId) {
+        return t.preview ? { ...t, preview: false } : t;
+      }
+      return t;
+    }),
+    changed: true,
+  };
+}
+
 export function useTabs(initial?: Partial<TerminalTab>) {
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const tabId = 1;
@@ -1174,6 +1228,22 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     setTabs((prev) => reorderTabsByGap(prev, fromId, toGapIndex));
   }, []);
 
+  const moveTab = useCallback((tabId: number, index: number) => {
+    const result = moveTabToIndex(tabsRef.current, tabId, index);
+    if (result.index === null) return null;
+    tabsRef.current = result.tabs;
+    setTabs(result.tabs);
+    return result.index;
+  }, []);
+
+  const setTabPinned = useCallback((tabId: number, pinned: boolean) => {
+    const result = setTabPinnedInList(tabsRef.current, tabId, pinned);
+    if (!result.changed) return false;
+    tabsRef.current = result.tabs;
+    setTabs(result.tabs);
+    return true;
+  }, []);
+
   return {
     tabs,
     activeId,
@@ -1183,6 +1253,8 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     moveTabToSpace,
     reorderTab,
     reorderTabByGap,
+    moveTab,
+    setTabPinned,
     newTabInSpace,
     removeTabsForSpace,
     markBooted,

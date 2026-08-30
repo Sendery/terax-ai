@@ -32,6 +32,10 @@ import {
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { native } from "@/modules/ai/lib/native";
+import {
+  checkReadable,
+  checkReadableCanonical,
+} from "@/modules/ai/lib/security";
 import { CommandPalette, createCommandItems } from "@/modules/command-palette";
 import {
   buildAppSnapshot,
@@ -206,6 +210,8 @@ export default function App() {
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    moveTab,
+    setTabPinned,
     closeTab,
     updateTab,
     updateTabNotes,
@@ -1608,6 +1614,73 @@ export default function App() {
       openGitDiff: (payload) => {
         const tabId = openGitDiffTab(payload);
         return { tabId };
+      },
+      openGitHistory: ({ repoRoot, branch }) => {
+        const tabId = openCommitHistoryTab({ repoRoot, branch });
+        return { tabId };
+      },
+      openCommitFile: ({ repoRoot, sha, path, originalPath, subject }) => {
+        const tabId = openCommitFileDiffTab({
+          repoRoot,
+          sha,
+          shortSha: sha.slice(0, 7),
+          subject: subject ?? "",
+          path,
+          originalPath: originalPath ?? null,
+        });
+        return { tabId };
+      },
+      searchContent: async ({ query, root, caseInsensitive, maxResults }) => {
+        // Pi is an external caller, so the same deny-list the in-app AI tools
+        // use guards the root and every hit: a match must never reveal a path
+        // the agent is not allowed to read.
+        const safety = await checkReadableCanonical(root, (p) =>
+          native.canonicalize(p),
+        );
+        if (!safety.ok) {
+          throw { code: "command_failed", message: safety.reason };
+        }
+        let response: Awaited<ReturnType<typeof native.grep>>;
+        try {
+          response = await native.grep({
+            pattern: query,
+            root: safety.canonical,
+            caseInsensitive,
+            maxResults: maxResults ?? 50,
+          });
+        } catch (error) {
+          throw {
+            code: "command_failed",
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+        const hits = response.hits.filter((hit) => {
+          const absolute = hit.path.startsWith("/")
+            ? hit.path
+            : `${safety.canonical}/${hit.path}`;
+          return checkReadable(absolute).ok;
+        });
+        return {
+          hits,
+          truncated: response.truncated || hits.length !== response.hits.length,
+          filesScanned: response.files_scanned,
+        };
+      },
+      moveTab: ({ tabId, index }) => {
+        const moved = moveTab(tabId, index);
+        if (moved === null) {
+          throw { code: "command_failed", message: `Tab ${tabId} not found` };
+        }
+        return { tabId, index: moved };
+      },
+      setTabPinned: ({ tabId, pinned }) => {
+        if (!setTabPinned(tabId, pinned)) {
+          throw {
+            code: "command_failed",
+            message: `Tab ${tabId} is not an editor tab`,
+          };
+        }
+        return { tabId, pinned };
       },
       openSettings: ({ tab }) => {
         void openSettingsWindow(tab);
