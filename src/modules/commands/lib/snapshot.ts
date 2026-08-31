@@ -82,6 +82,18 @@ export type SnapshotTab =
     }
   | {
       id: number;
+      kind: "pr-review";
+      spaceId: string;
+      title: string;
+      repoRoot: string;
+      /** Branch under review. */
+      head: string;
+      /** Branch it is compared against. */
+      base: string;
+      color?: TabColor;
+    }
+  | {
+      id: number;
       kind: "git-commit-file";
       spaceId: string;
       title: string;
@@ -282,6 +294,19 @@ function serializeTab(tab: Tab): SnapshotTab {
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       repoRoot: tab.repoRoot,
+      ...(tab.color ? { color: tab.color } : {}),
+    };
+  }
+
+  if (tab.kind === "pr-review") {
+    return {
+      id: tab.id,
+      kind: "pr-review",
+      spaceId: tab.spaceId,
+      title: displayTitle(tab),
+      repoRoot: tab.repoRoot,
+      head: tab.head,
+      base: tab.base,
       ...(tab.color ? { color: tab.color } : {}),
     };
   }

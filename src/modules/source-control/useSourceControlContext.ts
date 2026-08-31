@@ -22,6 +22,11 @@ type Params = {
   home: string | null;
   sidebarView: SidebarViewId;
   cycleSidebarView: (view: SidebarViewId) => void;
+  openPrReviewTab: (args: {
+    repoRoot: string;
+    head: string;
+    base: string;
+  }) => void;
   openCommitHistoryTab: (args: {
     repoRoot: string;
     branch: string | null;
@@ -44,6 +49,7 @@ export function useSourceControlContext({
   sidebarView,
   cycleSidebarView,
   openCommitHistoryTab,
+  openPrReviewTab,
 }: Params) {
   const workspaceFallbackPath = launchCwdResolved
     ? (launchCwd ?? home ?? null)
@@ -107,5 +113,49 @@ export function useSourceControlContext({
     sourceControlContextPath,
   ]);
 
-  return { sourceControl, toggleSourceControl, openGitGraphFromContext };
+  /**
+   * Opens a review of the checked-out branch.
+   *
+   * The base comes from the repository rather than a guess in the UI: git knows
+   * which branch the remote points at, and that is the one a pull request would
+   * target. A detached HEAD has no branch to review, so the action is skipped.
+   */
+  const openReviewFromContext = useCallback(async () => {
+    const known = sourceControl.hasRepo ? sourceControl.repo : null;
+    let repoRoot = known?.repoRoot ?? null;
+    let head = sourceControl.status?.branch ?? known?.branch ?? null;
+    if (!repoRoot && sourceControlContextPath) {
+      try {
+        const repo = await native.gitResolveRepo(sourceControlContextPath);
+        if (repo) {
+          repoRoot = repo.repoRoot;
+          head = head ?? repo.branch;
+        }
+      } catch {
+        return;
+      }
+    }
+    if (!repoRoot || !head) return;
+    try {
+      const branches = await native.gitBranches(repoRoot);
+      const base = branches.defaultBase;
+      if (!base) return;
+      openPrReviewTab({ repoRoot, head, base });
+    } catch {
+      /* the panel keeps working without a review */
+    }
+  }, [
+    openPrReviewTab,
+    sourceControl.hasRepo,
+    sourceControl.repo,
+    sourceControl.status?.branch,
+    sourceControlContextPath,
+  ]);
+
+  return {
+    sourceControl,
+    toggleSourceControl,
+    openGitGraphFromContext,
+    openReviewFromContext,
+  };
 }

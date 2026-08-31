@@ -121,6 +121,37 @@ export type GitLogEntry = {
   deletions: number;
 };
 
+export type GitBranchList = {
+  /** Checked-out branch, absent on a detached HEAD. */
+  current: string | null;
+  local: string[];
+  remote: string[];
+  /** Branch a review should default to comparing against. */
+  defaultBase: string | null;
+};
+
+export type GitRangeFile = {
+  path: string;
+  /** Previous path when the change is a rename or copy. */
+  originalPath: string | null;
+  /** Porcelain status letter: A, M, D, R, C or T. */
+  status: string;
+  statusLabel: string;
+  added: number;
+  removed: number;
+  isBinary: boolean;
+};
+
+export type GitRangeSummary = {
+  /** Commit the branches last shared, which is what the review diffs from. */
+  mergeBase: string;
+  base: string;
+  head: string;
+  ahead: number;
+  behind: number;
+  files: GitRangeFile[];
+};
+
 export type GitCommitFileChange = {
   path: string;
   originalPath: string | null;
@@ -437,6 +468,33 @@ export const native = {
       sha,
       path,
       originalPath: originalPath ?? null,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitBranches: (repoRoot: string) =>
+    invoke<GitBranchList>("git_branches", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitRangeSummary: (repoRoot: string, base: string, head: string) =>
+    invoke<GitRangeSummary>("git_range_summary", {
+      repoRoot,
+      base,
+      head,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitRangeFileDiff: (params: {
+    repoRoot: string;
+    baseRev: string;
+    headRev: string;
+    path: string;
+    originalPath?: string | null;
+  }) =>
+    invoke<GitDiffContentResult>("git_range_file_diff", {
+      repoRoot: params.repoRoot,
+      baseRev: params.baseRev,
+      headRev: params.headRev,
+      path: params.path,
+      originalPath: params.originalPath ?? null,
       workspace: currentWorkspaceEnv(),
     }),
   gitRemoteUrl: (repoRoot: string, name?: string) =>

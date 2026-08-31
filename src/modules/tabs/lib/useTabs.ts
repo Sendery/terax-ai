@@ -136,7 +136,20 @@ export type GitCommitFileDiffTab = TabBase & {
   originalPath: string | null;
 };
 
+/** A local review of one branch against the branch it would merge into. */
+export type PrReviewTab = TabBase & {
+  id: number;
+  kind: "pr-review";
+  title: string;
+  repoRoot: string;
+  /** Branch under review. */
+  head: string;
+  /** Branch it is compared against; the user can change it in the pane. */
+  base: string;
+};
+
 export type Tab =
+  | PrReviewTab
   | TerminalTab
   | EditorTab
   | PreviewTab
@@ -953,6 +966,56 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     [],
   );
 
+  const openPrReviewTab = useCallback(
+    (input: { repoRoot: string; head: string; base: string }) => {
+      const curr = tabsRef.current;
+      // One review per branch: reopening from the panel should return to the
+      // review already in progress rather than start a second copy of it.
+      const existing = curr.find(
+        (t) =>
+          t.kind === "pr-review" &&
+          t.repoRoot === input.repoRoot &&
+          t.head === input.head,
+      );
+      const title = `Review ${input.head}`;
+      if (existing) {
+        const nextTabs = curr.map((t) =>
+          t.id === existing.id ? { ...t, title, base: input.base } : t,
+        );
+        tabsRef.current = nextTabs;
+        setTabs(nextTabs);
+        setActiveId(existing.id);
+        return existing.id;
+      }
+      const id = nextIdRef.current++;
+      const nextTabs = [
+        ...curr,
+        {
+          id,
+          kind: "pr-review",
+          spaceId: activeSpaceIdRef.current,
+          title,
+          repoRoot: input.repoRoot,
+          head: input.head,
+          base: input.base,
+        } satisfies PrReviewTab,
+      ];
+      tabsRef.current = nextTabs;
+      setTabs(nextTabs);
+      setActiveId(id);
+      return id;
+    },
+    [],
+  );
+
+  const setPrReviewBase = useCallback((tabId: number, base: string) => {
+    setTabs((curr) =>
+      curr.map((t) =>
+        t.id === tabId && t.kind === "pr-review" ? { ...t, base } : t,
+      ),
+    );
+  }, []);
+
   const openCommitFileDiffTab = useCallback(
     (input: {
       repoRoot: string;
@@ -1276,6 +1339,8 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openPrReviewTab,
+    setPrReviewBase,
     setAiDiffStatus,
     closeAiDiffTab,
     closeTab,

@@ -48,6 +48,7 @@ import {
   FolderCloudIcon,
   FolderGitTwoIcon,
   GitBranchIcon,
+  GitPullRequestIcon,
   Refresh01Icon,
   RemoveSquareIcon,
 } from "@hugeicons/core-free-icons";
@@ -74,6 +75,8 @@ type Props = {
   open: boolean;
   sourceControl: SourceControlSummary;
   onOpenGitGraph?: () => void;
+  /** Start a local review of this branch against a branch it would merge into. */
+  onOpenReview?: () => void;
   onOpenDiff: (input: {
     path: string;
     repoRoot: string;
@@ -151,6 +154,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
   open,
   sourceControl,
   onOpenGitGraph,
+  onOpenReview,
   onOpenDiff,
   onOpenFile,
 }: Props) {
@@ -538,6 +542,30 @@ export const SourceControlPanel = memo(function SourceControlPanel({
               className="shrink-0"
             />
             <span className="flex-1 text-[12px] font-medium">Commit Graph</span>
+            <HugeiconsIcon
+              icon={ArrowRight01Icon}
+              size={12}
+              strokeWidth={2}
+              className="shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5"
+            />
+          </button>
+        ) : null}
+
+        {onOpenReview ? (
+          <button
+            type="button"
+            onClick={() => onOpenReview()}
+            className="group flex shrink-0 cursor-pointer items-center gap-2 border-b border-border/40 px-3 py-2 text-left text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          >
+            <HugeiconsIcon
+              icon={GitPullRequestIcon}
+              size={13}
+              strokeWidth={1.85}
+              className="shrink-0"
+            />
+            <span className="flex-1 text-[12px] font-medium">
+              Review branch
+            </span>
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               size={12}

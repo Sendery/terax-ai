@@ -10,7 +10,8 @@ use crate::modules::git::process::{
 };
 use crate::modules::git::types::{
     DiscardEntry, GitChangedFile, GitCommitFileChange, GitCommitResult, GitDiffContentResult,
-    GitDiffResult, GitLogEntry, GitOutput, GitPanelSnapshot, GitPushResult, GitRef,
+    GitBranchList, GitDiffResult, GitLogEntry, GitOutput, GitPanelSnapshot, GitPushResult,
+    GitRangeFile, GitRangeSummary, GitRef,
     GitRefKind, GitRepoInfo,
     GitStatusSnapshot, TextSource, DEFAULT_TIMEOUT_SECS, NETWORK_TIMEOUT_SECS,
 };
@@ -855,6 +856,38 @@ fn sha_is_safe(sha: &str) -> bool {
     !sha.is_empty() && sha.len() <= 64 && sha.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// Whether a branch name may be passed to git as an argument.
+///
+/// The caller is asking for a branch, so anything that means something else to
+/// the revision parser is refused rather than interpreted: a leading dash would
+/// be read as an option, and `..`, `~`, `^`, `:` and `@{` all select something
+/// other than the ref named. The remaining rules are the ones
+/// `git check-ref-format` enforces, so a name accepted here is a name git will
+/// recognise.
+fn ref_is_safe(name: &str) -> bool {
+    if name.is_empty() || name.len() > 255 {
+        return false;
+    }
+    if name.starts_with('-') || name.starts_with('/') || name.ends_with('/') {
+        return false;
+    }
+    if name.ends_with('.') || name.ends_with(".lock") || name.contains("//") {
+        return false;
+    }
+    if name.contains("..") || name.contains("@{") {
+        return false;
+    }
+    if name
+        .chars()
+        .any(|c| c.is_control() || c.is_whitespace() || "~^:?*[\\".contains(c))
+    {
+        return false;
+    }
+    // No path component may start with a dot or end in .lock.
+    name.split('/')
+        .all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
+}
+
 pub fn commit_files(
     registry: &WorkspaceRegistry,
     repo_root: &str,
@@ -867,7 +900,15 @@ pub fn commit_files(
         return Err(GitError::command("git diff-tree", "invalid commit sha"));
     }
 
-    let output = run_git(
+    // Two calls, and both against the first parent.
+    //
+    // git diff-tree honours only one of --name-status and --numstat, so asking
+    // for both at once silently drops the counts and every file reads as +0 -0.
+    // And without `-m --first-parent` a merge produces no output at all, so a
+    // reviewer stepping through a branch saw every merge as an empty commit;
+    // the first-parent diff is what the merge brought in, which is also what
+    // `commit_file_diff` already shows for one.
+    let statuses = run_git(
         &repo_root.workspace,
         Some(&repo_root.git_path),
         [
@@ -875,43 +916,36 @@ pub fn commit_files(
             OsStr::new("--no-commit-id"),
             OsStr::new("-r"),
             OsStr::new("-z"),
+            OsStr::new("-m"),
+            OsStr::new("--first-parent"),
             OsStr::new("--name-status"),
+            OsStr::new(sha),
+        ],
+        DEFAULT_TIMEOUT_SECS,
+    )?;
+    ensure_success(&statuses, "git diff-tree --name-status failed")?;
+    let counts = run_git(
+        &repo_root.workspace,
+        Some(&repo_root.git_path),
+        [
+            OsStr::new("diff-tree"),
+            OsStr::new("--no-commit-id"),
+            OsStr::new("-r"),
+            OsStr::new("-z"),
+            OsStr::new("-m"),
+            OsStr::new("--first-parent"),
             OsStr::new("--numstat"),
             OsStr::new(sha),
         ],
         DEFAULT_TIMEOUT_SECS,
     )?;
-    ensure_success(&output, "git diff-tree failed")?;
+    ensure_success(&counts, "git diff-tree --numstat failed")?;
 
-    let (name_status_bytes, numstat_bytes) = split_name_status_numstat(&output.stdout);
-    let mut files = parse_diff_tree_name_status(name_status_bytes);
-    apply_numstat(&mut files, numstat_bytes);
+    let mut files = parse_diff_tree_name_status(&statuses.stdout);
+    apply_numstat(&mut files, &counts.stdout);
     Ok(files)
 }
 
-fn split_name_status_numstat(bytes: &[u8]) -> (&[u8], &[u8]) {
-    let s = std::str::from_utf8(bytes).unwrap_or("");
-    let tokens: Vec<(usize, &str)> = s
-        .split('\0')
-        .scan(0usize, |off, t| {
-            let start = *off;
-            *off += t.len() + 1;
-            Some((start, t))
-        })
-        .collect();
-    let mut split_at = bytes.len();
-    for (idx, tok) in tokens.iter().enumerate() {
-        if tok.1.contains('\t') {
-            split_at = tok.0;
-            // Walk back: numstat for R/C with -z emits "<a>\t<r>" then two
-            // NUL-separated paths. The two trailing path tokens belong to the
-            // numstat block, not name-status.
-            let _ = idx;
-            break;
-        }
-    }
-    (&bytes[..split_at], &bytes[split_at..])
-}
 
 pub fn commit_file_diff(
     registry: &WorkspaceRegistry,
@@ -1114,6 +1148,75 @@ fn apply_numstat(files: &mut [GitCommitFileChange], bytes: &[u8]) {
             }
         }
     }
+}
+
+/// Pairs `--name-status -z` with `--numstat -z` for a review range.
+///
+/// Both list the same files in the same order but in different shapes. In
+/// name-status a record is `M\0path` and a rename is `R086\0old\0new`; in
+/// numstat it is `added\tremoved\tpath` and a rename leaves the path empty and
+/// puts `old` and `new` in the two records that follow. So the two are walked
+/// in step rather than joined by path, which a rename would break anyway.
+fn parse_range_files(name_status: &str, numstat: &str) -> Vec<GitRangeFile> {
+    let mut counts: Vec<(u32, u32, bool)> = Vec::new();
+    let mut numstat_fields = numstat.split('\0').filter(|f| !f.is_empty()).peekable();
+    while let Some(record) = numstat_fields.next() {
+        let mut parts = record.splitn(3, '\t');
+        let (Some(added), Some(removed)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        // `-` marks a binary file, where a line count would be a fiction.
+        let is_binary = added == "-" || removed == "-";
+        // A rename leaves the path empty here and follows with old and new.
+        if parts.next().is_none_or(str::is_empty) {
+            numstat_fields.next();
+            numstat_fields.next();
+        }
+        counts.push((
+            added.parse().unwrap_or(0),
+            removed.parse().unwrap_or(0),
+            is_binary,
+        ));
+    }
+
+    let mut out = Vec::new();
+    let mut records = name_status.split('\0').filter(|f| !f.is_empty());
+    let mut index = 0usize;
+    while let Some(status_field) = records.next() {
+        let Some(code) = status_field.chars().next() else {
+            continue;
+        };
+        let Some(first_path) = records.next() else { break };
+        let (path, original_path) = if code == 'R' || code == 'C' {
+            match records.next() {
+                Some(second) => (second.to_string(), Some(first_path.to_string())),
+                None => (first_path.to_string(), None),
+            }
+        } else {
+            (first_path.to_string(), None)
+        };
+        let (added, removed, is_binary) = counts.get(index).copied().unwrap_or((0, 0, false));
+        index += 1;
+        out.push(GitRangeFile {
+            path,
+            original_path,
+            status: code.to_string(),
+            status_label: status_label_for(code),
+            added,
+            removed,
+            is_binary,
+        });
+    }
+    out
+}
+
+/// Reads `rev-list --left-right --count base...head`, which prints the count on
+/// base first and the count on head second.
+fn parse_ahead_behind(line: &str) -> (u32, u32) {
+    let mut parts = line.split_whitespace();
+    let behind = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let ahead = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+    (ahead, behind)
 }
 
 fn status_label_for(c: char) -> String {
@@ -1430,5 +1533,436 @@ mod log_parse_tests {
         let out = record(&["not-a-sha", "A", "a@e.com", "1", "", "", "s", ""]);
 
         assert!(parse_log_records(&out).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod ref_safety_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_the_branch_names_people_actually_use() {
+        for name in [
+            "main",
+            "develop",
+            "origin/main",
+            "feature/pr-review",
+            "release/v1.2.0",
+            "fix_123",
+            "user.name/topic",
+        ] {
+            assert!(ref_is_safe(name), "{name} should be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_a_name_git_would_read_as_an_option() {
+        // A ref reaches git as an argument; a leading dash makes it a flag.
+        assert!(!ref_is_safe("--upload-pack=touch /tmp/pwn"));
+        assert!(!ref_is_safe("-x"));
+    }
+
+    #[test]
+    fn rejects_revision_syntax_rather_than_resolving_it() {
+        // The caller asks for a branch. Anything that means something else to
+        // the revision parser is refused instead of being interpreted.
+        for name in ["main..HEAD", "main...HEAD", "HEAD~1", "HEAD^", "main@{u}", "main:path"] {
+            assert!(!ref_is_safe(name), "{name} should be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_glob_and_shell_significant_characters() {
+        for name in ["ma?n", "ma*n", "ma[in]", "main\\x", "main space", "main\ttab"] {
+            assert!(!ref_is_safe(name), "{name:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_control_characters_and_the_empty_name() {
+        assert!(!ref_is_safe(""));
+        assert!(!ref_is_safe("main\nrm -rf /"));
+        assert!(!ref_is_safe("main\0"));
+        assert!(!ref_is_safe("main\x7f"));
+    }
+
+    #[test]
+    fn rejects_the_shapes_git_check_ref_format_forbids() {
+        for name in [
+            "main/",
+            "/main",
+            "main.lock",
+            "main//topic",
+            ".hidden",
+            "topic/.hidden",
+            "main.",
+        ] {
+            assert!(!ref_is_safe(name), "{name} should be rejected");
+        }
+    }
+
+    #[test]
+    fn bounds_the_length() {
+        assert!(!ref_is_safe(&"a".repeat(256)));
+        assert!(ref_is_safe(&"a".repeat(255)));
+    }
+}
+
+#[cfg(test)]
+mod range_parse_tests {
+    use super::*;
+
+    #[test]
+    fn pairs_name_status_with_numstat() {
+        let name_status = "M\0src/a.ts\0A\0src/b.ts\0D\0src/c.ts\0";
+        let numstat = "3\t1\tsrc/a.ts\x0010\t0\tsrc/b.ts\x000\t7\tsrc/c.ts\0";
+
+        let files = parse_range_files(name_status, numstat);
+
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].path, "src/a.ts");
+        assert_eq!(files[0].status, "M");
+        assert_eq!((files[0].added, files[0].removed), (3, 1));
+        assert_eq!(files[1].status_label, "Added");
+        assert_eq!(files[2].status_label, "Deleted");
+        assert_eq!((files[2].added, files[2].removed), (0, 7));
+    }
+
+    #[test]
+    fn reads_a_rename_as_two_paths() {
+        // -M reports a rename as `R<score>` with old and new, and numstat
+        // leaves its path empty and follows with the same pair, so the two
+        // lists only stay aligned if both halves are consumed together.
+        let name_status = "R086\0src/old.ts\0src/new.ts\0M\0src/after.ts\0";
+        let numstat = "10\t10\t\0src/old.ts\0src/new.ts\x004\t2\tsrc/after.ts\0";
+
+        let files = parse_range_files(name_status, numstat);
+
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "src/new.ts");
+        assert_eq!(files[0].original_path.as_deref(), Some("src/old.ts"));
+        assert_eq!(files[0].status, "R");
+        assert_eq!(files[0].status_label, "Renamed");
+        assert_eq!((files[0].added, files[0].removed), (10, 10));
+        // The file after a rename must still get its own counts.
+        assert_eq!(files[1].path, "src/after.ts");
+        assert_eq!((files[1].added, files[1].removed), (4, 2));
+    }
+
+    #[test]
+    fn marks_a_binary_file_instead_of_inventing_counts() {
+        let files = parse_range_files("M\0logo.png\0", "-\t-\tlogo.png\0");
+
+        assert!(files[0].is_binary);
+        assert_eq!((files[0].added, files[0].removed), (0, 0));
+    }
+
+    #[test]
+    fn keeps_a_file_whose_counts_never_arrived() {
+        let files = parse_range_files("M\0src/a.ts\0", "");
+
+        assert_eq!(files.len(), 1);
+        assert_eq!((files[0].added, files[0].removed), (0, 0));
+    }
+
+    #[test]
+    fn ignores_trailing_separators_and_blank_records() {
+        assert!(parse_range_files("", "").is_empty());
+        assert!(parse_range_files("\0\0", "\0\0").is_empty());
+    }
+
+    #[test]
+    fn reads_ahead_and_behind_in_the_order_git_prints_them() {
+        // `rev-list --left-right --count base...head` prints behind then ahead.
+        assert_eq!(parse_ahead_behind("4\t7"), (7, 4));
+        assert_eq!(parse_ahead_behind("0\t0"), (0, 0));
+        assert_eq!(parse_ahead_behind("nonsense"), (0, 0));
+    }
+
+}
+
+/// Branches a review can compare against.
+///
+/// Remote-tracking refs are listed as well as local ones because a review is
+/// normally against what the remote has, not a local copy that may have moved.
+pub fn branches(
+    registry: &WorkspaceRegistry,
+    repo_root: &str,
+    workspace: &WorkspaceEnv,
+) -> Result<GitBranchList> {
+    let repo_root = authorized_repo_root(registry, repo_root, workspace)?;
+    ensure_git_available(&repo_root.workspace)?;
+
+    let output = run_git(
+        &repo_root.workspace,
+        Some(&repo_root.git_path),
+        [
+            OsStr::new("for-each-ref"),
+            OsStr::new("--format=%(refname)"),
+            OsStr::new("refs/heads"),
+            OsStr::new("refs/remotes"),
+        ],
+        DEFAULT_TIMEOUT_SECS,
+    )?;
+    if output.timed_out {
+        return Err(GitError::TimedOut("git for-each-ref"));
+    }
+    ensure_success(&output, "git for-each-ref failed")?;
+
+    let mut local = Vec::new();
+    let mut remote = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if let Some(name) = line.strip_prefix("refs/heads/") {
+            if ref_is_safe(name) {
+                local.push(name.to_string());
+            }
+        } else if let Some(name) = line.strip_prefix("refs/remotes/") {
+            // `<remote>/HEAD` is a symbolic pointer at a branch already listed.
+            if !name.ends_with("/HEAD") && ref_is_safe(name) {
+                remote.push(name.to_string());
+            }
+        }
+    }
+    local.sort();
+    remote.sort();
+
+    let current = git_stdout_line_opt(
+        &repo_root.workspace,
+        &repo_root.git_path,
+        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+    )?
+    .filter(|name| ref_is_safe(name));
+
+    let default_base = pick_default_base(&local, &remote, current.as_deref(), || {
+        git_stdout_line_opt(
+            &repo_root.workspace,
+            &repo_root.git_path,
+            ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+        )
+        .ok()
+        .flatten()
+    });
+
+    Ok(GitBranchList {
+        current,
+        local,
+        remote,
+        default_base,
+    })
+}
+
+/// Branch a review should start from.
+///
+/// The remote's own HEAD is the best answer when it is set, since that is the
+/// branch pull requests target. Otherwise fall back to the conventional names,
+/// preferring the remote copy, and never to the branch being reviewed.
+fn pick_default_base(
+    local: &[String],
+    remote: &[String],
+    current: Option<&str>,
+    remote_head: impl FnOnce() -> Option<String>,
+) -> Option<String> {
+    let usable = |name: &String| Some(name.as_str()) != current;
+    if let Some(head) = remote_head() {
+        if remote.contains(&head) && Some(head.as_str()) != current {
+            return Some(head);
+        }
+    }
+    for candidate in ["main", "master", "develop", "trunk"] {
+        if let Some(found) = remote
+            .iter()
+            .find(|name| name.ends_with(&format!("/{candidate}")) && usable(name))
+        {
+            return Some(found.clone());
+        }
+        if let Some(found) = local.iter().find(|name| *name == candidate && usable(name)) {
+            return Some(found.clone());
+        }
+    }
+    remote
+        .iter()
+        .chain(local.iter())
+        .find(|name| usable(name))
+        .cloned()
+}
+
+/// What `head` adds on top of `base`, as a pull request would show it.
+///
+/// The diff is taken from the merge base, not from the tip of `base`, so
+/// commits that landed on the base branch after this one forked do not appear
+/// as changes the author made.
+pub fn range_summary(
+    registry: &WorkspaceRegistry,
+    repo_root: &str,
+    base: &str,
+    head: &str,
+    workspace: &WorkspaceEnv,
+) -> Result<GitRangeSummary> {
+    let repo_root = authorized_repo_root(registry, repo_root, workspace)?;
+    ensure_git_available(&repo_root.workspace)?;
+    if !ref_is_safe(base) || !ref_is_safe(head) {
+        return Err(GitError::command("git diff", "invalid branch name"));
+    }
+
+    let merge_base = git_stdout_line_opt(
+        &repo_root.workspace,
+        &repo_root.git_path,
+        ["merge-base", base, head],
+    )?
+    .ok_or_else(|| GitError::command("git merge-base", "branches share no history"))?;
+
+    let counts = git_stdout_line_opt(
+        &repo_root.workspace,
+        &repo_root.git_path,
+        [
+            "rev-list",
+            "--left-right",
+            "--count",
+            &format!("{base}...{head}"),
+        ],
+    )?
+    .unwrap_or_default();
+    let (ahead, behind) = parse_ahead_behind(&counts);
+
+    let name_status = run_git(
+        &repo_root.workspace,
+        Some(&repo_root.git_path),
+        [
+            OsStr::new("diff"),
+            OsStr::new("--no-color"),
+            OsStr::new("--name-status"),
+            OsStr::new("-M"),
+            OsStr::new("-z"),
+            OsStr::new(&merge_base),
+            OsStr::new(head),
+        ],
+        DEFAULT_TIMEOUT_SECS,
+    )?;
+    ensure_success(&name_status, "git diff --name-status failed")?;
+    let numstat = run_git(
+        &repo_root.workspace,
+        Some(&repo_root.git_path),
+        [
+            OsStr::new("diff"),
+            OsStr::new("--no-color"),
+            OsStr::new("--numstat"),
+            OsStr::new("-M"),
+            OsStr::new("-z"),
+            OsStr::new(&merge_base),
+            OsStr::new(head),
+        ],
+        DEFAULT_TIMEOUT_SECS,
+    )?;
+    ensure_success(&numstat, "git diff --numstat failed")?;
+
+    Ok(GitRangeSummary {
+        merge_base,
+        base: base.to_string(),
+        head: head.to_string(),
+        ahead,
+        behind,
+        files: parse_range_files(
+            &String::from_utf8_lossy(&name_status.stdout),
+            &String::from_utf8_lossy(&numstat.stdout),
+        ),
+    })
+}
+
+/// A file as it looked at the merge base and as it looks on the branch tip.
+///
+/// This is the whole-branch view of one file; reviewing a single commit uses
+/// `commit_file_diff`, which is scoped to that commit's parent.
+pub fn range_file_diff(
+    registry: &WorkspaceRegistry,
+    repo_root: &str,
+    base_rev: &str,
+    head_rev: &str,
+    path: &str,
+    original_path: Option<&str>,
+    workspace: &WorkspaceEnv,
+) -> Result<GitDiffContentResult> {
+    let repo_root = authorized_repo_root(registry, repo_root, workspace)?;
+    ensure_git_available(&repo_root.workspace)?;
+    // The base is a resolved merge base, the head a branch name.
+    if !sha_is_safe(base_rev) || !ref_is_safe(head_rev) {
+        return Err(GitError::command("git diff", "invalid revision"));
+    }
+    let resolved = resolve_within_repo(&repo_root.local_path, path)?;
+    let rel = resolved
+        .strip_prefix(&repo_root.local_path)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.replace('\\', "/"));
+    let original_rel = match original_path {
+        Some(orig) if !orig.is_empty() => {
+            let resolved_orig = resolve_within_repo(&repo_root.local_path, orig)?;
+            resolved_orig
+                .strip_prefix(&repo_root.local_path)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_else(|_| orig.replace('\\', "/"))
+        }
+        _ => rel.clone(),
+    };
+
+    let original = git_show_text(
+        &repo_root.workspace,
+        &repo_root.git_path,
+        &format!("{base_rev}:{original_rel}"),
+    )?;
+    let modified = git_show_text(
+        &repo_root.workspace,
+        &repo_root.git_path,
+        &format!("{head_rev}:{rel}"),
+    )?;
+
+    let mut diff_args: Vec<OsString> = vec![
+        "diff".into(),
+        "--no-color".into(),
+        "--no-ext-diff".into(),
+        "-M".into(),
+        base_rev.into(),
+        head_rev.into(),
+        "--".into(),
+        rel.clone().into(),
+    ];
+    if original_rel != rel {
+        diff_args.push(original_rel.clone().into());
+    }
+    let patch = run_git(
+        &repo_root.workspace,
+        Some(&repo_root.git_path),
+        diff_args,
+        DEFAULT_TIMEOUT_SECS,
+    )?;
+    ensure_success(&patch, "git diff <range> -- <path> failed")?;
+
+    let is_binary =
+        matches!(original, TextSource::Binary) || matches!(modified, TextSource::Binary);
+
+    Ok(GitDiffContentResult {
+        original_content: original.into_text(),
+        modified_content: modified.into_text(),
+        is_binary,
+        fallback_patch: String::from_utf8_lossy(&patch.stdout).into_owned(),
+        truncated: patch.truncated,
+    })
+}
+
+#[cfg(test)]
+mod commit_files_counts_tests {
+    use super::*;
+
+    #[test]
+    fn a_commit_file_list_carries_its_line_counts() {
+        // `git diff-tree` honours only one of --name-status and --numstat, so
+        // asking for both in one call returned name-status alone and every
+        // file reported +0 -0. The two lists now come from separate calls.
+        let name_status = b"M\x00TERAX.md\x00A\x00src/new.ts\x00";
+        let numstat = b"1\t1\tTERAX.md\x0042\t0\tsrc/new.ts\x00";
+
+        let mut files = parse_diff_tree_name_status(name_status);
+        apply_numstat(&mut files, numstat);
+
+        assert_eq!((files[0].added, files[0].removed), (1, 1));
+        assert_eq!((files[1].added, files[1].removed), (42, 0));
     }
 }

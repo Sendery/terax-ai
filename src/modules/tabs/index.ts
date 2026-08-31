@@ -26,6 +26,7 @@ export {
   type MermaidVisualLayout,
   nextActiveInSpace,
   type PreviewTab,
+  type PrReviewTab,
   type Tab,
   type TabPatch,
   type TerminalTab,
