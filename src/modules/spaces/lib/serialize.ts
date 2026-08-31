@@ -7,6 +7,7 @@ import {
   type MermaidTab,
   type MermaidVisualLayout,
   type PreviewTab,
+  type PrReviewTab,
   type Tab,
   type TabColor,
   type TerminalTab,
@@ -34,11 +35,30 @@ export type SerializedTab =
   | (SerializedTabBase & { kind: "preview"; url: string })
   | (SerializedTabBase & { kind: "markdown"; path: string })
   | (SerializedTabBase & {
+      kind: "pr-review";
+      repoRoot: string;
+      head: string;
+      base: string;
+    })
+  | (SerializedTabBase & {
       kind: "mermaid";
       title: string;
       source: string;
       visualLayout?: MermaidVisualLayout;
     });
+
+/** Mirrors the Rust-side check, so a stored name cannot reach git as a flag. */
+function isStorableRefName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 255 &&
+    !value.startsWith("-") &&
+    !value.includes("..") &&
+    !value.includes("@{") &&
+    !/[\s~^:?*[\\]|[\u0000-\u001f\u007f]/.test(value)
+  );
+}
 
 const MAX_MERMAID_LAYOUT_NODES = 256;
 const MAX_MERMAID_LAYOUT_COORDINATE = 100_000;
@@ -116,6 +136,7 @@ export function isSerializableTab(tab: Tab): boolean {
     case "preview":
     case "markdown":
     case "mermaid":
+    case "pr-review":
       return true;
     default:
       return false;
@@ -149,6 +170,14 @@ function serializeTab(tab: Tab): SerializedTab | null {
       return {
         kind: "markdown",
         path: tab.path,
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
+    case "pr-review":
+      return {
+        kind: "pr-review",
+        repoRoot: tab.repoRoot,
+        head: tab.head,
+        base: tab.base,
         ...(tab.color !== undefined && { color: tab.color }),
       };
     case "mermaid": {
@@ -282,6 +311,29 @@ function hydrateTab(
         path: s.path,
         ...color,
       } satisfies MarkdownTab;
+    case "pr-review": {
+      // Branch names reach git as arguments, so a stored name that would read
+      // as an option or a revision expression is dropped, not replayed.
+      if (
+        typeof s.repoRoot !== "string" ||
+        !s.repoRoot ||
+        !isStorableRefName(s.head) ||
+        !isStorableRefName(s.base)
+      ) {
+        return null;
+      }
+      return {
+        id: allocId(),
+        kind: "pr-review",
+        spaceId,
+        cold: true,
+        title: `Review ${s.head}`,
+        repoRoot: s.repoRoot,
+        head: s.head,
+        base: s.base,
+        ...color,
+      } satisfies PrReviewTab;
+    }
     case "mermaid": {
       if (typeof s.source !== "string") return null;
       const source = validateMermaidDraftSource(s.source);

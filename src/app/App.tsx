@@ -210,6 +210,8 @@ export default function App() {
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openPrReviewTab,
+    setPrReviewBase,
     moveTab,
     setTabPinned,
     closeTab,
@@ -950,19 +952,24 @@ export default function App() {
     activeTab?.kind === "editor" || activeTab?.kind === "markdown"
       ? activeTab.path
       : null;
-  const { sourceControl, toggleSourceControl, openGitGraphFromContext } =
-    useSourceControlContext({
-      activeTab,
-      tabs,
-      activeTerminalLeafCwd,
-      explorerRoot,
-      launchCwd,
-      launchCwdResolved,
-      home,
-      sidebarView,
-      cycleSidebarView,
-      openCommitHistoryTab,
-    });
+  const {
+    sourceControl,
+    toggleSourceControl,
+    openGitGraphFromContext,
+    openReviewFromContext,
+  } = useSourceControlContext({
+    activeTab,
+    tabs,
+    activeTerminalLeafCwd,
+    explorerRoot,
+    launchCwd,
+    launchCwdResolved,
+    home,
+    sidebarView,
+    cycleSidebarView,
+    openCommitHistoryTab,
+    openPrReviewTab,
+  });
   const explorerGitDecorations = usePreferencesStore(
     (s) => s.explorerGitDecorations,
   );
@@ -1323,6 +1330,13 @@ export default function App() {
     candidates: graphCandidates,
     groups: graphSourceGroups,
   } = useResolvedSession(graphAgentHint, graphBinding, terminalSources);
+
+  const handlePrReviewBaseChange = useCallback(
+    (tabId: number, base: string) => {
+      setPrReviewBase(tabId, base);
+    },
+    [setPrReviewBase],
+  );
 
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
@@ -2084,6 +2098,7 @@ export default function App() {
                         sourceControl={sourceControl}
                         onOpenDiff={openGitDiffTab}
                         onOpenGitGraph={openGitGraphFromContext}
+                        onOpenReview={openReviewFromContext}
                         onOpenFile={handleOpenFile}
                       />
                     )}
@@ -2122,6 +2137,7 @@ export default function App() {
                       onAiDiffAccept={(id) => respondToApproval(id, true)}
                       onAiDiffReject={(id) => respondToApproval(id, false)}
                       onOpenCommitFile={openCommitFileDiffTab}
+                      onPrReviewBaseChange={handlePrReviewBaseChange}
                       onGitHistorySearchHandle={setGitHistoryHandle}
                       onSetMarkdownView={setMarkdownView}
                       onMermaidSourceChange={updateMermaidSource}

@@ -137,6 +137,47 @@ pub struct GitLogEntry {
     pub deletions: u32,
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchList {
+    /// Checked-out branch, absent on a detached HEAD.
+    pub current: Option<String>,
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+    /// Branch a review should default to comparing against.
+    pub default_base: Option<String>,
+}
+
+/// One file changed across a review range.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRangeFile {
+    pub path: String,
+    /// Previous path when the change is a rename or copy.
+    pub original_path: Option<String>,
+    /// Porcelain status letter: A, M, D, R, C or T.
+    pub status: String,
+    pub status_label: String,
+    pub added: u32,
+    pub removed: u32,
+    pub is_binary: bool,
+}
+
+/// What a branch contains relative to the branch it would merge into.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRangeSummary {
+    /// Commit the two branches last shared, which is what the review diffs from.
+    pub merge_base: String,
+    pub base: String,
+    pub head: String,
+    /// Commits on head that base does not have.
+    pub ahead: u32,
+    /// Commits on base that head does not have, so the reviewer knows it is stale.
+    pub behind: u32,
+    pub files: Vec<GitRangeFile>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitPushResult {
