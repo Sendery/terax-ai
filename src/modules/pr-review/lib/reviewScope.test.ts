@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  basePointsAtRemote,
   fileDiffRequest,
   nextScopeAfterCommits,
   type ReviewScope,
@@ -62,5 +63,27 @@ describe("nextScopeAfterCommits", () => {
 
   it("falls back to the branch when the range is empty", () => {
     expect(nextScopeAfterCommits(COMMIT, [])).toEqual(BRANCH);
+  });
+});
+
+describe("basePointsAtRemote", () => {
+  const remotes = ["origin/main", "origin/qa", "fork/main"];
+
+  it("recognises a remote-tracking base", () => {
+    expect(basePointsAtRemote("origin/main", remotes)).toBe(true);
+  });
+
+  it("leaves a local branch alone", () => {
+    expect(basePointsAtRemote("main", remotes)).toBe(false);
+  });
+
+  it("does not go by the name, which a local branch may borrow", () => {
+    // `git branch origin/main` is legal. Only the ref list settles it, which
+    // is why the decision needs the list rather than a prefix match.
+    expect(basePointsAtRemote("origin/main", ["fork/main"])).toBe(false);
+  });
+
+  it("says no when the ref list is not known yet", () => {
+    expect(basePointsAtRemote("origin/main", [])).toBe(false);
   });
 });

@@ -63,3 +63,17 @@ export function nextScopeAfterCommits(
   if (scope.kind === "branch") return scope;
   return shas.includes(scope.sha) ? scope : { kind: "branch" };
 }
+
+/**
+ * Whether the base is a remote-tracking branch, and so worth fetching first.
+ *
+ * Decided from the repository's own ref list rather than the shape of the
+ * name: `git branch origin/main` is legal, and fetching because a local branch
+ * happens to be named like a remote one would be wrong.
+ */
+export function basePointsAtRemote(
+  base: string,
+  remoteBranches: readonly string[],
+): boolean {
+  return remoteBranches.includes(base);
+}

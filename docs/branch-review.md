@@ -43,7 +43,19 @@ its patch text rather than freezing the pane.
 ## What it does not do
 
 The review reads history: nothing here stages, commits, or writes to the
-repository. It also does not fetch — the base branch is compared as your last
-fetch left it, so run a fetch from the Source Control panel first if the remote
-has moved. Reviews are per branch and reopening returns to the one in progress;
-they survive a restart with the branches they were comparing.
+repository. Reviews are per branch and reopening returns to the one in
+progress; they survive a restart with the branches they were comparing.
+
+## Fetching
+
+When the base is a remote-tracking branch, Terax fetches before comparing, so
+the review is against what the remote actually has rather than a copy that may
+be days old. It happens on open, on switching base, and on refresh; the header
+says *Fetching the base…* while it runs.
+
+Whether a base is remote is decided from the repository's ref list, not from
+the look of the name — `git branch origin/main` is legal, and a local branch is
+never fetched for.
+
+If the remote cannot be reached the review still opens, against the refs your
+last fetch left, and the header shows **offline** with the reason on hover.

@@ -34,6 +34,7 @@ import {
   type DiffViewPrefs,
 } from "./lib/diffView";
 import {
+  basePointsAtRemote,
   fileDiffRequest,
   nextScopeAfterCommits,
   type ReviewScope,
@@ -107,22 +108,10 @@ export function PrReviewPane({ repoRoot, head, base, onBaseChange }: Props) {
   const [diff, setDiff] = useState<DiffState>({ kind: "idle" });
   const [prefs, setPrefs] = useState<DiffViewPrefs>(DEFAULT_DIFF_PREFS);
   const [loading, setLoading] = useState(true);
+  const [phase, setPhase] = useState<"fetching" | "reading">("reading");
+  /** Why the remote could not be reached, when it could not be. */
+  const [fetchNote, setFetchNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void native
-      .gitBranches(repoRoot)
-      .then((list) => {
-        if (!cancelled) setBranches(list);
-      })
-      .catch(() => {
-        if (!cancelled) setBranches(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [repoRoot]);
 
   // The range and its commits are one unit: the file list, the commit list and
   // the scope all have to agree about which revisions are in play. Loading is a
@@ -132,7 +121,33 @@ export function PrReviewPane({ repoRoot, head, base, onBaseChange }: Props) {
     async (signal: { cancelled: boolean }) => {
       setLoading(true);
       setError(null);
+      setFetchNote(null);
       try {
+        // The ref list comes first because it settles whether the base is a
+        // remote-tracking branch, and so whether the comparison would be
+        // against a stale copy of it.
+        const list = await native.gitBranches(repoRoot);
+        if (signal.cancelled) return;
+        setBranches(list);
+
+        if (basePointsAtRemote(base, list.remote)) {
+          setPhase("fetching");
+          try {
+            await native.gitFetch(repoRoot);
+          } catch (cause) {
+            // Offline is not a reason to refuse the review: it just means the
+            // base is as the last fetch left it, and saying so beats a diff
+            // that quietly compares against something older than it looks.
+            if (!signal.cancelled) {
+              setFetchNote(
+                cause instanceof Error ? cause.message : String(cause),
+              );
+            }
+          }
+          if (signal.cancelled) return;
+        }
+        setPhase("reading");
+
         const next = await native.gitRangeSummary(repoRoot, base, head);
         const log = await native.gitLog(repoRoot, { limit: 200 });
         if (signal.cancelled) return;
@@ -327,6 +342,15 @@ export function PrReviewPane({ repoRoot, head, base, onBaseChange }: Props) {
           </PopoverContent>
         </Popover>
 
+        {fetchNote ? (
+          <span
+            className="shrink-0 text-[10.5px] text-amber-600 dark:text-amber-400"
+            title={`Could not reach the remote: ${fetchNote}`}
+          >
+            offline
+          </span>
+        ) : null}
+
         {summary ? (
           <span className="shrink-0 tabular-nums text-[10.5px] text-muted-foreground">
             {summary.ahead} ahead
@@ -470,7 +494,9 @@ export function PrReviewPane({ repoRoot, head, base, onBaseChange }: Props) {
               {loading && !scopeFiles ? (
                 <div className="flex items-center gap-2 px-2 py-3 text-[11px] text-muted-foreground">
                   <Spinner className="size-3" />
-                  Reading the branch…
+                  {phase === "fetching"
+                    ? "Fetching the base…"
+                    : "Reading the branch…"}
                 </div>
               ) : (scopeFiles?.length ?? 0) === 0 ? (
                 <p className="px-2 py-3 text-[11px] text-muted-foreground">
