@@ -27,7 +27,10 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import type { ThemePref } from "@/modules/settings/store";
+import type {
+  AgentSessionRestorePolicy,
+  ThemePref,
+} from "@/modules/settings/store";
 import {
   TERMINAL_FONT_SIZES,
   TERMINAL_SCROLLBACK_PRESETS,
@@ -37,6 +40,7 @@ import {
   setEditorAutoSave,
   setEditorAutoSaveDelay,
   setExplorerGitDecorations,
+  setRestoreAgentSessions,
   setRestoreWindowState,
   setShowHidden,
   setTerminalFontFamily,
@@ -113,6 +117,9 @@ export function GeneralSection() {
   const terminalScrollback = usePreferencesStore((s) => s.terminalScrollback);
   const zoomLevel = usePreferencesStore((s) => s.zoomLevel);
   const agentNotifications = usePreferencesStore((s) => s.agentNotifications);
+  const restoreAgentSessions = usePreferencesStore(
+    (s) => s.restoreAgentSessions,
+  );
   const [waker, setWaker] = useState<WakerStatus>(WAKER_UNAVAILABLE);
   const [wakerBusy, setWakerBusy] = useState(false);
 
@@ -440,6 +447,32 @@ export function GeneralSection() {
             checked={agentNotifications}
             onCheckedChange={(v) => void setAgentNotifications(v)}
           />
+        </SettingRow>
+        <SettingRow
+          title="Reopen agent sessions"
+          description="Pi, Claude Code and Codex sessions that were running when Terax closed can be resumed on the next launch, in the tab they ran in."
+        >
+          <Select
+            value={restoreAgentSessions}
+            onValueChange={(v) =>
+              void setRestoreAgentSessions(v as AgentSessionRestorePolicy)
+            }
+          >
+            <SelectTrigger size="sm" className="h-8 w-36 text-[12px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ask" className="text-[12px]">
+                Ask
+              </SelectItem>
+              <SelectItem value="always" className="text-[12px]">
+                Always
+              </SelectItem>
+              <SelectItem value="never" className="text-[12px]">
+                Never
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
       </div>
 

@@ -158,6 +158,8 @@ export type Preferences = {
   lastWslDistro: string | null;
   zoomLevel: number;
   agentNotifications: boolean;
+  /** What to do with the agent sessions that were live at the last shutdown. */
+  restoreAgentSessions: AgentSessionRestorePolicy;
   shortcuts: Record<ShortcutId, KeyBinding[]>;
   editorAutoSave: boolean;
   editorAutoSaveDelay: number;
@@ -217,6 +219,29 @@ const KEY_TERMINAL_SCROLLBACK = "terminalScrollback";
 const KEY_LAST_WSL_DISTRO = "lastWslDistro";
 const KEY_ZOOM_LEVEL = "zoomLevel";
 const KEY_AGENT_NOTIFICATIONS = "agentNotifications";
+const KEY_RESTORE_AGENT_SESSIONS = "restoreAgentSessions";
+
+export const AGENT_SESSION_RESTORE_POLICIES = [
+  "ask",
+  "always",
+  "never",
+] as const;
+export type AgentSessionRestorePolicy =
+  (typeof AGENT_SESSION_RESTORE_POLICIES)[number];
+export function isAgentSessionRestorePolicy(
+  value: unknown,
+): value is AgentSessionRestorePolicy {
+  return (
+    typeof value === "string" &&
+    (AGENT_SESSION_RESTORE_POLICIES as readonly string[]).includes(value)
+  );
+}
+
+function coerceRestorePolicy(value: unknown): AgentSessionRestorePolicy {
+  return isAgentSessionRestorePolicy(value)
+    ? value
+    : DEFAULT_PREFERENCES.restoreAgentSessions;
+}
 const KEY_SHORTCUTS = "shortcuts";
 const KEY_EDITOR_AUTO_SAVE = "editorAutoSave";
 const KEY_EDITOR_AUTO_SAVE_DELAY = "editorAutoSaveDelay";
@@ -283,6 +308,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lastWslDistro: null,
   zoomLevel: 1.0,
   agentNotifications: true,
+  restoreAgentSessions: "ask",
   shortcuts: {} as Record<ShortcutId, KeyBinding[]>,
   editorAutoSave: false,
   editorAutoSaveDelay: 1000,
@@ -445,6 +471,9 @@ export async function loadPreferences(): Promise<Preferences> {
     agentNotifications:
       get<boolean>(KEY_AGENT_NOTIFICATIONS) ??
       DEFAULT_PREFERENCES.agentNotifications,
+    restoreAgentSessions: coerceRestorePolicy(
+      get<unknown>(KEY_RESTORE_AGENT_SESSIONS),
+    ),
     shortcuts:
       get<Record<ShortcutId, KeyBinding[]>>(KEY_SHORTCUTS) ??
       DEFAULT_PREFERENCES.shortcuts,
@@ -515,6 +544,12 @@ export async function setAutostart(value: boolean): Promise<void> {
 
 export async function setRestoreWindowState(value: boolean): Promise<void> {
   await writePref(KEY_RESTORE_WINDOW, value);
+}
+
+export async function setRestoreAgentSessions(
+  value: AgentSessionRestorePolicy,
+): Promise<void> {
+  await writePref(KEY_RESTORE_AGENT_SESSIONS, value);
 }
 
 export async function setUpdateChannel(value: UpdateChannel): Promise<void> {
@@ -766,6 +801,7 @@ export async function onPreferencesChange(
     [KEY_LAST_WSL_DISTRO]: "lastWslDistro",
     [KEY_ZOOM_LEVEL]: "zoomLevel",
     [KEY_AGENT_NOTIFICATIONS]: "agentNotifications",
+    [KEY_RESTORE_AGENT_SESSIONS]: "restoreAgentSessions",
     [KEY_SHORTCUTS]: "shortcuts",
     [KEY_EDITOR_AUTO_SAVE]: "editorAutoSave",
     [KEY_EDITOR_AUTO_SAVE_DELAY]: "editorAutoSaveDelay",

@@ -8,6 +8,7 @@ export {
   leafIdForPty,
   navigateFocusedBlocks,
   respawnSession,
+  submitToLeaf,
   whenSessionReady,
   writeToSession,
 } from "./lib/useTerminalSession";

@@ -412,6 +412,17 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     });
   }, [activeId, booted]);
 
+  // Spawns a restored tab where it sits, without stealing focus. Session
+  // restore needs the shell of every reopened agent, not just the focused one,
+  // and activation can only warm one tab.
+  const warmTab = useCallback((tabId: number) => {
+    setTabs((curr) => {
+      const t = curr.find((x) => x.id === tabId);
+      if (!t?.cold) return curr;
+      return curr.map((x) => (x.id === tabId ? { ...x, cold: false } : x));
+    });
+  }, []);
+
   const allocId = useCallback(() => nextIdRef.current++, []);
 
   const markBooted = useCallback(() => setBooted(true), []);
@@ -1319,6 +1330,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     moveTab,
     setTabPinned,
     newTabInSpace,
+    warmTab,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,

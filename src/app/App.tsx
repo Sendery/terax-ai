@@ -16,7 +16,10 @@ import {
   AGENT_MONITOR_MIN_WIDTH,
   AgentMonitorPanel,
   AgentNotificationsBridge,
+  AgentRestoreDialog,
   useAgentMonitorPanel,
+  useAgentSessionCapture,
+  useAgentSessionRestore,
   useAgentStore,
 } from "@/modules/agents";
 import { captureSurface } from "@/modules/capture";
@@ -189,6 +192,7 @@ export default function App() {
     reorderTab,
     reorderTabByGap,
     newTabInSpace,
+    warmTab,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,
@@ -314,6 +318,35 @@ export default function App() {
     activeId,
     activeSpaceId: activeSpaceId ?? DEFAULT_SPACE_ID,
     enabled: spacesHydrated,
+  });
+
+  const restoreAgentSessionsPref = usePreferencesStore(
+    (s) => s.restoreAgentSessions,
+  );
+  // Preferences hydrate asynchronously, and asking before they land would
+  // ignore a stored "never".
+  const prefsHydrated = usePreferencesStore((s) => s.hydrated);
+  const getTabsForRestore = useCallback(() => tabsRef.current, []);
+  const knownSpaceIds = useCallback(
+    () => useSpaces.getState().spaces.map((s) => s.id),
+    [],
+  );
+  const agentRestore = useAgentSessionRestore({
+    ready: spacesHydrated && prefsHydrated,
+    policy: restoreAgentSessionsPref,
+    shellFlavor: IS_WINDOWS ? "windows" : "posix",
+    getTabs: getTabsForRestore,
+    knownSpaceIds,
+    newTabInSpace,
+    warmTab,
+    setActiveId,
+  });
+  // Only starts once the restore decision is made, so the snapshot it
+  // overwrites is never the one still being offered to the user. Turning the
+  // feature off stops the writing too, so it costs nothing when unwanted.
+  useAgentSessionCapture({
+    tabs,
+    enabled: agentRestore.settled && restoreAgentSessionsPref !== "never",
   });
 
   const prevSpaceRef = useRef(activeSpaceId);
@@ -2361,6 +2394,12 @@ export default function App() {
               closeTaskEditor();
             }}
             onCancel={closeTaskEditor}
+          />
+
+          <AgentRestoreDialog
+            sessions={agentRestore.pending}
+            onRestore={agentRestore.restore}
+            onDismiss={agentRestore.dismiss}
           />
 
           <CloseDialogs
