@@ -49,6 +49,28 @@ describe("Pi extension", () => {
     return { visual: tools.find((tool) => tool.name === "terax_visual_qa"), dependencies, call, discover, runVisual };
   }
 
+  function speakHarness() {
+    const tools: RegisteredTool[] = [];
+    const call = vi.fn(async () => ({
+      voiceId: "builtin-es-dora",
+      chunks: 2,
+      truncated: false,
+      started: true,
+    }));
+    const discover = vi.fn(async () => ({
+      version: 1 as const, pid: 123, port: 4000, token: "token",
+    }));
+    createExtension({
+      discover,
+      createClient: () => ({ call }),
+      hostEnv: { TERAX_TERMINAL: "1" },
+    } as unknown as ExtensionDependencies)({
+      registerTool: (tool: RegisteredTool) => tools.push(tool),
+      on: () => {},
+    } as never);
+    return { speak: tools.find((tool) => tool.name === "terax_speak"), call, discover };
+  }
+
   function registerWith(env: Record<string, string | undefined>) {
     const tools: RegisteredTool[] = [];
     const events: Record<string, Array<(...a: unknown[]) => unknown>> = {};
@@ -81,6 +103,7 @@ describe("Pi extension", () => {
       "terax_status",
       "terax_get_state",
       "terax_call",
+      "terax_speak",
       "terax_wait",
       "terax_development_guide",
       "terax_visual_qa",
@@ -404,6 +427,79 @@ describe("Pi extension", () => {
     )).resolves.toMatchObject({ details: { surface: "settings" } });
     expect(harness.call).toHaveBeenCalledTimes(2);
     expect(harness.call.mock.calls.every(([command]) => command === "app.snapshot")).toBe(true);
+  });
+
+  it("registers terax_speak only inside Terax", () => {
+    expect(
+      registerWith({ TERAX_TERMINAL: "1" }).tools.map((tool) => tool.name),
+    ).toContain("terax_speak");
+    expect(
+      registerWith({ TERM_PROGRAM: "Apple_Terminal" }).tools.map(
+        (tool) => tool.name,
+      ),
+    ).not.toContain("terax_speak");
+  });
+
+  it("forwards the speech payload to tts.speak", async () => {
+    const harness = speakHarness();
+
+    await expect(
+      harness.speak?.execute("speak-1", {
+        text: "  The build finished.  ",
+        language: "es-ES",
+        voiceId: "builtin-es-dora",
+      }),
+    ).resolves.toMatchObject({
+      details: { result: { voiceId: "builtin-es-dora", started: true } },
+    });
+    expect(harness.call).toHaveBeenCalledWith("tts.speak", {
+      text: "The build finished.",
+      language: "es-ES",
+      voiceId: "builtin-es-dora",
+    });
+  });
+
+  it("omits the optional speech fields it was not given", async () => {
+    const harness = speakHarness();
+
+    await harness.speak?.execute("speak-2", { text: "Done." });
+
+    expect(harness.call).toHaveBeenCalledWith("tts.speak", { text: "Done." });
+  });
+
+  it("rejects empty speech text before any transport", async () => {
+    const harness = speakHarness();
+
+    await expect(
+      harness.speak?.execute("speak-3", { text: "   " }),
+    ).rejects.toThrow("terax_speak requires text to speak");
+    expect(harness.discover).not.toHaveBeenCalled();
+    expect(harness.call).not.toHaveBeenCalled();
+  });
+
+  it("declares terax_speak among the available capabilities", async () => {
+    const { tools } = registerWith({ TERAX_TERMINAL: "1" });
+    const status = tools.find((tool) => tool.name === "terax_status");
+    const result = await status?.execute("s2", {});
+    expect(
+      (result?.details as { capabilities: string[] }).capabilities,
+    ).toContain("terax_speak");
+  });
+
+  it("allowlists every local speech command", () => {
+    for (const id of [
+      "tts.status",
+      "tts.start",
+      "tts.stop",
+      "tts.install",
+      "tts.download",
+      "tts.voices",
+      "tts.speak",
+      "tts.stopSpeaking",
+    ]) {
+      expect(isTeraxCommandId(id), id).toBe(true);
+      expect(TERAX_COMMAND_IDS).toContain(id);
+    }
   });
 
   it("waits without touching Terax transport", async () => {

@@ -125,6 +125,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** harden the published manifest (`scripts/publish-extension.mjs` / `pi-extension-lib.mjs`): promote every non-host runtime dep into `dependencies`, keep only host-provided packages (`@earendil-works/pi-coding-agent`) as peers, and drop dev scripts/deps. Deliver release-asset extensions through a Terax-driven install into a local path that Pi loads, not through Pi's git/npm auto-resolution.
 - **Verification:** `scripts/pi-extension-lib.test.mjs` asserts the hardened manifest; `node scripts/publish-extension.mjs <v> --no-upload --out-dir <dir>` then `tar tzf` confirms `dependencies.typebox` and the `pi` contract are present in the packed `package.json`.
 
+### Numeric ids must have the same JSON type on both sides of `invoke`
+
+- **Trigger:** a Tauri command returns or accepts an id, offset, port or count (for example a background job id typed `u32` in Rust).
+- **Failure mode:** the TypeScript wrapper declares it as `string` (or passes a numeric string), everything type-checks and lints clean, and the call fails at runtime inside Tauri's argument deserializer with an opaque message. Nothing in the frontend build catches it, because the boundary is JSON, not types.
+- **Prevention:** mirror the Rust type exactly in the `invoke<T>()` wrapper and in the command payload: an integer stays a number end to end, and only the display layer formats it. Keep every wrapper for one Rust module in a single typed `native.ts` so the mapping is reviewable in one place.
+- **Verification:** call the command once from the running app (or an integration test) with a real id and assert the returned value's `typeof`, rather than trusting the declared type.
+
 ### Rejection must be side-effect free
 
 - **Trigger:** invalid enum values, malformed payloads, or nonexistent target IDs.
@@ -216,6 +223,57 @@ A row is complete only when implementation and verification evidence both exist.
 - **Failure mode:** the request fails silently on any endpoint that redirects to a different host (for example a GitHub release URL redirecting `github.com` -> `*.githubusercontent.com`, or any CDN hand-off), because `build_safe_client`'s SSRF policy pins to one host's resolved IPs and stops cross-host redirects by design.
 - **Prevention:** build a purpose-specific client for downloads whose redirect policy follows only `https` and only an explicit host allowlist (e.g. `github.com` plus `*.githubusercontent.com`); derive the saved filename from the original URL, not the redirect target, and reject path separators/`..`.
 - **Verification:** exercise the real endpoint (a temporary, uncommitted integration test that downloads the actual asset confirms the redirect is followed and the full body arrives), plus unit tests for the host allowlist and filename guard.
+
+## Local Sidecars and Python Runtimes
+
+### espeak-ng aborts the process when its data path is too long
+
+- **Trigger:** driving espeak-ng (through `phonemizer-fork` / `espeakng-loader`, as the Kokoro adapter does) from a directory inside the app's local data dir.
+- **Failure mode:** espeak-ng caps its data path at 159 characters and does not report an error: it aborts the process. The sidecar dies mid-request with no Python traceback, which reads like a crash in the model rather than a path-length limit.
+- **Prevention:** copy the espeak data into a short path under the private root (`<root>/tmp`) and point `EspeakWrapper.set_data_path` at the copy; give every child process a `TMPDIR` inside that same short root so nothing derives a longer path at runtime. Keep the private root itself short.
+- **Verification:** synthesize one Spanish sentence (the language that needs G2P) from a deeply nested install path and confirm the sidecar survives and returns audio.
+
+### `uv` writes outside its install dir unless told not to
+
+- **Trigger:** bootstrapping a private Python with `uv python install`.
+- **Failure mode:** `uv` drops a `python` shim into `~/.local/bin`, which is a mutation of the user's machine the feature promised not to make, and a user-level `uv.toml` can redirect the package index so the pinned requirements resolve from somewhere unexpected.
+- **Prevention:** pass `--no-bin` (or `UV_PYTHON_INSTALL_BIN=0`) and `--no-config` on every `uv` invocation, and set `UV_PYTHON_INSTALL_DIR`, `UV_CACHE_DIR` and `HF_HOME` into the private root. Sanitize the child environment: keep `PATH`, `HOME` and the explicit `UV_*`/`HF_*` variables, drop `PYTHONPATH`, `VIRTUAL_ENV`, `CONDA_*` and `PIP_*`.
+- **Verification:** install into a scratch root and confirm `~/.local/bin` gained nothing and the private root holds the interpreter; re-run with a hostile `uv.toml` in place and confirm the resolved index is unchanged.
+
+### A model that pip-installs at first use raises `SystemExit` in a handler thread
+
+- **Trigger:** a Python dependency that fetches something on demand at first use (misaki downloads a spaCy model through pip the first time it phonemizes English).
+- **Failure mode:** the download runs inside the uv-managed virtual environment where pip is not the installer of record, fails, and calls `sys.exit`, which raises `SystemExit`. `SystemExit` is not an `Exception`, so an `except Exception` handler does not catch it and the request thread dies without a response.
+- **Prevention:** pin the model wheel in the engine's requirements so nothing is fetched at request time, and catch `SystemExit` (or `BaseException` narrowed deliberately) in the request handler so a library that exits becomes a 500 with a message instead of a hung connection.
+- **Verification:** run the first English synthesis in a fresh venv with the network blocked and confirm the handler answers with an error instead of hanging.
+
+### An engine that prints to stdout corrupts the sidecar handshake
+
+- **Trigger:** a sidecar whose parent reads a single ready line from the child's stdout, wrapping libraries that log freely (torch, transformers, huggingface_hub progress bars).
+- **Failure mode:** a library banner lands on stdout before or after the ready line, so the parent's line parse fails or reads a banner as the handshake, and the start times out with no useful log.
+- **Prevention:** print the one ready line (`{"ready":true,"port":N}`), flush it, then rebind `sys.stdout` to `sys.stderr` for the rest of the process so every later print is captured as a log without touching the protocol channel.
+- **Verification:** start the sidecar with a library that prints a banner and confirm the parent still parses the ready line and the banner shows up in the log file.
+
+### Killing a child without reaping it leaves a zombie for the app's lifetime
+
+- **Trigger:** stopping a spawned sidecar on Unix, whether from a stop command, a drop implementation or app exit.
+- **Failure mode:** `kill` only sends the signal. Without a `wait`, the child stays a zombie in the process table for as long as the app lives, so repeated start and stop cycles accumulate defunct processes and the app looks like it leaks processes.
+- **Prevention:** kill and then wait for the child in the same path, including the `Drop` implementation, and treat an already-exited child as success.
+- **Verification:** start and stop an engine several times and confirm no defunct child of the app remains.
+
+### HTTP keep-alive with an unread request body corrupts the next request
+
+- **Trigger:** a small standard-library HTTP server that answers a request with an error before reading the body (a 400 on a bad payload, a 401 on a bad token).
+- **Failure mode:** the unread body stays in the socket buffer, and with HTTP/1.1 keep-alive the next request on that connection starts parsing at the leftover bytes. The following request fails with a nonsense parse error that looks unrelated to the request that caused it.
+- **Prevention:** either drain the body before answering, or close the connection on every error response (`Connection: close` plus `close_connection = True`). Cap the body size before reading it so a large body cannot be used to stall the server.
+- **Verification:** send a rejected request followed immediately by a valid one on the same connection and assert the second answer is correct.
+
+### The bridge's 15 s UI timeout bounds every command, including slow native work
+
+- **Trigger:** exposing a command that starts a process, loads a model, or otherwise runs for tens of seconds (engine start, first synthesis, a large download).
+- **Failure mode:** the Pi bridge only waits 15 seconds for the UI to answer, so the caller gets a `timeout` error while the work is still running and succeeds later. Retrying starts the work twice.
+- **Prevention:** make such commands return as soon as the work is accepted (`{ starting: true }`, `{ jobId }`, `{ started: true }`), keep the failure path observable through a status command, and let the caller poll. Do not raise the bridge timeout to accommodate slow work.
+- **Verification:** call the command on a cold machine and confirm it answers well inside the timeout, and that the status command reports both the in-progress state and the eventual failure message.
 
 ## Reading Another Tool's Data
 

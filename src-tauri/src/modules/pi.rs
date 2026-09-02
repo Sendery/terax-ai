@@ -212,6 +212,14 @@ fn is_allowed_command(command: &str) -> bool {
             | "tasks.pauseAll"
             | "tasks.resumeAll"
             | "tasks.wake"
+            | "tts.status"
+            | "tts.start"
+            | "tts.stop"
+            | "tts.install"
+            | "tts.download"
+            | "tts.voices"
+            | "tts.speak"
+            | "tts.stopSpeaking"
     )
 }
 
@@ -261,7 +269,7 @@ fn cache_file_path() -> Result<PathBuf, String> {
     Ok(base.join("terax-ai").join("pi-bridge.json"))
 }
 
-fn random_token() -> Result<String, String> {
+pub(crate) fn random_token() -> Result<String, String> {
     let mut bytes = [0_u8; 32];
     fill_random(&mut bytes)?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
@@ -580,6 +588,26 @@ mod tests {
             let line = format!(
                 r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#
             );
+            let request = decode_request_line(line.as_bytes(), "tok")
+                .unwrap_or_else(|_| panic!("{command} must be allowed"));
+
+            assert_eq!(request.command, command);
+        }
+    }
+
+    #[test]
+    fn allows_every_tts_command() {
+        for command in [
+            "tts.status",
+            "tts.start",
+            "tts.stop",
+            "tts.install",
+            "tts.download",
+            "tts.voices",
+            "tts.speak",
+            "tts.stopSpeaking",
+        ] {
+            let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
             let request = decode_request_line(line.as_bytes(), "tok")
                 .unwrap_or_else(|_| panic!("{command} must be allowed"));
 

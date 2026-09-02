@@ -1,6 +1,13 @@
 import { leafIds } from "@/modules/terminal";
 import type { SidebarViewId } from "@/modules/sidebar";
 import type { Tab, TabColor } from "@/modules/tabs";
+import {
+  TTS_ENGINES,
+  TTS_MODELS,
+  type TtsEngineId,
+  type TtsModelId,
+} from "@/modules/tts/lib/engines";
+import type { TtsStatus } from "@/modules/tts/lib/native";
 
 export type SnapshotTab =
   | {
@@ -125,6 +132,22 @@ export type SnapshotTask = {
   state: "running" | "queued" | "idle";
 };
 
+/** Local speech state as coordination data only: which engines and models are
+ *  on disk, which are up, and whether this window is speaking. Never the text
+ *  being read, never a sidecar token, never a sample path. */
+export type SnapshotTts = {
+  engines: { id: TtsEngineId; installed: boolean; running: boolean }[];
+  models: { id: TtsModelId; downloaded: boolean }[];
+  speaking: boolean;
+};
+
+export type SnapshotTtsInput = {
+  /** Last status read by this window, or null when nothing has read it yet.
+   *  The snapshot never invokes Rust to fill it in. */
+  status: TtsStatus | null;
+  speaking: boolean;
+};
+
 export type AppSnapshot = {
   version: 1;
   activeTabId: number | null;
@@ -138,6 +161,7 @@ export type AppSnapshot = {
     paused: boolean;
     tasks: SnapshotTask[];
   };
+  tts?: SnapshotTts;
 };
 
 export type AppSnapshotInput = {
@@ -152,6 +176,7 @@ export type AppSnapshotInput = {
     paused: boolean;
     tasks: SnapshotTaskInput[];
   };
+  tts?: SnapshotTtsInput;
 };
 
 export type SnapshotTaskInput = {
@@ -187,6 +212,27 @@ function serializeTask(task: SnapshotTaskInput): SnapshotTask {
     runCount: task.runCount,
     ...(task.maxRuns !== undefined ? { maxRuns: task.maxRuns } : {}),
     state: task.running ? "running" : task.queued ? "queued" : "idle",
+  };
+}
+
+function serializeTts(input: SnapshotTtsInput): SnapshotTts {
+  const engines = input.status?.engines ?? [];
+  const models = input.status?.models ?? [];
+  return {
+    engines: TTS_ENGINES.map((id) => {
+      const entry = engines.find((candidate) => candidate.id === id);
+      return {
+        id,
+        installed: entry?.installed ?? false,
+        running: entry?.running ?? false,
+      };
+    }),
+    models: TTS_MODELS.map((id) => ({
+      id,
+      downloaded:
+        models.find((candidate) => candidate.id === id)?.downloaded ?? false,
+    })),
+    speaking: input.speaking,
   };
 }
 
@@ -341,5 +387,6 @@ export function buildAppSnapshot(input: AppSnapshotInput): AppSnapshot {
           },
         }
       : {}),
+    ...(input.tts ? { tts: serializeTts(input.tts) } : {}),
   };
 }

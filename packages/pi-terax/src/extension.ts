@@ -167,6 +167,50 @@ const defaultDependencies: ExtensionDependencies = {
   platform: process.platform,
 };
 
+function createSpeakTool(dependencies: ExtensionDependencies) {
+  return defineTool({
+    name: "terax_speak",
+    label: "Speak through Terax",
+    description:
+      "Read a short text aloud on the user's machine with Terax's local speech engine. Returns as soon as playback starts, not when it ends. Use it for confirmations and requested summaries, never to dump logs or long output. Call terax_call with tts.voices to list voices and with tts.status to follow progress.",
+    parameters: Type.Object({
+      text: Type.String({
+        minLength: 1,
+        maxLength: 8192,
+        description:
+          "Plain prose to speak. Markup, code and ANSI noise are spoken literally or stripped, so write it as it should sound.",
+      }),
+      language: Type.Optional(
+        Type.Union([Type.Literal("es-ES"), Type.Literal("en-US")], {
+          description:
+            "Language whose default voice profile should speak. Omit to use the user's preferred language.",
+        }),
+      ),
+      voiceId: Type.Optional(
+        Type.String({
+          minLength: 1,
+          description:
+            "Voice profile id from tts.voices. Wins over language when both are given.",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, signal) {
+      const text = typeof params.text === "string" ? params.text.trim() : "";
+      if (text.length === 0) {
+        throw new Error("terax_speak requires text to speak");
+      }
+      const discovery = await dependencies.discover({ signal });
+      const client = dependencies.createClient(discovery, signal);
+      const result = await client.call("tts.speak", {
+        text,
+        ...(params.language === undefined ? {} : { language: params.language }),
+        ...(params.voiceId === undefined ? {} : { voiceId: params.voiceId }),
+      });
+      return textResult(JSON.stringify(result, null, 2), { result });
+    },
+  });
+}
+
 function createStatusTool(dependencies: ExtensionDependencies) {
   return defineTool({
     name: "terax_status",
@@ -180,6 +224,7 @@ function createStatusTool(dependencies: ExtensionDependencies) {
         ? [
             "terax_get_state",
             "terax_call",
+            "terax_speak",
             "terax_wait",
             "terax_development_guide",
             "terax_visual_qa",
@@ -326,6 +371,7 @@ export function createExtension(
       registerMonitorLifecycle(pi);
       pi.registerTool(getStateTool);
       pi.registerTool(callTool);
+      pi.registerTool(createSpeakTool(dependencies));
       pi.registerTool(waitTool);
       pi.registerTool(developmentGuideTool);
       pi.registerTool(createVisualQaTool(dependencies));

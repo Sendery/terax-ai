@@ -21,6 +21,18 @@ import {
   type TaskMode,
   type TaskTarget,
 } from "@/modules/tasks/lib/task";
+import { DEFAULT_MAX_TOTAL } from "@/modules/tts/lib/chunk";
+import {
+  isTtsEngineId,
+  isTtsLanguage,
+  isTtsModelId,
+  TTS_ENGINES,
+  TTS_LANGUAGES,
+  TTS_MODELS,
+  type TtsEngineId,
+  type TtsLanguage,
+  type TtsModelId,
+} from "@/modules/tts/lib/engines";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
@@ -76,6 +88,14 @@ export const COMMAND_IDS = [
   "tasks.pauseAll",
   "tasks.resumeAll",
   "tasks.wake",
+  "tts.status",
+  "tts.start",
+  "tts.stop",
+  "tts.install",
+  "tts.download",
+  "tts.voices",
+  "tts.speak",
+  "tts.stopSpeaking",
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -183,6 +203,14 @@ export type CommandPayloads = {
   "tasks.pauseAll": undefined;
   "tasks.resumeAll": undefined;
   "tasks.wake": undefined;
+  "tts.status": undefined;
+  "tts.start": { engine: TtsEngineId };
+  "tts.stop": { engine?: TtsEngineId };
+  "tts.install": { engine: TtsEngineId };
+  "tts.download": { model: TtsModelId };
+  "tts.voices": undefined;
+  "tts.speak": { text: string; voiceId?: string; language?: TtsLanguage };
+  "tts.stopSpeaking": undefined;
 };
 
 /** Optional configuration shared by tasks.add and tasks.update. */
@@ -766,7 +794,15 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         type: "enum",
         required: false,
         description: "Settings section to deep-link.",
-        values: ["general", "models", "agents", "themes", "shortcuts", "about"],
+        values: [
+          "general",
+          "models",
+          "voice",
+          "agents",
+          "themes",
+          "shortcuts",
+          "about",
+        ],
       },
     ],
   },
@@ -1027,6 +1063,109 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       "Re-evaluate the schedule now and dispatch anything due. This is what the optional OS-level waker calls, and confirming it is how a running instance takes ownership of a wake.",
     params: [],
   },
+  "tts.status": {
+    id: "tts.status",
+    description:
+      "Read the local speech stack: runtime, engines (installed, running, device), downloaded models, install jobs, disk usage, and what this window is speaking right now. Bearer tokens are never returned.",
+    params: [],
+  },
+  "tts.start": {
+    id: "tts.start",
+    description:
+      "Start an engine's local sidecar on the configured device. Returns as soon as the start is requested, because loading a model outlasts the bridge timeout; poll tts.status until the engine reports running.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: true,
+        description: "Engine whose sidecar should be started.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.stop": {
+    id: "tts.stop",
+    description:
+      "Stop one engine sidecar, or every running one when the engine is omitted, freeing its memory. Returns the engines that were stopped.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: false,
+        description: "Engine to stop; omit to stop every running engine.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.install": {
+    id: "tts.install",
+    description:
+      "Install an engine into the private speech directory, installing the Python runtime first when it is missing. Returns a job id; read its progress with tts.status.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: true,
+        description: "Engine to install.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.download": {
+    id: "tts.download",
+    description:
+      "Download a model's weights into the private speech directory. The model's engine must already be installed. Returns a job id; read its progress with tts.status.",
+    params: [
+      {
+        name: "model",
+        type: "enum",
+        required: true,
+        description: "Model to download.",
+        values: TTS_MODELS,
+      },
+    ],
+  },
+  "tts.voices": {
+    id: "tts.voices",
+    description:
+      "List the configured voice profiles with their model, language, voice source and which one is the default for each language.",
+    params: [],
+  },
+  "tts.speak": {
+    id: "tts.speak",
+    description:
+      "Read text aloud locally. Returns once the queue is running, not when the audio ends, because synthesis outlasts the bridge timeout; poll tts.status for progress. Text is capped at 8192 characters and split into sentence-sized chunks.",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        required: true,
+        description:
+          "Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally.",
+      },
+      {
+        name: "voiceId",
+        type: "string",
+        required: false,
+        description:
+          "Voice profile id from tts.voices. Wins over language when both are given.",
+      },
+      {
+        name: "language",
+        type: "enum",
+        required: false,
+        description:
+          "Language whose default voice profile should speak. Omit to use the preferred language.",
+        values: TTS_LANGUAGES,
+      },
+    ],
+  },
+  "tts.stopSpeaking": {
+    id: "tts.stopSpeaking",
+    description:
+      "Stop the audio this window is playing and drop the rest of the queue. The engine stays loaded.",
+    params: [],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -1157,6 +1296,24 @@ export type CommandHandlers = {
   pauseAllTasks: () => Promise<unknown> | unknown;
   resumeAllTasks: () => Promise<unknown> | unknown;
   wakeTasks: () => Promise<unknown> | unknown;
+  getTtsStatus: () => Promise<unknown> | unknown;
+  startTtsEngine: (
+    payload: CommandPayloads["tts.start"],
+  ) => Promise<unknown> | unknown;
+  stopTtsEngine: (
+    payload: CommandPayloads["tts.stop"],
+  ) => Promise<unknown> | unknown;
+  installTtsEngine: (
+    payload: CommandPayloads["tts.install"],
+  ) => Promise<unknown> | unknown;
+  downloadTtsModel: (
+    payload: CommandPayloads["tts.download"],
+  ) => Promise<unknown> | unknown;
+  listTtsVoices: () => Promise<unknown> | unknown;
+  speakTts: (
+    payload: CommandPayloads["tts.speak"],
+  ) => Promise<unknown> | unknown;
+  stopTtsSpeaking: () => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1238,6 +1395,7 @@ function validateSettingsTab(value: unknown): value is SettingsTab | undefined {
     value === undefined ||
     value === "general" ||
     value === "models" ||
+    value === "voice" ||
     value === "agents" ||
     value === "themes" ||
     value === "shortcuts" ||
@@ -1288,7 +1446,10 @@ export function validateCommandRequest(
     id === "tasks.list" ||
     id === "tasks.pauseAll" ||
     id === "tasks.resumeAll" ||
-    id === "tasks.wake"
+    id === "tasks.wake" ||
+    id === "tts.status" ||
+    id === "tts.voices" ||
+    id === "tts.stopSpeaking"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -1300,7 +1461,8 @@ export function validateCommandRequest(
     id === "sidebar.show" ||
     id === "tab.close" ||
     id === "settings.open" ||
-    id === "tasks.openEditor";
+    id === "tasks.openEditor" ||
+    id === "tts.stop";
   const objectPayload =
     acceptsEmptyPayload && (payload === undefined || payload === null)
       ? ({ ok: true, value: {} } as const)
@@ -1675,6 +1837,74 @@ export function validateCommandRequest(
     return validateTaskPayload(id, obj);
   }
 
+  if (id === "tts.start" || id === "tts.install") {
+    if (!isTtsEngineId(obj.engine)) {
+      return invalidPayload(
+        `${id} requires payload.engine to be one of ${TTS_ENGINES.join(", ")}`,
+      );
+    }
+    return { ok: true, value: { id, payload: { engine: obj.engine } } };
+  }
+
+  if (id === "tts.stop") {
+    if (obj.engine !== undefined && !isTtsEngineId(obj.engine)) {
+      return invalidPayload(
+        `tts.stop requires payload.engine to be one of ${TTS_ENGINES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { engine: obj.engine as TtsEngineId | undefined },
+      },
+    };
+  }
+
+  if (id === "tts.download") {
+    if (!isTtsModelId(obj.model)) {
+      return invalidPayload(
+        `tts.download requires payload.model to be one of ${TTS_MODELS.join(", ")}`,
+      );
+    }
+    return { ok: true, value: { id, payload: { model: obj.model } } };
+  }
+
+  if (id === "tts.speak") {
+    const raw = requireString(obj, "text", id);
+    if (!raw.ok) return raw;
+    const text = raw.value.trim();
+    if (text.length === 0) {
+      return invalidPayload("tts.speak requires a non-empty payload.text");
+    }
+    if (text.length > DEFAULT_MAX_TOTAL) {
+      return invalidPayload(
+        `tts.speak requires payload.text to be at most ${DEFAULT_MAX_TOTAL} characters`,
+      );
+    }
+    if (obj.voiceId !== undefined && typeof obj.voiceId !== "string") {
+      return invalidPayload(
+        "tts.speak requires payload.voiceId to be a voice profile id",
+      );
+    }
+    if (obj.language !== undefined && !isTtsLanguage(obj.language)) {
+      return invalidPayload(
+        `tts.speak requires payload.language to be one of ${TTS_LANGUAGES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          text,
+          voiceId: obj.voiceId as string | undefined,
+          language: obj.language as TtsLanguage | undefined,
+        },
+      },
+    };
+  }
+
   if (!validateSettingsTab(obj.tab)) {
     return invalidPayload("settings.open requires payload.tab");
   }
@@ -1908,6 +2138,22 @@ async function dispatchCommand(
       return handlers.resumeAllTasks();
     case "tasks.wake":
       return handlers.wakeTasks();
+    case "tts.status":
+      return handlers.getTtsStatus();
+    case "tts.start":
+      return handlers.startTtsEngine(request.payload);
+    case "tts.stop":
+      return handlers.stopTtsEngine(request.payload);
+    case "tts.install":
+      return handlers.installTtsEngine(request.payload);
+    case "tts.download":
+      return handlers.downloadTtsModel(request.payload);
+    case "tts.voices":
+      return handlers.listTtsVoices();
+    case "tts.speak":
+      return handlers.speakTts(request.payload);
+    case "tts.stopSpeaking":
+      return handlers.stopTtsSpeaking();
   }
 }
 

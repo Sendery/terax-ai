@@ -492,15 +492,11 @@ fn build_github_download_client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Download a GitHub release asset into the OS downloads directory and return
-/// the saved path. Only https GitHub release URLs are accepted; the file name
-/// is derived from the URL and sanitized against path traversal.
-#[tauri::command]
-pub async fn download_release_asset(
-    app: tauri::AppHandle,
-    url: String,
-) -> Result<String, String> {
-    let parsed = validate_url(&url, false)?;
+/// Validate a GitHub release URL and return it together with its safe file
+/// name. Shared by the updater download command and by any other caller that
+/// needs the same guarantees with a different destination.
+fn validate_github_asset_url(url: &str) -> Result<(reqwest::Url, String), String> {
+    let parsed = validate_url(url, false)?;
     if parsed.scheme() != "https" {
         return Err("only https downloads are allowed".into());
     }
@@ -515,6 +511,39 @@ pub async fn download_release_asset(
         return Err("only github release assets are allowed".into());
     }
     let file_name = github_asset_file_name(&parsed)?;
+    Ok((parsed, file_name))
+}
+
+/// Fetch a GitHub release asset into memory through the same validated path the
+/// updater uses. `max_bytes` bounds what a redirect target can hand back.
+pub(crate) async fn fetch_github_asset(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
+    let (parsed, _) = validate_github_asset_url(url)?;
+    let client = build_github_download_client()?;
+    let resp = client.get(parsed).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("download failed: HTTP {}", resp.status().as_u16()));
+    }
+    if let Some(len) = resp.content_length() {
+        if len > max_bytes as u64 {
+            return Err(format!("download is larger than {max_bytes} bytes"));
+        }
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > max_bytes {
+        return Err(format!("download is larger than {max_bytes} bytes"));
+    }
+    Ok(bytes.to_vec())
+}
+
+/// Download a GitHub release asset into the OS downloads directory and return
+/// the saved path. Only https GitHub release URLs are accepted; the file name
+/// is derived from the URL and sanitized against path traversal.
+#[tauri::command]
+pub async fn download_release_asset(
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<String, String> {
+    let (parsed, file_name) = validate_github_asset_url(&url)?;
 
     let client = build_github_download_client()?;
     let resp = client.get(parsed).send().await.map_err(|e| e.to_string())?;
@@ -561,6 +590,24 @@ mod tests {
         let trailing =
             reqwest::Url::parse("https://github.com/a/b/releases/download/v1/").unwrap();
         assert!(github_asset_file_name(&trailing).is_err());
+    }
+
+    #[test]
+    fn github_asset_url_validation_is_shared_and_strict() {
+        let (url, name) = validate_github_asset_url(
+            "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-aarch64-apple-darwin.tar.gz",
+        )
+        .unwrap();
+        assert_eq!(name, "uv-aarch64-apple-darwin.tar.gz");
+        assert_eq!(url.host_str(), Some("github.com"));
+        for bad in [
+            "http://github.com/a/b/releases/download/v1/x.tar.gz",
+            "https://evil.com/a/b/releases/download/v1/x.tar.gz",
+            "https://github.com/astral-sh/uv/archive/main.tar.gz",
+            "https://user:pass@github.com/a/b/releases/download/v1/x",
+        ] {
+            assert!(validate_github_asset_url(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

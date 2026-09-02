@@ -3,6 +3,47 @@
 Work landed on `qa` since `be21959` (*Add typescript 7 for better performance*).
 Each entry names the commit it came from.
 
+## Local speech output
+
+### Added - read anything aloud, entirely on your machine
+
+Terax can speak. Select text in a terminal or an editor and read it aloud from
+the context menu, the command palette's new **Voice** group, or `Mod+Shift+R`
+(`Mod+Shift+.` stops). A pill in the status bar shows the voice, the chunk
+position and a stop button while audio plays.
+
+Synthesis is local and self-contained. Rust owns a private directory under the
+app's local data dir holding a `uv` binary, a Python 3.11, one virtual
+environment per engine and the model weights; a standard-library Python sidecar
+per engine binds `127.0.0.1:0`, requires a per-launch bearer token that never
+appears in argv, and is killed when Terax exits. No shell profile, `PATH`,
+`~/.cache`, system Python or system package manager is touched, and **Purge
+everything** returns the machine to its prior state.
+
+Two engines and four models are offered, installed and downloaded on demand as
+cancellable background jobs with live logs: Kokoro (Spanish and English, preset
+voices, ~330 MB) and Chatterbox (multilingual, Turbo and Nano, zero-shot cloning
+from a short WAV sample). A voice profile pairs a model, a language, a preset or
+a sample, synthesis parameters and a style definition, and each language has
+exactly one default so "read this in Spanish" is deterministic. Two built-in
+Kokoro profiles ship enabled, so reading aloud works as soon as the engine is
+installed.
+
+Long text is stripped of ANSI escapes and prompt noise, split into
+sentence-sized chunks and played as a queue, so audio starts before the whole
+text is synthesized. Nothing runs until the feature is used: no sidecar, no
+poll, no mounted component.
+
+Pi and the in-app agent reach it through eight new registry commands
+(`tts.status`, `tts.start`, `tts.stop`, `tts.install`, `tts.download`,
+`tts.voices`, `tts.speak`, `tts.stopSpeaking`), a `terax_speak` tool and a
+bundled `terax-tts` skill that documents when to speak and how to write text for
+each model. `app.snapshot` reports engine, model and speaking state, never the
+text, never a token. Private terminals do not offer **Read aloud**, keeping the
+boundary they already have with the AI.
+
+User guide: [`docs/tts.md`](docs/tts.md).
+
 ## Mermaid diagrams
 
 ### Added — a Mermaid tab with source and visual editing ([`438dfb3`](https://github.com/Sendery/terax-ai/commit/438dfb3), merged in [`b216f42`](https://github.com/Sendery/terax-ai/commit/b216f42))

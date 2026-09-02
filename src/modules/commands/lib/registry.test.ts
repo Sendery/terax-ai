@@ -1,4 +1,9 @@
 import { TAB_COLORS } from "@/modules/tabs";
+import {
+  TTS_ENGINES,
+  TTS_LANGUAGES,
+  TTS_MODELS,
+} from "@/modules/tts/lib/engines";
 import { describe, expect, it, vi } from "vitest";
 import {
   COMMAND_IDS,
@@ -94,6 +99,31 @@ function handlers(): CommandHandlers {
     pauseAllTasks: vi.fn(() => ({ paused: true })),
     resumeAllTasks: vi.fn(() => ({ paused: false })),
     wakeTasks: vi.fn(() => ({ dispatched: 0 })),
+    getTtsStatus: vi.fn(() => ({
+      runtime: { installed: true, uvVersion: "0.12.9", pythonVersion: "3.11" },
+      engines: [],
+      models: [],
+      jobs: [],
+      diskUsageBytes: 0,
+      speech: {
+        speaking: false,
+        voiceId: null,
+        progress: { index: 0, total: 0 },
+        error: null,
+      },
+    })),
+    startTtsEngine: vi.fn(() => ({ engine: "kokoro", starting: true })),
+    stopTtsEngine: vi.fn(() => ({ stopped: ["kokoro"] })),
+    installTtsEngine: vi.fn(() => ({ jobId: 3 })),
+    downloadTtsModel: vi.fn(() => ({ jobId: 4 })),
+    listTtsVoices: vi.fn(() => ({ voices: [] })),
+    speakTts: vi.fn(() => ({
+      voiceId: "builtin-es-dora",
+      chunks: 2,
+      truncated: false,
+      started: true,
+    })),
+    stopTtsSpeaking: vi.fn(() => ({ stopped: true })),
   };
 }
 
@@ -702,6 +732,14 @@ describe("command registry", () => {
       "tasks.pauseAll",
       "tasks.resumeAll",
       "tasks.wake",
+      "tts.status",
+      "tts.start",
+      "tts.stop",
+      "tts.install",
+      "tts.download",
+      "tts.voices",
+      "tts.speak",
+      "tts.stopSpeaking",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });
@@ -1288,5 +1326,198 @@ describe("surfaces that had no bridge command", () => {
       ok: false,
       error: { code: "invalid_payload" },
     });
+  });
+});
+
+describe("local speech commands", () => {
+  it("routes every tts command to its handler", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    expect((await reg.call({ id: "tts.status" })).ok).toBe(true);
+    expect((await reg.call({ id: "tts.voices" })).ok).toBe(true);
+    expect((await reg.call({ id: "tts.stopSpeaking" })).ok).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.start", payload: { engine: "kokoro" } })).ok,
+    ).toBe(true);
+    expect((await reg.call({ id: "tts.stop", payload: {} })).ok).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.install", payload: { engine: "chatterbox" } }))
+        .ok,
+    ).toBe(true);
+    expect(
+      (
+        await reg.call({
+          id: "tts.download",
+          payload: { model: "kokoro-82m" },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.speak", payload: { text: "Ready." } })).ok,
+    ).toBe(true);
+
+    expect(h.getTtsStatus).toHaveBeenCalledTimes(1);
+    expect(h.listTtsVoices).toHaveBeenCalledTimes(1);
+    expect(h.stopTtsSpeaking).toHaveBeenCalledTimes(1);
+    expect(h.startTtsEngine).toHaveBeenCalledWith({ engine: "kokoro" });
+    expect(h.stopTtsEngine).toHaveBeenCalledWith({ engine: undefined });
+    expect(h.installTtsEngine).toHaveBeenCalledWith({ engine: "chatterbox" });
+    expect(h.downloadTtsModel).toHaveBeenCalledWith({ model: "kokoro-82m" });
+    expect(h.speakTts).toHaveBeenCalledWith({
+      text: "Ready.",
+      voiceId: undefined,
+      language: undefined,
+    });
+  });
+
+  it("accepts an omitted engine on tts.stop and rejects an unknown one", () => {
+    expect(validateCommandRequest({ id: "tts.stop" })).toEqual({
+      ok: true,
+      value: { id: "tts.stop", payload: { engine: undefined } },
+    });
+    expect(
+      validateCommandRequest({ id: "tts.stop", payload: { engine: "piper" } })
+        .ok,
+    ).toBe(false);
+  });
+
+  it("closes the engine and model sets", () => {
+    expect(
+      validateCommandRequest({ id: "tts.start", payload: { engine: "piper" } })
+        .ok,
+    ).toBe(false);
+    expect(validateCommandRequest({ id: "tts.install", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({
+        id: "tts.download",
+        payload: { model: "kokoro-82m-v2" },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("trims speech text, caps it at 8192 characters, and closes the language set", () => {
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "  Build finished.  ", language: "es-ES" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "tts.speak",
+        payload: {
+          text: "Build finished.",
+          voiceId: undefined,
+          language: "es-ES",
+        },
+      },
+    });
+    expect(
+      validateCommandRequest({ id: "tts.speak", payload: { text: "   " } }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "a".repeat(8193) },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "a".repeat(8192) },
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "hola", language: "fr-FR" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "hola", voiceId: 7 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("refuses a payload on the read-only speech commands", () => {
+    for (const id of ["tts.status", "tts.voices", "tts.stopSpeaking"]) {
+      expect(
+        validateCommandRequest({ id, payload: { engine: "kokoro" } }).ok,
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("does not reach a handler when the payload is rejected", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const rejected = await reg.call({
+      id: "tts.speak",
+      payload: { text: "" },
+    });
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+    expect(h.speakTts).not.toHaveBeenCalled();
+
+    const badEngine = await reg.call({
+      id: "tts.start",
+      payload: { engine: "espeak" },
+    });
+
+    expect(badEngine.ok).toBe(false);
+    expect(h.startTtsEngine).not.toHaveBeenCalled();
+    expect(h.installTtsEngine).not.toHaveBeenCalled();
+  });
+
+  it("documents the speech commands with their closed value sets", () => {
+    const catalog = describeCommands();
+    const speak = catalog.commands.find((c) => c.id === "tts.speak");
+    expect(speak?.params.map((p) => p.name)).toEqual([
+      "text",
+      "voiceId",
+      "language",
+    ]);
+    expect(speak?.params.find((p) => p.name === "language")?.values).toEqual([
+      ...TTS_LANGUAGES,
+    ]);
+    const start = catalog.commands.find((c) => c.id === "tts.start");
+    expect(start?.params[0]).toMatchObject({
+      name: "engine",
+      type: "enum",
+      required: true,
+    });
+    expect(start?.params[0]?.values).toEqual([...TTS_ENGINES]);
+    const download = catalog.commands.find((c) => c.id === "tts.download");
+    expect(download?.params[0]?.values).toEqual([...TTS_MODELS]);
+    const stop = catalog.commands.find((c) => c.id === "tts.stop");
+    expect(stop?.params[0]?.required).toBe(false);
+    expect(catalog.commands.find((c) => c.id === "tts.status")?.params).toEqual(
+      [],
+    );
+  });
+
+  it("offers the voice settings tab to settings.open", () => {
+    expect(
+      validateCommandRequest({
+        id: "settings.open",
+        payload: { tab: "voice" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: { id: "settings.open", payload: { tab: "voice" } },
+    });
+    const tab = describeCommands()
+      .commands.find((c) => c.id === "settings.open")
+      ?.params.find((p) => p.name === "tab");
+    expect(tab?.values).toContain("voice");
   });
 });

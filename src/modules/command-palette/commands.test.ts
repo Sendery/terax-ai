@@ -12,6 +12,7 @@ function context(
   return {
     tabs: [],
     activeId: 1,
+    hasSelection: false,
     searchTarget: null,
     explorerRoot: "/tmp",
     home: "/Users/dev",
@@ -33,6 +34,11 @@ function context(
     newScheduledTask: noop,
     toggleAi: noop,
     askAiSelection: noop,
+    readSelectionAloud: noop,
+    readSelectionAloudSpanish: noop,
+    readSelectionAloudEnglish: noop,
+    stopReading: noop,
+    openVoiceSettings: noop,
     openSettings: noop,
     openKeyboardShortcuts: noop,
     spaces: [],
@@ -94,5 +100,73 @@ describe("createCommandItems", () => {
     const tasks = items.find((item) => item.id === "tasks.toggle");
     expect(tasks?.keywords).toContain("schedule");
     expect(tasks?.keywords).toContain("cron");
+  });
+
+  it("groups the speech actions under Voice", () => {
+    const items = createCommandItems(context());
+    for (const id of [
+      "tts.readSelection",
+      "tts.readSelection.es",
+      "tts.readSelection.en",
+      "tts.stop",
+      "tts.settings",
+    ]) {
+      const item = items.find((entry) => entry.id === id);
+      expect(item?.group, id).toBe("Voice");
+      expect(item?.icon, id).toBeDefined();
+    }
+  });
+
+  it("disables reading aloud until something is selected", () => {
+    const withoutSelection = createCommandItems(context());
+    const withSelection = createCommandItems(context({ hasSelection: true }));
+    for (const id of [
+      "tts.readSelection",
+      "tts.readSelection.es",
+      "tts.readSelection.en",
+    ]) {
+      expect(
+        withoutSelection.find((entry) => entry.id === id)?.disabledReason,
+        id,
+      ).toBe("No selection");
+      expect(
+        withSelection.find((entry) => entry.id === id)?.disabledReason,
+        id,
+      ).toBeUndefined();
+    }
+    // Stopping is about playback, not about a selection.
+    expect(
+      withoutSelection.find((entry) => entry.id === "tts.stop")?.disabledReason,
+    ).toBeUndefined();
+  });
+
+  it("wires each voice entry to its own handler", () => {
+    const readSelectionAloud = vi.fn();
+    const readSelectionAloudSpanish = vi.fn();
+    const readSelectionAloudEnglish = vi.fn();
+    const stopReading = vi.fn();
+    const openVoiceSettings = vi.fn();
+    const items = createCommandItems(
+      context({
+        hasSelection: true,
+        readSelectionAloud,
+        readSelectionAloudSpanish,
+        readSelectionAloudEnglish,
+        stopReading,
+        openVoiceSettings,
+      }),
+    );
+
+    items.find((item) => item.id === "tts.readSelection")?.run?.();
+    items.find((item) => item.id === "tts.readSelection.es")?.run?.();
+    items.find((item) => item.id === "tts.readSelection.en")?.run?.();
+    items.find((item) => item.id === "tts.stop")?.run?.();
+    items.find((item) => item.id === "tts.settings")?.run?.();
+
+    expect(readSelectionAloud).toHaveBeenCalledTimes(1);
+    expect(readSelectionAloudSpanish).toHaveBeenCalledTimes(1);
+    expect(readSelectionAloudEnglish).toHaveBeenCalledTimes(1);
+    expect(stopReading).toHaveBeenCalledTimes(1);
+    expect(openVoiceSettings).toHaveBeenCalledTimes(1);
   });
 });

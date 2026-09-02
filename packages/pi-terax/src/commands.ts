@@ -51,6 +51,14 @@ export const TERAX_COMMAND_IDS = [
   "tasks.pauseAll",
   "tasks.resumeAll",
   "tasks.wake",
+  "tts.status",
+  "tts.start",
+  "tts.stop",
+  "tts.install",
+  "tts.download",
+  "tts.voices",
+  "tts.speak",
+  "tts.stopSpeaking",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];
