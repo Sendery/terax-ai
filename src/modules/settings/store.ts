@@ -15,6 +15,12 @@ import {
   type SttProvider,
 } from "@/modules/ai/config";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
+import {
+  isTtsDevice,
+  isTtsLanguage,
+  type TtsDevice,
+  type TtsLanguage,
+} from "@/modules/tts/lib/engines";
 import type { KeyBinding, ShortcutId } from "@/modules/shortcuts/shortcuts";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
@@ -142,6 +148,13 @@ export type Preferences = {
   sttProvider: SttProvider;
   groqSttModel: string;
   whispercppBaseURL: string;
+  /** Language "read aloud" speaks in when the caller names none. */
+  ttsDefaultLanguage: TtsLanguage;
+  /** Compute device the speech sidecar is started with. */
+  ttsDevice: TtsDevice;
+  /** Minutes of silence before running speech engines are stopped. 0 keeps
+   *  them resident. */
+  ttsIdleStopMinutes: number;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -202,6 +215,23 @@ const KEY_CLI_AGENT_PERMISSION = "cliAgentPermission";
 const KEY_STT_PROVIDER = "sttProvider";
 const KEY_GROQ_STT_MODEL = "groqSttModel";
 const KEY_WHISPERCPP_BASE_URL = "whispercppBaseURL";
+const KEY_TTS_DEFAULT_LANGUAGE = "ttsDefaultLanguage";
+const KEY_TTS_DEVICE = "ttsDevice";
+const KEY_TTS_IDLE_STOP_MINUTES = "ttsIdleStopMinutes";
+
+export const TTS_IDLE_STOP_MIN = 0;
+export const TTS_IDLE_STOP_MAX = 240;
+export const TTS_IDLE_STOP_DEFAULT = 10;
+
+export function coerceTtsIdleStopMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return TTS_IDLE_STOP_DEFAULT;
+  }
+  return Math.min(
+    TTS_IDLE_STOP_MAX,
+    Math.max(TTS_IDLE_STOP_MIN, Math.round(value)),
+  );
+}
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -292,6 +322,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sttProvider: DEFAULT_STT_PROVIDER,
   groqSttModel: "whisper-large-v3-turbo",
   whispercppBaseURL: WHISPERCPP_DEFAULT_BASE_URL,
+  ttsDefaultLanguage: "es-ES",
+  ttsDevice: "auto",
+  ttsIdleStopMinutes: TTS_IDLE_STOP_DEFAULT,
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -424,6 +457,19 @@ export async function loadPreferences(): Promise<Preferences> {
       get<string>(KEY_GROQ_STT_MODEL) ?? DEFAULT_PREFERENCES.groqSttModel,
     whispercppBaseURL:
       get<string>(KEY_WHISPERCPP_BASE_URL) ?? DEFAULT_PREFERENCES.whispercppBaseURL,
+    ttsDefaultLanguage: ((): TtsLanguage => {
+      const stored = get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
+      return isTtsLanguage(stored)
+        ? stored
+        : DEFAULT_PREFERENCES.ttsDefaultLanguage;
+    })(),
+    ttsDevice: ((): TtsDevice => {
+      const stored = get<unknown>(KEY_TTS_DEVICE);
+      return isTtsDevice(stored) ? stored : DEFAULT_PREFERENCES.ttsDevice;
+    })(),
+    ttsIdleStopMinutes: coerceTtsIdleStopMinutes(
+      get<unknown>(KEY_TTS_IDLE_STOP_MINUTES),
+    ),
     favoriteModelIds: (
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds
@@ -639,6 +685,18 @@ export async function setWhispercppBaseURL(value: string): Promise<void> {
   await writePref(KEY_WHISPERCPP_BASE_URL, value.trim());
 }
 
+export async function setTtsDefaultLanguage(value: TtsLanguage): Promise<void> {
+  await writePref(KEY_TTS_DEFAULT_LANGUAGE, value);
+}
+
+export async function setTtsDevice(value: TtsDevice): Promise<void> {
+  await writePref(KEY_TTS_DEVICE, value);
+}
+
+export async function setTtsIdleStopMinutes(value: number): Promise<void> {
+  await writePref(KEY_TTS_IDLE_STOP_MINUTES, coerceTtsIdleStopMinutes(value));
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -785,6 +843,9 @@ export async function onPreferencesChange(
     [KEY_STT_PROVIDER]: "sttProvider",
     [KEY_GROQ_STT_MODEL]: "groqSttModel",
     [KEY_WHISPERCPP_BASE_URL]: "whispercppBaseURL",
+    [KEY_TTS_DEFAULT_LANGUAGE]: "ttsDefaultLanguage",
+    [KEY_TTS_DEVICE]: "ttsDevice",
+    [KEY_TTS_IDLE_STOP_MINUTES]: "ttsIdleStopMinutes",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

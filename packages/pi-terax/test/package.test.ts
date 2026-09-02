@@ -50,4 +50,38 @@ describe("Pi package metadata", () => {
     expect(journalTemplate).toContain("## Gotcha Candidates");
     expect(journalTemplate).toContain("## Verification Evidence");
   });
+
+  it("bundles a skill for every shipped capability", async () => {
+    const skillRoot = join(packageRoot, "skills");
+    const [visualQa, tts] = await Promise.all([
+      readFile(join(skillRoot, "terax-visual-qa", "SKILL.md"), "utf8"),
+      readFile(join(skillRoot, "terax-tts", "SKILL.md"), "utf8"),
+    ]);
+
+    expect(visualQa).toContain("name: terax-visual-qa");
+    expect(tts).toContain("name: terax-tts");
+    expect(tts).toContain("## When to Speak");
+    expect(tts).toContain("## Text Formatting per Model");
+    expect(tts).toContain("## Install and Start Flow");
+    expect(tts).toContain("## Privacy");
+    // The three tags the model README documents must stay called out.
+    expect(tts).toContain("[laugh]");
+    expect(tts).toContain("[cough]");
+    expect(tts).toContain("[chuckle]");
+  });
+
+  it("bundles the local sidecar gotchas so the constraints travel with the skill", async () => {
+    const gotchas = await readFile(
+      join(
+        packageRoot,
+        "skills",
+        "terax-development",
+        "references",
+        "gotchas.md",
+      ),
+      "utf8",
+    );
+
+    expect(gotchas).toContain("## Local Sidecars and Python Runtimes");
+  });
 });

@@ -14,5 +14,6 @@ pub mod scheduler;
 pub mod secrets;
 pub mod shell;
 pub mod slotmonit;
+pub mod tts;
 pub mod waker;
 pub mod workspace;

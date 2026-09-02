@@ -149,6 +149,20 @@ import {
   useSpacesBoot,
 } from "@/modules/spaces";
 import { ThemeProvider, useThemeFileEditing } from "@/modules/theme";
+import {
+  speakText,
+  stopSpeaking,
+  ttsDownloadCommand,
+  ttsInstallCommand,
+  ttsSpeakCommand,
+  ttsStartCommand,
+  ttsStatusCommand,
+  ttsStopCommand,
+  ttsStopSpeakingCommand,
+  ttsVoicesCommand,
+  useTtsStore,
+  type SpeakOptions,
+} from "@/modules/tts";
 import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -675,6 +689,30 @@ export default function App() {
     notesDetached,
   ]);
 
+  const speakAloud = useCallback((text: string, options: SpeakOptions = {}) => {
+    if (!text.trim()) return;
+    void speakText(text, options).catch((error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Reading aloud failed. Check Settings, Voice.",
+      );
+    });
+  }, []);
+
+  const readSelectionAloud = useCallback(
+    (options: SpeakOptions = {}) => {
+      const selection = captureActiveSelection();
+      if (!selection?.trim()) return;
+      speakAloud(selection, options);
+    },
+    [captureActiveSelection, speakAloud],
+  );
+
+  const stopReading = useCallback(() => {
+    stopSpeaking();
+  }, []);
+
   const { askPopup, setAskPopup, onAskFromSelection, onAddToNoteFromSelection } =
     useSelectionAskAi({
       captureActiveSelection,
@@ -1078,6 +1116,8 @@ export default function App() {
       "ai.toggle": togglePanelAndFocus,
       "ai.askSelection": askFromSelection,
       "notes.addSelection": addSelectionToNote,
+      "tts.readSelection": () => readSelectionAloud(),
+      "tts.stop": stopReading,
       "terminal.clearActive": clearActiveTerminal,
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -1107,6 +1147,8 @@ export default function App() {
       togglePanelAndFocus,
       askFromSelection,
       addSelectionToNote,
+      readSelectionAloud,
+      stopReading,
       toggleSidebar,
       toggleExplorerFocus,
       zoomIn,
@@ -1130,10 +1172,14 @@ export default function App() {
         const sel = captureActiveSelection();
         return !sel || !sel.trim();
       }
-      if (id === "notes.addSelection") {
-        // Only claim the binding when there is a selection to add; otherwise
-        // let the key fall through (never preventDefault when disabled).
+      if (id === "notes.addSelection" || id === "tts.readSelection") {
+        // Only claim the binding when there is a selection to act on;
+        // otherwise let the key fall through (never preventDefault when
+        // disabled).
         return !captureActiveSelection()?.trim();
+      }
+      if (id === "tts.stop") {
+        return !useTtsStore.getState().speaking;
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -1476,6 +1522,14 @@ export default function App() {
             newScheduledTask: openNewTaskEditor,
             toggleAi: togglePanelAndFocus,
             askAiSelection: askFromSelection,
+            hasSelection: Boolean(captureActiveSelection()?.trim()),
+            readSelectionAloud: () => readSelectionAloud(),
+            readSelectionAloudSpanish: () =>
+              readSelectionAloud({ language: "es-ES" }),
+            readSelectionAloudEnglish: () =>
+              readSelectionAloud({ language: "en-US" }),
+            stopReading,
+            openVoiceSettings: () => void openSettingsWindow("voice"),
             openSettings: () => void openSettingsWindow(),
             openKeyboardShortcuts: () => void openSettingsWindow("shortcuts"),
             spaces: useSpaces.getState().spaces,
@@ -1506,6 +1560,9 @@ export default function App() {
       openNewTaskEditor,
       togglePanelAndFocus,
       askFromSelection,
+      captureActiveSelection,
+      readSelectionAloud,
+      stopReading,
       activeSpaceId,
       handleNewSpace,
     ],
@@ -1552,6 +1609,10 @@ export default function App() {
                 },
               }
             : {}),
+          tts: {
+            status: useTtsStore.getState().status,
+            speaking: useTtsStore.getState().speaking,
+          },
         }),
       getBuildInfo: () => ({
         repository: BUILD_INFO.repository,
@@ -1969,6 +2030,14 @@ export default function App() {
         const dispatched = tasksSchedulerRef.current.wakeNow();
         return { dispatched, paused: scheduledRef.current.paused };
       },
+      getTtsStatus: () => ttsStatusCommand(),
+      startTtsEngine: ({ engine }) => ttsStartCommand(engine),
+      stopTtsEngine: ({ engine }) => ttsStopCommand(engine),
+      installTtsEngine: ({ engine }) => ttsInstallCommand(engine),
+      downloadTtsModel: ({ model }) => ttsDownloadCommand(model),
+      listTtsVoices: () => ttsVoicesCommand(),
+      speakTts: (payload) => ttsSpeakCommand(payload),
+      stopTtsSpeaking: () => ttsStopSpeakingCommand(),
     }),
     [
       activeId,
@@ -2162,6 +2231,8 @@ export default function App() {
                       onExit={handleLeafExit}
                       onFocusLeaf={handleFocusLeaf}
                       onOpenFileLink={handleOpenTerminalFileLink}
+                      onReadAloud={speakAloud}
+                      onStopReading={stopReading}
                       homePath={home}
                       registerEditorHandle={registerEditorHandle}
                       onEditorDirtyChange={handleEditorDirty}

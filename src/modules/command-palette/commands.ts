@@ -4,6 +4,7 @@ import { leafIds } from "@/modules/terminal";
 import {
   AlarmClockIcon,
   AlarmClockPlusIcon,
+  AudioWave01Icon,
   Cancel01Icon,
   DashboardSquare01Icon,
   FileEditIcon,
@@ -20,6 +21,7 @@ import {
   SidebarLeftIcon,
   SourceCodeIcon,
   SparklesIcon,
+  StopIcon,
   TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import type { PaletteItem } from "./types";
@@ -33,11 +35,14 @@ export const COMMAND_GROUPS = [
   "Search",
   "View",
   "AI",
+  "Voice",
 ] as const;
 
 export type CommandPaletteActionContext = {
   tabs: Tab[];
   activeId: number;
+  /** Whether the active terminal or editor pane has a selection right now. */
+  hasSelection: boolean;
   searchTarget: SearchTarget;
   explorerRoot: string | null;
   home: string | null;
@@ -59,6 +64,11 @@ export type CommandPaletteActionContext = {
   newScheduledTask: () => void;
   toggleAi: () => void;
   askAiSelection: () => void;
+  readSelectionAloud: () => void;
+  readSelectionAloudSpanish: () => void;
+  readSelectionAloudEnglish: () => void;
+  stopReading: () => void;
+  openVoiceSettings: () => void;
   openSettings: () => void;
   openKeyboardShortcuts: () => void;
   spaces: { id: string; name: string }[];
@@ -87,6 +97,7 @@ export function createCommandItems(
       : undefined;
   const closeDisabled =
     onlyOneTab && activePaneCount < 2 ? "Last tab" : undefined;
+  const selectionDisabled = ctx.hasSelection ? undefined : "No selection";
 
   return [
     {
@@ -320,6 +331,51 @@ export function createCommandItems(
       icon: SparklesIcon,
       shortcutId: "ai.askSelection",
       run: ctx.askAiSelection,
+    },
+    {
+      id: "tts.readSelection",
+      title: "Read selection aloud",
+      group: "Voice",
+      keywords: ["speak", "tts", "voice", "selection", "read", "audio"],
+      icon: AudioWave01Icon,
+      shortcutId: "tts.readSelection",
+      disabledReason: selectionDisabled,
+      run: ctx.readSelectionAloud,
+    },
+    {
+      id: "tts.readSelection.es",
+      title: "Read selection aloud in Spanish",
+      group: "Voice",
+      keywords: ["speak", "tts", "voice", "spanish", "espanol", "read"],
+      icon: AudioWave01Icon,
+      disabledReason: selectionDisabled,
+      run: ctx.readSelectionAloudSpanish,
+    },
+    {
+      id: "tts.readSelection.en",
+      title: "Read selection aloud in English",
+      group: "Voice",
+      keywords: ["speak", "tts", "voice", "english", "read"],
+      icon: AudioWave01Icon,
+      disabledReason: selectionDisabled,
+      run: ctx.readSelectionAloudEnglish,
+    },
+    {
+      id: "tts.stop",
+      title: "Stop reading",
+      group: "Voice",
+      keywords: ["speak", "tts", "voice", "stop", "silence", "quiet"],
+      icon: StopIcon,
+      shortcutId: "tts.stop",
+      run: ctx.stopReading,
+    },
+    {
+      id: "tts.settings",
+      title: "Open voice settings",
+      group: "Voice",
+      keywords: ["tts", "voice", "speech", "engine", "model", "settings"],
+      icon: Settings01Icon,
+      run: ctx.openVoiceSettings,
     },
   ];
 }

@@ -1,4 +1,5 @@
 import type { Tab } from "@/modules/tabs";
+import type { TtsStatus } from "@/modules/tts/lib/native";
 import { describe, expect, it } from "vitest";
 import { buildAppSnapshot } from "./snapshot";
 
@@ -342,5 +343,88 @@ describe("scheduled tasks in the snapshot", () => {
     });
     expect(snapshot.scheduledTasks?.tasks[0].nextRunAt).toBeNull();
     expect(snapshot.scheduledTasks?.tasks[0].lastRunAt).toBeNull();
+  });
+});
+
+describe("local speech in the snapshot", () => {
+  const status: TtsStatus = {
+    runtime: { installed: true, uvVersion: "0.12.9", pythonVersion: "3.11.9" },
+    engines: [
+      {
+        id: "kokoro",
+        installed: true,
+        specVersion: 1,
+        installedAt: 1000,
+        latestSpecVersion: 1,
+        running: true,
+        port: 51234,
+        token: "super-secret-token",
+        device: "cpu",
+        pid: 4242,
+        sizeBytes: 700,
+      },
+    ],
+    models: [
+      {
+        id: "kokoro-82m",
+        engine: "kokoro",
+        downloaded: true,
+        sizeBytes: 330,
+      },
+    ],
+    jobs: [],
+    diskUsageBytes: 1030,
+  };
+
+  it("reports every engine and model with no text, token or path", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      tts: { status, speaking: true },
+    });
+
+    expect(snapshot.tts).toEqual({
+      engines: [
+        { id: "kokoro", installed: true, running: true },
+        { id: "chatterbox", installed: false, running: false },
+      ],
+      models: [
+        { id: "kokoro-82m", downloaded: true },
+        { id: "chatterbox-multilingual", downloaded: false },
+        { id: "chatterbox-turbo", downloaded: false },
+        { id: "chatterbox-nano", downloaded: false },
+      ],
+      speaking: true,
+    });
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain("super-secret-token");
+    expect(serialized).not.toContain("51234");
+    expect(serialized).not.toContain("4242");
+  });
+
+  it("reports nothing installed when no status has been read yet", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+      tts: { status: null, speaking: false },
+    });
+
+    expect(snapshot.tts?.engines.every((e) => !e.installed && !e.running)).toBe(
+      true,
+    );
+    expect(snapshot.tts?.models.every((m) => !m.downloaded)).toBe(true);
+    expect(snapshot.tts?.speaking).toBe(false);
+  });
+
+  it("omits the section when the window has no speech state to report", () => {
+    const snapshot = buildAppSnapshot({
+      tabs: [],
+      activeTabId: null,
+      activeSpaceId: null,
+    });
+
+    expect(snapshot.tts).toBeUndefined();
   });
 });

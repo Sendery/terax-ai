@@ -26,6 +26,8 @@ type Props = {
   onExit: TerminalStackProps["onExit"];
   onFocusLeaf: TerminalStackProps["onFocusLeaf"];
   onOpenFileLink: TerminalStackProps["onOpenFileLink"];
+  onReadAloud: TerminalStackProps["onReadAloud"];
+  onStopReading: TerminalStackProps["onStopReading"];
   homePath?: TerminalStackProps["homePath"];
   registerEditorHandle: EditorStackProps["registerHandle"];
   onEditorDirtyChange: EditorStackProps["onDirtyChange"];
@@ -57,6 +59,8 @@ export function WorkspaceSurface({
   onExit,
   onFocusLeaf,
   onOpenFileLink,
+  onReadAloud,
+  onStopReading,
   homePath,
   registerEditorHandle,
   onEditorDirtyChange,
@@ -101,6 +105,8 @@ export function WorkspaceSurface({
           onExit={onExit}
           onFocusLeaf={onFocusLeaf}
           onOpenFileLink={onOpenFileLink}
+          onReadAloud={onReadAloud}
+          onStopReading={onStopReading}
           homePath={homePath}
         />
       </div>

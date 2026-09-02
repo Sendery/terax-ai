@@ -1,8 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentsessions, capture, fs, git, history, net, pi, pisessions, pty, scheduler,
-    secrets, shell, slotmonit, waker, workspace,
+    agent, agent_cli, agentsessions, capture, fs, git, history, net, pi, pisessions, pty,
+    scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -252,6 +252,7 @@ pub fn run() {
         .manage(history::HistoryState::default())
         .manage(scheduler::SchedulerState::default())
         .manage(fs::grep::ContentSearchState::default())
+        .manage(tts::TtsState::default())
         .manage({
             let registry = workspace::WorkspaceRegistry::default();
             workspace::bootstrap_registry(&registry);
@@ -356,7 +357,38 @@ pub fn run() {
             history::history_commands,
             history::history_record,
             history::history_list,
+            tts::commands::tts_layout,
+            tts::commands::tts_status,
+            tts::commands::tts_install_runtime,
+            tts::commands::tts_install_engine,
+            tts::commands::tts_remove_engine,
+            tts::commands::tts_download_model,
+            tts::commands::tts_remove_model,
+            tts::commands::tts_job_logs,
+            tts::commands::tts_job_cancel,
+            tts::commands::tts_start,
+            tts::commands::tts_stop,
+            tts::commands::tts_stop_all,
+            tts::commands::tts_models_list,
+            tts::commands::tts_models_purge,
+            tts::commands::tts_purge_all,
+            tts::commands::tts_reveal_dir,
+            tts::commands::tts_sample_import,
+            tts::commands::tts_sample_remove,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // A TTS sidecar is a Python process holding a loaded model; unlike a
+            // PTY it has no window event of its own, so it is killed from the
+            // app's own exit path as well as from `Drop for TtsState`.
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                if let Some(state) = app.try_state::<tts::TtsState>() {
+                    state.kill_all();
+                }
+            }
+        });
 }

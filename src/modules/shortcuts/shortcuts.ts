@@ -39,6 +39,8 @@ export type ShortcutId =
   | "ai.toggle"
   | "ai.askSelection"
   | "notes.addSelection"
+  | "tts.readSelection"
+  | "tts.stop"
   | "settings.open"
   | "sidebar.toggle"
   | "editor.undo"
@@ -53,6 +55,7 @@ export type ShortcutGroup =
   | "Search"
   | "AI"
   | "Notes"
+  | "Voice"
   | "View"
   | "Editor";
 
@@ -260,6 +263,23 @@ export const SHORTCUTS: Shortcut[] = [
     defaultBindings: [{ [MOD_PROP]: true, key: "l" }],
   },
   {
+    id: "tts.readSelection",
+    label: "Read selection aloud",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "r" }],
+  },
+  {
+    id: "tts.stop",
+    label: "Stop reading aloud",
+    group: "Voice",
+    // Both encodings of the same chord: `e.key` is the shifted character on a
+    // US layout and the unshifted one on layouts where Shift+. stays a period.
+    defaultBindings: [
+      { [MOD_PROP]: true, shift: true, key: "." },
+      { [MOD_PROP]: true, shift: true, key: ">" },
+    ],
+  },
+  {
     id: "sidebar.toggle",
     label: "Toggle file explorer",
     group: "View",
@@ -337,6 +357,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   "Search",
   "AI",
   "Notes",
+  "Voice",
   "Editor",
 ];
 

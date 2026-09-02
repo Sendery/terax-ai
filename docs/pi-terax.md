@@ -76,6 +76,14 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tasks.pauseAll`
 - `tasks.resumeAll`
 - `tasks.wake`
+- `tts.status`
+- `tts.start`
+- `tts.stop`
+- `tts.install`
+- `tts.download`
+- `tts.voices`
+- `tts.speak`
+- `tts.stopSpeaking`
 
 Call `app.commands` for the authoritative catalog with every payload argument,
 its type, and the closed value set of each enum. That catalog is generated from
@@ -84,7 +92,7 @@ what is enforced; this list is a convenience and `app.commands` wins.
 
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, and scheduled-task APIs. It does not expose AI diff approval internals.
 
-`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. `tasks.list` returns a prompt only because asking for it is an explicit request.
+`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. The `tts` section reports which speech engines are installed and running, which models are downloaded, and whether the window is speaking, never the text being read, a sidecar token, or a voice sample path. `tasks.list` returns a prompt only because asking for it is an explicit request.
 
 ### mermaid.open
 
@@ -111,6 +119,39 @@ clears stale private visual-layout metadata, and never returns the source.
 command does not focus the tab automatically; call `tab.focus` when the updated
 diagram should become active. Visual undo/redo is transient UI state and is not
 persisted, returned through Pi, or included in snapshots.
+
+### tts.speak
+
+Read text aloud through the local speech engine. Nothing leaves the machine: a
+private Python sidecar synthesizes the audio and the webview plays it.
+
+```json
+{ "id": "tts.speak", "payload": { "text": "The build passed.", "language": "es-ES" } }
+```
+
+`text` is capped at 8192 characters after trimming and split into
+sentence-sized chunks. `voiceId` (from `tts.voices`) pins one profile and wins
+over `language`; `language` (`es-ES` or `en-US`) picks that language's default
+profile; omitting both uses the preferred language. A request that resolves to
+no profile fails with `command_failed` before any audio starts.
+
+The reply is `{ voiceId, chunks, truncated, started: true }` and arrives as soon
+as the queue is running, not when the audio ends: starting an engine and loading
+a model take longer than the bridge's 15 second UI window. Poll `tts.status` and
+read `speech` (`{ speaking, voiceId, progress, error }`) to follow or diagnose
+playback, and call `tts.stopSpeaking` to silence it.
+
+`tts.status` reports the runtime, every engine (installed, running, device,
+size), every model (downloaded, size), background jobs and disk usage, with the
+per-launch sidecar token removed. `tts.install` and `tts.download` return a
+`jobId` whose progress appears in `tts.status.jobs`; both download hundreds of
+megabytes, so they belong behind an explicit user decision. `tts.start` returns
+`{ starting: true }` for the same timeout reason, and `tts.stop` shuts a sidecar
+down and frees its memory.
+
+Private terminal text is never offered for speech, and the snapshot's `tts`
+section carries engine and model state only. Full user guide:
+[`docs/tts.md`](tts.md).
 
 ### git.history.open
 
@@ -228,10 +269,11 @@ The discovery file is written atomically. Terax removes stale discovery data on 
 
 ## Pi Package
 
-The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus development and visual-QA skills. The extension registers five tools:
+The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus the development, visual-QA and local-speech skills. The extension registers six tools:
 
 - `terax_get_state`: returns the redacted Terax snapshot.
 - `terax_call`: calls only allowlisted Terax registry commands.
+- `terax_speak`: reads a short text aloud through `tts.speak`.
 - `terax_wait`: waits for a short interval before the next state check.
 - `terax_development_guide`: returns project contribution points for a feature, native window, setting, shortcut, or app command.
 - `terax_visual_qa`: returns screenshot evidence, records short MP4s, or compares the UI against a project baseline.
