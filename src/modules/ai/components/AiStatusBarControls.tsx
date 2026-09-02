@@ -81,19 +81,29 @@ const PROVIDER_ICON = {
   "cli-opencode": CpuIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
-export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
+/**
+ * Opens the AI panel, and closes it again. It stays on screen while the panel
+ * is open without a provider configured, and that state has no other exit.
+ */
+export function AiOpenButton({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={onToggle}
       className={cn(
         "flex h-6 items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 text-xs",
         "text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground",
         "animate-in slide-in-from-top-2 duration-200 ease-out",
       )}
-      title="Open AI agent"
+      title={open ? "Close AI panel" : "Open AI agent"}
     >
-      <span>Open AI agent</span>
+      <span>{open ? "Close AI panel" : "Open AI agent"}</span>
       <Kbd className="h-4 min-w-4 px-1">{fmtShortcut(MOD_KEY, "I")}</Kbd>
     </button>
   );

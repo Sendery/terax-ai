@@ -461,6 +461,7 @@ export default function App() {
   const openMini = useChatStore((s) => s.openMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
+  const closePanel = useChatStore((s) => s.closePanel);
   const panelOpen = useChatStore((s) => s.panelOpen);
   const setLive = useChatStore((s) => s.setLive);
   const respondToApproval = useChatStore((s) => s.respondToApproval);
@@ -608,18 +609,18 @@ export default function App() {
     return null;
   }, [tabs, activeId]);
 
+  // A real toggle in every state. Without a provider the panel shows the
+  // connect bar rather than jumping to Settings: that bar carries the same
+  // action, and routing elsewhere left the shortcut unable to close what the
+  // status-bar button had opened.
   const togglePanelAndFocus = useCallback(() => {
-    if (!hasComposer) {
-      void openSettingsWindow("models");
+    if (panelOpen) {
+      closePanel();
       return;
     }
-    if (panelOpen) {
-      useChatStore.getState().closePanel();
-    } else {
-      openPanel();
-      focusInput(null);
-    }
-  }, [hasComposer, panelOpen, openPanel, focusInput]);
+    openPanel();
+    if (hasComposer) focusInput(null);
+  }, [hasComposer, panelOpen, openPanel, closePanel, focusInput]);
 
   const attachSelection = useChatStore((s) => s.attachSelection);
 
@@ -2188,6 +2189,7 @@ export default function App() {
                     panelOpen={panelOpen}
                     keysLoaded={keysLoaded}
                     onConnect={() => void openSettingsWindow("models")}
+                    onDismiss={closePanel}
                   />
                 </div>
               </ResizablePanel>
