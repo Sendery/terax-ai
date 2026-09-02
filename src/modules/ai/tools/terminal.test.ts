@@ -156,10 +156,12 @@ describe("open_preview", () => {
   });
 
   it("rejects a non-http scheme", async () => {
-    const r = await run("open_preview", makeContext(), {
+    const openPreview = vi.fn(() => true);
+    const r = await run("open_preview", makeContext({ openPreview }), {
       url: "file://localhost/etc/passwd",
     });
-    expect(r.error).toContain("http/https");
+    expect(r.error).toContain("http(s)");
+    expect(openPreview).not.toHaveBeenCalled();
   });
 
   it("reports when the preview surface is unavailable", async () => {

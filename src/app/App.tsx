@@ -52,6 +52,7 @@ import {
 } from "@/modules/editor";
 import { FileExplorer, type FileExplorerHandle } from "@/modules/explorer";
 import type { GitHistorySearchHandle } from "@/modules/git-history";
+import { setLspNavigator } from "@/modules/lsp";
 import {
   Header,
   type SearchInlineHandle,
@@ -2035,6 +2036,11 @@ export default function App() {
     },
     [openFileTab],
   );
+
+  useEffect(() => {
+    setLspNavigator({ openFile: openContentHit });
+    return () => setLspNavigator(null);
+  }, [openContentHit]);
 
   const insertHistoryCommand = useMemo(
     () =>

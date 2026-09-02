@@ -244,6 +244,9 @@ mod serde_shape_tests {
             unstaged: false,
             untracked: false,
             status_label: "renamed".into(),
+            added: 3,
+            removed: 1,
+            is_binary: false,
         };
         let json = serde_json::to_value(&file).unwrap();
         assert_eq!(
@@ -257,6 +260,9 @@ mod serde_shape_tests {
                 "unstaged": false,
                 "untracked": false,
                 "statusLabel": "renamed",
+                "added": 3,
+                "removed": 1,
+                "isBinary": false,
             })
         );
     }
@@ -357,6 +363,8 @@ mod serde_shape_tests {
             timestamp_secs: 1_700_000_000,
             parents: vec!["p0".into()],
             subject: "s".into(),
+            body: "".into(),
+            refs: Vec::new(),
             files_changed: 2,
             insertions: 10,
             deletions: 5,
@@ -369,6 +377,8 @@ mod serde_shape_tests {
             "filesChanged",
             "insertions",
             "deletions",
+            "body",
+            "refs",
         ] {
             assert!(json.get(key).is_some(), "missing key {key}");
         }
@@ -387,26 +397,19 @@ mod serde_shape_tests {
             serde_json::json!({ "remote": "origin", "branch": null, "pushed": true })
         );
 
-        let branch = GitBranchEntry {
-            name: "feature".into(),
-            kind: "local".into(),
-            worktree_path: None,
-            is_head: false,
-            is_detached: false,
-        };
-        let list = GitBranchListResult {
-            branches: vec![branch],
+        let list = GitBranchList {
+            current: Some("main".into()),
+            local: vec!["main".into(), "feature".into()],
+            remote: vec!["origin/main".into()],
+            default_base: Some("main".into()),
         };
         assert_eq!(
             serde_json::to_value(&list).unwrap(),
             serde_json::json!({
-                "branches": [{
-                    "name": "feature",
-                    "kind": "local",
-                    "worktreePath": null,
-                    "isHead": false,
-                    "isDetached": false,
-                }],
+                "current": "main",
+                "local": ["main", "feature"],
+                "remote": ["origin/main"],
+                "defaultBase": "main",
             })
         );
     }
