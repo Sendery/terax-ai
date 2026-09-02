@@ -105,6 +105,7 @@ export function TerminalStack({
               getBundle={getBundle}
               onOpenFileLink={onOpenFileLink}
               homePath={homePath}
+              tabColor={t.color}
             />
           </div>
         );

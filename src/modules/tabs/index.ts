@@ -1,5 +1,6 @@
 export {
   isTabColor,
+  paneDividerColor,
   TAB_COLOR_CSS,
   TAB_COLOR_LABEL,
   TAB_COLORS,

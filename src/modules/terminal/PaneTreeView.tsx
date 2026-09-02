@@ -3,8 +3,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { cn } from "@/lib/utils";
+import { paneDividerColor, type TabColor } from "@/modules/tabs";
 import type { SearchAddon } from "@xterm/addon-search";
-import { Fragment } from "react";
+import { type CSSProperties, Fragment } from "react";
 import { useTerminalDropStore } from "./lib/dropStore";
 import { leafIds, type PaneNode } from "./lib/panes";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
@@ -25,6 +27,8 @@ type Props = {
   getBundle: (leafId: number) => LeafBundle;
   onOpenFileLink: (path: string) => void;
   homePath?: string | null;
+  /** Accent of the owning tab, so a split seam matches the tab it belongs to. */
+  tabColor?: TabColor;
 };
 
 export function PaneTreeView(props: Props) {
@@ -70,7 +74,20 @@ export function PaneTreeView(props: Props) {
     >
       {node.children.map((child, i) => (
         <Fragment key={leafIds(child)[0]}>
-          {i > 0 && <ResizableHandle />}
+          {i > 0 && (
+            <ResizableHandle
+              className={cn(
+                "w-0.5 bg-[var(--pane-divider)] opacity-65 transition-opacity duration-150",
+                "hover:opacity-100 active:opacity-100 focus-visible:opacity-100",
+                "aria-[orientation=horizontal]:h-0.5 aria-[orientation=horizontal]:w-full",
+              )}
+              style={
+                {
+                  "--pane-divider": paneDividerColor(props.tabColor),
+                } as CSSProperties
+              }
+            />
+          )}
           <ResizablePanel id={`pane-${child.id}`} minSize="10%">
             <PaneTreeView {...props} node={child} />
           </ResizablePanel>
