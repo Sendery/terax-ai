@@ -112,7 +112,7 @@ export function AiOpenButton({
 export function AiStatusBarControls() {
   const c = useComposer();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const openMini = useChatStore((s) => s.openMini);
+  const toggleMini = useChatStore((s) => s.toggleMini);
   const miniOpen = useChatStore((s) => s.mini.open);
   const closePanel = useChatStore((s) => s.closePanel);
 
@@ -184,9 +184,8 @@ export function AiStatusBarControls() {
         </Kbd>
       </Button>
       <IconBtn
-        title={miniOpen ? "Mini-window open" : "Open conversation"}
-        onClick={openMini}
-        disabled={miniOpen}
+        title={`${miniOpen ? "Close" : "Open"} AI chat window (${fmtShortcut("⇧", MOD_KEY, "I")})`}
+        onClick={toggleMini}
       >
         <HugeiconsIcon icon={Message01Icon} size={13} strokeWidth={1.75} />
       </IconBtn>
