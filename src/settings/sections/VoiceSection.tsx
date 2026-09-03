@@ -52,6 +52,7 @@ import {
   formatApproxBytes,
   formatBytes,
   isProfileSpeakable,
+  isRunning,
   KOKORO_PRESET_VOICES,
   LANGUAGE_LABELS,
   MODEL_APPROX_BYTES,
@@ -63,6 +64,7 @@ import {
   modelsForLanguage,
   modelStatusOf,
   modelSupportsTags,
+  pickJob,
   previewVoice,
   sidecarVoices,
   toMono24kWav,
@@ -207,7 +209,7 @@ function DefaultsCard() {
 function RuntimeCard({ runtime }: { runtime: Runtime }) {
   const [busy, setBusy] = useState(false);
   const info = runtime.status?.runtime;
-  const job = jobFor(runtime, (j) => j.kind === "runtime");
+  const job = pickJob(runtime.jobs, (j) => j.kind === "runtime");
 
   const install = async () => {
     setBusy(true);
@@ -232,10 +234,10 @@ function RuntimeCard({ runtime }: { runtime: Runtime }) {
             size="sm"
             variant="outline"
             className="h-7 gap-1.5 px-2 text-[11px]"
-            disabled={busy || !!job || runtime.loading}
+            disabled={busy || isRunning(job) || runtime.loading}
             onClick={() => void install()}
           >
-            {busy || job ? (
+            {busy || isRunning(job) ? (
               <Spinner className="size-3" />
             ) : (
               <HugeiconsIcon icon={Download04Icon} size={12} strokeWidth={1.75} />
@@ -272,8 +274,8 @@ function EngineCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const entry = engineStatusOf(runtime.status, engine);
-  const job = jobFor(
-    runtime,
+  const job = pickJob(
+    runtime.jobs,
     (j) =>
       j.engine === engine &&
       (j.kind === "engine-install" || j.kind === "engine-remove"),
@@ -311,7 +313,7 @@ function EngineCard({
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1.5 px-2 text-[11px]"
-                disabled={!!busy || !!job}
+                disabled={!!busy || isRunning(job)}
                 onClick={() =>
                   void run(
                     running ? "stop" : "start",
@@ -336,7 +338,7 @@ function EngineCard({
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                disabled={!!busy || !!job}
+                disabled={!!busy || isRunning(job)}
                 onClick={() =>
                   void run("remove", () => ttsNative.removeEngine(engine))
                 }
@@ -350,12 +352,13 @@ function EngineCard({
               size="sm"
               variant="outline"
               className="h-7 gap-1.5 px-2 text-[11px]"
-              disabled={!!busy || !!job}
+              disabled={!!busy || isRunning(job)}
               onClick={() =>
                 void run("install", () => ttsNative.installEngine(engine))
               }
             >
-              {busy === "install" || job?.kind === "engine-install" ? (
+              {busy === "install" ||
+              (isRunning(job) && job?.kind === "engine-install") ? (
                 <Spinner className="size-3" />
               ) : (
                 <HugeiconsIcon
@@ -454,8 +457,8 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
           const status = modelStatusOf(runtime.status, model);
           const engineInstalled =
             engineStatusOf(runtime.status, engine)?.installed ?? false;
-          const job = jobFor(
-            runtime,
+          const job = pickJob(
+            runtime.jobs,
             (j) => j.kind === "model-download" && j.model === model,
           );
           return (
@@ -518,7 +521,9 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
                     size="sm"
                     variant="outline"
                     className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
-                    disabled={!engineInstalled || busy === model || !!job}
+                    disabled={
+                      !engineInstalled || busy === model || isRunning(job)
+                    }
                     title={
                       engineInstalled
                         ? undefined
@@ -528,7 +533,7 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
                       void run(model, () => ttsNative.downloadModel(model))
                     }
                   >
-                    {busy === model || job ? (
+                    {busy === model || isRunning(job) ? (
                       <Spinner className="size-3" />
                     ) : (
                       <HugeiconsIcon
@@ -1189,7 +1194,7 @@ function StorageCard({ runtime }: { runtime: Runtime }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const usage = runtime.status?.diskUsageBytes ?? 0;
-  const job = jobFor(runtime, (j) => j.kind === "purge");
+  const job = pickJob(runtime.jobs, (j) => j.kind === "purge");
 
   const purge = async () => {
     setBusy(true);
@@ -1226,7 +1231,7 @@ function StorageCard({ runtime }: { runtime: Runtime }) {
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                disabled={busy || !!job}
+                disabled={busy || isRunning(job)}
               >
                 <HugeiconsIcon icon={Delete02Icon} size={12} strokeWidth={1.75} />
                 Purge everything
@@ -1268,16 +1273,6 @@ function StorageCard({ runtime }: { runtime: Runtime }) {
       {error ? <ErrorLine message={error} /> : null}
       <JobLog runtime={runtime} job={job} />
     </Card>
-  );
-}
-
-function jobFor(runtime: Runtime, match: (job: TtsJob) => boolean): TtsJob | null {
-  const jobs = runtime.jobs.filter(match);
-  if (jobs.length === 0) return null;
-  const running = jobs.find((job) => job.state === "running");
-  if (running) return running;
-  return jobs.reduce((latest, job) =>
-    job.startedAtMs > latest.startedAtMs ? job : latest,
   );
 }
 

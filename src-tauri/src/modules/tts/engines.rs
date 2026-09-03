@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// Bumped whenever an engine's pins change, so an installed venv can be
 /// recognised as stale without reinstalling to find out.
 pub const KOKORO_SPEC_VERSION: u32 = 1;
-pub const CHATTERBOX_SPEC_VERSION: u32 = 1;
+pub const CHATTERBOX_SPEC_VERSION: u32 = 2;
 
 pub const PYTHON_VERSION: &str = "3.11";
 
@@ -350,9 +350,20 @@ mod tests {
         assert!(kokoro.contains(&"kokoro==0.9.4".to_string()), "{kokoro:?}");
         assert!(kokoro.contains(&"torch==2.6.0".to_string()), "{kokoro:?}");
         let chatterbox = Engine::Chatterbox.pins();
+        // A source archive rather than a release: the published 0.1.7 predates
+        // the v3 weights and the turbo models this engine's adapter loads.
+        let archive = chatterbox
+            .iter()
+            .find(|pin| pin.starts_with("chatterbox-tts @ "))
+            .unwrap_or_else(|| panic!("{chatterbox:?}"));
         assert!(
-            chatterbox.contains(&"chatterbox-tts==0.1.7".to_string()),
-            "{chatterbox:?}"
+            archive.contains("resemble-ai/chatterbox/archive/"),
+            "{archive}"
+        );
+        assert!(archive.ends_with(".tar.gz"), "{archive}");
+        assert!(
+            !chatterbox.iter().any(|pin| pin.starts_with("huggingface_hub==0.35")),
+            "the 0.35 line cannot satisfy transformers 5.x: {chatterbox:?}"
         );
         for engine in Engine::ALL {
             for pin in engine.pins() {

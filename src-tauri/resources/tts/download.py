@@ -19,12 +19,17 @@ from engines.base import MODELS, model_info  # noqa: E402
 # File names verified against the HF repos; anything not listed is skipped.
 ALLOW_PATTERNS = {
     "kokoro-82m": ("kokoro-v1_0.pth", "config.json", "voices/*.pt"),
+    # Exactly what ChatterboxMultilingualTTS.from_local reads for t3_model="v3".
+    # The repo also carries ve.safetensors and s3gen_v3.safetensors, which the
+    # library never opens: listing those downloaded gigabytes the loader would
+    # then re-fetch as ve.pt and s3gen.pt.
     "chatterbox-multilingual": (
         "t3_mtl23ls_v3.safetensors",
-        "s3gen_v3.safetensors",
-        "ve.safetensors",
+        "s3gen.pt",
+        "ve.pt",
         "conds.pt",
-        "*.json",
+        "grapheme_mtl_merged_expanded_v1.json",
+        "Cangjie5_TC.json",
     ),
     "chatterbox-turbo": None,
     "chatterbox-nano": None,

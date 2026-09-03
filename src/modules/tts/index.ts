@@ -91,6 +91,7 @@ export {
   type PlaybackState,
 } from "./lib/playback";
 export { formatApproxBytes, formatBytes } from "./lib/format";
+export { isRunning, pickJob } from "./lib/jobs";
 export { hydrateVoicesState, TTS_VOICES_STORE_PATH } from "./lib/store";
 export {
   previewVoice,

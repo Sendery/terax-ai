@@ -1,3 +1,11 @@
-chatterbox-tts==0.1.7
-huggingface_hub==0.35.3
+# Pinned to a source archive rather than the PyPI release: 0.1.7 is the last
+# published version and predates the v3 multilingual weights, ChatterboxTurboTTS
+# and ChatterboxNano, all of which the adapter uses. The archive is fetched over
+# HTTPS, but the package's own `resemble-perth` dependency is a git reference,
+# so installing this engine needs `git` on PATH.
+chatterbox-tts @ https://github.com/resemble-ai/chatterbox/archive/5de7a54aa4e5e2baadb0182dde554908b48b85c2.tar.gz
+# chatterbox-tts pulls transformers 5.x, which requires huggingface-hub >= 1.3;
+# the 0.35 line kokoro pins is unsatisfiable here. Each engine has its own venv,
+# so the two pins never meet.
+huggingface_hub==1.30.0
 soundfile==0.13.1

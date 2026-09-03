@@ -33,6 +33,10 @@ export function useTtsRuntime(enabled = true): TtsRuntime {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, string>>({});
   const offsets = useRef(new Map<number, number>());
+  // Jobs whose final output has been read. A job that failed between two polls
+  // still holds the lines that say why, so tailing only the running ones loses
+  // exactly the part the user needs.
+  const drained = useRef(new Set<number>());
   const alive = useRef(true);
 
   const tailJobLog = useCallback(async (jobId: number) => {
@@ -64,7 +68,18 @@ export function useTtsRuntime(enabled = true): TtsRuntime {
       setStatus(next);
       setError(null);
       useTtsStore.getState().setStatus(next);
-      await Promise.all(runningJobsOf(next).map((job) => tailJobLog(job.id)));
+      await Promise.all(
+        (next.jobs ?? [])
+          .filter(
+            (job) => job.state === "running" || !drained.current.has(job.id),
+          )
+          .map(async (job) => {
+            await tailJobLog(job.id);
+            // A finished job writes nothing more, so one read after it stopped
+            // is the whole tail.
+            if (job.state !== "running") drained.current.add(job.id);
+          }),
+      );
     } catch (err) {
       if (!alive.current) return;
       setError(err instanceof Error ? err.message : String(err));
@@ -93,6 +108,8 @@ export function useTtsRuntime(enabled = true): TtsRuntime {
 
   const forgetJobLog = useCallback((jobId: number) => {
     offsets.current.delete(jobId);
+    // Dismissed on purpose: the next poll must not fetch it again from zero.
+    drained.current.add(jobId);
     setLogs((prev) => {
       if (prev[jobId] === undefined) return prev;
       const next = { ...prev };
