@@ -116,6 +116,7 @@ pub fn child_env(
     set("HF_HOME", s(layout.hf_home()));
     set("HF_HUB_CACHE", s(layout.hf_hub()));
     set("HF_HUB_DISABLE_TELEMETRY", "1".to_string());
+    set("PKUSEG_HOME", s(layout.pkuseg_home()));
 
     set("PYTHONNOUSERSITE", "1".to_string());
     set("PYTHONDONTWRITEBYTECODE", "1".to_string());
@@ -179,6 +180,7 @@ mod tests {
             "UV_CACHE_DIR",
             "HF_HOME",
             "HF_HUB_CACHE",
+            "PKUSEG_HOME",
             "TMPDIR",
             "TEMP",
             "TMP",

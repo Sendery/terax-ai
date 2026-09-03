@@ -107,6 +107,13 @@ impl Layout {
         self.hf_home().join("hub")
     }
 
+    /// `PKUSEG_HOME`. The Chinese tokenizer chatterbox pulls in downloads its
+    /// own corpus, and its default is `~/.pkuseg`: without this the engine
+    /// leaves ~90 MB outside the root that a purge would never reclaim.
+    pub fn pkuseg_home(&self) -> PathBuf {
+        self.models().join("pkuseg")
+    }
+
     pub fn model_dir(&self, model: Model) -> PathBuf {
         self.hf_hub().join(model.hf_dir_name())
     }
