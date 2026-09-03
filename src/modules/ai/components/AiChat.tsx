@@ -8,7 +8,13 @@ import {
   Message,
   MessageContent,
   MessageResponse,
+  type MessageResponseProps,
 } from "@/components/ai-elements/message";
+import { MarkdownCode } from "@/components/ai-elements/markdown-code";
+import {
+  MarkdownLink,
+  type MarkdownLinkProps,
+} from "@/modules/markdown/MarkdownLink";
 import {
   Reasoning,
   ReasoningContent,
@@ -252,7 +258,7 @@ export function AiChatView({
         )}
         {error && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            <div className="font-medium">Something went wrong.</div>
+            <div className="font-medium">Request failed.</div>
             <div className="mt-0.5 leading-relaxed opacity-90">
               {error.message}
             </div>
@@ -586,6 +592,22 @@ const ReadRow = memo(function ReadRow({ part }: { part: AnyPart }) {
   );
 });
 
+const aiStreamdownComponents = {
+  a: (props: MarkdownLinkProps) => (
+    <MarkdownLink {...props} onSettled={useChatStore.getState().focusInput} />
+  ),
+  code: MarkdownCode,
+};
+
+function AiMessageResponse(props: Omit<MessageResponseProps, "components">) {
+  return (
+    <MessageResponse
+      {...props}
+      components={aiStreamdownComponents}
+    />
+  );
+}
+
 const RenderedPart = memo(function RenderedPart({
   part,
   onApproval,
@@ -597,9 +619,9 @@ const RenderedPart = memo(function RenderedPart({
 }) {
   if (part.type === "text") {
     return (
-      <MessageResponse streaming={streaming}>
+      <AiMessageResponse streaming={streaming}>
         {(part as unknown as { text: string }).text}
-      </MessageResponse>
+      </AiMessageResponse>
     );
   }
 

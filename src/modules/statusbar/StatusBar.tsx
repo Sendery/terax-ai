@@ -1,21 +1,22 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useChatStore } from "@/modules/ai";
 import { AgentStatusPill } from "@/modules/ai/components/AgentStatusPill";
 import {
   AiOpenButton,
   AiStatusBarControls,
 } from "@/modules/ai/components/AiStatusBarControls";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { LspStatusPill } from "@/modules/lsp";
+import type { WorkspaceEnv } from "@/modules/workspace";
 import { IncognitoIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SlotMonitorIndicator } from "@/modules/slot-monitor";
 import { SpeakingPill } from "@/modules/tts";
 import { CwdBreadcrumb } from "./CwdBreadcrumb";
 import { WorkspaceEnvSelector } from "./WorkspaceEnvSelector";
-import type { WorkspaceEnv } from "@/modules/workspace";
 
 type Props = {
   cwd: string | null;
@@ -50,6 +51,7 @@ export function StatusBar({
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <WorkspaceEnvSelector onSelect={onWorkspaceChange} />
         <CwdBreadcrumb cwd={cwd} filePath={filePath} home={home} onCd={onCd} />
+        <LspStatusPill filePath={filePath ?? null} />
         {privateActive ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -58,7 +60,10 @@ export function StatusBar({
                 <span>Private: hidden from AI</span>
               </span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-64 text-[11px] leading-relaxed">
+            <TooltipContent
+              side="top"
+              className="max-w-64 text-[11px] leading-relaxed"
+            >
               AI can't see this terminal's output. Use it for secrets, SSH, or
               anything you don't want sent to the model.
             </TooltipContent>

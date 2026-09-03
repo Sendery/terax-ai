@@ -52,6 +52,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AgentTabBadge } from "./AgentTabBadge";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
 
@@ -384,6 +385,7 @@ export function TabBar({
                       />
                     ) : null}
                   </span>
+                  <AgentTabBadge tab={t} />
                   {tabs.length > 1 && (
                     <span
                       role="button"

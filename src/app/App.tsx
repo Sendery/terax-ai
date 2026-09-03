@@ -52,6 +52,7 @@ import {
 } from "@/modules/editor";
 import { FileExplorer, type FileExplorerHandle } from "@/modules/explorer";
 import type { GitHistorySearchHandle } from "@/modules/git-history";
+import { setLspNavigator } from "@/modules/lsp";
 import {
   Header,
   type SearchInlineHandle,
@@ -174,6 +175,7 @@ import {
   WorkspaceInputBar,
 } from "./components/WorkspaceInputBar";
 import { WorkspaceSurface } from "./components/WorkspaceSurface";
+import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 
@@ -400,7 +402,9 @@ export default function App() {
     sidebarRef,
     sidebarWidthRef,
     sidebarView,
+    initialSidebarCollapsed,
     persistSidebarView,
+    persistSidebarCollapsed,
     toggleSidebar,
     showSidebar,
     hideSidebar,
@@ -473,6 +477,7 @@ export default function App() {
   const miniOpen = useChatStore((s) => s.mini.open);
   const miniPresence = usePresence(miniOpen, 200);
   const openMini = useChatStore((s) => s.openMini);
+  const toggleMini = useChatStore((s) => s.toggleMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
   const closePanel = useChatStore((s) => s.closePanel);
@@ -571,6 +576,9 @@ export default function App() {
     cancelDeleteClose,
     handlePathDeleted,
   } = useTabCloseGuards({ tabs, disposeTab });
+
+  const { pendingAppClose, confirmAppClose, cancelAppClose } =
+    useAppCloseGuard(tabsRef);
 
   useEffect(() => {
     const live = new Set<number>();
@@ -1114,6 +1122,13 @@ export default function App() {
       "blocks.next": () => navigateFocusedBlocks(1),
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
+      "ai.toggleMini": () => {
+        if (!hasComposer) {
+          void openSettingsWindow("models");
+          return;
+        }
+        toggleMini();
+      },
       "ai.askSelection": askFromSelection,
       "notes.addSelection": addSelectionToNote,
       "tts.readSelection": () => readSelectionAloud(),
@@ -1144,7 +1159,9 @@ export default function App() {
       focusNextPaneInTab,
       clearActiveTerminal,
       toggleSourceControl,
+      hasComposer,
       togglePanelAndFocus,
+      toggleMini,
       askFromSelection,
       addSelectionToNote,
       readSelectionAloud,
@@ -2089,6 +2106,11 @@ export default function App() {
     [openFileTab],
   );
 
+  useEffect(() => {
+    setLspNavigator({ openFile: openContentHit });
+    return () => setLspNavigator(null);
+  }, [openContentHit]);
+
   const insertHistoryCommand = useMemo(
     () =>
       isTerminalTab && activeLeafId !== null
@@ -2160,17 +2182,23 @@ export default function App() {
             <ResizablePanelGroup
               orientation="horizontal"
               className="min-h-0 flex-1"
+              onLayoutChanged={(_, { isUserInteraction }) => {
+                const width = sidebarRef.current?.getSize().inPixels ?? 0;
+                persistSidebarWidth(width, isUserInteraction);
+              }}
             >
               <ResizablePanel
                 id="sidebar"
                 panelRef={sidebarRef}
-                defaultSize={`${sidebarWidthRef.current}px`}
+                defaultSize={
+                  initialSidebarCollapsed ? "0px" : `${sidebarWidthRef.current}px`
+                }
                 minSize={`${SIDEBAR_MIN_WIDTH}px`}
                 maxSize={`${SIDEBAR_MAX_WIDTH}px`}
                 collapsible
                 collapsedSize={0}
                 onResize={(size) => {
-                  if (size.inPixels > 0) persistSidebarWidth(size.inPixels);
+                  persistSidebarCollapsed(size.inPixels <= 0);
                 }}
               >
                 <div
@@ -2486,6 +2514,9 @@ export default function App() {
             pendingDeleteTabs={pendingDeleteTabs}
             onCancelDeleteClose={cancelDeleteClose}
             onConfirmDeleteClose={confirmDeleteClose}
+            pendingAppClose={pendingAppClose}
+            onCancelAppClose={cancelAppClose}
+            onConfirmAppClose={confirmAppClose}
           />
         </div>
       </TooltipProvider>

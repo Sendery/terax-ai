@@ -48,6 +48,7 @@ tokio = { version = "1", default-features = false, features = ["rt"] }
 tempfile = "3"
 notify = "8.2.0"
 sha2 = "0.10"
+which = "8.0.4"
 
 [dev-dependencies]
 proptest = "1"
@@ -77,6 +78,7 @@ windows-sys = { version = "0.61", features = [
 	"Win32_Security_Cryptography",
 	"Win32_System_JobObjects",
 	"Win32_System_Threading",
+	"Win32_System_ProcessStatus",
 	"Win32_System_Diagnostics_ToolHelp",
 ] }
 
@@ -94,3 +96,8 @@ lto = "fat"
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# rust-lang/rust#110536: stripping proc-macro dylibs breaks the dlopen rustc does
+# at compile time on macOS, reported as a bogus E0463. Never shipped, so nothing to strip.
+[profile.release.build-override]
+strip = false

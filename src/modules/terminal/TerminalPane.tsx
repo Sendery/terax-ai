@@ -73,7 +73,7 @@ export const TerminalPane = memo(
     const downYRef = useRef<number | null>(null);
     const menuSelectionRef = useRef<string | null>(null);
     const preClickSelectionRef = useRef<string | null>(null);
-    const { resolvedMode, themeId, customThemes } = useTheme();
+    const { resolvedMode, activeTheme } = useTheme();
 
     const session = useTerminalSession({
       leafId,
@@ -93,7 +93,7 @@ export const TerminalPane = memo(
       // Defer one frame so CSS-variable token resolution sees the new class.
       const id = requestAnimationFrame(() => session.applyTheme());
       return () => cancelAnimationFrame(id);
-    }, [resolvedMode, themeId, customThemes, session]);
+    }, [resolvedMode, activeTheme, session]);
 
     useImperativeHandle(
       ref,

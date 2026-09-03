@@ -221,6 +221,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      codemirror-languageserver:
+        specifier: ^1.22.1
+        version: 1.22.1(@codemirror/autocomplete@6.20.3)(@codemirror/lint@6.9.7)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6)
       mermaid:
         specifier: 11.17.0
         version: 11.17.0
@@ -3628,6 +3631,14 @@ packages:
 
   code-block-writer@13.0.3:
     resolution: {integrity: sha512-Oofo0pq3IKnsFtuHqSF7TqBfr71aeyZDVJ0HpmqB7FBM2qEigL0iPONSCZSO9pE9dZTAxANe5XHG9Uy0YMv8cg==}
+
+  codemirror-languageserver@1.22.1:
+    resolution: {integrity: sha512-Wg76PNzgYAy4YxInzqgS+AKa9meUzDrIsYnBKmFIY1RnClFu3jKI6rjurMfgBmzEewoAWmxOzYKNwvhsB2K8MQ==}
+    peerDependencies:
+      '@codemirror/autocomplete': ^6.18.6
+      '@codemirror/lint': ^6.8.5
+      '@codemirror/state': ^6.5.2
+      '@codemirror/view': ^6.38.1
 
   codemirror@6.0.2:
     resolution: {integrity: sha512-VhydHotNW5w1UGK0Qj96BwSk/Zqbp9WbnyK2W/eVMv4QyF41INRGpjUhFJY7/uDNuudSc33a/PKr4iDqRduvHw==}
@@ -9731,6 +9742,15 @@ snapshots:
       - '@types/react-dom'
 
   code-block-writer@13.0.3: {}
+
+  codemirror-languageserver@1.22.1(@codemirror/autocomplete@6.20.3)(@codemirror/lint@6.9.7)(@codemirror/state@6.7.1)(@codemirror/view@6.43.6):
+    dependencies:
+      '@codemirror/autocomplete': 6.20.3
+      '@codemirror/lint': 6.9.7
+      '@codemirror/state': 6.7.1
+      '@codemirror/view': 6.43.6
+      marked: 16.4.2
+      vscode-languageserver-protocol: 3.17.5
 
   codemirror@6.0.2:
     dependencies:

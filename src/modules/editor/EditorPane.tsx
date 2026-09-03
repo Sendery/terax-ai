@@ -20,11 +20,13 @@ import {
   useMemo,
   useRef,
 } from "react";
+import { languageIdOf, useLspExtension } from "@/modules/lsp";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { inlineCompletion } from "./lib/autocomplete/inlineExtension";
 import {
   buildSharedExtensions,
   languageCompartment,
+  lspCompartment,
   vimCompartment,
   wrapCompartment,
 } from "./lib/extensions";
@@ -169,6 +171,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
         })),
         ...buildSharedExtensions(),
         languageCompartment.of([]),
+        lspCompartment.of([]),
         inlineCompletion({
           getPrefs: () => {
             const s = usePreferencesStore.getState();
@@ -261,6 +264,16 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
         cancelled = true;
       };
     }, [path, doc.status]);
+
+    const langId = useMemo(() => languageIdOf(path), [path]);
+    const lspExt = useLspExtension(path, langId, doc.status === "ready");
+    useEffect(() => {
+      const view = cmRef.current?.view;
+      if (!view) return;
+      view.dispatch({
+        effects: lspCompartment.reconfigure(lspExt ?? []),
+      });
+    }, [lspExt]);
 
     useImperativeHandle(
       ref,
@@ -406,7 +419,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           theme={themeExt}
           extensions={extensions}
           height="100%"
-          className="flex-1 min-h-0 overflow-hidden"
+          className="terax-code-editor flex-1 min-h-0 overflow-hidden"
           basicSetup={{
             lineNumbers: true,
             highlightActiveLineGutter: true,

@@ -1,7 +1,7 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentsessions, capture, fs, git, history, net, pi, pisessions, pty,
+    agent, agent_cli, agentsessions, capture, fs, git, history, lsp, net, pi, pisessions, pty,
     scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
@@ -250,6 +250,7 @@ pub fn run() {
         .manage(fs::watch::FsWatchState::default())
         .manage(agent_cli::AgentCliState::default())
         .manage(history::HistoryState::default())
+        .manage(lsp::LspState::default())
         .manage(scheduler::SchedulerState::default())
         .manage(fs::grep::ContentSearchState::default())
         .manage(tts::TtsState::default())
@@ -285,6 +286,12 @@ pub fn run() {
             fs::mutate::fs_copy,
             fs::watch::fs_watch_add,
             fs::watch::fs_watch_remove,
+            lsp::lsp_detect,
+            lsp::lsp_host_pid,
+            lsp::lsp_resolve_root,
+            lsp::lsp_spawn,
+            lsp::lsp_send,
+            lsp::lsp_kill,
             fs::search::fs_search,
             fs::search::fs_list_files,
             fs::grep::fs_grep,
@@ -387,6 +394,13 @@ pub fn run() {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
                 if let Some(state) = app.try_state::<tts::TtsState>() {
+                    state.kill_all();
+                }
+            }
+            // LSP servers exit on stdin EOF, but destructors are not guaranteed
+            // on process exit; kill explicitly.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<lsp::LspState>() {
                     state.kill_all();
                 }
             }

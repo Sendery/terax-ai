@@ -176,10 +176,26 @@ export type Preferences = {
   shortcuts: Record<ShortcutId, KeyBinding[]>;
   editorAutoSave: boolean;
   editorAutoSaveDelay: number;
+  lspActivation: Record<string, LspActivation>;
+  lspCustomServers: LspCustomServer[];
+};
+
+export type LspActivation = "enabled" | "dismissed";
+
+export type LspCustomServer = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  /** languageResolver id -> LSP languageId */
+  languages: Record<string, string>;
+  rootMarkers: string[];
 };
 
 const STORE_PATH = "terax-settings.json";
 const KEY_THEME = "theme";
+const KEY_LSP_ACTIVATION = "lspActivation";
+const KEY_LSP_CUSTOM_SERVERS = "lspCustomServers";
 const KEY_THEME_ID = "themeId";
 const KEY_BG_KIND = "backgroundKind";
 const KEY_BG_IMAGE_ID = "backgroundImageId";
@@ -292,6 +308,8 @@ export const TERMINAL_SCROLLBACK_PRESETS = [
 ] as const;
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  lspActivation: {},
+  lspCustomServers: [],
   theme: "system",
   themeId: DEFAULT_THEME_ID,
   backgroundKind: "none",
@@ -368,6 +386,12 @@ export async function loadPreferences(): Promise<Preferences> {
   const map = new Map<string, unknown>(entries);
   const get = <T>(k: string): T | undefined => map.get(k) as T | undefined;
   return {
+    lspActivation:
+      get<Record<string, LspActivation>>(KEY_LSP_ACTIVATION) ??
+      DEFAULT_PREFERENCES.lspActivation,
+    lspCustomServers:
+      get<LspCustomServer[]>(KEY_LSP_CUSTOM_SERVERS) ??
+      DEFAULT_PREFERENCES.lspCustomServers,
     theme: get<ThemePref>(KEY_THEME) ?? DEFAULT_PREFERENCES.theme,
     themeId: get<string>(KEY_THEME_ID) ?? DEFAULT_PREFERENCES.themeId,
     backgroundKind:
@@ -531,6 +555,25 @@ export async function loadPreferences(): Promise<Preferences> {
         DEFAULT_PREFERENCES.editorAutoSaveDelay,
     ),
   };
+}
+
+export async function setLspActivation(
+  id: string,
+  value: LspActivation | null,
+): Promise<void> {
+  const current =
+    ((await store.get(KEY_LSP_ACTIVATION)) as Record<string, LspActivation>) ??
+    {};
+  const next = { ...current };
+  if (value === null) delete next[id];
+  else next[id] = value;
+  await writePref(KEY_LSP_ACTIVATION, next);
+}
+
+export async function setLspCustomServers(
+  value: LspCustomServer[],
+): Promise<void> {
+  await writePref(KEY_LSP_CUSTOM_SERVERS, value);
 }
 
 export async function setTheme(value: ThemePref): Promise<void> {
@@ -813,6 +856,8 @@ export async function onPreferencesChange(
   cb: (key: PrefKey, value: unknown) => void,
 ): Promise<UnlistenFn> {
   const map: Record<string, PrefKey> = {
+    [KEY_LSP_ACTIVATION]: "lspActivation",
+    [KEY_LSP_CUSTOM_SERVERS]: "lspCustomServers",
     [KEY_THEME]: "theme",
     [KEY_THEME_ID]: "themeId",
     [KEY_BG_KIND]: "backgroundKind",
