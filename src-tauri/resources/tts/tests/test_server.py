@@ -381,6 +381,75 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotEqual(self.spawn(env=env).wait(timeout=15), 0)
 
 
+class CorsTests(ServerCase):
+    """The webview is a foreign origin to a loopback port, so every POST it
+    makes is preceded by a preflight. Without an answer, nothing is ever
+    synthesised: the browser never sends the request itself."""
+
+    def options(self, path, origin="tauri://localhost"):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        try:
+            headers = {
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization, content-type",
+            }
+            if origin is not None:
+                headers["Origin"] = origin
+            connection.request("OPTIONS", path, headers=headers)
+            response = connection.getresponse()
+            response.read()
+            return response.status, dict(response.getheaders())
+        finally:
+            connection.close()
+
+    def test_preflight_is_answered_for_the_webview(self):
+        status, headers = self.options("/synthesize")
+        self.assertEqual(status, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "tauri://localhost")
+        self.assertIn("POST", headers["Access-Control-Allow-Methods"])
+        # The bearer token travels in Authorization, so the browser only sends
+        # it once the preflight says that header is allowed.
+        self.assertIn("authorization", headers["Access-Control-Allow-Headers"].lower())
+
+    def test_preflight_is_answered_for_the_dev_server(self):
+        status, headers = self.options("/synthesize", origin="http://localhost:1420")
+        self.assertEqual(status, 204)
+        self.assertEqual(
+            headers["Access-Control-Allow-Origin"], "http://localhost:1420"
+        )
+
+    def test_preflight_from_a_foreign_origin_is_refused(self):
+        status, headers = self.options("/synthesize", origin="https://evil.example")
+        self.assertEqual(status, 403)
+        self.assertNotIn("Access-Control-Allow-Origin", headers)
+
+    def test_a_real_response_is_readable_by_the_webview(self):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        try:
+            connection.request(
+                "GET",
+                "/health",
+                headers={
+                    "Authorization": "Bearer " + TOKEN,
+                    "Origin": "tauri://localhost",
+                },
+            )
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(
+                response.getheader("Access-Control-Allow-Origin"), "tauri://localhost"
+            )
+        finally:
+            connection.close()
+
+    def test_a_request_without_an_origin_is_untouched(self):
+        # Rust talks to the sidecar directly; it sends no Origin and needs none.
+        status, payload = self.get_json("/health")
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+
+
 class BuiltinVoiceValidationTests(unittest.TestCase):
     """A clone model owns one voice; that one alone needs nothing to clone."""
 

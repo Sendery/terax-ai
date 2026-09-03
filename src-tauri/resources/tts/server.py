@@ -259,6 +259,30 @@ def validate_synthesize(host: Host, payload: dict) -> dict:
     }
 
 
+# The webview is a different origin from a loopback port, so every authorised
+# request is preceded by a CORS preflight. Answering it is what lets the window
+# speak at all; the reply is limited to the origins Terax itself runs under, and
+# the bearer token remains the thing that actually authorises a request.
+ALLOWED_ORIGIN_EXACT = (
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+)
+# The Vite dev server, whose port is assigned at run time.
+ALLOWED_ORIGIN_PREFIX = ("http://localhost:", "http://127.0.0.1:")
+
+
+def allowed_origin(origin):
+    """The value to echo back, or None when the origin is not one of ours."""
+    if not origin:
+        return None
+    if origin in ALLOWED_ORIGIN_EXACT:
+        return origin
+    if origin.startswith(ALLOWED_ORIGIN_PREFIX):
+        return origin
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "terax-tts"
@@ -280,9 +304,34 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._send_cors_headers()
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
+
+    def _send_cors_headers(self) -> None:
+        origin = allowed_origin(self.headers.get("Origin"))
+        if origin is None:
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
+
+    def do_OPTIONS(self):
+        origin = allowed_origin(self.headers.get("Origin"))
+        if origin is None:
+            # No echo, no allowed methods: the browser refuses the real request.
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "authorization, content-type")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Vary", "Origin")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _send_json(self, status: int, payload: dict) -> None:
         self._send(status, json.dumps(payload).encode("utf-8"), "application/json")

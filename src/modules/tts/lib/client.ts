@@ -192,9 +192,12 @@ async function request(
     if (external?.aborted) {
       throw new TtsClientError("aborted", "Speech was stopped.");
     }
+    // A blocked fetch reports "Load failed" in WebKit and "Failed to fetch" in
+    // Chromium, neither of which says anything to the person reading it.
+    const detail = err instanceof Error ? err.message : String(err);
     throw new TtsClientError(
       "network",
-      err instanceof Error ? err.message : "Could not reach the speech engine.",
+      `Could not reach the speech engine (${detail}).`,
     );
   } finally {
     clearTimeout(timer);
