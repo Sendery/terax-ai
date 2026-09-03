@@ -237,7 +237,10 @@ def validate_synthesize(host: Host, payload: dict) -> dict:
     params = validate_params(info.params, payload.get("params"))
     sample_path = validate_sample_path(host.samples_dir, payload.get("samplePath"))
     if info.voice_source == "clone" and sample_path is None:
-        raise HttpError(400, "sample_required", "{} needs a voice sample".format(info.id))
+        # The voice baked into the weights is the one clone models can speak
+        # without being given anything to clone.
+        if not info.builtin_voice or voice != info.builtin_voice:
+            raise HttpError(400, "sample_required", "{} needs a voice sample".format(info.id))
 
     known = {"model", "text", "language", "voice", "samplePath", "params"}
     unknown = sorted(set(payload) - known)
@@ -352,6 +355,7 @@ class Handler(BaseHTTPRequestHandler):
                     "downloaded": is_downloaded(info),
                     "languages": list(info.languages),
                     "voiceSource": info.voice_source,
+                    "builtinVoice": info.builtin_voice or None,
                 }
                 for info in self.host.engine.models()
             ]

@@ -1,4 +1,11 @@
 export { SpeakingPill } from "./components/SpeakingPill";
+export { TtsEngineControl } from "./components/TtsEngineControl";
+export {
+  hasInstalledEngine,
+  isEngineRunning,
+  modelChoices,
+  type ModelChoice,
+} from "./lib/engineControl";
 export {
   collapseWhitespace,
   DEFAULT_MAX_CHARS,
@@ -20,12 +27,14 @@ export {
   type TtsPresetVoice,
 } from "./lib/client";
 export {
+  BUILTIN_VOICE_ID,
   DEVICE_LABELS,
   ENGINE_APPROX_BYTES,
   ENGINE_DESCRIPTIONS,
   ENGINE_LABELS,
   engineOf,
   EXPRESSIVENESS_TAGS,
+  isBuiltinVoice,
   isTtsDevice,
   isTtsEngineId,
   isTtsLanguage,
@@ -33,6 +42,7 @@ export {
   KOKORO_PRESET_VOICES,
   LANGUAGE_LABELS,
   MODEL_APPROX_BYTES,
+  MODEL_BUILTIN_VOICE,
   MODEL_DESCRIPTIONS,
   MODEL_ENGINE,
   MODEL_LABELS,
@@ -92,7 +102,11 @@ export {
 } from "./lib/playback";
 export { formatApproxBytes, formatBytes } from "./lib/format";
 export { isRunning, pickJob } from "./lib/jobs";
-export { hydrateVoicesState, TTS_VOICES_STORE_PATH } from "./lib/store";
+export {
+  hydrateVoicesState,
+  SEED_VERSION,
+  TTS_VOICES_STORE_PATH,
+} from "./lib/store";
 export {
   previewVoice,
   speakText,
@@ -105,6 +119,7 @@ export {
 export { TTS_POLL_MS, useTtsRuntime } from "./lib/useTtsRuntime";
 export {
   BUILT_IN_DEFAULTS,
+  builtInsAddedAfter,
   createProfile,
   defaultVoiceFor,
   isProfileSpeakable,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   KEY_DEFAULTS,
   KEY_VOICES,
+  SEED_VERSION,
   parseStoredDefaults,
   parseStoredVoices,
   seedVoicesState,
@@ -10,6 +11,8 @@ import {
   TTS_VOICES_STORE_PATH,
 } from "./store";
 import {
+  BUILT_IN_DEFAULTS,
+  builtInsAddedAfter,
   BUILT_IN_EN_ID,
   BUILT_IN_ES_ID,
   createProfile,
@@ -150,10 +153,11 @@ describe("seedVoicesState", () => {
   it("seeds the built-ins the first time, before anything is written", () => {
     const seeded = seedVoicesState(undefined, undefined);
     expect(seeded.seeded).toBe(true);
-    expect(seeded.profiles.map((p) => p.id)).toEqual([
-      BUILT_IN_ES_ID,
-      BUILT_IN_EN_ID,
-    ]);
+    expect(seeded.profiles.map((p) => p.id)).toEqual(
+      BUILT_IN_DEFAULTS.map((p) => p.id),
+    );
+    // Every model arrives with a voice, but the defaults stay on Kokoro: the
+    // others would each want a multi-gigabyte download before they can speak.
     expect(seeded.defaults).toEqual({
       "es-ES": BUILT_IN_ES_ID,
       "en-US": BUILT_IN_EN_ID,
@@ -161,6 +165,7 @@ describe("seedVoicesState", () => {
   });
 
   it("does not resurrect built-ins once the list was emptied by hand", () => {
+    // Emptied on purpose: not even a newly catalogued voice is pushed back in.
     const state = seedVoicesState([], { "es-ES": BUILT_IN_ES_ID });
     expect(state.seeded).toBe(false);
     expect(state.profiles).toEqual([]);
@@ -168,9 +173,40 @@ describe("seedVoicesState", () => {
   });
 
   it("keeps stored profiles and prunes their broken defaults", () => {
-    const state = seedVoicesState([profile()], { "es-ES": "v-1", "en-US": "v-1" });
+    const state = seedVoicesState(
+      [profile()],
+      { "es-ES": "v-1", "en-US": "v-1" },
+      SEED_VERSION,
+    );
     expect(state.seeded).toBe(false);
     expect(state.profiles.map((p) => p.id)).toEqual(["v-1"]);
     expect(state.defaults).toEqual({ "es-ES": "v-1", "en-US": null });
+  });
+
+  it("hands an older install only the voices it has never been offered", () => {
+    // No marker: written before the version was tracked, so seed 1 is assumed
+    // seen and only what came later arrives.
+    const state = seedVoicesState([profile()], { "es-ES": "v-1" });
+    expect(state.seeded).toBe(true);
+    expect(state.profiles.map((p) => p.id)).toEqual([
+      "v-1",
+      ...builtInsAddedAfter(1).map((p) => p.id),
+    ]);
+    // The Kokoro built-ins it deleted stay deleted, and its default is intact.
+    expect(state.profiles.map((p) => p.id)).not.toContain(BUILT_IN_ES_ID);
+    expect(state.defaults["es-ES"]).toBe("v-1");
+  });
+
+  it("offers nothing new twice", () => {
+    const first = seedVoicesState([profile()], { "es-ES": "v-1" });
+    const second = seedVoicesState(
+      first.profiles,
+      { "es-ES": "v-1" },
+      SEED_VERSION,
+    );
+    expect(second.seeded).toBe(false);
+    expect(second.profiles.map((p) => p.id)).toEqual(
+      first.profiles.map((p) => p.id),
+    );
   });
 });

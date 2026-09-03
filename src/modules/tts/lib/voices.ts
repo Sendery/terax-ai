@@ -1,4 +1,6 @@
 import {
+  BUILTIN_VOICE_ID,
+  isBuiltinVoice,
   isTtsLanguage,
   isTtsModelId,
   MODEL_PARAMS,
@@ -104,7 +106,8 @@ export function isProfileSpeakable(profile: VoiceProfile): boolean {
   if (MODEL_VOICE_SOURCE[profile.model] === "preset") {
     return !!profile.voice && profile.voice.trim().length > 0;
   }
-  return !!profile.sampleId;
+  // A clone model speaks its own built-in voice with nothing to clone from.
+  return !!profile.sampleId || isBuiltinVoice(profile.model, profile.voice);
 }
 
 export type VoiceProfileInput = {
@@ -154,13 +157,17 @@ function normalizeStyle(model: TtsModelId, style: VoiceStyle): VoiceStyle {
 export function createProfile(input: VoiceProfileInput): VoiceProfile {
   const name = input.name.trim().slice(0, MAX_NAME) || "New voice";
   const preset = MODEL_VOICE_SOURCE[input.model] === "preset";
+  const asked = input.voice?.trim() || null;
+  // A clone model stores no preset id, but it does store which of its two
+  // sources to use: the voice in its weights, or an imported sample.
+  const builtin = !preset && isBuiltinVoice(input.model, asked);
   return {
     id: input.id ?? newProfileId(),
     name,
     model: input.model,
     language: input.language,
-    voice: preset ? (input.voice?.trim() || null) : null,
-    sampleId: preset ? null : (input.sampleId ?? null),
+    voice: preset ? asked : builtin ? BUILTIN_VOICE_ID : null,
+    sampleId: preset || builtin ? null : (input.sampleId ?? null),
     params: clampParams(input.model, input.params ?? {}),
     style: normalizeStyle(input.model, input.style ?? {}),
     createdAt:
@@ -172,9 +179,34 @@ export function createProfile(input: VoiceProfileInput): VoiceProfile {
 
 export const BUILT_IN_ES_ID = "builtin-es-dora";
 export const BUILT_IN_EN_ID = "builtin-en-heart";
+export const BUILT_IN_CHATTERBOX_ES_ID = "builtin-es-chatterbox";
+export const BUILT_IN_CHATTERBOX_EN_ID = "builtin-en-chatterbox";
+export const BUILT_IN_TURBO_ID = "builtin-en-turbo";
+export const BUILT_IN_NANO_ID = "builtin-en-nano";
+
+function clonedBuiltIn(
+  id: string,
+  name: string,
+  model: TtsModelId,
+  language: TtsLanguage,
+): VoiceProfile {
+  return {
+    id,
+    name,
+    model,
+    language,
+    voice: BUILTIN_VOICE_ID,
+    sampleId: null,
+    params: {},
+    style: {},
+    createdAt: 0,
+  };
+}
 
 /** Seeded once so "read aloud" is deterministic before the user configures
- *  anything. Both point at Kokoro presets, the smallest download. */
+ *  anything, and so every model arrives with a voice that can be heard without
+ *  recording anything first. The per-language defaults stay on Kokoro, the
+ *  smallest download; the rest are there to be picked. */
 export const BUILT_IN_DEFAULTS: readonly VoiceProfile[] = [
   {
     id: BUILT_IN_ES_ID,
@@ -198,14 +230,49 @@ export const BUILT_IN_DEFAULTS: readonly VoiceProfile[] = [
     style: {},
     createdAt: 0,
   },
+  clonedBuiltIn(
+    BUILT_IN_CHATTERBOX_ES_ID,
+    "Chatterbox (Spanish)",
+    "chatterbox-multilingual",
+    "es-ES",
+  ),
+  clonedBuiltIn(
+    BUILT_IN_CHATTERBOX_EN_ID,
+    "Chatterbox (English)",
+    "chatterbox-multilingual",
+    "en-US",
+  ),
+  clonedBuiltIn(BUILT_IN_TURBO_ID, "Turbo", "chatterbox-turbo", "en-US"),
+  clonedBuiltIn(BUILT_IN_NANO_ID, "Nano", "chatterbox-nano", "en-US"),
 ];
 
+/** The seed version each built-in arrived in, so an existing install is given
+ *  what it has never seen without resurrecting what it deleted. */
+const BUILT_IN_SINCE: Record<string, number> = {
+  [BUILT_IN_ES_ID]: 1,
+  [BUILT_IN_EN_ID]: 1,
+  [BUILT_IN_CHATTERBOX_ES_ID]: 2,
+  [BUILT_IN_CHATTERBOX_EN_ID]: 2,
+  [BUILT_IN_TURBO_ID]: 2,
+  [BUILT_IN_NANO_ID]: 2,
+};
+
+/** Copies of the built-in voices introduced after `version`. */
+export function builtInsAddedAfter(version: number): VoiceProfile[] {
+  return BUILT_IN_DEFAULTS.filter(
+    (profile) => (BUILT_IN_SINCE[profile.id] ?? 1) > version,
+  ).map((profile) => ({ ...profile }));
+}
+
+/** Named rather than derived from the seed list: adding a voice for a new model
+ *  must not silently move the default off Kokoro. */
+const DEFAULT_PROFILE_IDS: VoiceDefaults = {
+  "es-ES": BUILT_IN_ES_ID,
+  "en-US": BUILT_IN_EN_ID,
+};
+
 export function builtInDefaultsMap(): VoiceDefaults {
-  const defaults: VoiceDefaults = { ...EMPTY_DEFAULTS };
-  for (const profile of BUILT_IN_DEFAULTS) {
-    defaults[profile.language] = profile.id;
-  }
-  return defaults;
+  return { ...DEFAULT_PROFILE_IDS };
 }
 
 export function defaultVoiceFor(

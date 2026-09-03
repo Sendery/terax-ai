@@ -2,6 +2,7 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 import { TTS_LANGUAGES } from "./engines";
 import {
   BUILT_IN_DEFAULTS,
+  builtInsAddedAfter,
   builtInDefaultsMap,
   EMPTY_DEFAULTS,
   isVoiceProfile,
@@ -13,6 +14,11 @@ export const TTS_VOICES_STORE_PATH = "terax-tts-voices.json";
 
 export const KEY_VOICES = "voices";
 export const KEY_DEFAULTS = "defaults";
+export const KEY_SEED_VERSION = "seedVersion";
+
+/** Bumped when BUILT_IN_DEFAULTS gains a voice an existing install should get.
+ *  1 was the two Kokoro voices; 2 added one voice per Chatterbox model. */
+export const SEED_VERSION = 2;
 
 export type PersistedVoicesState = {
   profiles: VoiceProfile[];
@@ -74,10 +80,13 @@ export function toStoredDefaults(defaults: VoiceDefaults): unknown {
 }
 
 /** Pure hydration core. The built-ins are seeded only when the key has never
- *  been written, so emptying the list by hand is not undone on next launch. */
+ *  been written, so emptying the list by hand is not undone on next launch.
+ *  A list written by an older version is topped up instead: voices added to the
+ *  catalogue since then arrive, and nothing already stored is touched. */
 export function seedVoicesState(
   rawVoices: unknown,
   rawDefaults: unknown,
+  rawSeedVersion?: unknown,
 ): PersistedVoicesState {
   if (rawVoices === undefined) {
     return {
@@ -86,11 +95,26 @@ export function seedVoicesState(
       seeded: true,
     };
   }
-  const profiles = parseStoredVoices(rawVoices);
+  const stored = parseStoredVoices(rawVoices);
+  // A stored list predates the version marker, so it has at least lived through
+  // seed 1; nothing from that seed is offered again.
+  const seenVersion =
+    typeof rawSeedVersion === "number" && Number.isFinite(rawSeedVersion)
+      ? rawSeedVersion
+      : 1;
+  const added =
+    stored.length > 0
+      ? builtInsAddedAfter(seenVersion).filter(
+          (built) => !stored.some((profile) => profile.id === built.id),
+        )
+      : [];
+  const profiles = [...stored, ...added];
   return {
     profiles,
     defaults: parseStoredDefaults(rawDefaults, profiles),
-    seeded: false,
+    // Only a write makes the top-up stick; without it the same voices would be
+    // offered again on every launch, including ones deleted on purpose.
+    seeded: added.length > 0,
   };
 }
 
@@ -104,7 +128,11 @@ export async function hydrateVoicesState(): Promise<PersistedVoicesState> {
   let state: PersistedVoicesState;
   try {
     const map = new Map(await store.entries());
-    state = seedVoicesState(map.get(KEY_VOICES), map.get(KEY_DEFAULTS));
+    state = seedVoicesState(
+      map.get(KEY_VOICES),
+      map.get(KEY_DEFAULTS),
+      map.get(KEY_SEED_VERSION),
+    );
   } catch {
     return {
       profiles: BUILT_IN_DEFAULTS.map((profile) => ({ ...profile })),
@@ -115,6 +143,7 @@ export async function hydrateVoicesState(): Promise<PersistedVoicesState> {
   if (state.seeded) {
     await persistVoices(state.profiles);
     await persistDefaults(state.defaults);
+    await write(KEY_SEED_VERSION, SEED_VERSION);
   }
   return state;
 }

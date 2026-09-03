@@ -14,7 +14,7 @@ import type { WorkspaceEnv } from "@/modules/workspace";
 import { IncognitoIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SlotMonitorIndicator } from "@/modules/slot-monitor";
-import { SpeakingPill } from "@/modules/tts";
+import { SpeakingPill, TtsEngineControl } from "@/modules/tts";
 import { CwdBreadcrumb } from "./CwdBreadcrumb";
 import { WorkspaceEnvSelector } from "./WorkspaceEnvSelector";
 
@@ -78,6 +78,7 @@ export function StatusBar({
         ) : (
           <AiOpenButton open={panelOpen} onToggle={togglePanel} />
         )}
+        <TtsEngineControl />
         <SlotMonitorIndicator cwd={cwd} />
       </div>
     </footer>

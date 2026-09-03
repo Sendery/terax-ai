@@ -279,11 +279,15 @@ class ChatterboxContractTests(ServerCase):
             ["chatterbox-multilingual", "chatterbox-nano", "chatterbox-turbo"],
         )
         self.assertEqual({m["voiceSource"] for m in payload["models"]}, {"clone"})
+        self.assertEqual({m["builtinVoice"] for m in payload["models"]}, {"builtin"})
 
-    def test_voices_are_empty(self):
+    def test_voices_are_the_built_in_one(self):
         status, payload = self.get_json("/voices?model=chatterbox-turbo")
         self.assertEqual(status, 200)
-        self.assertEqual(payload["voices"], [])
+        # One voice, and no language: the speaker in the weights is used for
+        # every language the model supports.
+        self.assertEqual([v["id"] for v in payload["voices"]], ["builtin"])
+        self.assertEqual(payload["voices"][0]["language"], "other")
 
     def test_turbo_refuses_spanish(self):
         self.assertEqual(
@@ -375,6 +379,55 @@ class LifecycleTests(unittest.TestCase):
         env = dict(self.env)
         del env["TERAX_TTS_TOKEN"]
         self.assertNotEqual(self.spawn(env=env).wait(timeout=15), 0)
+
+
+class BuiltinVoiceValidationTests(unittest.TestCase):
+    """A clone model owns one voice; that one alone needs nothing to clone."""
+
+    class _Host:
+        engine_name = "chatterbox"
+
+        def __init__(self, samples_dir):
+            self.samples_dir = samples_dir
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.samples_dir = os.path.join(self._tmp.name, "samples")
+        os.makedirs(self.samples_dir)
+        self.sample = os.path.join(self.samples_dir, "voice.wav")
+        with open(self.sample, "wb") as handle:
+            handle.write(b"RIFF")
+        self.host = self._Host(self.samples_dir)
+        self._downloaded = server.is_downloaded
+        server.is_downloaded = lambda info: True
+        self.addCleanup(setattr, server, "is_downloaded", self._downloaded)
+
+    def body(self, **over):
+        payload = {
+            "model": "chatterbox-multilingual",
+            "text": "Hola",
+            "language": "es-ES",
+            "voice": "builtin",
+        }
+        payload.update(over)
+        return payload
+
+    def test_builtin_voice_is_accepted_without_a_sample(self):
+        request = server.validate_synthesize(self.host, self.body())
+        self.assertIsNone(request["samplePath"])
+        self.assertEqual(request["voice"], "builtin")
+
+    def test_any_other_voice_still_needs_a_sample(self):
+        with self.assertRaises(server.HttpError) as caught:
+            server.validate_synthesize(self.host, self.body(voice="someone"))
+        self.assertEqual(caught.exception.code, "sample_required")
+
+    def test_a_sample_is_still_accepted_alongside_the_builtin_id(self):
+        request = server.validate_synthesize(
+            self.host, self.body(samplePath=self.sample)
+        )
+        self.assertEqual(request["samplePath"], os.path.realpath(self.sample))
 
 
 class SplitSentencesTests(unittest.TestCase):

@@ -1,4 +1,7 @@
-"""Chatterbox adapter (multilingual, turbo, nano). Cloning only."""
+"""Chatterbox adapter (multilingual, turbo, nano).
+
+Each checkpoint owns one built-in speaker and clones any other from a sample.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +9,15 @@ import importlib
 import sys
 from typing import Optional
 
-from .base import CHATTERBOX_LANG_IDS, MODELS, Engine, split_sentences
+from .base import (
+    BUILTIN_VOICE_ID,
+    CHATTERBOX_LANG_IDS,
+    MODELS,
+    Engine,
+    VoiceInfo,
+    model_info,
+    split_sentences,
+)
 
 MULTILINGUAL_ID = "chatterbox-multilingual"
 TURBO_ID = "chatterbox-turbo"
@@ -48,7 +59,12 @@ class ChatterboxEngine(Engine):
         return [m for m in MODELS if m.engine == self.id]
 
     def voices(self, model: str) -> list:
-        return []
+        info = model_info(model)
+        if info is None or not info.builtin_voice:
+            return []
+        # "other" rather than a language: the baked-in speaker is used for every
+        # language the model supports.
+        return [VoiceInfo(id=info.builtin_voice, label="Built-in", language="other")]
 
     def effective_device(self) -> Optional[str]:
         return self._device
@@ -97,10 +113,12 @@ class ChatterboxEngine(Engine):
 
         if self._model is None or self._model_id != model:
             raise RuntimeError("{} is not loaded".format(model))
-        if not sample_path:
+        if not sample_path and voice != BUILTIN_VOICE_ID:
             raise RuntimeError("{} requires a voice sample".format(model))
 
-        kwargs = {"audio_prompt_path": sample_path}
+        # Without an audio prompt the model speaks as the voice its weights
+        # carry, which is exactly what the built-in voice asks for.
+        kwargs = {"audio_prompt_path": sample_path} if sample_path else {}
         for key, name in (
             ("exaggeration", "exaggeration"),
             ("cfgWeight", "cfg_weight"),

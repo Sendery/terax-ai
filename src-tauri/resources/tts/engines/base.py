@@ -48,6 +48,12 @@ PARALINGUISTIC_TAGS = (
 )
 
 
+# Every chatterbox checkpoint ships a `conds.pt`: a speaker the model falls back
+# to when no audio prompt is given. It is the only voice a clone model owns, so
+# it needs no sample and works in every language the model supports.
+BUILTIN_VOICE_ID = "builtin"
+
+
 @dataclass(frozen=True)
 class ModelInfo:
     id: str
@@ -58,6 +64,8 @@ class ModelInfo:
     sample_rate: int
     params: tuple = ()
     tags: tuple = ()
+    #: Id of the voice baked into the weights, empty when there is none.
+    builtin_voice: str = ""
 
 
 @dataclass(frozen=True)
@@ -85,6 +93,7 @@ MODELS = (
         voice_source="clone",
         sample_rate=24000,
         params=("exaggeration", "cfgWeight", "temperature"),
+        builtin_voice=BUILTIN_VOICE_ID,
     ),
     ModelInfo(
         id="chatterbox-turbo",
@@ -95,6 +104,7 @@ MODELS = (
         sample_rate=24000,
         params=("exaggeration", "cfgWeight", "temperature"),
         tags=PARALINGUISTIC_TAGS,
+        builtin_voice=BUILTIN_VOICE_ID,
     ),
     ModelInfo(
         id="chatterbox-nano",
@@ -105,6 +115,7 @@ MODELS = (
         sample_rate=24000,
         params=("exaggeration", "cfgWeight", "temperature"),
         tags=PARALINGUISTIC_TAGS,
+        builtin_voice=BUILTIN_VOICE_ID,
     ),
     ModelInfo(
         id="fake-model",

@@ -103,6 +103,29 @@ export const MODEL_VOICE_SOURCE: Record<TtsModelId, VoiceSource> = {
   "chatterbox-nano": "clone",
 };
 
+/**
+ * Voice id every chatterbox checkpoint answers to without a sample: the speaker
+ * its `conds.pt` carries. Mirrors `BUILTIN_VOICE_ID` in the sidecar.
+ */
+export const BUILTIN_VOICE_ID = "builtin";
+
+/** The id of the voice a model owns outright, or null when it owns none. */
+export const MODEL_BUILTIN_VOICE: Record<TtsModelId, string | null> = {
+  "kokoro-82m": null,
+  "chatterbox-multilingual": BUILTIN_VOICE_ID,
+  "chatterbox-turbo": BUILTIN_VOICE_ID,
+  "chatterbox-nano": BUILTIN_VOICE_ID,
+};
+
+/** Whether `voice` is the one baked into `model`'s weights. */
+export function isBuiltinVoice(
+  model: TtsModelId,
+  voice: string | null | undefined,
+): boolean {
+  const builtin = MODEL_BUILTIN_VOICE[model];
+  return !!builtin && voice === builtin;
+}
+
 export const TTS_PARAMS = [
   "speed",
   "exaggeration",

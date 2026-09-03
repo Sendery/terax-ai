@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TTS_MODELS } from "./engines";
 import {
   BUILT_IN_DEFAULTS,
   BUILT_IN_EN_ID,
@@ -267,7 +268,20 @@ describe("built-in defaults", () => {
 
   it("groups profiles by language with every language present", () => {
     const grouped = profilesByLanguage(BUILT_IN_DEFAULTS);
-    expect(grouped["es-ES"].map((p) => p.id)).toEqual([BUILT_IN_ES_ID]);
-    expect(grouped["en-US"].map((p) => p.id)).toEqual([BUILT_IN_EN_ID]);
+    expect(grouped["es-ES"].map((p) => p.id)).toContain(BUILT_IN_ES_ID);
+    expect(grouped["en-US"].map((p) => p.id)).toContain(BUILT_IN_EN_ID);
+    expect(grouped["es-ES"][0].id).toBe(BUILT_IN_ES_ID);
+    expect(grouped["en-US"][0].id).toBe(BUILT_IN_EN_ID);
+  });
+
+  it("ships one usable voice per model, none of them needing a sample", () => {
+    for (const model of TTS_MODELS) {
+      const voices = BUILT_IN_DEFAULTS.filter((p) => p.model === model);
+      expect(voices.length, `${model} has no built-in voice`).toBeGreaterThan(0);
+      for (const voice of voices) {
+        expect(voice.sampleId).toBeNull();
+        expect(isProfileSpeakable(voice)).toBe(true);
+      }
+    }
   });
 });

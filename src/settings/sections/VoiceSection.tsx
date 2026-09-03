@@ -51,11 +51,14 @@ import {
   EXPRESSIVENESS_TAGS,
   formatApproxBytes,
   formatBytes,
+  BUILTIN_VOICE_ID,
+  isBuiltinVoice,
   isProfileSpeakable,
   isRunning,
   KOKORO_PRESET_VOICES,
   LANGUAGE_LABELS,
   MODEL_APPROX_BYTES,
+  MODEL_BUILTIN_VOICE,
   MODEL_DESCRIPTIONS,
   MODEL_LABELS,
   MODEL_LANGUAGES,
@@ -496,7 +499,9 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
                     {" · "}
                     {MODEL_VOICE_SOURCE[model] === "preset"
                       ? "preset voices"
-                      : "cloned from a sample"}
+                      : MODEL_BUILTIN_VOICE[model]
+                        ? "built-in voice or a cloned sample"
+                        : "cloned from a sample"}
                   </span>
                 </div>
                 {status?.downloaded ? (
@@ -705,7 +710,11 @@ function VoicesCard({ status }: { status: TtsStatus | null }) {
                       </span>
                       <span className="truncate text-[10.5px] text-muted-foreground">
                         {MODEL_LABELS[profile.model]}
-                        {profile.voice ? ` · ${profile.voice}` : ""}
+                        {isBuiltinVoice(profile.model, profile.voice)
+                          ? " · built-in voice"
+                          : profile.voice
+                            ? ` · ${profile.voice}`
+                            : ""}
                         {profile.sampleId ? " · cloned sample" : ""}
                         {profile.style.tags?.length
                           ? ` · ${profile.style.tags.length} tags`
@@ -791,6 +800,25 @@ function VoicesCard({ status }: { status: TtsStatus | null }) {
   );
 }
 
+/**
+ * The voice a model should start on. Presets keep whatever preset is already
+ * chosen; clone models keep an imported sample if the draft carries one and
+ * otherwise fall back to the voice in their own weights, so switching model
+ * never leaves the profile unusable.
+ */
+function defaultVoiceIdFor(
+  model: TtsModelId,
+  language: TtsLanguage,
+  draft: { voice: string | null; sampleId: string | null },
+): string | null {
+  if (MODEL_VOICE_SOURCE[model] === "preset") {
+    return draft.voice ?? KOKORO_PRESET_VOICES[language][0]?.id ?? null;
+  }
+  const builtin = MODEL_BUILTIN_VOICE[model];
+  if (!builtin) return null;
+  return draft.sampleId && !isBuiltinVoice(model, draft.voice) ? null : builtin;
+}
+
 function VoiceEditor({
   profile,
   status,
@@ -846,21 +874,19 @@ function VoiceEditor({
     patch({
       language,
       model: nextModel,
-      voice:
-        MODEL_VOICE_SOURCE[nextModel] === "preset"
-          ? (KOKORO_PRESET_VOICES[language][0]?.id ?? null)
-          : null,
+      voice: defaultVoiceIdFor(nextModel, language, draft),
     });
   };
 
   const changeModel = (next: TtsModelId) => {
+    const voice = defaultVoiceIdFor(next, draft.language, draft);
     patch({
       model: next,
-      voice:
-        MODEL_VOICE_SOURCE[next] === "preset"
-          ? (draft.voice ?? KOKORO_PRESET_VOICES[draft.language][0]?.id ?? null)
-          : null,
-      sampleId: MODEL_VOICE_SOURCE[next] === "preset" ? null : draft.sampleId,
+      voice,
+      sampleId:
+        MODEL_VOICE_SOURCE[next] === "preset" || voice === BUILTIN_VOICE_ID
+          ? null
+          : draft.sampleId,
       params: {},
       style: modelSupportsTags(next)
         ? draft.style
@@ -889,6 +915,7 @@ function VoiceEditor({
           .map((v) => ({ id: v.id, label: v.label || v.id }))
       : null;
   const knownPresets = KOKORO_PRESET_VOICES[draft.language];
+  const usesBuiltin = isBuiltinVoice(draft.model, draft.voice);
   const tagged = modelSupportsTags(draft.model);
   const params = MODEL_PARAMS[draft.model];
 
@@ -1014,6 +1041,43 @@ function VoiceEditor({
               )}
             </div>
           ) : (
+            <div className="flex flex-col gap-2">
+              {MODEL_BUILTIN_VOICE[draft.model] ? (
+                <div className="flex flex-col gap-1">
+                  <FieldLabel htmlFor="voice-source">Voice</FieldLabel>
+                  <Select
+                    value={usesBuiltin ? "builtin" : "sample"}
+                    onValueChange={(v) =>
+                      patch(
+                        v === "builtin"
+                          ? { voice: BUILTIN_VOICE_ID, sampleId: null }
+                          : { voice: null },
+                      )
+                    }
+                  >
+                    <SelectTrigger
+                      id="voice-source"
+                      className="h-8 w-full text-[11.5px]"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="builtin" className="text-[12px]">
+                        Built-in voice
+                      </SelectItem>
+                      <SelectItem value="sample" className="text-[12px]">
+                        Cloned from a sample
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[10.5px] text-muted-foreground">
+                    {usesBuiltin
+                      ? `The speaker ${MODEL_LABELS[draft.model]} carries in its own weights. Nothing to record.`
+                      : "Your own recording, cloned by the model."}
+                  </span>
+                </div>
+              ) : null}
+              {usesBuiltin ? null : (
             <div className="flex flex-col gap-1">
               <FieldLabel>Voice sample</FieldLabel>
               <div className="flex items-center gap-2">
@@ -1048,6 +1112,8 @@ function VoiceEditor({
                 {LANGUAGE_LABELS[draft.language]}. Converted to 24 kHz mono
                 before it is stored.
               </span>
+            </div>
+              )}
             </div>
           )}
 

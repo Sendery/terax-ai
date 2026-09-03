@@ -154,6 +154,11 @@ pub fn spawn(
     if !python.is_file() {
         return Err(format!("{} is not installed", engine.id()));
     }
+    // The venv survives app updates, so the sources beside it may be the ones a
+    // previous version wrote. Rewriting here is a hash comparison in the common
+    // case, and it is what keeps a fix to the adapter from waiting for a
+    // reinstall. A running sidecar has already read its own copy.
+    super::install::write_server_sources(layout)?;
     let entry = layout.server_entry();
     if !entry.is_file() {
         return Err("the sidecar sources are missing; reinstall the engine".into());
