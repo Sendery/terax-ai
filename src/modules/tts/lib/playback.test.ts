@@ -3,10 +3,14 @@ import {
   chunksToSynthesize,
   currentAudioUrl,
   initialPlaybackState,
+  isPaused,
   isSpeaking,
   playbackProgress,
   playbackReducer,
   PREFETCH_DEPTH,
+  RESTART_AFTER_SECONDS,
+  RETAINED_BEHIND,
+  seekTarget,
   type PlaybackEvent,
   type PlaybackState,
 } from "./playback";
@@ -87,15 +91,14 @@ describe("synthesized", () => {
     expect(state.ready).toEqual({ 0: "blob:0", 1: "blob:1" });
   });
 
-  it("ignores a result for a chunk already behind the cursor", () => {
+  it("keeps a result for a chunk already played, so stepping back is instant", () => {
     const state = reduce(
       enqueued(),
       { type: "synthesized", index: 0, url: "blob:0" },
       { type: "ended", index: 0 },
+      { type: "synthesized", index: 0, url: "again" },
     );
-    expect(
-      playbackReducer(state, { type: "synthesized", index: 0, url: "late" }),
-    ).toBe(state);
+    expect(state.ready[0]).toBe("again");
   });
 
   it("ignores a result out of range and one arriving after a stop", () => {
@@ -121,7 +124,8 @@ describe("ended", () => {
     expect(state.phase).toBe("playing");
     expect(state.cursor).toBe(1);
     expect(state.playing).toBe(1);
-    expect(state.ready).toEqual({ 1: "blob:1" });
+    // The chunk just played stays within the step-back window.
+    expect(state.ready).toEqual({ 0: "blob:0", 1: "blob:1" });
   });
 
   it("waits on synthesis when the next chunk is not ready", () => {
@@ -278,5 +282,128 @@ describe("playbackProgress", () => {
       { type: "ended", index: 0 },
     );
     expect(playbackProgress(second)).toEqual({ index: 1, total: 3 });
+  });
+});
+
+describe("pause and resume", () => {
+  function playing(): PlaybackState {
+    return reduce(enqueued(), { type: "synthesized", index: 0, url: "blob:0" });
+  }
+
+  it("holds the chunk on the element so resuming continues it", () => {
+    const paused = playbackReducer(playing(), { type: "pause" });
+    expect(paused.phase).toBe("paused");
+    expect(paused.playing).toBe(0);
+    expect(isPaused(paused)).toBe(true);
+    // Still a live utterance: the session must not be torn down.
+    expect(isSpeaking(paused)).toBe(true);
+    // Nothing to attach while paused, which is what keeps the element quiet.
+    expect(currentAudioUrl(paused)).toBeNull();
+
+    const resumed = playbackReducer(paused, { type: "resume" });
+    expect(resumed.phase).toBe("playing");
+    expect(currentAudioUrl(resumed)).toBe("blob:0");
+  });
+
+  it("keeps synthesizing ahead while paused", () => {
+    const paused = playbackReducer(playing(), { type: "pause" });
+    expect(chunksToSynthesize(paused, new Set())).toContain(1);
+  });
+
+  it("resumes into waiting when the chunk never arrived", () => {
+    const paused = playbackReducer(enqueued(), { type: "pause" });
+    // Nothing was playing, so there was nothing to pause.
+    expect(paused.phase).toBe("synthesizing");
+  });
+
+  it("ignores pause and resume outside their phase", () => {
+    const idle = initialPlaybackState;
+    expect(playbackReducer(idle, { type: "pause" })).toBe(idle);
+    expect(playbackReducer(idle, { type: "resume" })).toBe(idle);
+    const live = playing();
+    expect(playbackReducer(live, { type: "resume" })).toBe(live);
+  });
+});
+
+describe("seek", () => {
+  it("steps back to a chunk whose audio was kept", () => {
+    const state = reduce(
+      enqueued(),
+      { type: "synthesized", index: 0, url: "blob:0" },
+      { type: "synthesized", index: 1, url: "blob:1" },
+      { type: "ended", index: 0 },
+    );
+    const back = playbackReducer(state, { type: "seek", index: 0 });
+    expect(back.phase).toBe("playing");
+    expect(back.playing).toBe(0);
+    expect(currentAudioUrl(back)).toBe("blob:0");
+  });
+
+  it("waits on synthesis when the target has no audio", () => {
+    const state = reduce(enqueued(), {
+      type: "synthesized",
+      index: 0,
+      url: "blob:0",
+    });
+    const ahead = playbackReducer(state, { type: "seek", index: 2 });
+    expect(ahead.phase).toBe("synthesizing");
+    expect(ahead.cursor).toBe(2);
+    expect(ahead.playing).toBeNull();
+    expect(chunksToSynthesize(ahead, new Set())).toContain(2);
+  });
+
+  it("refuses an index outside the queue", () => {
+    const state = reduce(enqueued(), {
+      type: "synthesized",
+      index: 0,
+      url: "blob:0",
+    });
+    expect(playbackReducer(state, { type: "seek", index: -1 })).toBe(state);
+    expect(playbackReducer(state, { type: "seek", index: 3 })).toBe(state);
+  });
+
+  it("clamps a step to the ends of the queue", () => {
+    const state = reduce(enqueued(), {
+      type: "synthesized",
+      index: 0,
+      url: "blob:0",
+    });
+    expect(seekTarget(state, -1)).toBe(0);
+    expect(seekTarget(state, 1)).toBe(1);
+    expect(seekTarget(state, 99)).toBe(2);
+    expect(seekTarget(initialPlaybackState, 1)).toBeNull();
+  });
+
+  it("sends a back step to this chunk again once it is under way", () => {
+    const state = reduce(
+      enqueued(),
+      { type: "synthesized", index: 0, url: "blob:0" },
+      { type: "synthesized", index: 1, url: "blob:1" },
+      { type: "ended", index: 0 },
+    );
+    // Near the start of chunk 1, back means the chunk before it.
+    expect(seekTarget(state, -1, 0.5)).toBe(0);
+    // Well into it, back means starting it over: a listener who missed a word
+    // is not asking to skip the part they are listening to.
+    expect(seekTarget(state, -1, RESTART_AFTER_SECONDS + 1)).toBe(1);
+    // Forward is unaffected by how far in it is.
+    expect(seekTarget(state, 1, RESTART_AFTER_SECONDS + 1)).toBe(2);
+  });
+});
+
+describe("retained audio", () => {
+  it("drops what has fallen out of the step-back window", () => {
+    const chunks = Array.from({ length: RETAINED_BEHIND + 4 }, (_, i) => `c${i}.`);
+    let state = enqueued(chunks);
+    for (let index = 0; index < chunks.length - 1; index++) {
+      state = reduce(
+        state,
+        { type: "synthesized", index, url: `blob:${index}` },
+        { type: "ended", index },
+      );
+    }
+    const kept = Object.keys(state.ready).map(Number);
+    expect(kept.length).toBeLessThanOrEqual(RETAINED_BEHIND + 1);
+    expect(Math.min(...kept)).toBe(state.cursor - RETAINED_BEHIND);
   });
 });

@@ -94,9 +94,13 @@ export {
 export {
   chunksToSynthesize,
   initialPlaybackState,
+  isPaused,
   playbackProgress,
   playbackReducer,
   PREFETCH_DEPTH,
+  RESTART_AFTER_SECONDS,
+  RETAINED_BEHIND,
+  seekTarget,
   type PlaybackEvent,
   type PlaybackState,
 } from "./lib/playback";
@@ -108,10 +112,15 @@ export {
   TTS_VOICES_STORE_PATH,
 } from "./lib/store";
 export {
+  pauseSpeaking,
   previewVoice,
+  replayHistory,
+  resumeSpeaking,
+  seekSpeaking,
   speakText,
   stopEngines,
   stopSpeaking,
+  togglePauseSpeaking,
   useSpeaker,
   type SpeakOptions,
   type SpeakResult,

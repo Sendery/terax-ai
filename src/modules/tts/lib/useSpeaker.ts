@@ -24,19 +24,28 @@ import {
   chunksToSynthesize,
   currentAudioUrl,
   initialPlaybackState,
+  isPaused,
   isSpeaking,
   playbackProgress,
   playbackReducer,
+  seekTarget,
   type PlaybackEvent,
   type PlaybackState,
 } from "@/modules/tts/lib/playback";
 import { splitForSpeech } from "@/modules/tts/lib/chunk";
+import {
+  previewOf,
+  type SpeechHistoryEntry,
+} from "@/modules/tts/lib/history";
 import { isProfileSpeakable, resolveVoice, type VoiceProfile } from "@/modules/tts/lib/voices";
 import { useTtsStore } from "@/modules/tts/store/ttsStore";
 
 export type SpeakOptions = {
   voiceId?: string | null;
   language?: TtsLanguage | null;
+  /** False for utterances that are not worth remembering, such as the
+   *  one-line preview played from Settings. */
+  remember?: boolean;
 };
 
 export type SpeakResult = {
@@ -54,6 +63,8 @@ type Session = {
   inFlight: Map<number, AbortController>;
   urls: Map<number, string>;
   attachedUrl: string | null;
+  /** Set by a seek that lands on the chunk already loaded. */
+  restart: boolean;
 };
 
 // One element for the whole window: two overlapping utterances would be noise,
@@ -74,6 +85,15 @@ function element(): HTMLAudioElement | null {
       if (!active || active.state.playing === null) return;
       dispatch(active, { type: "ended", index: active.state.playing });
     };
+    // The only source of elapsed time: the queue knows chunks, not seconds.
+    audio.ontimeupdate = () => {
+      if (!session || !audio) return;
+      publishTime(audio.currentTime, audio.duration);
+    };
+    audio.ondurationchange = () => {
+      if (!session || !audio) return;
+      publishTime(audio.currentTime, audio.duration);
+    };
     audio.onerror = () => {
       const active = session;
       if (!active || !audio?.currentSrc) return;
@@ -85,6 +105,13 @@ function element(): HTMLAudioElement | null {
     };
   }
   return audio;
+}
+
+function publishTime(elapsed: number, duration: number): void {
+  useTtsStore.getState().setSpeech({
+    elapsed: Number.isFinite(elapsed) ? elapsed : 0,
+    duration: Number.isFinite(duration) ? duration : 0,
+  });
 }
 
 function detachAudio(): void {
@@ -103,6 +130,7 @@ function messageOf(err: unknown): string {
 function syncStore(active: Session): void {
   useTtsStore.getState().setSpeech({
     speaking: isSpeaking(active.state),
+    paused: isPaused(active.state),
     currentVoice: active.voice,
     progress: playbackProgress(active.state),
     error: active.state.error,
@@ -127,8 +155,11 @@ function finish(active: Session): void {
   active.attachedUrl = null;
   useTtsStore.getState().setSpeech({
     speaking: false,
+    paused: false,
     currentVoice: null,
     progress: { index: 0, total: 0 },
+    elapsed: 0,
+    duration: 0,
     error: active.state.error,
   });
   armIdleTimer();
@@ -152,9 +183,18 @@ function pump(active: Session): void {
 
   const url = currentAudioUrl(active.state);
   const el = element();
-  if (url && el && active.attachedUrl !== url) {
+  if (el && isPaused(active.state) && !el.paused) el.pause();
+  if (url && el && (active.attachedUrl !== url || active.restart)) {
+    // Assigning the same src again is a no-op in WebKit, so a seek back onto
+    // the chunk already loaded rewinds the element by hand instead.
+    const sameChunk = active.attachedUrl === url;
+    active.restart = false;
     active.attachedUrl = url;
-    el.src = url;
+    if (sameChunk) {
+      el.currentTime = 0;
+    } else {
+      el.src = url;
+    }
     void el.play().catch((err: unknown) => {
       if (session !== active) return;
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -344,8 +384,21 @@ export async function speakText(
     inFlight: new Map(),
     urls: new Map(),
     attachedUrl: null,
+    restart: false,
   };
   session = active;
+  if (options.remember !== false) {
+    useTtsStore.getState().remember({
+      id: `s-${active.id}`,
+      text,
+      preview: previewOf(text),
+      voiceId: voice.id,
+      voiceName: voice.name,
+      model: voice.model,
+      at: Date.now(),
+      chunks: chunks.length,
+    });
+  }
   dispatch(active, { type: "enqueue", chunks });
   return { chunks: chunks.length, voiceId: voice.id, truncated };
 }
@@ -356,7 +409,52 @@ export async function previewVoice(
 ): Promise<SpeakResult | null> {
   return speakText(PREVIEW_SENTENCES[profile.language], {
     voiceId: profile.id,
+    remember: false,
   });
+}
+
+/** Pauses the sound without giving up the queue or the audio already made. */
+export function pauseSpeaking(): boolean {
+  const active = session;
+  if (!active || active.state.phase !== "playing") return false;
+  dispatch(active, { type: "pause" });
+  return true;
+}
+
+export function resumeSpeaking(): boolean {
+  const active = session;
+  if (!active || !isPaused(active.state)) return false;
+  dispatch(active, { type: "resume" });
+  const el = element();
+  // The element still holds the chunk, so this continues where it stopped.
+  if (el && currentAudioUrl(active.state)) void el.play().catch(() => {});
+  return true;
+}
+
+export function togglePauseSpeaking(): boolean {
+  return pauseSpeaking() || resumeSpeaking();
+}
+
+/**
+ * Steps `delta` chunks through the utterance. Stepping back into a chunk whose
+ * audio was dropped re-synthesizes it, which is why the window exists.
+ */
+export function seekSpeaking(delta: number): boolean {
+  const active = session;
+  if (!active) return false;
+  const el = element();
+  const target = seekTarget(active.state, delta, el?.currentTime ?? 0);
+  if (target === null) return false;
+  const from = active.state.playing ?? active.state.cursor;
+  // Landing on the chunk already sounding means "play it again from the top".
+  if (delta < 0 && target === from && el && el.currentTime > 0) {
+    el.currentTime = 0;
+    return true;
+  }
+  if (target === from) return false;
+  active.restart = target === from;
+  dispatch(active, { type: "seek", index: target });
+  return true;
 }
 
 /** Aborts in-flight synthesis and silences the element. Safe when idle. */
@@ -373,23 +471,45 @@ export function stopSpeaking(): boolean {
   return was;
 }
 
+/** Reads a history entry again, with the voice it was read with. */
+export async function replayHistory(
+  entry: SpeechHistoryEntry,
+): Promise<SpeakResult | null> {
+  return speakText(entry.text, { voiceId: entry.voiceId });
+}
+
 export function useSpeaker() {
   const speaking = useTtsStore((s) => s.speaking);
+  const paused = useTtsStore((s) => s.paused);
   const currentVoice = useTtsStore((s) => s.currentVoice);
   const progress = useTtsStore((s) => s.progress);
+  const elapsed = useTtsStore((s) => s.elapsed);
+  const duration = useTtsStore((s) => s.duration);
+  const history = useTtsStore((s) => s.history);
   const error = useTtsStore((s) => s.error);
   const runningEngines = useTtsStore((s) => s.runningEngines);
   const clearError = useTtsStore((s) => s.clearError);
+  const forgetHistory = useTtsStore((s) => s.forgetHistory);
   return {
     speaking,
+    paused,
     currentVoice,
     progress,
+    elapsed,
+    duration,
+    history,
     error,
     runningEngines,
     speak: speakText,
     preview: previewVoice,
+    replay: replayHistory,
+    pause: pauseSpeaking,
+    resume: resumeSpeaking,
+    togglePause: togglePauseSpeaking,
+    seek: seekSpeaking,
     stop: stopSpeaking,
     stopEngines,
     clearError,
+    forgetHistory,
   };
 }

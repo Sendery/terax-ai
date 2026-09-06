@@ -71,13 +71,14 @@ export function StatusBar({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <SpeakingPill />
         <AgentStatusPill onClick={onOpenMini} />
         {panelOpen && hasComposer ? (
           <AiStatusBarControls />
         ) : (
           <AiOpenButton open={panelOpen} onToggle={togglePanel} />
         )}
+        {/* Speech keeps its transport, engine and history side by side. */}
+        <SpeakingPill />
         <TtsEngineControl />
         <SlotMonitorIndicator cwd={cwd} />
       </div>
