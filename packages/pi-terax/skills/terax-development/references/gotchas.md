@@ -575,6 +575,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** rerun affected tests and review the final diff after fixes.
 - **Verification:** review evidence identifies the final worktree state, and `git diff --check` passes afterward.
 
+### A Zustand hook rendered to static markup reads the store's initial state
+
+- **Trigger:** asserting a component's markup with `renderToStaticMarkup` after seeding a store with `useSomeStore.setState(...)`.
+- **Failure mode:** `useSyncExternalStore` takes the server snapshot on that path, which Zustand serves from `getInitialState`, so the component renders as if the store were empty. The test fails against correct production code, and "fixing" it invites reshaping the component around the test.
+- **Prevention:** split the store read from the presentation. Keep the store-connected container thin and export the presentational part as a pure component taking its data as props; assert that. Test the container's projection as a pure function instead.
+- **Verification:** the presentational test passes with no store setup at all, and the projection has its own unit test covering the same inputs.
+
 ### macOS temp paths need realpath before path equality
 
 - **Trigger:** a test compares a path returned by code that canonicalizes with `realpath` against a path built from `os.tmpdir()`/`mkdtemp`.

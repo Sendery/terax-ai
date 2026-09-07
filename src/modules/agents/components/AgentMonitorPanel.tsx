@@ -3,17 +3,18 @@ import { cn } from "@/lib/utils";
 import { Cancel01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMemo } from "react";
-import { projectAgentMonitor, type AgentMonitorRow } from "@/modules/agents/lib/monitor";
+import {
+  describeMonitorRow,
+  MONITOR_STATE_LABEL,
+  projectAgentMonitor,
+  type AgentMonitorRow,
+} from "@/modules/agents/lib/monitor";
+import { formatSessionStart, formatSince } from "@/modules/agents/lib/format";
+import { useNow } from "@/modules/agents/lib/useNow";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { useManagedAgentsStore } from "@/modules/agents/store/managedAgentsStore";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
-import { TAB_COLOR_CSS, type Tab } from "@/modules/tabs";
-
-const STATE_LABEL: Record<AgentMonitorRow["state"], string> = {
-  "needs-input": "Needs input",
-  working: "Working",
-  finished: "Finished",
-};
+import { labelFor, TAB_COLOR_CSS, type Tab } from "@/modules/tabs";
 
 const STATE_CLASS: Record<AgentMonitorRow["state"], string> = {
   "needs-input": "bg-primary",
@@ -23,6 +24,91 @@ const STATE_CLASS: Record<AgentMonitorRow["state"], string> = {
 
 /** Pi's first-party visual QA calls app.capture against this bounded target. */
 export const AGENT_MONITOR_CAPTURE_TARGET = "agent-monitor";
+
+/**
+ * One session in the monitor.
+ *
+ * Exported and free of stores so its presentation can be asserted directly:
+ * a Zustand hook read through `renderToStaticMarkup` returns the store's
+ * *initial* state, so a test that seeds a store and renders the panel would see
+ * an empty list no matter what it seeded.
+ */
+export function AgentMonitorRowView({
+  row,
+  now,
+  onActivate,
+}: {
+  row: AgentMonitorRow;
+  now: number;
+  onActivate: (tabId: number, leafId: number) => void;
+}) {
+  const startedAt = formatSessionStart(row.startedAt, now);
+  const notified =
+    row.lastNotificationAt === null
+      ? "No notifications yet"
+      : `Notified ${formatSince(row.lastNotificationAt, now)}`;
+  // The visible text names the session, so the provider, the state dot and both
+  // ages have to be composed into the accessible name explicitly.
+  const described = describeMonitorRow(row, now);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onActivate(row.tabId, row.leafId)}
+      aria-label={described}
+      title={described}
+      className="relative flex w-full flex-col gap-1 overflow-hidden rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+    >
+      {row.tabColor ? (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1"
+          style={{ backgroundColor: TAB_COLOR_CSS[row.tabColor] }}
+        />
+      ) : null}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="relative shrink-0">
+          <AgentIcon
+            agent={row.agent}
+            harness={row.harness}
+            size={16}
+            className="text-muted-foreground"
+          />
+          <span
+            aria-hidden
+            className={cn(
+              "absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full ring-1 ring-card",
+              STATE_CLASS[row.state],
+            )}
+          />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {row.sessionName}
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {MONITOR_STATE_LABEL[row.state]}
+        </span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
+        {startedAt ? (
+          <span className="shrink-0 tabular-nums">Started {startedAt}</span>
+        ) : null}
+        {startedAt ? <span aria-hidden>·</span> : null}
+        <span className="truncate">{notified}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
+        <span className="shrink-0">{row.integrationLabel}</span>
+        {row.task ? <span aria-hidden>·</span> : null}
+        {row.task ? <span className="truncate">{row.task}</span> : null}
+      </div>
+      {row.cwd ? (
+        <span className="truncate pl-3.5 font-mono text-[10px] text-muted-foreground/80">
+          {row.cwd}
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 export function AgentMonitorPanel({
   onActivate,
@@ -34,11 +120,25 @@ export function AgentMonitorPanel({
   tabs: readonly Tab[];
 }) {
   const sessions = useAgentStore((state) => state.sessions);
+  const notifications = useAgentStore((state) => state.notifications);
   const managed = useManagedAgentsStore((state) => state.agents);
-  const rows = useMemo(
-    () => projectAgentMonitor({ sessions, managed, tabs }),
-    [sessions, managed, tabs],
+  // The tab module owns how a tab is named; the projection only consumes the result.
+  const monitorTabs = useMemo(
+    () =>
+      tabs.map((tab) => ({
+        id: tab.id,
+        color: tab.color,
+        private: tab.kind === "terminal" ? tab.private : undefined,
+        label: labelFor(tab),
+      })),
+    [tabs],
   );
+  const rows = useMemo(
+    () => projectAgentMonitor({ sessions, managed, tabs: monitorTabs, notifications }),
+    [sessions, managed, monitorTabs, notifications],
+  );
+  // Ages are only rendered when there is a row, so an empty monitor holds no timer.
+  const now = useNow(rows.length > 0);
 
   return (
     <aside
@@ -89,49 +189,7 @@ export function AgentMonitorPanel({
           <ul className="flex flex-col gap-1.5">
             {rows.map((row) => (
               <li key={row.leafId}>
-                <button
-                  type="button"
-                  onClick={() => onActivate(row.tabId, row.leafId)}
-                  className="relative flex w-full flex-col gap-1 overflow-hidden rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
-                  {row.tabColor ? (
-                    <span
-                      aria-hidden
-                      className="absolute inset-y-0 left-0 w-1"
-                      style={{ backgroundColor: TAB_COLOR_CSS[row.tabColor] }}
-                    />
-                  ) : null}
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="relative shrink-0">
-                      <AgentIcon
-                        agent={row.agent}
-                        harness={row.harness}
-                        size={16}
-                        className="text-muted-foreground"
-                      />
-                      <span
-                        aria-hidden
-                        className={cn("absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full ring-1 ring-card", STATE_CLASS[row.state])}
-                      />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                      {row.agent}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {STATE_LABEL[row.state]}
-                    </span>
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
-                    <span className="shrink-0">{row.integrationLabel}</span>
-                    {row.task ? <span aria-hidden>·</span> : null}
-                    {row.task ? <span className="truncate">{row.task}</span> : null}
-                  </div>
-                  {row.cwd ? (
-                    <span className="truncate pl-3.5 font-mono text-[10px] text-muted-foreground/80">
-                      {row.cwd}
-                    </span>
-                  ) : null}
-                </button>
+                <AgentMonitorRowView row={row} now={now} onActivate={onActivate} />
               </li>
             ))}
           </ul>
