@@ -20,7 +20,7 @@ import {
   writeTerminalClipboard,
 } from "./terminalClipboard";
 import { terminalReadlineSequence } from "./keymap";
-import { createTerminalLinkHandler } from "./terminalLinks";
+import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 
 export const POOL_MAX_SIZE = 5;
 const FIT_DEBOUNCE_MS = 8;
@@ -344,10 +344,7 @@ function createFileLinkProvider(getSlot: () => Slot): ILinkProvider {
         callback(undefined);
         return;
       }
-      const line =
-        slot.term.buffer.active.getLine(bufferLineNumber)?.translateToString(true) ??
-        slot.term.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ??
-        "";
+      const line = readLinkRow(slot.term.buffer.active, bufferLineNumber);
       if (!line.trim()) {
         callback(undefined);
         return;
