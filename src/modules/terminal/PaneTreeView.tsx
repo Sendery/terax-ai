@@ -9,7 +9,10 @@ import type { SearchAddon } from "@xterm/addon-search";
 import { type CSSProperties, Fragment } from "react";
 import { useTerminalDropStore } from "./lib/dropStore";
 import { leafIds, type PaneNode } from "./lib/panes";
-import type { ReadAloudOptions } from "./TerminalContextMenu";
+import type {
+  ReadAloudOptions,
+  TerminalSelectionActions,
+} from "./TerminalContextMenu";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
 
 type LeafBundle = {
@@ -29,6 +32,7 @@ type Props = {
   onOpenFileLink: (path: string) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
+  selectionActions?: TerminalSelectionActions;
   /** The owning tab is private, so Read aloud is not offered. */
   privateTerminal?: boolean;
   homePath?: string | null;
@@ -69,6 +73,7 @@ export function PaneTreeView(props: Props) {
           onOpenFileLink={props.onOpenFileLink}
           onReadAloud={props.onReadAloud}
           onStopReading={props.onStopReading}
+          selectionActions={props.selectionActions}
           privateTerminal={props.privateTerminal}
         />
         <DropOverlay leafId={node.id} />

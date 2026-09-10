@@ -663,39 +663,44 @@ export default function App() {
     [hasComposer, openPanel, focusInput],
   );
 
+  // The text-taking cores are what the terminal context menu calls, since it
+  // must act on the selection captured when it opened rather than re-reading a
+  // selection a right-click may already have replaced. The zero-argument
+  // wrappers keep the signature the shortcuts and command palette are wired to.
+  const askWithSelection = useCallback(
+    (selection: string) => {
+      if (!hasComposer) {
+        void openSettingsWindow("models");
+        return;
+      }
+      if (!selection.trim()) {
+        focusInput(null);
+        return;
+      }
+      const source: "terminal" | "editor" =
+        activeTab?.kind === "editor" ? "editor" : "terminal";
+      attachSelection(selection, source);
+    },
+    [hasComposer, focusInput, attachSelection, activeTab],
+  );
+
   const askFromSelection = useCallback(() => {
-    if (!hasComposer) {
-      void openSettingsWindow("models");
-      return;
-    }
-    const selection = captureActiveSelection();
-    if (!selection || !selection.trim()) {
-      focusInput(null);
-      return;
-    }
-    const source: "terminal" | "editor" =
-      activeTab?.kind === "editor" ? "editor" : "terminal";
-    attachSelection(selection, source);
-  }, [
-    hasComposer,
-    captureActiveSelection,
-    focusInput,
-    attachSelection,
-    activeTab,
-  ]);
+    askWithSelection(captureActiveSelection() ?? "");
+  }, [askWithSelection, captureActiveSelection]);
+
+  const addTextToNote = useCallback(
+    (selection: string) => {
+      if (!selection.trim()) return;
+      tabNotes.addFromInput(selection);
+      showNotesPanel();
+      if (notesDetached) void openNotesWindow();
+    },
+    [tabNotes, showNotesPanel, notesDetached],
+  );
 
   const addSelectionToNote = useCallback(() => {
-    const selection = captureActiveSelection();
-    if (!selection?.trim()) return;
-    tabNotes.addFromInput(selection);
-    showNotesPanel();
-    if (notesDetached) void openNotesWindow();
-  }, [
-    captureActiveSelection,
-    tabNotes,
-    showNotesPanel,
-    notesDetached,
-  ]);
+    addTextToNote(captureActiveSelection() ?? "");
+  }, [addTextToNote, captureActiveSelection]);
 
   const speakAloud = useCallback((text: string, options: SpeakOptions = {}) => {
     if (!text.trim()) return;
@@ -727,17 +732,35 @@ export default function App() {
       askFromSelection,
       addSelectionToNote,
     });
+  const openMermaidWithSource = useCallback(
+    (selection: string) => {
+      const source = validateMermaidSource(selection);
+      if (!source.ok) {
+        toast.error(source.message);
+        return;
+      }
+      newMermaidTab(source.source);
+      setAskPopup(null);
+    },
+    [newMermaidTab, setAskPopup],
+  );
+
   const onOpenMermaidFromSelection = useCallback(() => {
     const selection = captureActiveSelection();
     if (!selection) return;
-    const source = validateMermaidSource(selection);
-    if (!source.ok) {
-      toast.error(source.message);
-      return;
-    }
-    newMermaidTab(source.source);
-    setAskPopup(null);
-  }, [captureActiveSelection, newMermaidTab, setAskPopup]);
+    openMermaidWithSource(selection);
+  }, [captureActiveSelection, openMermaidWithSource]);
+
+  // Same three actions the selection popup offers, so the terminal's right-click
+  // menu is a superset of it and the popup no longer needs to appear alongside.
+  const terminalSelectionActions = useMemo(
+    () => ({
+      onAsk: askWithSelection,
+      onAddToNote: addTextToNote,
+      onOpenMermaid: openMermaidWithSource,
+    }),
+    [askWithSelection, addTextToNote, openMermaidWithSource],
+  );
   const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
@@ -2261,6 +2284,7 @@ export default function App() {
                       onOpenFileLink={handleOpenTerminalFileLink}
                       onReadAloud={speakAloud}
                       onStopReading={stopReading}
+                      selectionActions={terminalSelectionActions}
                       homePath={home}
                       registerEditorHandle={registerEditorHandle}
                       onEditorDirtyChange={handleEditorDirty}

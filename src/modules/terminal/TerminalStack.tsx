@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { selectLiveTerminals } from "./lib/liveTerminals";
 import { leafIds } from "./lib/panes";
 import { PaneTreeView } from "./PaneTreeView";
-import type { ReadAloudOptions } from "./TerminalContextMenu";
+import type {
+  ReadAloudOptions,
+  TerminalSelectionActions,
+} from "./TerminalContextMenu";
 import type { TerminalPaneHandle } from "./TerminalPane";
 
 type Props = {
@@ -19,6 +22,7 @@ type Props = {
   onOpenFileLink: (path: string) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
+  selectionActions?: TerminalSelectionActions;
   homePath?: string | null;
 };
 
@@ -40,6 +44,7 @@ export function TerminalStack({
   onOpenFileLink,
   onReadAloud,
   onStopReading,
+  selectionActions,
   homePath,
 }: Props) {
   const terminals = useMemo(() => selectLiveTerminals(tabs), [tabs]);
@@ -111,6 +116,7 @@ export function TerminalStack({
               onOpenFileLink={onOpenFileLink}
               onReadAloud={onReadAloud}
               onStopReading={onStopReading}
+              selectionActions={selectionActions}
               privateTerminal={t.private === true}
               homePath={homePath}
               tabColor={t.color}

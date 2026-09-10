@@ -12,6 +12,7 @@ import { BlockWatermark } from "./block/BlockWatermark";
 import {
   TerminalContextMenu,
   type ReadAloudOptions,
+  type TerminalSelectionActions,
 } from "./TerminalContextMenu";
 import {
   focusLeafInput,
@@ -46,6 +47,8 @@ type Props = {
   onOpenFileLink?: (path: string) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
+  /** Ask Terax / Add to Note / Open Mermaid, shared with the selection popup. */
+  selectionActions?: TerminalSelectionActions;
   /** Hides Read aloud, the same way a private terminal is hidden from AI. */
   privateTerminal?: boolean;
 };
@@ -65,6 +68,7 @@ export const TerminalPane = memo(
       onOpenFileLink,
       onReadAloud,
       onStopReading,
+      selectionActions,
       privateTerminal = false,
     },
     ref,
@@ -130,6 +134,7 @@ export const TerminalPane = memo(
       readSelection: () => menuSelectionRef.current,
       onReadAloud,
       onStopReading,
+      selectionActions,
       onRestoreFocus: () => session.focus(),
       privateTerminal,
     };

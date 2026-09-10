@@ -4,11 +4,13 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { fmtShortcut, MOD_KEY } from "@/lib/platform";
 import {
   LANGUAGE_LABELS,
   profilesByLanguage,
@@ -20,6 +22,9 @@ import {
   AudioWave01Icon,
   ClipboardPasteIcon,
   Copy01Icon,
+  Flowchart01Icon,
+  Note01Icon,
+  SparklesIcon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -32,6 +37,18 @@ import {
 
 export type ReadAloudOptions = { voiceId?: string; language?: TtsLanguage };
 
+/**
+ * Selection actions shared with the floating popup that a primary-button
+ * selection raises. Each receives the selection captured when the menu opened,
+ * rather than re-reading it: on macOS xterm's `rightClickSelectsWord` can
+ * replace the selection under the pointer before the menu is even built.
+ */
+export type TerminalSelectionActions = {
+  onAsk: (text: string) => void;
+  onAddToNote: (text: string) => void;
+  onOpenMermaid: (text: string) => void;
+};
+
 type Props = {
   children: ReactNode;
   leafId: number;
@@ -41,6 +58,7 @@ type Props = {
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   onRestoreFocus?: () => void;
+  selectionActions?: TerminalSelectionActions;
   /** Private terminals are hidden from the AI and from snapshots; reading them
    *  aloud keeps the same signal and is not offered. */
   privateTerminal?: boolean;
@@ -57,6 +75,7 @@ export function TerminalContextMenu({
   onReadAloud,
   onStopReading,
   onRestoreFocus,
+  selectionActions,
   privateTerminal = false,
 }: Props) {
   return (
@@ -74,6 +93,7 @@ export function TerminalContextMenu({
           readSelection={readSelection}
           onReadAloud={onReadAloud}
           onStopReading={onStopReading}
+          selectionActions={selectionActions}
           privateTerminal={privateTerminal}
         />
       </ContextMenuContent>
@@ -86,6 +106,7 @@ function MenuBody({
   readSelection,
   onReadAloud,
   onStopReading,
+  selectionActions,
   privateTerminal,
 }: Omit<Props, "children" | "onRestoreFocus">) {
   // Read once at mount: the menu only mounts on open, and the selection must
@@ -124,6 +145,42 @@ function MenuBody({
         <HugeiconsIcon icon={ClipboardPasteIcon} size={14} strokeWidth={1.75} />
         <span className="flex-1">Paste</span>
       </ContextMenuItem>
+      {selectionActions ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            disabled={selection.length === 0}
+            onSelect={() => selectionActions.onAsk(selection)}
+          >
+            <HugeiconsIcon icon={SparklesIcon} size={14} strokeWidth={1.75} />
+            <span className="flex-1">Ask Terax</span>
+            <ContextMenuShortcut>
+              {fmtShortcut(MOD_KEY, "J")}
+            </ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={selection.length === 0}
+            onSelect={() => selectionActions.onAddToNote(selection)}
+          >
+            <HugeiconsIcon icon={Note01Icon} size={14} strokeWidth={1.75} />
+            <span className="flex-1">Add to Note</span>
+            <ContextMenuShortcut>
+              {fmtShortcut(MOD_KEY, "L")}
+            </ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={selection.length === 0}
+            onSelect={() => selectionActions.onOpenMermaid(selection)}
+          >
+            <HugeiconsIcon
+              icon={Flowchart01Icon}
+              size={14}
+              strokeWidth={1.75}
+            />
+            <span className="flex-1">Open Mermaid</span>
+          </ContextMenuItem>
+        </>
+      ) : null}
       {offersSpeech && onReadAloud ? (
         <>
           <ContextMenuSeparator />

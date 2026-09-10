@@ -37,6 +37,10 @@ export function useSelectionAskAi({
     };
     const onUp = (e: MouseEvent) => {
       if (isInsideAi(e.target)) return;
+      // Only a primary-button selection gesture raises the popup. A right-click
+      // opens the pane's context menu, which carries the same actions; without
+      // this the two used to appear stacked on top of each other.
+      if (e.button !== 0) return;
       const el = e.target as HTMLElement | null;
       const inContentArea = el?.closest?.(".xterm, .cm-editor");
       if (!inContentArea) return;
