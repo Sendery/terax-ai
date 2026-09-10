@@ -2,7 +2,9 @@ export {
   buildMermaidConfig,
   type MermaidRuntime,
   type MermaidTheme,
+  mermaidErrorMessage,
   renderMermaidSource,
+  svgToDataUrl,
 } from "./lib/render";
 export {
   MAX_MERMAID_SOURCE_BYTES,

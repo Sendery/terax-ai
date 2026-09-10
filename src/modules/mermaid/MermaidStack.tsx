@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import {
+  mermaidErrorMessage as errorMessage,
   renderMermaidSource,
   svgToDataUrl,
   validateMermaidSourceWithRuntime,
@@ -40,16 +41,6 @@ type MermaidPaneProps = {
     layout: MermaidTab["visualLayout"],
   ) => void;
 };
-
-function errorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message
-      .replace(/^Error:\s*/i, "")
-      .trim()
-      .slice(0, 600) || "Mermaid could not render this diagram"
-  );
-}
 
 function MermaidPane({
   active,

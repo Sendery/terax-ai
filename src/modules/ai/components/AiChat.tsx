@@ -10,7 +10,7 @@ import {
   MessageResponse,
   type MessageResponseProps,
 } from "@/components/ai-elements/message";
-import { MarkdownCode } from "@/components/ai-elements/markdown-code";
+import { MarkdownCodeBlock } from "@/modules/markdown/MarkdownCodeBlock";
 import {
   MarkdownLink,
   type MarkdownLinkProps,
@@ -596,7 +596,7 @@ const aiStreamdownComponents = {
   a: (props: MarkdownLinkProps) => (
     <MarkdownLink {...props} onSettled={useChatStore.getState().focusInput} />
   ),
-  code: MarkdownCode,
+  code: MarkdownCodeBlock,
 };
 
 function AiMessageResponse(props: Omit<MessageResponseProps, "components">) {

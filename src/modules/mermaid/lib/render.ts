@@ -38,6 +38,17 @@ export function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+/** Mermaid parse failures reach the UI verbatim, so they are trimmed and capped. */
+export function mermaidErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message
+      .replace(/^Error:\s*/i, "")
+      .trim()
+      .slice(0, 600) || "Mermaid could not render this diagram"
+  );
+}
+
 export function renderMermaidSource(
   runtime: MermaidRuntime,
   source: string,
