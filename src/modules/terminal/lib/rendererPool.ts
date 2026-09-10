@@ -94,6 +94,7 @@ type RendererFont = {
 let windowActive =
   typeof document === "undefined" || (!document.hidden && document.hasFocus());
 let windowActivityBound = false;
+let windowInactiveSince: number | null = null;
 let cursorBlinkEnabled = false;
 
 function bindWindowActivityListeners(): void {
@@ -108,8 +109,17 @@ function bindWindowActivityListeners(): void {
 function setWindowActive(active: boolean): void {
   if (windowActive === active) return;
   windowActive = active;
+  // A visible slot is never re-bound, so nothing else would ever repaint it.
+  // Suspect its GPU state only after the window was away long enough for the
+  // machine to have slept, rather than on every alt-tab: clearing the atlas
+  // re-rasterizes every glyph, which is not worth doing on a focus flicker.
+  const away =
+    windowInactiveSince === null ? 0 : performance.now() - windowInactiveSince;
+  windowInactiveSince = active ? null : performance.now();
+  const repaint = active && away > SLOT_STALE_MS;
   for (const slot of slots) {
     if (slot.currentLeafId === null) continue;
+    if (repaint && !slot.parked) repaintStaleSlot(slot);
     applyCursorBlinkOnSlot(
       slot,
       adapter?.isLeafFocused(slot.currentLeafId) ?? false,
@@ -585,12 +595,7 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   }
 
   if (fast) {
-    if (stale) {
-      if (!slot.webglAddon) attachWebgl(slot);
-      try {
-        slot.term.refresh(0, slot.term.rows - 1);
-      } catch {}
-    }
+    if (stale) repaintStaleSlot(slot);
     if (adapter?.isLeafFocused(p.leafId)) slot.term.focus();
   } else {
     scheduleUnhide(slot, stale || hadWebgl);
@@ -599,17 +604,37 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   p.onSearchReady(slot.searchAddon);
 }
 
+/**
+ * Repaint a slot whose GPU state is no longer trusted.
+ *
+ * `refresh()` only re-runs the renderer over the cell model; it cannot re-upload
+ * the WebGL glyph atlas, so a slot whose atlas texture lost its contents keeps
+ * drawing corrupt glyphs no matter how often it is refreshed. Only cells whose
+ * appearance changes miss the atlas cache and get re-rasterized, which is why
+ * dragging a selection over the damaged text was the one thing that fixed it.
+ *
+ * `clearTextureAtlas` drops the atlas, invalidates the model and redraws the
+ * viewport, which is the documented remedy for a corrupt texture (Chromium
+ * loses it across OS sleep, and this pool additionally forces context loss when
+ * recycling slots). The refresh stays as a floor for the non-WebGL renderer,
+ * where clearing the atlas is a no-op.
+ */
+function repaintStaleSlot(slot: Slot): void {
+  if (!slot.webglAddon) attachWebgl(slot);
+  try {
+    slot.term.clearTextureAtlas();
+  } catch {}
+  try {
+    slot.term.refresh(0, slot.term.rows - 1);
+  } catch {}
+}
+
 function scheduleUnhide(slot: Slot, stale: boolean): void {
   slot.unhideRaf = requestAnimationFrame(() => {
     slot.unhideRaf = requestAnimationFrame(() => {
       slot.unhideRaf = null;
       slot.host.style.visibility = "";
-      if (stale) {
-        if (!slot.webglAddon) attachWebgl(slot);
-        try {
-          slot.term.refresh(0, slot.term.rows - 1);
-        } catch {}
-      }
+      if (stale) repaintStaleSlot(slot);
       const leafId = slot.currentLeafId;
       if (leafId !== null && adapter?.isLeafFocused(leafId)) {
         slot.term.focus();
