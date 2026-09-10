@@ -13,7 +13,8 @@ Terax carries one visible SemVer identity across every layer and every artifact:
 
 The tag without its leading `v` is the single source of truth. `scripts/set-version.mjs` writes that exact string, in lockstep, to `package.json`, `src-tauri/tauri.conf.json`, the Cargo manifest and lockfile, and `packages/pi-terax/package.json`; every uploaded asset then embeds it verbatim:
 
-- Terax installers: `Terax_X.Y.Z-dev.N_<arch>.<ext>`.
+- Terax installers: `Terax_X.Y.Z-dev.N_<arch>.<ext>`, where macOS uses the hardware
+  labels `apple_silicon_intel` (universal), `apple_silicon`, or `intel`.
 - Companion extension: `pi-terax-extension_X.Y.Z-dev.N.tgz`.
 
 Do not introduce abbreviated forms (such as `X.Y.Z-N`), and never mix version strings across the assets of a single release.
@@ -77,24 +78,21 @@ Run on Windows x86_64 in PowerShell:
 pnpm release:local 0.9.0
 ```
 
-Run on Apple Silicon macOS for ARM64:
+Run once on any Mac. macOS builds one **universal** artifact that runs natively on
+Apple Silicon and on Intel, so a single run covers both architectures:
 
 ```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 pnpm release:local 0.9.0
 ```
 
-On the same Mac, stage the Intel build when the Rust target and Apple toolchain support it:
+Both Rust targets must be installed because the universal build links one slice from
+each. A single-architecture build stays available for troubleshooting, but it is not
+what ships:
 
 ```bash
-rustup target add x86_64-apple-darwin
-pnpm release:local 0.9.0 --target x86_64-apple-darwin
-```
-
-On an Intel Mac, use the native command for Intel and explicitly target ARM64 if the toolchain supports it:
-
-```bash
-rustup target add aarch64-apple-darwin
-pnpm release:local 0.9.0 --target aarch64-apple-darwin
+pnpm release:local 0.9.0 --target aarch64-apple-darwin   # Apple Silicon only
+pnpm release:local 0.9.0 --target x86_64-apple-darwin     # Intel only
 ```
 
 Each invocation:
@@ -111,6 +109,28 @@ Each invocation:
 10. Creates or reuses draft release `v<version>` pinned to the exact 40-character source commit SHA; it refuses to modify a published release or a draft targeting other source code.
 11. Uploads content-addressed platform assets whose names include the first 16 hexadecimal characters of their SHA-256 digest.
 12. Uploads `latest.<os>-<arch>.json` containing the source commit, artifact URL, and signature content.
+
+### macOS asset naming and updater keys
+
+User-facing macOS downloads are labelled with the hardware names the Apple menu shows,
+not Apple's toolchain jargon:
+
+| Build | Download label | Example |
+| --- | --- | --- |
+| universal (default) | `apple_silicon_intel` | `Terax_0.9.0_apple_silicon_intel_<digest>.dmg` |
+| single-architecture | `apple_silicon` / `intel` | `Terax_0.9.0_intel_<digest>.dmg` |
+
+The updater manifest is a different contract and keeps Apple's architecture keys.
+`tauri-plugin-updater` derives its lookup key from the **compile-time** architecture
+(`darwin-aarch64` or `darwin-x86_64`) and performs a plain map lookup with **no universal
+fallback**. A universal build therefore publishes *both* macOS keys in `latest.json`,
+pointing at the same universal archive and signature. Never collapse them into a single
+`darwin-universal` key: every installed Mac client would fail with `TargetNotFound` and
+silently stop updating.
+
+The fixed aliases `Terax_aarch64.app.tar.gz` and `Terax_x64.app.tar.gz` are a
+compatibility contract with already-shipped installers and the Nix expression. They keep
+their old names, and a universal build uploads the one archive under both.
 
 Local staging files are placed under `.terax/releases/` and ignored by Git.
 
@@ -173,7 +193,7 @@ pnpm release:dev 0.9.0-dev.6
 
 The command queries `Sendery/terax-ai` for the release's immutable target commit, checks that exact commit out in an isolated cache worktree, builds only the host's native formats, verifies that installers were produced, and uploads them with `--clobber`. It does **not** sign updater artifacts, publish updater manifests, or change the release out of its pre-release state.
 
-Run it on Linux x86_64 for AppImage, DEB, and RPM; on Windows x86_64 for NSIS EXE and MSI; and on macOS for DMG. Each host produces its own architecture, so cover both macOS architectures by running once on Apple Silicon and once on an Intel Mac. Cross-OS packaging is intentionally rejected because the native signing and installer toolchains are not reliably interchangeable.
+Run it on Linux x86_64 for AppImage, DEB, and RPM; on Windows x86_64 for NSIS EXE and MSI; and on macOS for DMG. One macOS run produces the universal DMG covering both Mac architectures, so no second Mac host is needed. Cross-OS packaging is intentionally rejected because the native signing and installer toolchains are not reliably interchangeable.
 
 Useful options:
 

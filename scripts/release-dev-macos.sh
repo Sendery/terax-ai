@@ -12,7 +12,7 @@ if [[ "$HOST_OS" != "Darwin" ]]; then
   exit 1
 fi
 
-for tool in git node pnpm cargo rustc rustup gh xcodebuild shasum file; do
+for tool in git node pnpm cargo rustc rustup gh xcodebuild shasum file lipo; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Missing required tool: $tool" >&2
     exit 1
@@ -58,6 +58,7 @@ rustup target add x86_64-apple-darwin
 CONFIG_FILE="$(mktemp -t terax-dev-release)"
 cleanup() {
   rm -f "$CONFIG_FILE"
+  [[ -n "${DOWNLOAD_DIR:-}" ]] && rm -rf "$DOWNLOAD_DIR"
 }
 trap cleanup EXIT
 
@@ -66,37 +67,51 @@ trap cleanup EXIT
 # than the title are preserved verbatim.
 node scripts/dev-release-config.mjs src-tauri/tauri.conf.json >"$CONFIG_FILE"
 
-rm -rf \
-  src-tauri/target/aarch64-apple-darwin/release/bundle \
-  src-tauri/target/x86_64-apple-darwin/release/bundle
+BUNDLE_ROOT=src-tauri/target/universal-apple-darwin/release/bundle
 
-node scripts/build-version.mjs "$APP_VERSION" -- \
-  --target aarch64-apple-darwin \
-  --bundles app,dmg \
-  --no-sign \
-  --config "$CONFIG_FILE"
+rm -rf "$BUNDLE_ROOT"
 
+# One universal build replaces the previous pair of per-architecture builds, so
+# users get a single macOS download that runs natively on Apple Silicon and Intel.
 node scripts/build-version.mjs "$APP_VERSION" -- \
-  --target x86_64-apple-darwin \
+  --target universal-apple-darwin \
   --bundles app,dmg \
   --no-sign \
   --config "$CONFIG_FILE"
 
 shopt -s nullglob
-ARM_DMG=(src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg)
-INTEL_DMG=(src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg)
+UNIVERSAL_DMG=("$BUNDLE_ROOT"/dmg/*.dmg)
+UNIVERSAL_APP=("$BUNDLE_ROOT"/macos/*.app)
 
-if [[ ${#ARM_DMG[@]} -ne 1 || ${#INTEL_DMG[@]} -ne 1 ]]; then
-  echo "Expected exactly one ARM64 DMG and one Intel DMG." >&2
+if [[ ${#UNIVERSAL_DMG[@]} -ne 1 || ${#UNIVERSAL_APP[@]} -ne 1 ]]; then
+  echo "Expected exactly one universal DMG and one universal .app bundle." >&2
   exit 1
 fi
 
-file "${ARM_DMG[@]}" "${INTEL_DMG[@]}"
-shasum -a 256 "${ARM_DMG[@]}" "${INTEL_DMG[@]}"
+# Prove the bundle really is fat before publishing it: a universal target that
+# silently produced a single-architecture binary would ship a broken download to
+# half the users.
+APP_BINARY="$(find "${UNIVERSAL_APP[0]}/Contents/MacOS" -maxdepth 1 -type f -perm +111 | head -n 1)"
+BUNDLE_ARCHS="$(lipo -archs "$APP_BINARY")"
+echo "Bundle architectures: $BUNDLE_ARCHS"
+for required in arm64 x86_64; do
+  if [[ " $BUNDLE_ARCHS " != *" $required "* ]]; then
+    echo "The universal bundle is missing the $required slice: $BUNDLE_ARCHS" >&2
+    exit 1
+  fi
+done
+
+# Publish under the hardware names the Apple menu shows, not Apple's toolchain
+# jargon, so the download choice is unambiguous.
+DOWNLOAD_DIR="$(mktemp -d)"
+DOWNLOAD_DMG="$DOWNLOAD_DIR/$(basename "${UNIVERSAL_DMG[0]}" | sed 's/_universal\.dmg$/_apple_silicon_intel.dmg/')"
+cp "${UNIVERSAL_DMG[0]}" "$DOWNLOAD_DMG"
+
+file "$DOWNLOAD_DMG"
+shasum -a 256 "$DOWNLOAD_DMG"
 
 gh release upload "$RELEASE_TAG" \
-  "${ARM_DMG[@]}" \
-  "${INTEL_DMG[@]}" \
+  "$DOWNLOAD_DMG" \
   --repo "$REPOSITORY" \
   --clobber
 
@@ -110,4 +125,4 @@ gh release view "$RELEASE_TAG" \
   --repo "$REPOSITORY" \
   --json tagName,isDraft,isPrerelease,assets,url
 
-echo "macOS ARM64 and Intel artifacts uploaded to draft $RELEASE_TAG."
+echo "Universal macOS artifact (Apple Silicon + Intel) uploaded to draft $RELEASE_TAG."

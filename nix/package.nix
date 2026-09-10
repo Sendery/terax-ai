@@ -7,6 +7,11 @@ let
   sources = builtins.fromJSON (builtins.readFile ./sources.json);
   version = sources.version;
 
+  # The two macOS URLs are fixed compatibility aliases. Since releases ship a
+  # single universal (Apple Silicon + Intel) bundle, both aliases now point at the
+  # same archive, so `hashes.x86_64-darwin` and `hashes.aarch64-darwin` are
+  # expected to be identical. Keep both entries: the alias names are the contract
+  # already baked into published releases.
   srcMap = {
     x86_64-linux = fetchurl {
       url = "https://github.com/crynta/terax-ai/releases/download/v${version}/Terax_${version}_amd64.deb";

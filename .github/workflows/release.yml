@@ -14,12 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # One universal macOS build. `universal-apple-darwin` links the two
+          # Apple slices into a single binary, so there is one Mac download that
+          # runs natively on Apple Silicon and on Intel.
           - platform: macos-latest
-            args: --target aarch64-apple-darwin
-            rust-target: aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-            rust-target: x86_64-apple-darwin
+            args: --target universal-apple-darwin
+            rust-target: aarch64-apple-darwin,x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ""
             rust-target: ""
@@ -94,3 +94,25 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # A universal target that silently produced a single-architecture binary
+      # would ship a broken download to half of all Mac users, so fail the
+      # release rather than publish it.
+      - name: Verify the macOS bundle is universal
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        run: |
+          bundle="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)"
+          if [ -z "$bundle" ]; then
+            echo "No universal .app bundle was produced" >&2
+            exit 1
+          fi
+          binary="$(find "$bundle/Contents/MacOS" -maxdepth 1 -type f -perm +111 | head -n 1)"
+          archs="$(lipo -archs "$binary")"
+          echo "Bundle architectures: $archs"
+          for required in arm64 x86_64; do
+            case " $archs " in
+              *" $required "*) ;;
+              *) echo "Missing $required slice in $archs" >&2; exit 1 ;;
+            esac
+          done

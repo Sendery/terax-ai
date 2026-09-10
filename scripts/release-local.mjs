@@ -21,7 +21,7 @@ import {
   assertSourceProvenance,
   assertVersionIsNewer,
   buildUpdaterFragment,
-  compatibilityAssetName,
+  compatibilityAssetNames,
   mergeUpdaterFragments,
   parseReleaseArgs,
   platformBuildPlan,
@@ -37,8 +37,10 @@ function usage() {
   pnpm release:publish <version> [--repo OWNER/REPO] [--allow-partial] [--dry-run]
 
 Stage one signed native build from Linux, Windows, or macOS into a draft GitHub release.
-Run the stage command on each required platform. On macOS, run it once natively and
-once with --target x86_64-apple-darwin or aarch64-apple-darwin as needed.
+Run the stage command once on each required platform. macOS builds one universal
+(Apple Silicon + Intel) artifact by default, so a single macOS run covers both
+architectures; pass --target aarch64-apple-darwin or x86_64-apple-darwin only when a
+single-architecture build is explicitly required.
 
 The publish command merges uploaded latest.<target>.json fragments into latest.json
 and publishes the draft. It requires all supported updater targets unless
@@ -234,16 +236,15 @@ function stagePlatformRelease(options) {
     const destination = join(stageRoot, assetName);
     cpSync(file, destination);
     staged.push({ source: file, path: destination, assetName });
-    const compatibilityName = compatibilityAssetName(
+    for (const compatibilityName of compatibilityAssetNames(
       options.version,
       plan.updaterTarget,
       file,
-    );
-    if (compatibilityName) {
+    )) {
       const compatibilityPath = join(stageRoot, compatibilityName);
       cpSync(file, compatibilityPath);
       staged.push({
-        source: `${file}#compatibility`,
+        source: `${file}#compatibility:${compatibilityName}`,
         path: compatibilityPath,
         assetName: compatibilityName,
       });
@@ -254,6 +255,7 @@ function stagePlatformRelease(options) {
   const fragment = buildUpdaterFragment({
     version: options.version,
     updaterTarget: plan.updaterTarget,
+    updaterKeys: plan.updaterKeys,
     assetName: updaterAsset.assetName,
     signature: readFileSync(updater.signature, "utf8"),
     repository: options.repository,
