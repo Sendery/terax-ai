@@ -135,7 +135,13 @@ export const TerminalPane = memo(
       onReadAloud,
       onStopReading,
       selectionActions,
-      onRestoreFocus: () => session.focus(),
+      onRestoreFocus: () => {
+        // In a blocks pane the editor, not the grid, holds focus at the prompt.
+        // Focusing the grid would move the caret out of the input the user was
+        // typing in, so a right-click would cost them their place.
+        if (blocks && session.blockMode === "prompt") focusLeafInput(leafId);
+        else session.focus();
+      },
       privateTerminal,
     };
 
@@ -156,10 +162,16 @@ export const TerminalPane = memo(
               <div
                 ref={containerRef}
                 className="absolute inset-0 z-0"
+                // Selecting a block is a primary-button gesture. The secondary
+                // button only opens the context menu: letting it through here
+                // moved the block selection and the focus out from under the
+                // menu that was opening.
                 onMouseDown={(e) => {
+                  if (e.button !== 0) return;
                   downYRef.current = e.clientY;
                 }}
                 onMouseUp={(e) => {
+                  if (e.button !== 0) return;
                   const moved =
                     downYRef.current != null &&
                     Math.abs(e.clientY - downYRef.current) > 4;
