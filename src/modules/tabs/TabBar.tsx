@@ -65,6 +65,7 @@ type Props = {
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
+  onNewMermaid: () => void;
   onNewGitGraph: () => void;
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
@@ -87,6 +88,7 @@ export function TabBar({
   onNewPrivate,
   onNewPreview,
   onNewEditor,
+  onNewMermaid,
   onNewGitGraph,
   onClose,
   onPin,
@@ -565,6 +567,14 @@ export function TabBar({
               <span className="text-xs text-muted-foreground">
                 {fmtShortcut(MOD_KEY, "P")}
               </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewMermaid()}>
+              <HugeiconsIcon
+                icon={Flowchart01Icon}
+                size={14}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">Mermaid</span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewGitGraph()}>
               <HugeiconsIcon

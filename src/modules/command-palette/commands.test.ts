@@ -21,6 +21,7 @@ function context(
     openNewPrivate: noop,
     openNewEditor: noop,
     openNewPreview: noop,
+    openNewMermaid: noop,
     openGitGraph: noop,
     toggleSourceControl: noop,
     closeActiveTabOrPane: noop,
@@ -88,6 +89,17 @@ describe("createCommandItems", () => {
       expect(item?.group, id).toBe("View");
       expect(item?.icon, id).toBeDefined();
     }
+  });
+
+  it("offers a blank Mermaid diagram, the only way to start one from nothing", () => {
+    const openNewMermaid = vi.fn();
+    const items = createCommandItems(context({ openNewMermaid }));
+    const item = items.find((entry) => entry.id === "tab.newMermaid");
+
+    expect(item?.group).toBe("Tabs");
+    expect(item?.keywords).toContain("diagram");
+    item?.run?.();
+    expect(openNewMermaid).toHaveBeenCalledTimes(1);
   });
 
   it("keeps every id unique so the palette cannot render duplicates", () => {

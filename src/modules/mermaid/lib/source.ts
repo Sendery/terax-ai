@@ -7,6 +7,19 @@ export type MermaidSourceValidation =
 
 const FENCED_MERMAID = /^```(?:mermaid|mmd)[^\S\n]*\n([\s\S]*?)\n```$/i;
 
+/**
+ * Source a Mermaid tab opens with when it is created empty, from the new-tab
+ * menu or the command palette.
+ *
+ * An empty source is not valid Mermaid, so a blank tab would greet the user
+ * with a parse error. This starter is deliberately inside the Visual mode
+ * subset, so both editing modes work on it from the first frame.
+ */
+export const NEW_MERMAID_SOURCE = `flowchart TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do the thing]
+    B -->|No| D[Stop]`;
+
 export function mermaidSourceByteLength(source: string): number {
   return new TextEncoder().encode(source).byteLength;
 }
