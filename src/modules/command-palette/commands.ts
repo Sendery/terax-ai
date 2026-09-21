@@ -9,6 +9,7 @@ import {
   DashboardSquare01Icon,
   FileEditIcon,
   FileSearchIcon,
+  Flowchart01Icon,
   Globe02Icon,
   IncognitoIcon,
   KeyboardIcon,
@@ -51,6 +52,7 @@ export type CommandPaletteActionContext = {
   openNewPrivate: () => void;
   openNewEditor: () => void;
   openNewPreview: () => void;
+  openNewMermaid: () => void;
   openGitGraph: () => void;
   toggleSourceControl: () => void;
   closeActiveTabOrPane: () => void;
@@ -195,6 +197,14 @@ export function createCommandItems(
       icon: Globe02Icon,
       shortcutId: "tab.newPreview",
       run: ctx.openNewPreview,
+    },
+    {
+      id: "tab.newMermaid",
+      title: "New Mermaid diagram",
+      group: "Tabs",
+      keywords: ["mermaid", "diagram", "flowchart", "sequence", "graph"],
+      icon: Flowchart01Icon,
+      run: ctx.openNewMermaid,
     },
     {
       id: "tab.close",

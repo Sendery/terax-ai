@@ -58,7 +58,10 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
-import { validateMermaidSource } from "@/modules/mermaid";
+import {
+  NEW_MERMAID_SOURCE,
+  validateMermaidSource,
+} from "@/modules/mermaid";
 import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -743,6 +746,12 @@ export default function App() {
       setAskPopup(null);
     },
     [newMermaidTab, setAskPopup],
+  );
+
+  /** A Mermaid tab started from scratch, from the new-tab menu or the palette. */
+  const openNewMermaidTab = useCallback(
+    () => newMermaidTab(NEW_MERMAID_SOURCE, "Untitled diagram"),
+    [newMermaidTab],
   );
 
   const onOpenMermaidFromSelection = useCallback(() => {
@@ -1549,6 +1558,7 @@ export default function App() {
             openNewPrivate: openNewPrivateTab,
             openNewEditor: () => setNewEditorOpen(true),
             openNewPreview: () => openPreviewTab(""),
+            openNewMermaid: openNewMermaidTab,
             openGitGraph: openGitGraphFromContext,
             toggleSourceControl,
             closeActiveTabOrPane: handleCloseTabOrPane,
@@ -1590,6 +1600,7 @@ export default function App() {
       openNewBlockTab,
       openNewPrivateTab,
       openPreviewTab,
+      openNewMermaidTab,
       openGitGraphFromContext,
       toggleSourceControl,
       handleCloseTabOrPane,
@@ -2171,6 +2182,7 @@ export default function App() {
               onNewPrivate={openNewPrivateTab}
               onNewPreview={() => openPreviewTab("")}
               onNewEditor={() => setNewEditorOpen(true)}
+              onNewMermaid={openNewMermaidTab}
               onNewGitGraph={openGitGraphFromContext}
               onClose={handleClose}
               onPin={pinTab}
