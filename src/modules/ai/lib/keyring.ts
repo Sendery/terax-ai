@@ -25,6 +25,7 @@ export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
   lmstudio: null,
   mlx: null,
   ollama: null,
+  "chatgpt-codex": null,
   "cli-claude": null,
   "cli-codex": null,
   "cli-cursor": null,

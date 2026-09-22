@@ -75,6 +75,7 @@ const PROVIDER_ICON = {
   lmstudio: ComputerIcon,
   mlx: AppleIcon,
   ollama: ServerStack01Icon,
+  "chatgpt-codex": ChatGptIcon,
   "cli-claude": ClaudeIcon,
   "cli-codex": ChatGptIcon,
   "cli-cursor": ComputerIcon,

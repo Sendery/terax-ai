@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  MODELS,
   compatModelIdForEndpoint,
   endpointIdFromCompatModel,
   getModelContextLimit,
   isCompatModelId,
   migrateLegacyCompatEndpoint,
   modelKeepsReasoning,
+  oauthProviderFor,
+  providerNeedsKey,
+  providerRequiresOAuth,
   resolveModel,
   type CustomEndpoint,
 } from "./config";
@@ -100,5 +104,45 @@ describe("migrateLegacyCompatEndpoint", () => {
   it("skips migration when base URL or model id is missing", () => {
     expect(migrateLegacyCompatEndpoint("", "m", 1, "x")).toEqual([]);
     expect(migrateLegacyCompatEndpoint("u", "  ", 1, "x")).toEqual([]);
+  });
+});
+
+describe("subscription sign-in providers", () => {
+  it("maps each Terax provider to the backend login that authorises it", () => {
+    expect(oauthProviderFor("anthropic")).toBe("anthropic");
+    expect(oauthProviderFor("chatgpt-codex")).toBe("openai-codex");
+  });
+
+  it("leaves key-only providers without a login", () => {
+    expect(oauthProviderFor("openai")).toBeNull();
+    expect(oauthProviderFor("google")).toBeNull();
+  });
+
+  it("does not demand an API key for the ChatGPT subscription", () => {
+    // There is no key to demand: the plan is only reachable through OAuth, so
+    // requiring one would make the provider permanently unusable.
+    expect(providerNeedsKey("chatgpt-codex")).toBe(false);
+    expect(providerRequiresOAuth("chatgpt-codex")).toBe(true);
+  });
+
+  it("keeps Anthropic usable with either credential", () => {
+    expect(providerNeedsKey("anthropic")).toBe(true);
+    expect(providerRequiresOAuth("anthropic")).toBe(false);
+  });
+
+  it("gives the subscription copies of OpenAI models their own ids", () => {
+    // The catalogue is keyed by id, and these reach the same models through a
+    // different account, so they cannot reuse the API-key model ids.
+    const codex = MODELS.filter((m) => m.provider === "chatgpt-codex");
+    expect(codex.length).toBeGreaterThan(0);
+    for (const model of codex) {
+      expect(model.id.startsWith("codex-")).toBe(true);
+      expect(resolveModel(model.id).provider).toBe("chatgpt-codex");
+    }
+  });
+
+  it("keeps every catalogue model id unique", () => {
+    const ids = MODELS.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

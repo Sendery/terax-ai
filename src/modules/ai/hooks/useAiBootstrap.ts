@@ -7,6 +7,7 @@ import {
   getAllKeys,
   hasAnyKey,
 } from "../lib/keyring";
+import { listOAuthAccounts, type OAuthAccount } from "../lib/oauth";
 import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
@@ -54,7 +55,11 @@ export function useAiBootstrap(): {
     customEndpoints.some(
       (e) => e.baseURL.trim().length > 0 && e.modelId.trim().length > 0,
     );
-  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel;
+  // A connected subscription is a credential like any other, so it opens the
+  // composer on its own.
+  const [oauthAccounts, setOauthAccounts] = useState<OAuthAccount[]>([]);
+  const hasOAuthAccount = oauthAccounts.some((a) => a.connected);
+  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel || hasOAuthAccount;
 
   const prefsHydrated = usePreferencesStore((s) => s.hydrated);
   const [keysLoaded, setKeysLoaded] = useState(false);
@@ -65,6 +70,10 @@ export function useAiBootstrap(): {
         if (!alive) return;
         setApiKeys(keys);
         setKeysLoaded(true);
+      });
+      void listOAuthAccounts().then((accounts) => {
+        if (!alive) return;
+        setOauthAccounts(accounts);
       });
       if (!prefsHydrated) return;
       void getAllCustomEndpointKeys(

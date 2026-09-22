@@ -7,6 +7,7 @@ pub mod git;
 pub mod history;
 pub mod lsp;
 pub mod net;
+pub mod oauth;
 pub mod pi;
 pub mod pisessions;
 pub mod proc;

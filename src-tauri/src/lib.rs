@@ -1,8 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentsessions, capture, fs, git, history, lsp, net, pi, pisessions, pty,
-    scheduler, secrets, shell, slotmonit, tts, waker, workspace,
+    agent, agent_cli, agentsessions, capture, fs, git, history, lsp, net, oauth, pi, pisessions,
+    pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -356,6 +356,12 @@ pub fn run() {
             secrets::secrets_set,
             secrets::secrets_delete,
             secrets::secrets_get_all,
+            oauth::oauth_begin,
+            oauth::oauth_complete,
+            oauth::oauth_cancel,
+            oauth::oauth_status,
+            oauth::oauth_logout,
+            oauth::oauth_access_token,
             net::lm_ping,
             net::ai_http_request,
             net::ai_http_stream,
