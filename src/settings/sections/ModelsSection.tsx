@@ -20,6 +20,8 @@ import {
   getModel,
   getProvider,
   isCliProvider,
+  OAUTH_PROVIDERS,
+  oauthProviderFor,
   providerNeedsKey,
   type CustomEndpoint,
   type ModelId,
@@ -35,6 +37,14 @@ import {
   setCustomEndpointKey,
   type CustomEndpointKeys,
 } from "@/modules/ai/lib/keyring";
+import {
+  accountDescription,
+  cancelOAuth,
+  connectOAuth,
+  disconnectOAuth,
+  listOAuthAccounts,
+  type OAuthAccount,
+} from "@/modules/ai/lib/oauth";
 import { useChatStore } from "@/modules/ai/store/chatStore";
 import { detectCliAgents } from "@/modules/ai/cli/bridge";
 import { CLI_AGENTS } from "@/modules/ai/cli/registry";
@@ -72,7 +82,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { ProviderKeyCard } from "../components/ProviderKeyCard";
 import { SectionHeader } from "../components/SectionHeader";
@@ -140,11 +150,23 @@ export function ModelsSection() {
   const [epKeys, setEpKeys] = useState<CustomEndpointKeys>({});
   const [adding, setAdding] = useState<Set<ProviderId>>(new Set());
   const [cliPaths, setCliPaths] = useState<Record<string, string | null>>({});
+  const [oauthAccounts, setOauthAccounts] = useState<OAuthAccount[]>([]);
 
   useEffect(() => {
     const bins = Object.values(CLI_PROVIDERS).map((id) => CLI_AGENTS[id].bin);
     void detectCliAgents(bins).then(setCliPaths);
   }, []);
+
+  const reloadOAuth = useCallback(() => {
+    void listOAuthAccounts().then(setOauthAccounts);
+  }, []);
+  useEffect(reloadOAuth, [reloadOAuth]);
+
+  const oauthConnected = (id: ProviderId): boolean => {
+    const oauthId = oauthProviderFor(id);
+    if (!oauthId) return false;
+    return oauthAccounts.some((a) => a.provider === oauthId && a.connected);
+  };
 
   const cliInstalled = (id: ProviderId): boolean => {
     const cliId = CLI_PROVIDERS[id];
@@ -300,6 +322,9 @@ export function ModelsSection() {
 
   const isConfigured = (id: ProviderId): boolean => {
     if (isCliProvider(id)) return cliInstalled(id);
+    // A subscription sign-in authorises a provider as fully as a key does, so
+    // its models have to reach the pickers the same way.
+    if (oauthConnected(id)) return true;
     if (id === "openrouter")
       return !!keys?.[id] && !!openrouterModelId.trim();
     if (!isLocalProvider(id)) return !!keys?.[id];
@@ -320,7 +345,9 @@ export function ModelsSection() {
   // CLI agents have their own block (detection-based, no key/URL config), so
   // keep them out of the cloud/local add-remove flow.
   const visibleIds = new Set<ProviderId>(
-    [...configuredIds].filter((id) => !isCliProvider(id)),
+    [...configuredIds].filter(
+      (id) => !isCliProvider(id) && !isOAuthOnlyProvider(id),
+    ),
   );
   for (const id of adding) visibleIds.add(id);
   const visibleProviders = PROVIDERS.filter(
@@ -330,7 +357,8 @@ export function ModelsSection() {
     (p) =>
       p.id !== "openai-compatible" &&
       !visibleIds.has(p.id) &&
-      !isCliProvider(p.id),
+      !isCliProvider(p.id) &&
+      !isOAuthOnlyProvider(p.id),
   );
 
   const removeProvider = (id: ProviderId) => {
@@ -442,6 +470,8 @@ export function ModelsSection() {
         )}
       </div>
 
+      <SubscriptionsBlock accounts={oauthAccounts} onChanged={reloadOAuth} />
+
       <CliAgentsBlock cliPaths={cliPaths} />
     </div>
   );
@@ -549,6 +579,181 @@ const CLI_PERMISSION_OPTIONS: {
     description: "Edits and runs commands without prompts. Use with care.",
   },
 ];
+
+/** Terax providers whose only credential is a browser sign-in. */
+function isOAuthOnlyProvider(id: ProviderId): boolean {
+  return oauthProviderFor(id) !== null && !providerNeedsKey(id);
+}
+
+/** The Terax provider each subscription login authorises, in display order. */
+const SUBSCRIPTION_PROVIDERS = Object.keys(OAUTH_PROVIDERS) as ProviderId[];
+
+/**
+ * Sign in to a paid plan instead of pasting an API key.
+ *
+ * The browser does the authenticating; this block only starts the flow and
+ * reports what came back. Tokens never reach the renderer, so there is nothing
+ * to show beyond an account label and an expiry.
+ */
+function SubscriptionsBlock({
+  accounts,
+  onChanged,
+}: {
+  accounts: OAuthAccount[];
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<ProviderId | null>(null);
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [error, setError] = useState<{ id: ProviderId; message: string } | null>(
+    null,
+  );
+
+  const connect = async (id: ProviderId) => {
+    const oauthId = oauthProviderFor(id);
+    if (!oauthId) return;
+    setBusy(id);
+    setError(null);
+    setPendingUrl(null);
+    try {
+      await connectOAuth(oauthId, setPendingUrl);
+      onChanged();
+      // Other windows gate the composer on credentials; this is the same
+      // broadcast an API key change makes.
+      await emitKeysChanged();
+    } catch (e) {
+      setError({ id, message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(null);
+      setPendingUrl(null);
+    }
+  };
+
+  const cancel = async (id: ProviderId) => {
+    const oauthId = oauthProviderFor(id);
+    if (oauthId) await cancelOAuth(oauthId);
+  };
+
+  const disconnect = async (id: ProviderId) => {
+    const oauthId = oauthProviderFor(id);
+    if (!oauthId) return;
+    setError(null);
+    try {
+      await disconnectOAuth(oauthId);
+      onChanged();
+      await emitKeysChanged();
+    } catch (e) {
+      setError({ id, message: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Label>Subscription sign-in</Label>
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Use a plan you already pay for — no API key. Terax opens your browser,
+        and the tokens it gets back are kept in your OS keychain, never in the
+        app window. Check your provider's terms before using a subscription
+        outside their own apps.
+      </p>
+
+      <div className="flex flex-col gap-2">
+        {SUBSCRIPTION_PROVIDERS.map((id) => {
+          const oauthId = oauthProviderFor(id);
+          const account = accounts.find((a) => a.provider === oauthId) ?? null;
+          const connected = account?.connected ?? false;
+          const connecting = busy === id;
+          const provider = getProvider(id);
+          return (
+            <div
+              key={id}
+              className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5"
+            >
+              <div className="flex items-center gap-2">
+                <ProviderIcon provider={id} size={15} />
+                <span className="text-[12.5px] font-medium">
+                  {provider.label}
+                </span>
+                {connected ? (
+                  <Badge
+                    variant="outline"
+                    className="ml-1 h-4 gap-1 border-border/60 bg-muted/40 px-1.5 text-[10px] font-normal text-muted-foreground"
+                  >
+                    <HugeiconsIcon
+                      icon={CheckmarkCircle02Icon}
+                      size={9}
+                      strokeWidth={2}
+                    />
+                    Connected
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="ml-1 h-4 px-1.5 text-[10px] font-normal text-muted-foreground/70"
+                  >
+                    Not connected
+                  </Badge>
+                )}
+                {account && connected ? (
+                  <span className="ml-1 truncate text-[10px] text-muted-foreground/60">
+                    {accountDescription(account)}
+                  </span>
+                ) : null}
+
+                <div className="ml-auto flex items-center gap-1.5">
+                  {connecting ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() => void cancel(id)}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant={connected ? "ghost" : "outline"}
+                    disabled={connecting}
+                    className="h-6 px-2.5 text-[11px]"
+                    onClick={() =>
+                      void (connected ? disconnect(id) : connect(id))
+                    }
+                  >
+                    {connecting
+                      ? "Waiting for browser…"
+                      : connected
+                        ? "Disconnect"
+                        : "Connect"}
+                  </Button>
+                </div>
+              </div>
+
+              {connecting && pendingUrl ? (
+                <button
+                  type="button"
+                  onClick={() => void openUrl(pendingUrl)}
+                  className="self-start text-left text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  Browser did not open? Click here to sign in again.
+                </button>
+              ) : null}
+
+              {connected && account?.expired ? (
+                <p className="text-[10px] text-muted-foreground/70">
+                  Access token expired; it refreshes on the next request.
+                </p>
+              ) : null}
+
+              {error?.id === id ? (
+                <p className="text-[10px] text-destructive">{error.message}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function CliAgentsBlock({
   cliPaths,

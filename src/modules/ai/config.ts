@@ -14,6 +14,7 @@ export type ProviderId =
   | "lmstudio"
   | "mlx"
   | "ollama"
+  | "chatgpt-codex"
   | "cli-claude"
   | "cli-codex"
   | "cli-cursor"
@@ -31,6 +32,27 @@ export const CLI_PROVIDERS: Partial<Record<ProviderId, "claude" | "codex" | "cur
 
 export function isCliProvider(id: ProviderId): boolean {
   return id in CLI_PROVIDERS;
+}
+
+/** Ids understood by the Rust OAuth module. Not the same namespace as
+ *  `ProviderId`: one Terax provider maps to at most one subscription login. */
+export type OAuthProviderId = "anthropic" | "openai-codex";
+
+/** Providers that can be authorised with a browser sign-in instead of (or as
+ *  well as) an API key. Anthropic accepts both; the ChatGPT subscription has no
+ *  API key at all, so OAuth is the only way in. */
+export const OAUTH_PROVIDERS: Partial<Record<ProviderId, OAuthProviderId>> = {
+  anthropic: "anthropic",
+  "chatgpt-codex": "openai-codex",
+};
+
+export function oauthProviderFor(id: ProviderId): OAuthProviderId | null {
+  return OAUTH_PROVIDERS[id] ?? null;
+}
+
+/** True when a browser sign-in is the only way to authorise this provider. */
+export function providerRequiresOAuth(id: ProviderId): boolean {
+  return oauthProviderFor(id) !== null && !providerSupportsKey(id);
 }
 
 export type ProviderInfo = {
@@ -135,6 +157,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://ollama.com/download",
+  },
+  {
+    id: "chatgpt-codex",
+    label: "ChatGPT (Codex)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://chatgpt.com/codex",
   },
   {
     id: "cli-claude",
@@ -605,6 +634,29 @@ export const MODELS = [
     capabilities: { intelligence: 3, speed: 3, cost: 5 },
   },
 
+  // ── ChatGPT subscription (Codex backend, browser sign-in, no API key) ─────
+  // Ids carry a `codex-` prefix because the catalogue is keyed by id and these
+  // reach the same OpenAI models through a different account and endpoint.
+  // `buildLanguageModel` strips the prefix to get the wire model id.
+  {
+    id: "codex-gpt-5.3-codex",
+    provider: "chatgpt-codex",
+    label: "GPT-5.3 Codex",
+    hint: "Codex",
+    description: "Tuned for code and tool use, billed to your ChatGPT plan.",
+    capabilities: { intelligence: 4, speed: 4, cost: 5 },
+    tags: ["tools", "coding"],
+  },
+  {
+    id: "codex-gpt-5.5",
+    provider: "chatgpt-codex",
+    label: "GPT-5.5",
+    hint: "Codex",
+    description: "Frontier reasoning, billed to your ChatGPT plan.",
+    capabilities: { intelligence: 5, speed: 3, cost: 5 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+
   // ── Local CLI agents (no API key; the installed CLI runs its own agent) ───
   {
     id: "cli-claude-agent",
@@ -809,6 +861,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "mlx",
   "ollama",
   "openai-compatible",
+  "chatgpt-codex",
   "cli-claude",
   "cli-codex",
   "cli-cursor",
