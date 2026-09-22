@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isSerializableTab } from "@/modules/spaces/lib/serialize";
 import type { ShellFlavor } from "@/modules/tasks/lib/dispatch";
 import type { Tab } from "@/modules/tabs";
-import { submitToLeaf, whenSessionReady } from "@/modules/terminal";
+import {
+  findLeafCwd,
+  leafIds,
+  submitToLeaf,
+  whenSessionReady,
+} from "@/modules/terminal";
 import {
   matchRestoreTargets,
+  type RestoreCandidateTab,
   type RestoreTarget,
   resumeCommandLine,
   type SavedAgentSession,
@@ -19,6 +26,8 @@ type Params = {
   shellFlavor: ShellFlavor;
   getTabs: () => Tab[];
   knownSpaceIds: () => string[];
+  /** Space on screen, so a restore never focuses a tab the user cannot see. */
+  activeSpaceId: () => string | null;
   newTabInSpace: (spaceId: string, cwd?: string) => number;
   warmTab: (tabId: number) => void;
   setActiveId: (tabId: number) => void;
@@ -45,6 +54,32 @@ function leafOf(tabs: Tab[], tabId: number): number | null {
 }
 
 /**
+ * Tabs as the matcher sees them: the same serializable set the capture side
+ * indexes against, each carrying its panes in tree order. Both sides must
+ * count the same tabs or a private or transient tab would shift every
+ * recorded index.
+ */
+function candidateTabs(tabs: Tab[]): RestoreCandidateTab[] {
+  const out: RestoreCandidateTab[] = [];
+  for (const tab of tabs) {
+    if (!isSerializableTab(tab)) continue;
+    out.push({
+      id: tab.id,
+      kind: tab.kind,
+      spaceId: tab.spaceId,
+      leaves:
+        tab.kind === "terminal"
+          ? leafIds(tab.paneTree).map((id) => ({
+              id,
+              cwd: findLeafCwd(tab.paneTree, id),
+            }))
+          : [],
+    });
+  }
+  return out;
+}
+
+/**
  * Offers to reopen the agent sessions that were live when Terax last ran.
  *
  * Restoring means resuming the conversation, not replaying it: each session is
@@ -59,6 +94,7 @@ export function useAgentSessionRestore({
   shellFlavor,
   getTabs,
   knownSpaceIds,
+  activeSpaceId,
   newTabInSpace,
   warmTab,
   setActiveId,
@@ -69,6 +105,7 @@ export function useAgentSessionRestore({
   const deps = useRef({
     getTabs,
     knownSpaceIds,
+    activeSpaceId,
     newTabInSpace,
     warmTab,
     setActiveId,
@@ -77,6 +114,7 @@ export function useAgentSessionRestore({
   deps.current = {
     getTabs,
     knownSpaceIds,
+    activeSpaceId,
     newTabInSpace,
     warmTab,
     setActiveId,
@@ -87,15 +125,9 @@ export function useAgentSessionRestore({
     const d = deps.current;
     const targets: RestoreTarget[] = matchRestoreTargets(
       sessions,
-      d.getTabs().map((tab) => ({
-        id: tab.id,
-        kind: tab.kind,
-        spaceId: tab.spaceId,
-        ...(tab.kind === "terminal" && tab.cwd !== undefined
-          ? { cwd: tab.cwd }
-          : {}),
-      })),
+      candidateTabs(d.getTabs()),
     );
+    const onScreen = d.activeSpaceId();
 
     let focus: number | null = null;
     for (const target of targets) {
@@ -103,10 +135,13 @@ export function useAgentSessionRestore({
         target.tabId ??
         d.newTabInSpace(target.session.spaceId, target.session.cwd);
       d.warmTab(tabId);
-      focus ??= tabId;
+      // Activating a tab from a space the user is not looking at would leave
+      // the tab strip pointing at something it does not list.
+      if (focus === null && target.session.spaceId === onScreen) focus = tabId;
 
       const deadline = Date.now() + TAB_APPEAR_TIMEOUT_MS;
-      let leafId = leafOf(d.getTabs(), tabId);
+      // A matched pane is already known; only a brand new tab has to appear.
+      let leafId = target.leafId ?? leafOf(d.getTabs(), tabId);
       while (leafId === null && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, TAB_POLL_MS));
         leafId = leafOf(d.getTabs(), tabId);

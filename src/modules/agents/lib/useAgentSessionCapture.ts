@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { isSerializableTab } from "@/modules/spaces/lib/serialize";
 import type { Tab } from "@/modules/tabs";
-import { findLeafCwd } from "@/modules/terminal";
+import { findLeafCwd, leafIds } from "@/modules/terminal";
 import { useAgentStore } from "../store/agentStore";
 import type { AgentHarness, AgentSession } from "./types";
 import {
@@ -41,6 +41,7 @@ type Live = {
   cwd: string;
   spaceId: string;
   tabIndex: number;
+  leafIndex: number;
   tabTitle: string;
   tabColor?: SavedAgentSession["tabColor"];
   startedAt: number;
@@ -70,12 +71,17 @@ function liveAgents(
     if (tabIndex === undefined) continue;
     const cwd = findLeafCwd(tab.paneTree, session.leafId) ?? tab.cwd;
     if (!cwd) continue;
+    // Pane position, so a split with two agents reopens both in their own
+    // shell rather than stacking them on the tab's active one.
+    const leafIndex = leafIds(tab.paneTree).indexOf(session.leafId);
+    if (leafIndex < 0) continue;
     out.push({
       leafId: session.leafId,
       agent,
       cwd,
       spaceId: tab.spaceId,
       tabIndex,
+      leafIndex,
       tabTitle: tab.customTitle ?? tab.title,
       ...(tab.color !== undefined && { tabColor: tab.color }),
       startedAt: session.startedAt,
@@ -148,6 +154,7 @@ export function useAgentSessionCapture({
         spaceId: entry.spaceId,
         ...(id !== undefined && { sessionId: id }),
         tabIndex: entry.tabIndex,
+        leafIndex: entry.leafIndex,
         tabTitle: entry.tabTitle,
         ...(entry.tabColor !== undefined && { tabColor: entry.tabColor }),
         startedAt: entry.startedAt,

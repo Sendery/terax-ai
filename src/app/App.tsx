@@ -350,12 +350,14 @@ export default function App() {
     () => useSpaces.getState().spaces.map((s) => s.id),
     [],
   );
+  const getActiveSpaceId = useCallback(() => useSpaces.getState().activeId, []);
   const agentRestore = useAgentSessionRestore({
     ready: spacesHydrated && prefsHydrated,
     policy: restoreAgentSessionsPref,
     shellFlavor: IS_WINDOWS ? "windows" : "posix",
     getTabs: getTabsForRestore,
     knownSpaceIds,
+    activeSpaceId: getActiveSpaceId,
     newTabInSpace,
     warmTab,
     setActiveId,
