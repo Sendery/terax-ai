@@ -51,6 +51,8 @@ import {
   GitPullRequestIcon,
   Refresh01Icon,
   RemoveSquareIcon,
+  ViewIcon,
+  ViewOffSlashIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -164,6 +166,7 @@ export const SourceControlPanel = memo(function SourceControlPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
+  const [hiddenExpanded, setHiddenExpanded] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -172,6 +175,11 @@ export const SourceControlPanel = memo(function SourceControlPanel({
       }
     };
   }, []);
+
+  const hiddenCount = scm.hiddenFileEntries.length;
+  useEffect(() => {
+    if (hiddenCount === 0) setHiddenExpanded(false);
+  }, [hiddenCount]);
 
   const isRefreshing = scm.panelState === "loading";
   const repoLabel = useMemo(() => {
@@ -265,6 +273,30 @@ export const SourceControlPanel = memo(function SourceControlPanel({
   const handlePull = useCallback(() => {
     void sourceControl.runRemoteAction("pull");
   }, [sourceControl]);
+
+  const entryActions = useMemo<EntryActions>(
+    () => ({
+      actionBusy: scm.actionBusy,
+      repoRoot: scm.repo?.repoRoot ?? null,
+      onFocusRow: setFocusedRowKey,
+      onSelectFile: scm.selectFile,
+      onToggleStageFile: scm.toggleStageFile,
+      onDiscardFile: scm.requestDiscardFile,
+      onHideFile: scm.hideFile,
+      onRevealFile: scm.revealFile,
+      onOpenFile,
+    }),
+    [
+      onOpenFile,
+      scm.actionBusy,
+      scm.hideFile,
+      scm.repo?.repoRoot,
+      scm.requestDiscardFile,
+      scm.revealFile,
+      scm.selectFile,
+      scm.toggleStageFile,
+    ],
+  );
 
   const rows = useMemo<RowDescriptor[]>(() => {
     const result: RowDescriptor[] = [];
@@ -409,6 +441,16 @@ export const SourceControlPanel = memo(function SourceControlPanel({
           if (entry && entry.unstaged) {
             event.preventDefault();
             scm.requestDiscardFile(entry);
+          }
+          break;
+        }
+        case "h":
+        case "H": {
+          if (meta) break;
+          const entry = focusedEntry();
+          if (entry) {
+            event.preventDefault();
+            void scm.hideFile(entry);
           }
           break;
         }
@@ -739,6 +781,8 @@ export const SourceControlPanel = memo(function SourceControlPanel({
 
             {scm.allClean ? (
               <CleanTreeHint repoLabel={repoLabel} />
+            ) : changedCount === 0 ? (
+              <HiddenOnlyHint count={hiddenCount} />
             ) : (
               <div
                 ref={containerRef}
@@ -778,18 +822,12 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                           }}
                         >
                           <RowRenderer
+                            actions={entryActions}
                             row={row}
                             focused={focusedRowKey === row.key}
                             selectedPath={scm.selected?.path ?? null}
-                            actionBusy={scm.actionBusy}
                             headerCheckState={scm.headerCheckState}
-                            repoRoot={scm.repo?.repoRoot ?? null}
-                            onFocusRow={setFocusedRowKey}
                             onToggleAll={scm.toggleAll}
-                            onSelectFile={scm.selectFile}
-                            onToggleStageFile={scm.toggleStageFile}
-                            onDiscardFile={scm.requestDiscardFile}
-                            onOpenFile={onOpenFile}
                           />
                         </div>
                       );
@@ -798,6 +836,17 @@ export const SourceControlPanel = memo(function SourceControlPanel({
                 </div>
               </div>
             )}
+
+            {hiddenCount > 0 ? (
+              <HiddenFilesSection
+                entries={scm.hiddenFileEntries}
+                expanded={hiddenExpanded}
+                onToggleExpanded={() => setHiddenExpanded((v) => !v)}
+                onRevealAll={() => void scm.revealAllHiddenFiles()}
+                actions={entryActions}
+                selectedPath={scm.selected?.path ?? null}
+              />
+            ) : null}
           </>
         ) : null}
       </aside>
@@ -875,30 +924,58 @@ function CleanTreeHint({ repoLabel }: { repoLabel: string }) {
   );
 }
 
+type EntryActions = {
+  actionBusy: string | null;
+  repoRoot: string | null;
+  onFocusRow: (key: string | null) => void;
+  onSelectFile: (entry: SourceControlFileEntry) => Promise<void>;
+  onToggleStageFile: (entry: SourceControlFileEntry) => Promise<void>;
+  onDiscardFile: (entry: SourceControlFileEntry) => void;
+  onHideFile: (entry: SourceControlFileEntry) => Promise<void>;
+  onRevealFile: (entry: SourceControlFileEntry) => Promise<void>;
+  onOpenFile?: (absolutePath: string) => void;
+};
+
 type RowRendererProps = {
   row: RowDescriptor;
   focused: boolean;
   selectedPath: string | null;
-  actionBusy: string | null;
   headerCheckState: CheckState;
-  repoRoot: string | null;
-  onFocusRow: (key: string | null) => void;
   onToggleAll: () => Promise<void> | void;
-  onSelectFile: (entry: SourceControlFileEntry) => Promise<void>;
-  onToggleStageFile: (entry: SourceControlFileEntry) => Promise<void>;
-  onDiscardFile: (entry: SourceControlFileEntry) => void;
-  onOpenFile?: (absolutePath: string) => void;
+  actions: EntryActions;
 };
 
-const RowRenderer = memo(function RowRenderer(props: RowRendererProps) {
-  const { row } = props;
+const RowRenderer = memo(function RowRenderer({
+  row,
+  focused,
+  selectedPath,
+  headerCheckState,
+  onToggleAll,
+  actions,
+}: RowRendererProps) {
   switch (row.kind) {
     case "banner-diverged":
       return <DivergedBanner />;
     case "list-header":
-      return <ListHeader {...props} row={row} />;
+      return (
+        <ListHeader
+          count={row.count}
+          actionBusy={actions.actionBusy}
+          headerCheckState={headerCheckState}
+          onToggleAll={onToggleAll}
+        />
+      );
     case "entry":
-      return <EntryRow {...props} row={row} />;
+      return (
+        <EntryRow
+          {...actions}
+          rowKey={row.key}
+          entry={row.entry}
+          focused={focused}
+          selected={selectedPath === row.entry.path}
+          hidden={false}
+        />
+      );
   }
 });
 
@@ -922,12 +999,15 @@ function DivergedBanner() {
 }
 
 function ListHeader({
-  row,
+  count,
   actionBusy,
   headerCheckState,
   onToggleAll,
-}: RowRendererProps & {
-  row: Extract<RowDescriptor, { kind: "list-header" }>;
+}: {
+  count: number;
+  actionBusy: string | null;
+  headerCheckState: CheckState;
+  onToggleAll: () => Promise<void> | void;
 }) {
   return (
     <div className="flex h-7 items-center gap-2 px-3">
@@ -935,7 +1015,7 @@ function ListHeader({
         Changes
       </span>
       <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-border/60 px-1 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
-        {row.count}
+        {count}
       </span>
       <label className="ml-auto flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground">
         <span>All</span>
@@ -951,26 +1031,35 @@ function ListHeader({
   );
 }
 
+type EntryRowProps = EntryActions & {
+  rowKey: string;
+  entry: SourceControlFileEntry;
+  focused: boolean;
+  selected: boolean;
+  /** Muted rows live in the collapsed footer section, not the main list. */
+  hidden: boolean;
+};
+
 const EntryRow = memo(function EntryRow({
-  row,
+  rowKey,
+  entry,
   focused,
-  selectedPath,
+  selected: isSelected,
+  hidden,
   actionBusy,
   repoRoot,
   onFocusRow,
   onSelectFile,
   onToggleStageFile,
   onDiscardFile,
+  onHideFile,
+  onRevealFile,
   onOpenFile,
-}: RowRendererProps & {
-  row: Extract<RowDescriptor, { kind: "entry" }>;
-}) {
-  const entry = row.entry;
-  const isSelected = selectedPath === entry.path;
+}: EntryRowProps) {
   const fileName = basename(entry.path);
   const iconUrl = fileIconUrl(fileName);
   const pathLabel = entryPathLabel(entry);
-  const showDiscard = entry.unstaged;
+  const showDiscard = entry.unstaged && !hidden;
   const showStats = hasChangeStats(entry);
   const isStageBusy =
     actionBusy === `stage:${entry.path}` ||
@@ -988,12 +1077,12 @@ const EntryRow = memo(function EntryRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          id={`scm-row-${row.key}`}
+          id={`scm-row-${rowKey}`}
           data-focused={focused || undefined}
           data-selected={isSelected || undefined}
           role="option"
           aria-selected={isSelected}
-          onMouseDown={() => onFocusRow(row.key)}
+          onMouseDown={() => onFocusRow(rowKey)}
           className={cn(
             "group relative flex h-[30px] items-center gap-2 rounded-md pl-2 pr-2 transition-all duration-100",
             focused
@@ -1006,7 +1095,9 @@ const EntryRow = memo(function EntryRow({
           <span
             className={cn(
               "pointer-events-none absolute inset-y-1 left-0 w-[2px] rounded-full transition-opacity",
-              statusAccent(entry.statusCode),
+              hidden
+                ? "bg-muted-foreground/40"
+                : statusAccent(entry.statusCode),
               isSelected || focused
                 ? "opacity-100"
                 : "opacity-55 group-hover:opacity-95",
@@ -1016,13 +1107,20 @@ const EntryRow = memo(function EntryRow({
           <button
             type="button"
             onClick={() => {
-              onFocusRow(row.key);
+              onFocusRow(rowKey);
               void onSelectFile(entry);
             }}
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
           >
             {iconUrl ? (
-              <img src={iconUrl} alt="" className="size-4 shrink-0" />
+              <img
+                src={iconUrl}
+                alt=""
+                className={cn(
+                  "size-4 shrink-0",
+                  hidden && "opacity-45 grayscale",
+                )}
+              />
             ) : (
               <span className="size-4 shrink-0" />
             )}
@@ -1030,23 +1128,32 @@ const EntryRow = memo(function EntryRow({
               <span
                 className={cn(
                   "truncate text-[12px] leading-tight",
-                  isSelected || focused
-                    ? "font-semibold text-foreground"
-                    : "font-medium text-foreground/95",
+                  hidden
+                    ? "font-medium text-muted-foreground/75"
+                    : isSelected || focused
+                      ? "font-semibold text-foreground"
+                      : "font-medium text-foreground/95",
                   pathLabel ? "max-w-[58%] shrink-0" : "min-w-0 flex-1",
                 )}
               >
                 {fileName}
               </span>
               {pathLabel ? (
-                <span className="min-w-0 flex-1 truncate text-[10.5px] leading-tight text-muted-foreground/75">
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-[10.5px] leading-tight",
+                    hidden
+                      ? "text-muted-foreground/50"
+                      : "text-muted-foreground/75",
+                  )}
+                >
                   {pathLabel}
                 </span>
               ) : null}
             </div>
           </button>
 
-          {showStats ? (
+          {showStats && !hidden ? (
             <div
               className="flex shrink-0 items-center gap-1 text-[10.5px] font-semibold tabular-nums leading-none"
               title={
@@ -1072,8 +1179,36 @@ const EntryRow = memo(function EntryRow({
             </div>
           ) : null}
 
-          {showDiscard ? (
-            <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[focused=true]:opacity-100 data-[selected=true]:opacity-100">
+          <div
+            className={cn(
+              "flex shrink-0 items-center transition-opacity",
+              focused || isSelected
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            )}
+          >
+            {hidden ? (
+              <IconActionButton
+                label={`Show ${entry.path} in the list`}
+                side="top"
+                onClick={() => void onRevealFile(entry)}
+              >
+                <HugeiconsIcon icon={ViewIcon} size={11} strokeWidth={1.9} />
+              </IconActionButton>
+            ) : (
+              <IconActionButton
+                label={`Hide ${entry.path} from the list`}
+                side="top"
+                onClick={() => void onHideFile(entry)}
+              >
+                <HugeiconsIcon
+                  icon={ViewOffSlashIcon}
+                  size={11}
+                  strokeWidth={1.9}
+                />
+              </IconActionButton>
+            )}
+            {showDiscard ? (
               <IconActionButton
                 label={`Discard ${entry.path}`}
                 disabled={disabled}
@@ -1090,8 +1225,8 @@ const EntryRow = memo(function EntryRow({
                   />
                 )}
               </IconActionButton>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
           <span className="flex size-5 shrink-0 items-center justify-center">
             {isStageBusy ? (
@@ -1114,7 +1249,7 @@ const EntryRow = memo(function EntryRow({
         <ContextMenuItem
           className={COMPACT_ITEM}
           onSelect={() => {
-            onFocusRow(row.key);
+            onFocusRow(rowKey);
             void onSelectFile(entry);
           }}
         >
@@ -1152,6 +1287,18 @@ const EntryRow = memo(function EntryRow({
 
         <ContextMenuSeparator />
 
+        {/* Panel visibility, never .gitignore */}
+        <ContextMenuItem
+          className={COMPACT_ITEM}
+          onSelect={() =>
+            void (hidden ? onRevealFile(entry) : onHideFile(entry))
+          }
+        >
+          {hidden ? "Show in Source Control" : "Do Not Show"}
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
         {/* Copy paths */}
         <ContextMenuItem
           className={COMPACT_ITEM}
@@ -1184,6 +1331,143 @@ const EntryRow = memo(function EntryRow({
     </ContextMenu>
   );
 });
+
+const HIDDEN_LIST_MAX_HEIGHT = 216;
+
+/**
+ * Footer drawer for the files the user muted. It is anchored below the list
+ * rather than appended to it so the drawer stays reachable without scrolling
+ * past every change, and it virtualizes its own rows so a long mute list
+ * costs nothing while collapsed.
+ */
+function HiddenFilesSection({
+  entries,
+  expanded,
+  onToggleExpanded,
+  onRevealAll,
+  actions,
+  selectedPath,
+}: {
+  entries: readonly SourceControlFileEntry[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onRevealAll: () => void;
+  actions: EntryActions;
+  selectedPath: string | null;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: expanded ? entries.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHTS.entry,
+    overscan: 8,
+    getItemKey: (index) => entries[index]?.key ?? index,
+  });
+  const listHeight = Math.min(
+    entries.length * ROW_HEIGHTS.entry,
+    HIDDEN_LIST_MAX_HEIGHT,
+  );
+
+  return (
+    <div className="flex max-h-[45%] shrink-0 flex-col border-t border-border/50 bg-card/60 pb-1">
+      <div className="flex h-7 shrink-0 items-center gap-1.5 pl-1.5 pr-2">
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <HugeiconsIcon
+            icon={expanded ? ArrowDown01Icon : ArrowRight01Icon}
+            size={12}
+            strokeWidth={2}
+            className="shrink-0 opacity-70"
+          />
+          <HugeiconsIcon
+            icon={ViewOffSlashIcon}
+            size={11}
+            strokeWidth={1.9}
+            className="shrink-0 opacity-70"
+          />
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em]">
+            Hidden
+          </span>
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-border/60 px-1 text-[9.5px] font-semibold tabular-nums">
+            {entries.length}
+          </span>
+        </button>
+        <IconActionButton
+          label="Show every hidden file again"
+          side="top"
+          onClick={onRevealAll}
+        >
+          <HugeiconsIcon icon={ViewIcon} size={12} strokeWidth={1.9} />
+        </IconActionButton>
+      </div>
+
+      {expanded ? (
+        <div
+          ref={scrollRef}
+          role="listbox"
+          aria-label="Hidden files"
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+          style={{ height: listHeight }}
+        >
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const entry = entries[virtualRow.index];
+              if (!entry) return null;
+              return (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: virtualRow.size,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <EntryRow
+                    {...actions}
+                    rowKey={`hidden-${entry.key}`}
+                    entry={entry}
+                    focused={false}
+                    selected={selectedPath === entry.path}
+                    hidden
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function HiddenOnlyHint({ count }: { count: number }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-4 text-center">
+      <div className="flex size-8 items-center justify-center rounded-full border border-border/55 text-muted-foreground">
+        <HugeiconsIcon icon={ViewOffSlashIcon} size={16} strokeWidth={1.6} />
+      </div>
+      <div className="text-[12px] font-medium text-foreground">
+        Nothing to show
+      </div>
+      <div className="text-[10.5px] leading-snug text-muted-foreground">
+        {count} changed {count === 1 ? "file is" : "files are"} hidden
+      </div>
+    </div>
+  );
+}
 
 function IconActionButton({
   label,

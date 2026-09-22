@@ -22,6 +22,10 @@ import {
   type TtsLanguage,
 } from "@/modules/tts/lib/engines";
 import type { KeyBinding, ShortcutId } from "@/modules/shortcuts/shortcuts";
+import {
+  sanitizeHiddenFilesMap,
+  type HiddenFilesMap,
+} from "@/modules/source-control/lib/hiddenFiles";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
@@ -161,6 +165,9 @@ export type Preferences = {
   editorWordWrap: boolean;
   showHidden: boolean;
   explorerGitDecorations: boolean;
+  /** Paths muted in the Source Control panel, keyed by repo root.
+   *  A view filter only: nothing is written to .gitignore. */
+  sourceControlHiddenFiles: HiddenFilesMap;
   terminalWebglEnabled: boolean;
   terminalCursorBlink: boolean;
   terminalFontFamily: string;
@@ -255,6 +262,7 @@ const KEY_EDITOR_WORD_WRAP = "editorWordWrap";
 const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
 const KEY_EXPLORER_GIT_DECORATIONS = "explorerGitDecorations";
+const KEY_SC_HIDDEN_FILES = "sourceControlHiddenFiles";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
 const KEY_TERMINAL_CURSOR_BLINK = "terminalCursorBlink";
 const KEY_TERMINAL_FONT_FAMILY = "terminalFontFamily";
@@ -349,6 +357,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorWordWrap: false,
   showHidden: false,
   explorerGitDecorations: true,
+  sourceControlHiddenFiles: {},
   terminalWebglEnabled: true,
   terminalCursorBlink: false,
   terminalFontFamily: "",
@@ -511,6 +520,9 @@ export async function loadPreferences(): Promise<Preferences> {
     explorerGitDecorations:
       get<boolean>(KEY_EXPLORER_GIT_DECORATIONS) ??
       DEFAULT_PREFERENCES.explorerGitDecorations,
+    sourceControlHiddenFiles: sanitizeHiddenFilesMap(
+      get<unknown>(KEY_SC_HIDDEN_FILES),
+    ),
     terminalWebglEnabled:
       get<boolean>(KEY_TERMINAL_WEBGL_ENABLED) ??
       DEFAULT_PREFERENCES.terminalWebglEnabled,
@@ -764,6 +776,12 @@ export async function setExplorerGitDecorations(value: boolean): Promise<void> {
   await writePref(KEY_EXPLORER_GIT_DECORATIONS, value);
 }
 
+export async function setSourceControlHiddenFiles(
+  value: HiddenFilesMap,
+): Promise<void> {
+  await writePref(KEY_SC_HIDDEN_FILES, sanitizeHiddenFilesMap(value));
+}
+
 export async function setTerminalWebglEnabled(value: boolean): Promise<void> {
   await writePref(KEY_TERMINAL_WEBGL_ENABLED, value);
 }
@@ -897,6 +915,7 @@ export async function onPreferencesChange(
     [KEY_EDITOR_WORD_WRAP]: "editorWordWrap",
     [KEY_SHOW_HIDDEN]: "showHidden",
     [KEY_EXPLORER_GIT_DECORATIONS]: "explorerGitDecorations",
+    [KEY_SC_HIDDEN_FILES]: "sourceControlHiddenFiles",
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_CURSOR_BLINK]: "terminalCursorBlink",
     [KEY_TERMINAL_FONT_FAMILY]: "terminalFontFamily",
