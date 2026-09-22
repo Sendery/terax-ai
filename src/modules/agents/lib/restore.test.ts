@@ -142,11 +142,18 @@ describe("resumeCommandLine", () => {
 });
 
 describe("matchRestoreTargets", () => {
+  const tab = (
+    id: number,
+    spaceId: string,
+    leaves: Array<{ id: number; cwd?: string }>,
+    kind = "terminal",
+  ) => ({ id, kind, spaceId, leaves });
+
   const tabs = [
-    { id: 10, kind: "terminal", spaceId: "sp-1", cwd: "/a" },
-    { id: 11, kind: "editor", spaceId: "sp-1" },
-    { id: 12, kind: "terminal", spaceId: "sp-1", cwd: "/b" },
-    { id: 20, kind: "terminal", spaceId: "sp-2", cwd: "/a" },
+    tab(10, "sp-1", [{ id: 100, cwd: "/a" }]),
+    tab(11, "sp-1", [], "editor"),
+    tab(12, "sp-1", [{ id: 120, cwd: "/b" }]),
+    tab(20, "sp-2", [{ id: 200, cwd: "/a" }]),
   ];
 
   it("resumes into the tab the space serializer already restored", () => {
@@ -155,6 +162,7 @@ describe("matchRestoreTargets", () => {
       tabs,
     );
     expect(target.tabId).toBe(12);
+    expect(target.leafId).toBe(120);
   });
 
   it("stays inside the session's own space", () => {
@@ -179,9 +187,10 @@ describe("matchRestoreTargets", () => {
       tabs,
     );
     expect(target.tabId).toBeNull();
+    expect(target.leafId).toBeNull();
   });
 
-  it("never resumes two sessions into one tab", () => {
+  it("never resumes two sessions into one pane", () => {
     const targets = matchRestoreTargets(
       [
         session({ cwd: "/a", tabIndex: 0, sessionId: "one" }),
@@ -189,7 +198,62 @@ describe("matchRestoreTargets", () => {
       ],
       tabs,
     );
-    expect(targets.map((t) => t.tabId)).toEqual([10, null]);
+    expect(targets.map((t) => t.leafId)).toEqual([100, null]);
+  });
+
+  describe("split tabs", () => {
+    const split = [
+      tab(30, "sp-1", [
+        { id: 300, cwd: "/left" },
+        { id: 301, cwd: "/right" },
+      ]),
+    ];
+
+    it("reopens each agent of a split in its own pane", () => {
+      const targets = matchRestoreTargets(
+        [
+          session({ cwd: "/left", tabIndex: 0, leafIndex: 0, sessionId: "l" }),
+          session({ cwd: "/right", tabIndex: 0, leafIndex: 1, sessionId: "r" }),
+        ],
+        split,
+      );
+      expect(targets.map((t) => t.tabId)).toEqual([30, 30]);
+      expect(targets.map((t) => t.leafId)).toEqual([300, 301]);
+    });
+
+    it("matches a pane the tab's own cwd disagrees with", () => {
+      // The tab reports the active pane's directory; the agent sat in the other
+      // one. Matching on the tab would have opened a duplicate tab here.
+      const [target] = matchRestoreTargets(
+        [session({ cwd: "/right", tabIndex: 0, leafIndex: 1 })],
+        split,
+      );
+      expect(target.leafId).toBe(301);
+    });
+
+    it("falls back to a sibling pane when the recorded one moved", () => {
+      const [target] = matchRestoreTargets(
+        [session({ cwd: "/right", tabIndex: 0, leafIndex: 0 })],
+        split,
+      );
+      expect(target.leafId).toBe(301);
+    });
+
+    it("reads a snapshot written before panes were recorded", () => {
+      const [target] = matchRestoreTargets(
+        [session({ cwd: "/left", tabIndex: 0 })],
+        split,
+      );
+      expect(target.leafId).toBe(300);
+    });
+  });
+
+  it("never resumes into a pane of a non-terminal tab", () => {
+    const [target] = matchRestoreTargets(
+      [session({ cwd: "/a", tabIndex: 1 })],
+      [tab(40, "sp-1", [{ id: 400, cwd: "/a" }], "editor")],
+    );
+    expect(target.tabId).toBeNull();
   });
 });
 
