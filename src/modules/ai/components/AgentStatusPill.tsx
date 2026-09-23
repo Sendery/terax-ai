@@ -23,14 +23,14 @@ export function AgentStatusPill({ onClick }: Props) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-6 items-center gap-1.5 rounded-md border px-1.5 text-[11px] transition-colors",
+        "flex h-6 min-w-0 items-center gap-1.5 rounded-md border px-1.5 text-[11px] transition-colors",
         "animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out",
         tone,
       )}
       title="Open AI log"
     >
-      {icon}
-      <span className="max-w-[180px] truncate">{label}</span>
+      <span className="flex shrink-0 items-center">{icon}</span>
+      <span className="min-w-0 max-w-[180px] truncate">{label}</span>
     </button>
   );
 }
