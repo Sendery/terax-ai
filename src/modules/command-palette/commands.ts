@@ -1,6 +1,6 @@
 import type { SearchTarget } from "@/modules/header";
 import { MAX_PANES_PER_TAB, type Tab } from "@/modules/tabs";
-import { leafIds } from "@/modules/terminal";
+import { leafIds, repaintLeaf } from "@/modules/terminal";
 import {
   AlarmClockIcon,
   AlarmClockPlusIcon,
@@ -17,6 +17,7 @@ import {
   LayoutTwoRowIcon,
   Note01Icon,
   PaintBoardIcon,
+  Refresh01Icon,
   Search01Icon,
   Settings01Icon,
   SidebarLeftIcon,
@@ -235,6 +236,24 @@ export function createCommandItems(
       shortcutId: "pane.splitDown",
       disabledReason: splitDisabled,
       run: ctx.splitPaneDown,
+    },
+    {
+      id: "pane.redraw",
+      title: "Redraw terminals",
+      group: "Panes",
+      keywords: [
+        "terminal",
+        "pane",
+        "redraw",
+        "repaint",
+        "render",
+        "corrupt",
+        "garbled",
+        "glyph",
+        "refresh",
+      ],
+      icon: Refresh01Icon,
+      run: () => repaintLeaf(null),
     },
     {
       id: "git.graph",
