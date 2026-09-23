@@ -264,6 +264,15 @@ export type ModelInfo = {
 export const MODELS = [
   // ── OpenAI ────────────────────────────────────────────────────────────────
   {
+    id: "gpt-6-astra",
+    provider: "openai",
+    label: "GPT-6 Astra",
+    hint: "Flagship",
+    description: "OpenAI's frontier model for computer use, browsing and software engineering.",
+    capabilities: { intelligence: 5, speed: 3, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
     id: "gpt-5.5",
     provider: "openai",
     label: "GPT-5.5",
@@ -320,6 +329,42 @@ export const MODELS = [
 
   // ── Anthropic ─────────────────────────────────────────────────────────────
   {
+    id: "claude-fable-5-1",
+    provider: "anthropic",
+    label: "Claude Fable 5.1",
+    hint: "Max",
+    description: "Anthropic's most capable model, for the hardest reasoning and long-horizon agentic work.",
+    capabilities: { intelligence: 5, speed: 1, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-opus-5-5",
+    provider: "anthropic",
+    label: "Claude Opus 5.5",
+    hint: "Best",
+    description: "The current Opus: frontier coding and agentic work, cheaper than Opus 5.",
+    capabilities: { intelligence: 5, speed: 2, cost: 2 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-opus-5",
+    provider: "anthropic",
+    label: "Claude Opus 5",
+    hint: "Strong",
+    description: "Deep reasoning and long-horizon agentic coding.",
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-sonnet-5",
+    provider: "anthropic",
+    label: "Claude Sonnet 5",
+    hint: "Balanced",
+    description: "Everyday workhorse with a million-token window.",
+    capabilities: { intelligence: 4, speed: 4, cost: 3 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
     id: "claude-opus-4-8",
     provider: "anthropic",
     label: "Claude Opus 4.8",
@@ -366,6 +411,15 @@ export const MODELS = [
   },
 
   // ── Google ────────────────────────────────────────────────────────────────
+  {
+    id: "gemini-3.8-flash",
+    provider: "google",
+    label: "Gemini 3.8 Flash",
+    hint: "Fast",
+    description: "Google's current workhorse: Pro-level intelligence at Flash speed.",
+    capabilities: { intelligence: 4, speed: 5, cost: 4 },
+    tags: ["vision", "tools", "coding"],
+  },
   {
     id: "gemini-3.5-flash",
     provider: "google",
@@ -754,17 +808,23 @@ export const DEFAULT_MODEL_ID: ModelId = "gpt-5.4-mini";
  *  context-usage indicator in the AI mini-window header. Conservative
  *  estimates — actual provider limits may shift. */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gpt-6-astra": 1_000_000,
   "gpt-5.5": 1_050_000,
   "gpt-5.5-pro": 1_050_000,
   "gpt-5.4-mini": 400_000,
   "gpt-5.4-nano": 400_000,
   "gpt-5.3-codex": 400_000,
   "gpt-4.1-mini": 128_000,
+  "claude-fable-5-1": 1_000_000,
+  "claude-opus-5-5": 1_000_000,
+  "claude-opus-5": 1_000_000,
+  "claude-sonnet-5": 1_000_000,
   "claude-opus-4-7": 200_000,
   "claude-opus-4-8": 1_000_000,
   "claude-sonnet-4-6": 200_000,
   "claude-haiku-4-5": 200_000,
   "claude-opus-4-6": 200_000,
+  "gemini-3.8-flash": 1_000_000,
   "gemini-3.5-flash": 1_000_000,
   "gemini-3.1-flash-lite": 1_000_000,
   "gemini-3.1-pro-preview": 1_000_000,
@@ -785,6 +845,10 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "openai/gpt-oss-20b": 128_000,
   "llama-3.3-70b-versatile": 128_000,
   "deepseek-r1-distill-llama-70b": 128_000,
+  // The subscription copies reach the same OpenAI models, so they carry the
+  // same windows; without an entry the usage indicator would understate them.
+  "codex-gpt-5.3-codex": 400_000,
+  "codex-gpt-5.5": 1_050_000,
   "openrouter-custom": 256_000,
   "openai-compatible-custom": 128_000,
   "lmstudio-local": 32_000,
@@ -813,12 +877,17 @@ export type ModelPricing = {
 };
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  "gpt-6-astra": { input: 10, output: 50, cacheRead: 1 },
   "gpt-5.5": { input: 5, output: 15, cacheRead: 0.5 },
   "gpt-5.5-pro": { input: 30, output: 180 },
   "gpt-5.4-mini": { input: 0.4, output: 1.6, cacheRead: 0.04 },
   "gpt-5.4-nano": { input: 0.1, output: 0.4, cacheRead: 0.01 },
   "gpt-5.3-codex": { input: 1.5, output: 6, cacheRead: 0.15 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6, cacheRead: 0.1 },
+  "claude-fable-5-1": { input: 10, output: 50, cacheRead: 0.25 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
+  "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5 },
+  "claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2 },
   "claude-opus-4-7": { input: 15, output: 75, cacheRead: 1.5 },
   "claude-opus-4-8": { input: 5, output: 25, cacheRead: 0.5 },
   "claude-opus-4-6": { input: 15, output: 75, cacheRead: 1.5 },
