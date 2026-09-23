@@ -46,7 +46,7 @@ export function StatusBar({
   return (
     <footer
       data-capture-target="statusbar"
-      className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-card/60 px-3 text-[11px]"
+      className="flex h-8 shrink-0 items-center justify-between gap-3 overflow-hidden border-t border-border/60 bg-card/60 px-3 text-[11px]"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <WorkspaceEnvSelector onSelect={onWorkspaceChange} />
@@ -70,7 +70,10 @@ export function StatusBar({
           </Tooltip>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Every control shares one row, so the group yields instead of pushing
+          its trailing members off the bar: labels here shorten to an ellipsis
+          and only then does the breadcrumb on the left give up more room. */}
+      <div className="flex min-w-0 shrink items-center justify-end gap-1.5">
         <AgentStatusPill onClick={onOpenMini} />
         {panelOpen && hasComposer ? (
           <AiStatusBarControls />

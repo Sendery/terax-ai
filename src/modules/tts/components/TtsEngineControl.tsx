@@ -34,7 +34,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useState } from "react";
 
 const SHELL =
-  "flex h-6 items-center rounded-md border border-border/50 bg-card/60 text-[11px] text-muted-foreground";
+  "flex h-6 min-w-0 items-center rounded-md border border-border/50 bg-card/60 text-[11px] text-muted-foreground";
 const BUTTON =
   "flex h-full items-center gap-1 rounded-l-md px-1.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-60";
 
@@ -100,7 +100,7 @@ export function TtsEngineControl() {
           <TooltipTrigger asChild>
             <button
               type="button"
-              className={BUTTON}
+              className={cn(BUTTON, "shrink-0")}
               disabled={busy || !engine}
               onClick={() => void toggle()}
               aria-label={
@@ -132,10 +132,10 @@ export function TtsEngineControl() {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex h-full items-center gap-1 rounded-r-md border-l border-border/40 px-1.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="flex h-full min-w-0 items-center gap-1 rounded-r-md border-l border-border/40 px-1.5 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               aria-label="Choose the speech model"
             >
-              <span className="max-w-[92px] truncate">
+              <span className="min-w-0 max-w-[92px] truncate">
                 {model ? MODEL_LABELS[model] : "No voice"}
               </span>
               <HugeiconsIcon

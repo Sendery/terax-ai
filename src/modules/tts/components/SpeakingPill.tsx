@@ -30,7 +30,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 
 const PILL =
-  "flex h-6 items-center gap-1.5 rounded-md border px-1.5 text-[11px] transition-colors animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out";
+  "flex h-6 min-w-0 items-center gap-1.5 rounded-md border px-1.5 text-[11px] transition-colors animate-in fade-in-0 slide-in-from-top-1 duration-150 ease-out";
 const ACTION =
   "flex size-4 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-40";
 
@@ -77,12 +77,12 @@ export function SpeakingPill() {
               paused && "opacity-50",
             )}
           />
-          <span className="max-w-[120px] truncate">
+          <span className="min-w-0 max-w-[120px] truncate">
             {paused ? "Paused" : "Reading"}
             {currentVoice ? ` · ${currentVoice.name}` : ""}
           </span>
 
-          <span className="font-mono text-[10.5px] text-muted-foreground tabular-nums">
+          <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums">
             {formatClock(elapsed)}/{formatClock(duration)}
           </span>
           {position ? (

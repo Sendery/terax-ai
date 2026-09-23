@@ -98,14 +98,18 @@ export function AiOpenButton({
       type="button"
       onClick={onToggle}
       className={cn(
-        "flex h-6 items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 text-xs",
+        "flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 text-xs",
         "text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground",
         "animate-in slide-in-from-top-2 duration-200 ease-out",
       )}
       title={open ? "Close AI panel" : "Open AI agent"}
     >
-      <span>{open ? "Close AI panel" : "Open AI agent"}</span>
-      <Kbd className="h-4 min-w-4 px-1">{fmtShortcut(MOD_KEY, "I")}</Kbd>
+      <span className="min-w-0 truncate">
+        {open ? "Close AI panel" : "Open AI agent"}
+      </span>
+      <Kbd className="h-4 min-w-4 shrink-0 px-1">
+        {fmtShortcut(MOD_KEY, "I")}
+      </Kbd>
     </button>
   );
 }
@@ -118,7 +122,7 @@ export function AiStatusBarControls() {
   const closePanel = useChatStore((s) => s.closePanel);
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex min-w-0 items-center gap-0.5">
       <input
         ref={fileInputRef}
         type="file"
@@ -171,14 +175,14 @@ export function AiStatusBarControls() {
 
       <ModelDropdown />
 
-      <span className="mx-1 h-8 w-px bg-border" aria-hidden />
+      <span className="mx-1 h-8 w-px shrink-0 bg-border" aria-hidden />
       <Button
         onClick={closePanel}
         title="Close AI panel"
         size="xs"
         variant="ghost"
         aria-label="Close AI panel"
-        className="text-[11px] text-foreground/85 px-1"
+        className="shrink-0 px-1 text-[11px] text-foreground/85"
       >
         <Kbd className="h-4 gap-px px-2 font-mono text-[11px]">
           {fmtShortcut(MOD_KEY, "I")}
@@ -197,7 +201,7 @@ export function AiStatusBarControls() {
           size="icon"
           variant="ghost"
           onClick={c.stop}
-          className="size-6"
+          className="size-6 shrink-0"
           aria-label="Stop"
           title="Stop"
         >
@@ -209,7 +213,7 @@ export function AiStatusBarControls() {
           size="icon"
           onClick={c.submit}
           disabled={!c.canSend}
-          className="h-5.5 w-7.5 ml-1"
+          className="ml-1 h-5.5 w-7.5 shrink-0"
           aria-label="Send"
           title="Send (Enter)"
         >
@@ -307,7 +311,7 @@ function ModelDropdown() {
           variant="ghost"
           size="sm"
           className={cn(
-            "h-5.5 gap-1 rounded-md px-1.5 my-1 text-xs hover:bg-accent hover:text-foreground",
+            "h-5.5 min-w-0 gap-1 rounded-md px-1.5 my-1 text-xs hover:bg-accent hover:text-foreground",
             currentProviderHasKey
               ? "text-muted-foreground"
               : "text-amber-600 dark:text-amber-400",
@@ -318,12 +322,12 @@ function ModelDropdown() {
               : `${current.label} — no key configured`
           }
         >
-          {current.label}
+          <span className="min-w-0 truncate">{current.label}</span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             size={11}
             strokeWidth={2}
-            className="opacity-70"
+            className="shrink-0 opacity-70"
           />
         </Button>
       </DropdownMenuTrigger>
@@ -724,7 +728,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "size-6 rounded-md text-muted-foreground hover:text-foreground",
+        "size-6 shrink-0 rounded-md text-muted-foreground hover:text-foreground",
         className,
       )}
     >
