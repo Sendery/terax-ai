@@ -15,7 +15,6 @@ import {
   AiBookIcon,
   AppleIcon,
   ArrowDown01Icon,
-  ArrowUpIcon,
   BrainIcon,
   ChatGptIcon,
   ClaudeIcon,
@@ -37,7 +36,6 @@ import {
   Search01Icon,
   Settings01Icon,
   StarIcon,
-  StopCircleIcon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -176,50 +174,18 @@ export function AiStatusBarControls() {
       <ModelDropdown />
 
       <span className="mx-1 h-8 w-px shrink-0 bg-border" aria-hidden />
-      <Button
-        onClick={closePanel}
-        title="Close AI panel"
-        size="xs"
-        variant="ghost"
-        aria-label="Close AI panel"
-        className="shrink-0 px-1 text-[11px] text-foreground/85"
-      >
-        <Kbd className="h-4 gap-px px-2 font-mono text-[11px]">
-          {fmtShortcut(MOD_KEY, "I")}
-        </Kbd>
-      </Button>
       <IconBtn
         title={`${miniOpen ? "Close" : "Open"} AI chat window (${fmtShortcut("⇧", MOD_KEY, "I")})`}
         onClick={toggleMini}
       >
         <HugeiconsIcon icon={Message01Icon} size={13} strokeWidth={1.75} />
       </IconBtn>
-
-      {c.isBusy ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          onClick={c.stop}
-          className="size-6 shrink-0"
-          aria-label="Stop"
-          title="Stop"
-        >
-          <HugeiconsIcon icon={StopCircleIcon} size={13} strokeWidth={1.75} />
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          size="icon"
-          onClick={c.submit}
-          disabled={!c.canSend}
-          className="ml-1 h-5.5 w-7.5 shrink-0"
-          aria-label="Send"
-          title="Send (Enter)"
-        >
-          <HugeiconsIcon icon={ArrowUpIcon} size={13} strokeWidth={1.75} />
-        </Button>
-      )}
+      <IconBtn
+        title={`Collapse AI panel (${fmtShortcut(MOD_KEY, "I")})`}
+        onClick={closePanel}
+      >
+        <HugeiconsIcon icon={ArrowDown01Icon} size={14} strokeWidth={2} />
+      </IconBtn>
     </div>
   );
 }
