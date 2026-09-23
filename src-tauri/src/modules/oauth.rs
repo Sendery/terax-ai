@@ -49,6 +49,22 @@ enum BodyFormat {
     Json,
 }
 
+/// What a provider expects in the `state` parameter.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StateSource {
+    /// An opaque random value, which is what `state` is for.
+    Random,
+    /// The PKCE verifier itself.
+    ///
+    /// Anthropic's token endpoint does not treat `state` as an opaque value to
+    /// hand back: an exchange carrying an independently random one does not
+    /// complete, and every client that works against this endpoint -- pi's
+    /// included -- sends the verifier. It costs the usual property of `state`
+    /// (the verifier is no longer secret, since it travels in the authorize
+    /// URL), which is why it is a per-provider choice and not the default.
+    Verifier,
+}
+
 struct ProviderConfig {
     id: &'static str,
     label: &'static str,
@@ -65,6 +81,7 @@ struct ProviderConfig {
     token_body: BodyFormat,
     /// Whether the code exchange echoes `state` back to the token endpoint.
     exchange_sends_state: bool,
+    state_source: StateSource,
     /// JWT claim holding provider-specific account data, when the access token
     /// is a JWT worth reading.
     account_claim: Option<&'static str>,
@@ -77,12 +94,16 @@ static PROVIDERS: &[ProviderConfig] = &[
         client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
         authorize_url: "https://claude.ai/oauth/authorize",
         token_url: "https://platform.claude.com/v1/oauth/token",
-        scope: "org:create_api_key user:profile user:inference",
+        // The full set Claude Code asks for. A subset authorises the login but
+        // not everything the inference endpoint then expects of the token.
+        scope: "org:create_api_key user:profile user:inference \
+                user:sessions:claude_code user:mcp_servers user:file_upload",
         callback_port: 53692,
         callback_path: "/callback",
         extra_authorize_params: &[("code", "true")],
         token_body: BodyFormat::Json,
         exchange_sends_state: true,
+        state_source: StateSource::Verifier,
         account_claim: None,
     },
     ProviderConfig {
@@ -101,6 +122,7 @@ static PROVIDERS: &[ProviderConfig] = &[
         ],
         token_body: BodyFormat::Form,
         exchange_sends_state: false,
+        state_source: StateSource::Random,
         account_claim: Some("https://api.openai.com/auth"),
     },
 ];
@@ -646,7 +668,10 @@ pub struct LoginStart {
 pub async fn oauth_begin(provider: String) -> Result<LoginStart, String> {
     let cfg = find_provider(&provider)?;
     let verifier = random_base64url(32)?;
-    let state = random_base64url(16)?;
+    let state = match cfg.state_source {
+        StateSource::Random => random_base64url(16)?,
+        StateSource::Verifier => verifier.clone(),
+    };
 
     // 127.0.0.1 rather than 0.0.0.0: the redirect comes from this machine's
     // browser, and nothing else should be able to hand us an authorization code.
@@ -860,6 +885,37 @@ mod tests {
         assert_eq!(redirect_uri(anthropic), "http://localhost:53692/callback");
         let codex = find_provider("openai-codex").unwrap();
         assert_eq!(redirect_uri(codex), "http://localhost:1455/auth/callback");
+    }
+
+    #[test]
+    fn anthropic_asks_for_every_scope_claude_code_does() {
+        // A line continuation in the literal is easy to get wrong, and a
+        // missing space would silently request one malformed scope.
+        let cfg = find_provider("anthropic").unwrap();
+        assert_eq!(
+            cfg.scope,
+            "org:create_api_key user:profile user:inference \
+             user:sessions:claude_code user:mcp_servers user:file_upload"
+                .replace("             ", "")
+                .as_str()
+                .trim()
+        );
+        assert_eq!(cfg.scope.split(' ').count(), 6);
+        assert!(cfg.scope.contains("user:sessions:claude_code"));
+    }
+
+    #[test]
+    fn anthropic_sends_the_verifier_as_state_and_codex_does_not() {
+        // Anthropic's exchange fails with an independently random state; the
+        // distinction has to survive any later tidying of the provider table.
+        assert!(matches!(
+            find_provider("anthropic").unwrap().state_source,
+            StateSource::Verifier
+        ));
+        assert!(matches!(
+            find_provider("openai-codex").unwrap().state_source,
+            StateSource::Random
+        ));
     }
 
     #[test]
