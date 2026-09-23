@@ -1,5 +1,8 @@
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { ArrowUpIcon, StopCircleIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
 import { usePresence } from "@/lib/usePresence";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -265,6 +268,41 @@ export function AiComposerInput() {
               )}
             />
             <AgentSwitcher />
+            {/* Send sits against the text it sends: at the far end of the
+                status bar an upward arrow read as "expand this panel". */}
+            {c.isBusy ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={c.stop}
+                className="size-7 shrink-0 rounded-lg"
+                aria-label="Stop"
+                title="Stop"
+              >
+                <HugeiconsIcon
+                  icon={StopCircleIcon}
+                  size={14}
+                  strokeWidth={1.75}
+                />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                onClick={c.submit}
+                disabled={!c.canSend}
+                className="size-7 shrink-0 rounded-lg"
+                aria-label="Send"
+                title="Send (Enter)"
+              >
+                <HugeiconsIcon
+                  icon={ArrowUpIcon}
+                  size={14}
+                  strokeWidth={1.75}
+                />
+              </Button>
+            )}
           </div>
         </PopoverAnchor>
         {fileTrigger ? (
