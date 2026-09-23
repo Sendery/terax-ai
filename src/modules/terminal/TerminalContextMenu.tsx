@@ -24,12 +24,13 @@ import {
   Copy01Icon,
   Flowchart01Icon,
   Note01Icon,
+  Refresh01Icon,
   SparklesIcon,
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
-import { pasteIntoLeaf } from "./lib/rendererPool";
+import { pasteIntoLeaf, repaintLeaf } from "./lib/rendererPool";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,
@@ -144,6 +145,11 @@ function MenuBody({
       >
         <HugeiconsIcon icon={ClipboardPasteIcon} size={14} strokeWidth={1.75} />
         <span className="flex-1">Paste</span>
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={() => repaintLeaf(leafId)}>
+        <HugeiconsIcon icon={Refresh01Icon} size={14} strokeWidth={1.75} />
+        <span className="flex-1">Redraw</span>
       </ContextMenuItem>
       {selectionActions ? (
         <>

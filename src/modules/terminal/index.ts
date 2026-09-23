@@ -18,6 +18,7 @@ export {
   type AgentTabStatus,
   useAgentActivityStore,
 } from "./lib/agentActivity";
+export { repaintLeaf } from "./lib/rendererPool";
 export { useTerminalFileDrop } from "./lib/useTerminalFileDrop";
 export {
   findLeafCwd,

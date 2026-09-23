@@ -25,6 +25,8 @@ import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 export const POOL_MAX_SIZE = 5;
 const FIT_DEBOUNCE_MS = 8;
 const PTY_RESIZE_DEBOUNCE_MS = 256;
+/** Quiet period after the last resize before the atlas is re-uploaded. */
+const RESIZE_REPAINT_DEBOUNCE_MS = 300;
 const SNAPSHOT_SCROLLBACK_CAP = 5_000;
 
 export type SlotAdapter = {
@@ -70,6 +72,7 @@ export type Slot = {
   observer: ResizeObserver | null;
   fitTimer: ReturnType<typeof setTimeout> | null;
   ptyTimer: ReturnType<typeof setTimeout> | null;
+  repaintTimer: ReturnType<typeof setTimeout> | null;
   webglReapTimer: ReturnType<typeof setTimeout> | null;
   slotReapTimer: ReturnType<typeof setTimeout> | null;
   unhideRaf: number | null;
@@ -168,6 +171,20 @@ export function poolSlotStats(): PoolSlotStat[] {
 
 // Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
 // dropped path as a real paste while a plain shell gets the literal text.
+/**
+ * Force a repaint of one leaf, or of everything on screen when no leaf is
+ * given. GPU state can go bad in ways nothing here observes (a driver reset,
+ * an external display waking), so the user gets a way to ask for it directly
+ * rather than having to select the damaged text to repair it.
+ */
+export function repaintLeaf(leafId: number | null): void {
+  for (const slot of slots) {
+    if (slot.currentLeafId === null || slot.parked) continue;
+    if (leafId !== null && slot.currentLeafId !== leafId) continue;
+    repaintStaleSlot(slot);
+  }
+}
+
 export function pasteIntoLeaf(leafId: number, text: string): boolean {
   const slot = slots.find((s) => s.currentLeafId === leafId);
   if (!slot) return false;
@@ -266,6 +283,7 @@ function createSlot(): Slot {
     observer: null,
     fitTimer: null,
     ptyTimer: null,
+    repaintTimer: null,
     webglReapTimer: null,
     slotReapTimer: null,
     unhideRaf: null,
@@ -672,8 +690,10 @@ function setupResizeObserver(slot: Slot, p: AcquireParams): void {
   slot.observer?.disconnect();
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
 
   const container = p.container;
   const flushPty = () => {
@@ -700,6 +720,17 @@ function setupResizeObserver(slot: Slot, p: AcquireParams): void {
       slot.fitAddon.fit();
       if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
       slot.ptyTimer = setTimeout(flushPty, PTY_RESIZE_DEBOUNCE_MS);
+      // A resized canvas can keep drawing from an atlas laid out for the old
+      // one, which is how splitting a pane left the surviving one corrupt.
+      // This waits for the gesture to settle rather than riding the 8ms fit
+      // debounce: clearing the atlas re-rasterizes every glyph, so doing it
+      // per frame would make dragging a divider crawl.
+      if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
+      slot.repaintTimer = setTimeout(() => {
+        slot.repaintTimer = null;
+        if (slot.currentLeafId !== p.leafId || slot.parked) return;
+        repaintStaleSlot(slot);
+      }, RESIZE_REPAINT_DEBOUNCE_MS);
     }, FIT_DEBOUNCE_MS);
   });
   slot.observer.observe(container);
@@ -756,8 +787,10 @@ function detachSlotFromLeaf(slot: Slot, retain: boolean): void {
   slot.observer = null;
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
 
   cancelPendingUnhide(slot);
   slot.host.style.visibility = "";
@@ -832,8 +865,10 @@ function disposeSlot(slot: Slot): void {
   cancelPendingUnhide(slot);
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
   slot.observer?.disconnect();
   slot.observer = null;
   for (const d of slot.oscDisposers) {
