@@ -38,6 +38,7 @@ tauri-plugin-os = "2"
 tauri-plugin-store = "2"
 tauri-plugin-process = "2"
 tauri-plugin-notification = "2"
+png = "0.17"
 reqwest = { version = "0.12", default-features = false, features = [
 	"rustls-tls",
 	"stream",
@@ -62,6 +63,7 @@ libc = "0.2"
 keyring = { version = "3.6", default-features = false, features = [
 	"apple-native",
 ] }
+mac-notification-sys = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSUserDefaults"] }
 

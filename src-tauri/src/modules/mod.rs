@@ -12,6 +12,7 @@ pub mod oauth;
 pub mod pi;
 pub mod pisessions;
 pub mod proc;
+pub mod notify;
 pub mod pty;
 pub mod scheduler;
 pub mod secrets;
