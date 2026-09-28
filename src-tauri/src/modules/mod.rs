@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod agent_cli;
+pub mod agentdigest;
 pub mod agentsessions;
 pub mod capture;
 pub mod fs;
@@ -11,6 +12,7 @@ pub mod oauth;
 pub mod pi;
 pub mod pisessions;
 pub mod proc;
+pub mod notify;
 pub mod pty;
 pub mod scheduler;
 pub mod secrets;

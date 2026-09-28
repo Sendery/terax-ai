@@ -11,7 +11,10 @@ const row: AgentMonitorRow = {
   tabId: 10,
   agent: "claude",
   sessionName: "release notes",
+  tabLabel: null,
   state: "needs-input",
+  stateLabel: "Needs input",
+  reason: null,
   startedAt: new Date(2026, 0, 5, 9, 4).getTime(),
   lastActivityAt: NOW - 30 * 60_000,
   lastNotificationAt: NOW - 30 * 60_000,
@@ -20,6 +23,13 @@ const row: AgentMonitorRow = {
   tabColor: null,
   task: null,
   cwd: null,
+  summary: null,
+  pendingQuestion: null,
+  goal: null,
+  tasks: [],
+  taskSummary: null,
+  prs: [],
+  artifacts: [],
 };
 
 function render(over: Partial<AgentMonitorRow> = {}): string {
@@ -72,5 +82,36 @@ describe("AgentMonitorRowView", () => {
     expect(html).toContain("Native hook");
     expect(html).toContain("Add monitor");
     expect(html).toContain("/work/terax");
+  });
+
+  it("shows the tab beside the session name, and the state it is in", () => {
+    const html = render({
+      sessionName: "HACKATHON-MERGE",
+      tabLabel: "slot-5",
+      stateLabel: "Asking you",
+      reason: "question",
+    });
+
+    expect(html).toContain(">HACKATHON-MERGE<");
+    expect(html).toContain(">slot-5<");
+    expect(html).toContain(">Asking you<");
+  });
+
+  it("surfaces running work, PRs and artifacts at a glance", () => {
+    const html = render({
+      taskSummary: "2 subagents, 1 monitor",
+      prs: [
+        {
+          number: 112955,
+          url: "https://github.com/a/b/pull/112955",
+          repo: "a/b",
+        },
+      ],
+      artifacts: [{ url: "https://claude.ai/code/artifact/x", title: "Purga" }],
+    });
+
+    expect(html).toContain("2 subagents, 1 monitor");
+    expect(html).toContain("PR #112955");
+    expect(html).toContain("1 artifact");
   });
 });

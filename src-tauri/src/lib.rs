@@ -1,7 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentsessions, capture, fs, git, history, lsp, net, oauth, pi, pisessions,
+    agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, net, notify, oauth, pi,
+    pisessions,
     pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
@@ -333,6 +334,8 @@ pub fn run() {
             pisessions::pi_session_offset,
             pisessions::pi_session_usage,
             pisessions::pi_sessions_list,
+            agentdigest::agent_session_digest,
+            notify::agent_notify,
             agentsessions::agent_session_read,
             agentsessions::agent_sessions_list,
             agentsessions::agent_session_branch,

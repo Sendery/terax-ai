@@ -223,7 +223,7 @@ fn read_header(path: &std::path::Path, agent: AgentKind) -> (Option<String>, Opt
     (cwd, parent)
 }
 
-fn find_session_file(agent: AgentKind, session_id: &str) -> Option<PathBuf> {
+pub(crate) fn find_session_file(agent: AgentKind, session_id: &str) -> Option<PathBuf> {
     let root = sessions_root(agent)?;
     let exact = format!("{session_id}.jsonl");
     let suffix = format!("_{session_id}.jsonl");

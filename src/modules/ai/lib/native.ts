@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  NotificationTone,
+  SessionDigest,
+} from "@/modules/agents/lib/types";
 import type { SessionAgent } from "@/modules/session-graph/lib/entries";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 
@@ -338,6 +342,34 @@ export const native = {
       "agent_session_branch",
       { sessionId, entryId },
     ),
+  /**
+   * Live digest of a session's transcript: name, recap, pending question,
+   * running tasks, PRs and artifacts. Incremental on the Rust side, so a call
+   * costs only what was appended since the previous one.
+   */
+  agentSessionDigest: (
+    agent: "claude" | "pi" | "codex",
+    sessionId: string | null,
+    cwd: string | null,
+  ) =>
+    invoke<SessionDigest | null>("agent_session_digest", {
+      agent,
+      sessionId,
+      cwd,
+    }),
+  /**
+   * Posts a notification with a subtitle, a colour badge and a click target.
+   * Resolves false where no rich path exists, so the caller falls back.
+   */
+  agentNotify: (notification: {
+    title: string;
+    subtitle?: string;
+    body?: string;
+    accent?: string;
+    tone: NotificationTone;
+    leafId?: number;
+    tabId?: number;
+  }) => invoke<boolean>("agent_notify", { notification }),
   agentSessionsList: (agent: SessionAgent, cwd?: string, limit?: number) =>
     invoke<
       {
