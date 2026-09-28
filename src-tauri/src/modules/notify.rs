@@ -217,7 +217,7 @@ mod mac {
         Bool::YES
     }
 
-    fn present_in_foreground() {
+    pub(super) fn present_in_foreground() {
         let Some(class) = AnyClass::get(c"NotificationCenterDelegate") else {
             return;
         };
@@ -395,3 +395,36 @@ mod tests {
     }
 }
 
+#[cfg(all(test, target_os = "macos"))]
+mod mac_tests {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject, Bool, Sel};
+
+    #[test]
+    fn the_backend_delegate_learns_to_present_while_frontmost() {
+        // Referencing the backend keeps its Objective-C class linked into the
+        // test binary.
+        let _ = mac_notification_sys::Notification::default();
+        super::mac::present_in_foreground();
+        // Idempotent: a second call leaves the method as it is.
+        super::mac::present_in_foreground();
+
+        let class = AnyClass::get(c"NotificationCenterDelegate").expect("backend delegate class");
+        let sel = Sel::register(c"userNotificationCenter:shouldPresentNotification:");
+        assert!(class.instance_method(sel).is_some());
+
+        // Calling it through the runtime checks the signature and the BOOL ABI,
+        // not just that a method with that name exists.
+        let instance: *mut AnyObject = unsafe { msg_send![class, new] };
+        assert!(!instance.is_null());
+        let present: Bool = unsafe {
+            msg_send![
+                instance,
+                userNotificationCenter: std::ptr::null_mut::<AnyObject>(),
+                shouldPresentNotification: std::ptr::null_mut::<AnyObject>()
+            ]
+        };
+        assert!(present.as_bool());
+        let _: () = unsafe { msg_send![instance, release] };
+    }
+}
