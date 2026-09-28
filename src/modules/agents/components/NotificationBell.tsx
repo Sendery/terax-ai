@@ -17,7 +17,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
 import { tabColorStyle } from "@/modules/tabs";
 import { AgentIcon } from "../lib/agentIcon";
-import { NOTIFICATION_LABEL } from "../lib/describeEvent";
+import { notificationLabel } from "../lib/describeEvent";
 import { claudeHooksFooter } from "../lib/hooksFooter";
 import type { AgentNotification, AgentStatus } from "../lib/types";
 import { useAgentStore } from "../store/agentStore";
@@ -126,9 +126,9 @@ function NotificationRow({
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-sm text-foreground">
-            {n.agent}{" "}
+            {n.sessionName ?? n.agent}{" "}
             <span className="text-muted-foreground">
-              {NOTIFICATION_LABEL[n.kind]}
+              {notificationLabel(n.kind, n.reason)}
             </span>
           </span>
         </span>

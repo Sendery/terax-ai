@@ -1,6 +1,13 @@
 import type { ManagedAgent } from "../store/managedAgentsStore";
+import { describeTasks, liveTasks, sessionSummary } from "./describeEvent";
 import { displayAgent, formatSessionStart, formatSince } from "./format";
-import type { AgentHarness, AgentNotification, AgentSession } from "./types";
+import type {
+  AgentHarness,
+  AgentNotification,
+  AgentSession,
+  AttentionReason,
+  SessionDigest,
+} from "./types";
 import type { TabColor } from "@/modules/tabs";
 
 export type AgentMonitorState = "needs-input" | "working" | "finished";
@@ -10,9 +17,14 @@ export type AgentMonitorRow = {
   tabId: number;
   /** Provider id. The row shows its brand mark, not this string. */
   agent: string;
-  /** What the user calls this session: the tab's visible label. */
+  /** The session's own name when its transcript has one, else the tab's label. */
   sessionName: string;
+  /** The tab's label, shown beside the session name whenever the two differ. */
+  tabLabel: string | null;
   state: AgentMonitorState;
+  /** The state as the row reads it, naming the block when the hook said which. */
+  stateLabel: string;
+  reason: AttentionReason | null;
   startedAt: number;
   lastActivityAt: number;
   /** Newest notification this session raised, null while it has raised none. */
@@ -22,12 +34,27 @@ export type AgentMonitorRow = {
   tabColor: TabColor | null;
   task: string | null;
   cwd: string | null;
+  /** The agent's latest recap or reply, for the hover card. */
+  summary: string | null;
+  pendingQuestion: string | null;
+  goal: string | null;
+  /** Work still running under the current process, counted for the row. */
+  tasks: SessionDigest["tasks"];
+  taskSummary: string | null;
+  prs: SessionDigest["prs"];
+  artifacts: SessionDigest["artifacts"];
 };
 
-export const MONITOR_STATE_LABEL: Record<AgentMonitorState, string> = {
+const MONITOR_STATE_LABEL: Record<AgentMonitorState, string> = {
   "needs-input": "Needs input",
   working: "Working",
-  finished: "Finished",
+  finished: "Waiting for prompt",
+};
+
+const REASON_STATE_LABEL: Record<AttentionReason, string> = {
+  permission: "Needs permission",
+  question: "Asking you",
+  idle: "Waiting for prompt",
 };
 
 type MonitorSession = AgentSession & {
@@ -49,17 +76,6 @@ function integrationLabelFor(
       return "Native hook";
     case "pty-detection":
       return "PTY detection";
-  }
-}
-
-function priority(state: AgentMonitorState): number {
-  switch (state) {
-    case "needs-input":
-      return 0;
-    case "working":
-      return 1;
-    case "finished":
-      return 2;
   }
 }
 
@@ -88,6 +104,7 @@ export function projectAgentMonitor({
   managed,
   tabs = [],
   notifications = [],
+  digests = {},
 }: {
   sessions: Record<number, MonitorSession>;
   managed: Record<number, ManagedAgent>;
@@ -102,20 +119,32 @@ export function projectAgentMonitor({
     label?: string;
   }[];
   notifications?: readonly AgentNotification[];
+  digests?: Record<number, SessionDigest>;
 }): AgentMonitorRow[] {
   const newestNotification = lastNotificationByLeaf(notifications);
   return Object.values(sessions)
     .filter((session) => !tabs.find((tab) => tab.id === session.tabId)?.private)
-    .map((session) => {
+    .map((session): AgentMonitorRow => {
       const state = stateFor(session);
       const managedAgent = managed[session.leafId];
       const tab = tabs.find((candidate) => candidate.id === session.tabId);
+      const digest = digests[session.leafId];
+      const tabLabel = tab?.label?.trim() || null;
+      const sessionName =
+        digest?.name?.trim() || tabLabel || displayAgent(session.agent);
+      const reason = state === "needs-input" ? session.lastReason : null;
+      const tasks = digest ? liveTasks(digest.tasks, session.startedAt) : [];
       return {
         leafId: session.leafId,
         tabId: session.tabId,
         agent: session.agent,
-        sessionName: tab?.label?.trim() || displayAgent(session.agent),
+        sessionName,
+        tabLabel: tabLabel && tabLabel !== sessionName ? tabLabel : null,
         state,
+        stateLabel: reason
+          ? REASON_STATE_LABEL[reason]
+          : MONITOR_STATE_LABEL[state],
+        reason,
         startedAt: session.startedAt,
         lastActivityAt: session.lastActivityAt,
         lastNotificationAt: newestNotification.get(session.leafId) ?? null,
@@ -124,11 +153,20 @@ export function projectAgentMonitor({
         tabColor: tab?.color ?? null,
         task: managedAgent?.task ?? null,
         cwd: managedAgent?.cwd ?? null,
+        summary: sessionSummary(digest),
+        pendingQuestion:
+          reason === "question" ? (digest?.pendingQuestion ?? null) : null,
+        goal: digest?.goal ?? null,
+        tasks,
+        taskSummary: describeTasks(tasks),
+        prs: digest?.prs ?? [],
+        artifacts: digest?.artifacts ?? [],
       };
     })
     .sort(
       (left, right) =>
-        priority(left.state) - priority(right.state) ||
+        (right.lastNotificationAt ?? right.lastActivityAt) -
+          (left.lastNotificationAt ?? left.lastActivityAt) ||
         right.lastActivityAt - left.lastActivityAt,
     );
 }
@@ -142,11 +180,13 @@ export function projectAgentMonitor({
  * instead, and keep the order the row reads in.
  */
 export function describeMonitorRow(row: AgentMonitorRow, now: number): string {
-  const parts = [
-    row.sessionName,
-    displayAgent(row.agent),
-    MONITOR_STATE_LABEL[row.state],
-  ];
+  const parts = [row.sessionName];
+  if (row.tabLabel) parts.push(`tab ${row.tabLabel}`);
+  parts.push(displayAgent(row.agent), row.stateLabel);
+  if (row.taskSummary) parts.push(row.taskSummary);
+  if (row.prs.length > 0) {
+    parts.push(row.prs.map((pr) => `PR #${pr.number}`).join(" "));
+  }
   const started = formatSessionStart(row.startedAt, now);
   if (started) parts.push(`started ${started}`);
   parts.push(

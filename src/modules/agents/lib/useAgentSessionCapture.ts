@@ -147,7 +147,11 @@ export function useAgentSessionCapture({
     const live = liveAgents(sessionsRef.current, tabsRef.current);
     const candidates: SavedAgentSession[] = [];
     for (const entry of live) {
-      const id = tracked.current.get(entry.leafId)?.sessionId;
+      // The id the agent's own hook reported beats the one inferred from the
+      // transcript directory, which can only guess between panes sharing a cwd.
+      const id =
+        sessionsRef.current[entry.leafId]?.sessionId ??
+        tracked.current.get(entry.leafId)?.sessionId;
       candidates.push({
         agent: entry.agent,
         cwd: entry.cwd,
@@ -193,6 +197,8 @@ export function useAgentSessionCapture({
       const state = tracked.current.get(entry.leafId);
       if (!state || state.sessionId !== undefined) continue;
       if (entry.agent === "codex") continue;
+      // Bound by its hook: there is nothing left to infer.
+      if (sessions[entry.leafId]?.sessionId) continue;
       if (now - state.lastAttemptAt < RESOLVE_INTERVAL_MS) continue;
       state.lastAttemptAt = now;
       pending.push(entry);

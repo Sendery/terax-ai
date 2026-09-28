@@ -55,11 +55,12 @@ export function LocalAgentNotificationsBridge() {
         agent: AGENT,
         kind,
         title,
+        // The built-in agent has no tab, so the subtitle names where it lives.
+        subtitle: "Terax agent \u00b7 AI panel",
         body,
+        tone: kind === "attention" ? "permission" : kind,
         focused: focusedRef.current,
         visible: visibleRef.current,
-        allowToast: true,
-        onActivate: () => useChatStore.getState().openPanel(),
       });
 
     if (status === "awaiting-approval") {
@@ -67,7 +68,11 @@ export function LocalAgentNotificationsBridge() {
     } else if (status === "error") {
       fire("error", "Terax run failed", error ?? undefined);
     } else if (status === "idle" && isBusy(was)) {
-      fire("turn-end", "Terax finished its turn", "Your task is ready");
+      fire(
+        "turn-end",
+        "Terax finished, waiting for your prompt",
+        useChatStore.getState().agentMeta.step ?? "Your task is ready",
+      );
     }
   }, [status, error]);
 
