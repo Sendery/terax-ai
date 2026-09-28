@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod agent_cli;
+pub mod agentdigest;
 pub mod agentsessions;
 pub mod capture;
 pub mod fs;
