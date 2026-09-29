@@ -2,7 +2,7 @@ pub mod modules;
 
 use modules::{
     agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, net, notify, oauth, pi,
-    pisessions,
+    pisessions, profile,
     pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
@@ -173,6 +173,12 @@ async fn close_notes_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // The profile scopes cache paths and OS unit names, so it is fixed from the
+    // identifier compiled into this binary before anything, the wake path
+    // included, resolves one.
+    let context = tauri::generate_context!();
+    profile::init(&context.config().identifier);
+
     // A waker invocation is meant to be almost free. Ask a live instance to
     // handle it, or read the exported deadline, and exit before building an app
     // when there is nothing to do. This is the only single-instance guard: normal
@@ -214,6 +220,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(pi::PiBridgeState::default())
         .setup(move |_app| {
+            // Before any store is read: stores load lazily from the webview, and
+            // the webview has not started yet.
+            profile::seed_on_launch(_app.handle());
             // macOS skips parent() for the settings window, so tie its lifecycle
             // to the main window here instead. Other platforms keep parent().
             #[cfg(target_os = "macos")]
@@ -336,6 +345,8 @@ pub fn run() {
             pisessions::pi_sessions_list,
             agentdigest::agent_session_digest,
             notify::agent_notify,
+            profile::app_profile,
+            profile::sandbox_reset_from_installed,
             agentsessions::agent_session_read,
             agentsessions::agent_sessions_list,
             agentsessions::agent_session_branch,
@@ -392,7 +403,7 @@ pub fn run() {
             tts::commands::tts_sample_import,
             tts::commands::tts_sample_remove,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // A TTS sidecar is a Python process holding a loaded model; unlike a

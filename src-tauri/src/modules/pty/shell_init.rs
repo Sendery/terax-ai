@@ -114,6 +114,11 @@ fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     cmd.env("TERM_PROGRAM", TERM_PROGRAM);
     cmd.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
     cmd.env("TERAX_TERMINAL", "1");
+    // A Pi started in this terminal talks to the Terax that owns it, not to
+    // whichever instance last wrote the shared discovery file.
+    if let Ok(discovery) = crate::modules::pi::cache_file_path() {
+        cmd.env("TERAX_PI_DISCOVERY", discovery);
+    }
     if blocks {
         cmd.env("TERAX_BLOCKS", "1");
     }

@@ -17,6 +17,23 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub const WAKE_LABEL: &str = "app.crynta.terax.waker";
+
+/// The OS unit's label for this profile. Installing reboots out whatever unit
+/// holds the label first, so a sandbox sharing it replaced the installed app's
+/// waker with one pointing at the sandbox binary.
+pub fn wake_label() -> String {
+    super::profile::scoped(WAKE_LABEL)
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+/// The systemd user units for this profile. The timer activates the service
+/// that shares its stem, so both are scoped together.
+pub fn systemd_unit_names() -> (String, String) {
+    (
+        super::profile::scoped("terax-waker.timer"),
+        super::profile::scoped("terax-waker.service"),
+    )
+}
 pub const DEFAULT_INTERVAL_MINUTES: u32 = 15;
 /// One minute is the floor so validation can exercise the path quickly; three
 /// hours is the ceiling because beyond that the cadence stops being a safety net.
@@ -52,7 +69,7 @@ pub const fn can_wake_system() -> bool {
 }
 
 fn state_path() -> Option<PathBuf> {
-    Some(dirs::cache_dir()?.join("terax-ai").join("wake-state.json"))
+    Some(super::profile::cache_root()?.join("wake-state.json"))
 }
 
 pub fn read_wake_state() -> WakeState {
@@ -116,7 +133,7 @@ pub fn launchd_plist(program: &str, interval_minutes: u32) -> String {
 </dict>
 </plist>
 "#,
-        label = WAKE_LABEL,
+        label = wake_label(),
         program = xml_escape(program),
         seconds = seconds,
     )
@@ -224,7 +241,7 @@ mod platform {
             dirs::home_dir()?
                 .join("Library")
                 .join("LaunchAgents")
-                .join(format!("{WAKE_LABEL}.plist")),
+                .join(format!("{}.plist", super::wake_label())),
         )
     }
 
@@ -238,7 +255,7 @@ mod platform {
         // Re-registering is how a cadence change takes effect, so a stale
         // registration is removed first and a missing one is not an error.
         let _ = Command::new("launchctl")
-            .args(["bootout", &format!("{}/{WAKE_LABEL}", domain())])
+            .args(["bootout", &format!("{}/{}", domain(), super::wake_label())])
             .output();
         let output = Command::new("launchctl")
             .args(["bootstrap", &domain(), &path.to_string_lossy()])
@@ -256,7 +273,7 @@ mod platform {
 
     pub fn uninstall() -> Result<(), String> {
         let _ = Command::new("launchctl")
-            .args(["bootout", &format!("{}/{WAKE_LABEL}", domain())])
+            .args(["bootout", &format!("{}/{}", domain(), super::wake_label())])
             .output();
         if let Some(path) = unit_path() {
             let _ = std::fs::remove_file(path);
@@ -275,20 +292,20 @@ mod platform {
     }
 
     pub fn unit_path() -> Option<PathBuf> {
-        Some(units_dir()?.join("terax-waker.timer"))
+        Some(units_dir()?.join(super::systemd_unit_names().0.as_str()))
     }
 
     pub fn install(interval_minutes: u32) -> Result<PathBuf, String> {
         let dir = units_dir().ok_or_else(|| "No home directory".to_string())?;
         write_unit(
-            &dir.join("terax-waker.service"),
+            &dir.join(super::systemd_unit_names().1.as_str()),
             &systemd_service_unit(&program_path()?),
         )?;
-        let timer = dir.join("terax-waker.timer");
+        let timer = dir.join(super::systemd_unit_names().0.as_str());
         write_unit(&timer, &systemd_timer_unit(interval_minutes))?;
         let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).output();
         let output = Command::new("systemctl")
-            .args(["--user", "enable", "--now", "terax-waker.timer"])
+            .args(["--user", "enable", "--now", super::systemd_unit_names().0.as_str()])
             .output()
             .map_err(|e| e.to_string())?;
         if !output.status.success() {
@@ -302,11 +319,11 @@ mod platform {
 
     pub fn uninstall() -> Result<(), String> {
         let _ = Command::new("systemctl")
-            .args(["--user", "disable", "--now", "terax-waker.timer"])
+            .args(["--user", "disable", "--now", super::systemd_unit_names().0.as_str()])
             .output();
         if let Some(dir) = units_dir() {
-            let _ = std::fs::remove_file(dir.join("terax-waker.timer"));
-            let _ = std::fs::remove_file(dir.join("terax-waker.service"));
+            let _ = std::fs::remove_file(dir.join(super::systemd_unit_names().0.as_str()));
+            let _ = std::fs::remove_file(dir.join(super::systemd_unit_names().1.as_str()));
         }
         let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).output();
         Ok(())
@@ -319,7 +336,7 @@ mod platform {
     use std::process::Command;
 
     pub fn unit_path() -> Option<PathBuf> {
-        Some(dirs::cache_dir()?.join("terax-ai").join("waker-task.xml"))
+        Some(crate::modules::profile::cache_root()?.join("waker-task.xml"))
     }
 
     pub fn install(interval_minutes: u32) -> Result<PathBuf, String> {
@@ -338,7 +355,7 @@ mod platform {
             .args([
                 "/Create",
                 "/TN",
-                WAKE_LABEL,
+                &super::wake_label(),
                 "/XML",
                 &path.to_string_lossy(),
                 "/F",
@@ -356,7 +373,7 @@ mod platform {
 
     pub fn uninstall() -> Result<(), String> {
         let _ = Command::new("schtasks")
-            .args(["/Delete", "/TN", WAKE_LABEL, "/F"])
+            .args(["/Delete", "/TN", &super::wake_label(), "/F"])
             .output();
         if let Some(path) = unit_path() {
             let _ = std::fs::remove_file(path);
@@ -596,6 +613,16 @@ mod tests {
         let decoded: WakeState = serde_json::from_slice(b"not json").unwrap_or_default();
         assert_eq!(decoded, WakeState::default());
         assert!(!should_boot(&decoded, u64::MAX));
+    }
+
+    #[test]
+    fn the_installed_app_keeps_its_unit_names() {
+        // The profile is unset in tests, which is the installed app.
+        assert_eq!(wake_label(), WAKE_LABEL);
+        assert_eq!(
+            systemd_unit_names(),
+            ("terax-waker.timer".to_string(), "terax-waker.service".to_string())
+        );
     }
 
     #[test]

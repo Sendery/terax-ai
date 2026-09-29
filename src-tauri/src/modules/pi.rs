@@ -264,9 +264,12 @@ pub fn decode_request_line(line: &[u8], token: &str) -> Result<ClientRequest, Pr
     Ok(request)
 }
 
-fn cache_file_path() -> Result<PathBuf, String> {
-    let base = dirs::cache_dir().ok_or_else(|| "Unable to resolve cache directory".to_string())?;
-    Ok(base.join("terax-ai").join("pi-bridge.json"))
+/// Where this instance advertises its bridge. Scoped by profile, so a sandbox
+/// never takes the bridge over from the installed app.
+pub(crate) fn cache_file_path() -> Result<PathBuf, String> {
+    let base = super::profile::cache_root()
+        .ok_or_else(|| "Unable to resolve cache directory".to_string())?;
+    Ok(base.join("pi-bridge.json"))
 }
 
 pub(crate) fn random_token() -> Result<String, String> {
