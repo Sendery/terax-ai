@@ -1,5 +1,6 @@
 import type {
   AttentionReason,
+  DigestTaskKind,
   NotificationKind,
   NotificationTone,
   SessionDigest,
@@ -80,14 +81,19 @@ export function liveTasks(
 
 /** Background work still running, as the subtitle reads it. */
 export function describeTasks(tasks: SessionDigest["tasks"]): string | null {
-  const count = (kind: SessionDigest["tasks"][number]["kind"]) =>
-    tasks.filter((task) => task.kind === kind).length;
+  const count: Record<DigestTaskKind, number> = {
+    subagent: 0,
+    monitor: 0,
+    loop: 0,
+    background: 0,
+  };
+  for (const task of tasks) count[task.kind]++;
   const parts = [
-    count("subagent") && plural(count("subagent"), "subagent", "subagents"),
-    count("monitor") && plural(count("monitor"), "monitor", "monitors"),
-    count("loop") && plural(count("loop"), "loop", "loops"),
-    count("background") &&
-      plural(count("background"), "background job", "background jobs"),
+    count.subagent && plural(count.subagent, "subagent", "subagents"),
+    count.monitor && plural(count.monitor, "monitor", "monitors"),
+    count.loop && plural(count.loop, "loop", "loops"),
+    count.background &&
+      plural(count.background, "background job", "background jobs"),
   ].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? parts.join(", ") : null;
 }
