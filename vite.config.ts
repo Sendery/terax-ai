@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
@@ -5,6 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "path";
 import { defineConfig, type PluginOption, type UserConfig } from "vite";
 import Inspect from "vite-plugin-inspect";
+import { configDefaults } from "vitest/config";
 import { createBuildInfo } from "./scripts/build-info.mjs";
 
 const host = process.env.TAURI_DEV_HOST;
@@ -165,5 +167,10 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+  },
+  test: {
+    // Agent worktrees live inside the checkout; their copy of the suite is not
+    // this checkout's, and running it doubled the count with foreign failures.
+    exclude: [...configDefaults.exclude, ".claude/**"],
   },
 }));
