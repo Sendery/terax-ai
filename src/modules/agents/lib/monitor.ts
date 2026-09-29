@@ -122,12 +122,13 @@ export function projectAgentMonitor({
   digests?: Record<number, SessionDigest>;
 }): AgentMonitorRow[] {
   const newestNotification = lastNotificationByLeaf(notifications);
+  const tabById = new Map(tabs.map((tab) => [tab.id, tab]));
   return Object.values(sessions)
-    .filter((session) => !tabs.find((tab) => tab.id === session.tabId)?.private)
+    .filter((session) => !tabById.get(session.tabId)?.private)
     .map((session): AgentMonitorRow => {
       const state = stateFor(session);
       const managedAgent = managed[session.leafId];
-      const tab = tabs.find((candidate) => candidate.id === session.tabId);
+      const tab = tabById.get(session.tabId);
       const digest = digests[session.leafId];
       const tabLabel = tab?.label?.trim() || null;
       const sessionName =

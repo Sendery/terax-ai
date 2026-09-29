@@ -852,17 +852,40 @@ fn resolve(agent: DigestAgent, session_id: Option<&str>, cwd: Option<&str>) -> O
         DigestAgent::Codex => resolve_codex(cwd?),
         DigestAgent::Claude | DigestAgent::Pi => {
             let kind = if agent == DigestAgent::Claude { AgentKind::Claude } else { AgentKind::Pi };
+            let dir = cwd.and_then(|cwd| Some(sessions_root(agent)?.join(project_dir_name(cwd, kind))));
             if let Some(id) = session_id {
+                // Every signal and monitor tick resolves again, so the pane's own
+                // project is tried before walking every project on disk.
+                if let Some(path) = dir.as_deref().and_then(|dir| session_in_dir(dir, kind, id)) {
+                    return Some(path);
+                }
                 if let Some(path) = find_session_file(kind, id) {
                     return Some(path);
                 }
             }
             // Before the pane is bound, the newest transcript for its directory
             // is the best guess, and the same one restore would pick.
-            let dir = sessions_root(agent)?.join(project_dir_name(cwd?, kind));
-            newest_jsonl(&dir)
+            newest_jsonl(&dir?)
         }
     }
+}
+
+/// The transcript for `id` inside one project directory, named the way
+/// `find_session_file` matches it.
+fn session_in_dir(dir: &Path, kind: AgentKind, id: &str) -> Option<PathBuf> {
+    let exact = dir.join(format!("{id}.jsonl"));
+    if exact.is_file() {
+        return Some(exact);
+    }
+    if kind != AgentKind::Pi {
+        return None;
+    }
+    let suffix = format!("_{id}.jsonl");
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.ends_with(&suffix)))
 }
 
 #[tauri::command]
@@ -1148,6 +1171,23 @@ mod tests {
 
         std::fs::write(&path, "{\"type\":\"ai-title\",\"aiTitle\":\"Fresh\"}\n").unwrap();
         assert_eq!(digest_file(&path, DigestAgent::Claude).unwrap().name.as_deref(), Some("Fresh"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn finds_a_session_in_its_project_directory_by_each_agents_naming() {
+        let dir = std::env::temp_dir().join(format!("terax-digest-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("abc.jsonl"), "").unwrap();
+        std::fs::write(dir.join("2026-09-29T10-00-00-000Z_def.jsonl"), "").unwrap();
+
+        assert_eq!(session_in_dir(&dir, AgentKind::Claude, "abc"), Some(dir.join("abc.jsonl")));
+        assert_eq!(session_in_dir(&dir, AgentKind::Claude, "def"), None);
+        assert_eq!(
+            session_in_dir(&dir, AgentKind::Pi, "def"),
+            Some(dir.join("2026-09-29T10-00-00-000Z_def.jsonl"))
+        );
+        assert_eq!(session_in_dir(&dir, AgentKind::Pi, "missing"), None);
         std::fs::remove_dir_all(&dir).ok();
     }
 }
