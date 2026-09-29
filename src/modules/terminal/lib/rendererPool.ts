@@ -169,8 +169,6 @@ export function poolSlotStats(): PoolSlotStat[] {
   }));
 }
 
-// Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
-// dropped path as a real paste while a plain shell gets the literal text.
 /**
  * Force a repaint of one leaf, or of everything on screen when no leaf is
  * given. GPU state can go bad in ways nothing here observes (a driver reset,
@@ -185,6 +183,8 @@ export function repaintLeaf(leafId: number | null): void {
   }
 }
 
+// Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
+// dropped path as a real paste while a plain shell gets the literal text.
 export function pasteIntoLeaf(leafId: number, text: string): boolean {
   const slot = slots.find((s) => s.currentLeafId === leafId);
   if (!slot) return false;
