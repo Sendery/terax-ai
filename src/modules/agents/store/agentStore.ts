@@ -15,6 +15,18 @@ const MAX_NOTIFICATIONS = 50;
 
 let notifSeq = 0;
 
+/** Deep equality for the plain JSON a digest arrives as. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => sameJson(left[key], right[key]));
+}
+
 type AgentStoreState = {
   sessions: Record<number, AgentSession>;
   /** What each live session's transcript says it is, keyed like `sessions`. */
@@ -111,9 +123,13 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
     }),
 
   setDigest: (leafId, digest) =>
-    set((s) =>
-      s.sessions[leafId] ? { digests: { ...s.digests, [leafId]: digest } } : s,
-    ),
+    set((s) => {
+      if (!s.sessions[leafId]) return s;
+      // Most refreshes find nothing appended; keeping the old object spares
+      // every digest subscriber a re-render for an identical value.
+      if (sameJson(s.digests[leafId], digest)) return s;
+      return { digests: { ...s.digests, [leafId]: digest } };
+    }),
 
   finish: (leafId) =>
     set((s) => {
