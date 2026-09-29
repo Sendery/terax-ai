@@ -17,6 +17,8 @@
 //! All commands take `&AppHandle` so we can resolve the data directory
 //! once via Tauri's path API.
 
+#[cfg(not(target_os = "linux"))]
+use super::profile;
 use std::sync::Mutex;
 
 use tauri::AppHandle;
@@ -129,12 +131,19 @@ pub(crate) fn get_secret(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (app, state);
-        let e = entry(service, account)?;
-        match e.get_password() {
-            Ok(v) => Ok(Some(v)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(err) => Err(err.to_string()),
+        let read = |service: &str| -> Result<Option<String>, String> {
+            match entry(service, account)?.get_password() {
+                Ok(v) => Ok(Some(v)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(err) => Err(err.to_string()),
+            }
+        };
+        if !profile::is_sandbox() {
+            return read(service);
         }
+        // A sandbox reads through to the installed app's keys and never writes them.
+        let own = read(&profile::scoped_service(service, true))?;
+        Ok(profile::overlay_secret(own, || read(service).ok().flatten()))
     }
 }
 
@@ -161,7 +170,7 @@ pub(crate) fn set_secret(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (app, state);
-        let e = entry(service, account)?;
+        let e = entry(&profile::scoped_service(service, profile::is_sandbox()), account)?;
         e.set_password(password).map_err(|e| e.to_string())
     }
 }
@@ -188,6 +197,13 @@ pub(crate) fn delete_secret(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (app, state);
+        if profile::is_sandbox() {
+            // Removing the sandbox entry alone would let the installed app's
+            // key show through again, so the deletion is recorded instead.
+            return entry(&profile::scoped_service(service, true), account)?
+                .set_password(profile::DELETED_SECRET)
+                .map_err(|e| e.to_string());
+        }
         let e = entry(service, account)?;
         match e.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -327,12 +343,21 @@ pub async fn secrets_get_all(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (app, state);
+        let read = |service: &str, account: &str| {
+            keyring::Entry::new(service, account)
+                .ok()
+                .and_then(|e| e.get_password().ok())
+        };
+        let sandbox = profile::is_sandbox();
         Ok(accounts
             .into_iter()
             .map(|a| {
-                keyring::Entry::new(&service, &a)
-                    .ok()
-                    .and_then(|e| e.get_password().ok())
+                if !sandbox {
+                    return read(&service, &a);
+                }
+                profile::overlay_secret(read(&profile::scoped_service(&service, true), &a), || {
+                    read(&service, &a)
+                })
             })
             .collect())
     }

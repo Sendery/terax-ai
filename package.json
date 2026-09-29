@@ -20,6 +20,8 @@
     "release:publish": "node scripts/release-local.mjs --publish",
     "preview": "vite preview",
     "tauri": "tauri",
+    "dev:sandbox": "node scripts/sandbox.mjs dev",
+    "build:sandbox": "node scripts/sandbox.mjs build",
     "test": "vitest run",
     "test:watch": "vitest",
     "version:set": "node scripts/set-version.mjs",

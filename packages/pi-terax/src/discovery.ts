@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir, platform as hostPlatform, release as hostRelease } from "node:os";
-import { join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 
 export const DISCOVERY_COMMAND_TIMEOUT_MS = 5_000;
 export const DISCOVERY_OUTPUT_LIMIT_BYTES = 64 * 1024;
@@ -46,10 +46,29 @@ function cacheBaseDir(
   return env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
 }
 
+/** The discovery file name every Terax writes, whichever profile it runs as. */
+const DISCOVERY_FILE = "pi-bridge.json";
+
+/**
+ * Where Terax advertises its bridge.
+ *
+ * A Terax terminal exports `TERAX_PI_DISCOVERY` pointing at the file of the
+ * instance that owns it, so Pi in a sandbox talks to the sandbox and never to
+ * the installed app. Only an absolute path to a discovery file is honoured;
+ * anything else falls back to the default location.
+ */
 export function discoveryFilePath(options: DiscoverOptions = {}): string {
   const env = options.env ?? process.env;
   const currentPlatform = options.platform ?? hostPlatform();
-  return join(cacheBaseDir(env, currentPlatform), "terax-ai", "pi-bridge.json");
+  const advertised = env.TERAX_PI_DISCOVERY;
+  if (
+    advertised &&
+    isAbsolute(advertised) &&
+    basename(advertised) === DISCOVERY_FILE
+  ) {
+    return advertised;
+  }
+  return join(cacheBaseDir(env, currentPlatform), "terax-ai", DISCOVERY_FILE);
 }
 
 function parseDiscovery(value: unknown): TeraxDiscovery {

@@ -370,6 +370,10 @@ export const native = {
     leafId?: number;
     tabId?: number;
   }) => invoke<boolean>("agent_notify", { notification }),
+  /** Which Terax this is: the installed app, or a sandbox on a copy of its data. */
+  appProfile: () => invoke<"production" | "sandbox">("app_profile"),
+  /** Replaces the sandbox's data with a fresh copy on the next launch. */
+  sandboxResetFromInstalled: () => invoke<void>("sandbox_reset_from_installed"),
   agentSessionsList: (agent: SessionAgent, cwd?: string, limit?: number) =>
     invoke<
       {
