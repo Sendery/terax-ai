@@ -49,6 +49,7 @@ import {
   getSlotForLeaf,
   isLeafAltScreen,
   parkLeafSlot,
+  poolAtlasBytes,
   poolSize,
   poolSlotStats,
   refreshLeafSlot,
@@ -1177,6 +1178,7 @@ export function terminalDebugStats() {
   return {
     poolSize: poolSize(),
     webglContexts: slots.filter((s) => s.webgl).length,
+    atlasBytes: poolAtlasBytes(),
     idleSlots: slots.filter((s) => s.leafId === null).length,
     slots,
     sessionCount: liveSessions.length,
