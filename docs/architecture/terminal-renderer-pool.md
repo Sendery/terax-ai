@@ -50,6 +50,10 @@ If only a snapshot exists, `bindSlot` clears the terminal, resizes, writes the s
 
 WebGL addons are created when a slot becomes visible and reaped after a grace period when parked. The addon recovers from context loss on sleep/wake or GPU reset.
 
+### Repainting a shared atlas
+
+Slots with the same font and theme share one glyph atlas, and `clearTextureAtlas` clears only the model of the renderer that calls it. Clearing the atlas for one pane therefore left every other renderer drawing from glyph positions that now held different glyphs: corrupt text in the neighbouring panes that only selecting it repaired. `repaintSlots` never clears for one slot alone: when any target kept an existing WebGL context, `clearSharedAtlas` clears it through every slot with a renderer, so each one invalidates its model. A renderer attached during the same repaint uploads every page into a fresh context and needs no clear at all (`lib/atlasRepaint.ts`), which is the common re-bind case.
+
 ### Glyph atlas budget
 
 xterm's WebGL glyph atlas only grows. `clearTextureAtlas` wipes the pages but keeps their size, pages merge into larger ones up to `MAX_TEXTURE_SIZE` (16384 on Apple GPUs, where a single page can reach 1 GiB), and every WebGL context uploads its own mipmapped copy of each page. Slots with the same font and theme share one atlas, so it survives every individual slot rebind, and days of colourful agent output (truecolor diffs, spinners) pin that memory in the webview's graphics footprint.
@@ -63,6 +67,7 @@ The pool therefore caps it (`lib/atlasBudget.ts`, pure and tested). Each time a 
 - A hidden busy leaf keeps its live grid parked with `display:none`.
 - An idle hidden leaf releases its slot but the buffer continues parsing bytes.
 - The DormantRing only buffers bytes for leaves without any slot.
+- The shared glyph atlas is never cleared for one slot alone.
 - The shared glyph atlas never exceeds `ATLAS_BUDGET_BYTES` for longer than one rate-limit interval.
 
 ## See also
