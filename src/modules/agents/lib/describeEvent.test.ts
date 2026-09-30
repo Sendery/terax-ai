@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  NO_TAB_COLOR_MARK,
+  TAB_COLOR_MARK,
+  TONE_MARK,
   describeAgentEvent,
   describeTasks,
   notificationLabel,
@@ -35,8 +38,10 @@ describe("describeAgentEvent", () => {
       digest: digest({ name: "HACKATHON-MERGE" }),
     });
 
-    expect(d.title).toBe("HACKATHON-MERGE needs permission");
-    expect(d.subtitle).toBe("slot-5 · Claude Code");
+    expect(d.title).toBe(
+      `${NO_TAB_COLOR_MARK} ${TONE_MARK.permission} HACKATHON-MERGE`,
+    );
+    expect(d.subtitle).toBe("Needs permission · slot-5 · Claude Code");
     expect(d.body).toBe("Claude needs your permission to use Bash");
     expect(d.tone).toBe("permission");
   });
@@ -50,7 +55,8 @@ describe("describeAgentEvent", () => {
       digest: digest({ pendingQuestion: "Which layout do you prefer?" }),
     });
 
-    expect(d.title).toBe("api is asking you");
+    expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.question} api`);
+    expect(d.subtitle).toBe("Asking you · Claude Code");
     expect(d.body).toBe("Which layout do you prefer?");
     expect(d.tone).toBe("question");
   });
@@ -68,7 +74,8 @@ describe("describeAgentEvent", () => {
       }),
     });
 
-    expect(d.title).toBe("PURGA finished, waiting for your prompt");
+    expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK["turn-end"]} PURGA`);
+    expect(d.subtitle).toBe("Turn ended, your move · api · Claude Code");
     expect(d.body).toBe("Freed 87 GB.");
     expect(d.tone).toBe("turn-end");
   });
@@ -91,9 +98,9 @@ describe("describeAgentEvent", () => {
       }),
     });
 
-    expect(d.title).toBe("api has a subagent result");
+    expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.subagent} api`);
     expect(d.subtitle).toBe(
-      "Claude Code · 2 subagents, 1 monitor · PR #112955",
+      "Subagent result · Claude Code · 2 subagents, 1 monitor · PR #112955",
     );
   });
 
@@ -101,11 +108,34 @@ describe("describeAgentEvent", () => {
     expect(
       describeAgentEvent({ kind: "exited", agentLabel: "pi", tabTitle: "api" })
         .title,
-    ).toBe("api exited");
+    ).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.exited} api`);
     expect(
       describeAgentEvent({ kind: "exited", agentLabel: "pi", tabTitle: "" })
         .title,
-    ).toBe("pi exited");
+    ).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.exited} pi`);
+  });
+
+  it("leads with the tab's colour mark so the source reads at a glance", () => {
+    const d = describeAgentEvent({
+      kind: "attention",
+      reason: "idle",
+      agentLabel: "Claude Code",
+      tabTitle: "slot-5",
+      tabColor: "blue",
+      digest: digest({ name: "WORKPLACES-PUSH-TRAIN" }),
+    });
+    expect(d.title).toBe(
+      `${TAB_COLOR_MARK.blue} ${TONE_MARK.idle} WORKPLACES-PUSH-TRAIN`,
+    );
+    expect(d.subtitle).toBe("Waiting for your prompt · slot-5 · Claude Code");
+  });
+
+  it("gives every state its own mark and keeps tab marks out of that set", () => {
+    const tones = Object.values(TONE_MARK);
+    expect(new Set(tones).size).toBe(tones.length);
+    for (const mark of [...Object.values(TAB_COLOR_MARK), NO_TAB_COLOR_MARK]) {
+      expect(tones).not.toContain(mark);
+    }
   });
 
   it("bounds the body to one line", () => {

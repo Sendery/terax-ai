@@ -1,3 +1,4 @@
+import type { TabColor } from "@/modules/tabs";
 import type {
   AttentionReason,
   DigestTaskKind,
@@ -44,14 +45,46 @@ export function notificationLabel(
   return NOTIFICATION_LABEL[kind];
 }
 
-const STATE: Record<NotificationKind, string> = {
-  attention: "needs your input",
+// macOS draws the notification itself, so colour can only travel as text.
+// Emoji are written as escapes to keep the source free of them; the tab mark
+// comes from one family (hearts, the only one with a shade per tab colour)
+// and the state marks from pictographs, so the two never read as each other.
+export const TAB_COLOR_MARK: Record<TabColor, string> = {
+  red: "\u2764\uFE0F",
+  orange: "\u{1F9E1}",
+  amber: "\u{1F49B}",
+  green: "\u{1F49A}",
+  teal: "\u{1FA75}",
+  blue: "\u{1F499}",
+  // Hearts have no indigo; it shares purple, and the subtitle names the tab.
+  indigo: "\u{1F49C}",
+  purple: "\u{1F49C}",
+  pink: "\u{1FA77}",
+};
+export const NO_TAB_COLOR_MARK = "\u{1F90D}";
+
+export const TONE_MARK: Record<NotificationTone, string> = {
+  permission: "\u{1F510}",
+  question: "\u2753",
+  idle: "\u{1F4AC}",
+  attention: "\u{1F514}",
+  "turn-end": "\u2705",
+  subagent: "\u{1F9E9}",
+  error: "\u274C",
+  exited: "\u{1F3C1}",
+};
+
+const STATE_LABEL: Record<NotificationTone, string> = {
+  permission: "Needs permission",
+  question: "Asking you",
+  idle: "Waiting for your prompt",
+  attention: "Needs your input",
   // The turn is over and the next move is the user's, which is what they need
   // to know; "finished" alone read as the whole task being done.
-  "turn-end": "finished, waiting for your prompt",
-  subagent: "has a subagent result",
-  exited: "exited",
-  error: "failed",
+  "turn-end": "Turn ended, your move",
+  subagent: "Subagent result",
+  error: "Failed",
+  exited: "Exited",
 };
 
 function oneLine(value: string): string {
@@ -131,8 +164,9 @@ export type AgentEventDescription = {
 /**
  * Turns an agent event into what a notification says.
  *
- * The title names the session and what it needs; the subtitle says where it
- * lives (tab, agent) and what it still has running; the body is the most
+ * The title is the tab's colour mark, the state's mark and the session name;
+ * the subtitle says the state in words, where it lives (tab, agent) and what
+ * it still has running; the body is the most
  * specific thing available, in order: the question it is blocked on, what the
  * agent said with the event, and its latest summary. A notification is never
  * just "Terax needs attention".
@@ -145,6 +179,7 @@ export function describeAgentEvent({
   text,
   digest,
   startedAt,
+  tabColor,
 }: {
   kind: NotificationKind;
   reason?: AttentionReason | null;
@@ -154,10 +189,12 @@ export function describeAgentEvent({
   digest?: SessionDigest;
   /** The running process's start, so tasks a previous process left open are dropped. */
   startedAt?: number;
+  tabColor?: TabColor | null;
 }): AgentEventDescription {
   const why = reason ?? undefined;
+  const tone = toneFor(kind, why);
   const sessionName = digest?.name?.trim() || tabTitle.trim() || agentLabel;
-  const state = kind === "attention" && why ? REASON_LABEL[why] : STATE[kind];
+  const colorMark = tabColor ? TAB_COLOR_MARK[tabColor] : NO_TAB_COLOR_MARK;
 
   const tasks = digest
     ? describeTasks(
@@ -167,6 +204,7 @@ export function describeAgentEvent({
       )
     : null;
   const where = [
+    STATE_LABEL[tone],
     sessionName !== tabTitle.trim() && tabTitle.trim() ? tabTitle.trim() : null,
     agentLabel,
     tasks,
@@ -184,10 +222,11 @@ export function describeAgentEvent({
       .map((part) => (part ? oneLine(part) : ""))
       .find(Boolean) ?? "";
 
+  // The marks lead because macOS truncates the title: they always survive.
   return {
-    title: `${sessionName} ${state}`,
+    title: `${colorMark} ${TONE_MARK[tone]} ${sessionName}`,
     subtitle: where.join(" · "),
     body,
-    tone: toneFor(kind, why),
+    tone,
   };
 }
