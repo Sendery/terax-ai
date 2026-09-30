@@ -1,4 +1,4 @@
-import { ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
+import { type ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
 
 type Block = { kind: string; id: string; name: string; json: string };
 
