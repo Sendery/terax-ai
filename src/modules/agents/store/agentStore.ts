@@ -27,6 +27,17 @@ function sameJson(a: unknown, b: unknown): boolean {
   return keys.every((key) => sameJson(left[key], right[key]));
 }
 
+/** The pane whose session is reading from `ptyId`, if any. */
+export function leafOwningPty(
+  sessions: Record<number, AgentSession>,
+  ptyId: number,
+): number | null {
+  for (const session of Object.values(sessions)) {
+    if (session.ptyId === ptyId) return session.leafId;
+  }
+  return null;
+}
+
 type AgentStoreState = {
   sessions: Record<number, AgentSession>;
   /** What each live session's transcript says it is, keyed like `sessions`. */
@@ -39,6 +50,7 @@ type AgentStoreState = {
     agent: string,
     integration?: AgentIntegration,
     harness?: AgentHarness,
+    ptyId?: number | null,
   ) => void;
   setStatus: (
     leafId: number,
@@ -63,7 +75,14 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
   localAgent: null,
   notifications: [],
 
-  start: (leafId, tabId, agent, integration = "pty-detection", harness = "generic") =>
+  start: (
+    leafId,
+    tabId,
+    agent,
+    integration = "pty-detection",
+    harness = "generic",
+    ptyId = null,
+  ) =>
     set((s) => {
       const now = Date.now();
       return {
@@ -80,6 +99,7 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
             lastSignal: "started",
             lastReason: null,
             sessionId: null,
+            ptyId,
             integration,
             harness,
           },
