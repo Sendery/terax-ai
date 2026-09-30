@@ -107,6 +107,9 @@ type Session = {
   // at the most recent release. Read once on the next bind to trigger a
   // SIGWINCH-driven repaint instead of replaying dormant bytes.
   altScreenAtRelease: boolean;
+  // Serialized while a command or agent owned the terminal: the next bind
+  // replays its bytes and then kicks a repaint (see AcquireParams).
+  busyAtRelease: boolean;
   // OSC 133 C..D window (or blocks running mode): a foreground process owns
   // the terminal, so the leaf must keep its live grid while hidden.
   commandRunning: boolean;
@@ -467,6 +470,7 @@ configureRendererPool({
     if (out.cols > 0) s.cols = out.cols;
     if (out.rows > 0) s.rows = out.rows;
     s.altScreenAtRelease = out.altScreen;
+    s.busyAtRelease = leafBusy(s);
   },
 });
 
@@ -528,6 +532,7 @@ function ensureSession(
     inputActive: false,
     everSubmitted: false,
     altScreenAtRelease: false,
+    busyAtRelease: false,
     commandRunning: false,
     hiddenReleaseTimer: null,
     spawnFailed: false,
@@ -653,12 +658,15 @@ function applyBlockMode(leafId: number, mode: BlockMode): void {
 function bindLeafToSlot(leafId: number, s: Session): void {
   if (!s.container) return;
   const altScreen = s.altScreenAtRelease;
+  const busyAtRelease = s.busyAtRelease;
   s.altScreenAtRelease = false;
+  s.busyAtRelease = false;
   acquireSlot({
     leafId,
     container: s.container,
     snapshot: s.snapshot,
     altScreen,
+    busyAtRelease,
     drainRing: (write) => s.dormantRing.drain(write),
     // Keep stdin alive after a spawn failure so Enter can trigger the retry.
     shellExited: s.shellExited && !s.spawnFailed,
@@ -796,6 +804,7 @@ export async function respawnSession(
   s.pendingExit = null;
   s.pendingInput = "";
   s.altScreenAtRelease = false;
+  s.busyAtRelease = false;
   s.commandRunning = false;
   s.spawnFailed = false;
   cancelHiddenRelease(s);
