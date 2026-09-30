@@ -55,6 +55,7 @@ async function notify(
     text,
     digest,
     startedAt: session.startedAt,
+    tabColor: info?.color ?? null,
   });
 
   routeAgentNotification({

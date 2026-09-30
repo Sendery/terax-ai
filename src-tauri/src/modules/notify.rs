@@ -7,8 +7,9 @@
 //!
 //! Colour travels as that image: a badge whose ring is the tab's colour and
 //! whose centre is the state's, rendered once per pair and cached. Native
-//! notification text cannot be coloured, and the repository keeps emoji out of
-//! its strings, so the badge is the only honest way to carry both.
+//! notification text cannot be coloured, so the title also leads with emoji
+//! marks for the tab and the state (built in the webview, see
+//! `agents/lib/describeEvent.ts`), which survive the title's truncation.
 //!
 //! macOS hides a notification's banner while the sending app is frontmost
 //! unless its delegate says otherwise. The backend's delegate does not, so the
