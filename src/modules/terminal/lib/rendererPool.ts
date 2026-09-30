@@ -14,6 +14,7 @@ import {
   type ILinkProvider,
 } from "@xterm/xterm";
 import { atlasBytes, atlasResetDelay } from "./atlasBudget";
+import { needsAtlasClear } from "./atlasRepaint";
 import type { TerminalFileLink } from "./fileLinks";
 import { shouldCursorBlink } from "./cursorBlink";
 import {
@@ -120,10 +121,13 @@ function setWindowActive(active: boolean): void {
   const away =
     windowInactiveSince === null ? 0 : performance.now() - windowInactiveSince;
   windowInactiveSince = active ? null : performance.now();
-  const repaint = active && away > SLOT_STALE_MS;
+  if (active && away > SLOT_STALE_MS) {
+    repaintSlots(
+      slots.filter((s) => s.currentLeafId !== null && !s.parked),
+    );
+  }
   for (const slot of slots) {
     if (slot.currentLeafId === null) continue;
-    if (repaint && !slot.parked) repaintStaleSlot(slot);
     applyCursorBlinkOnSlot(
       slot,
       adapter?.isLeafFocused(slot.currentLeafId) ?? false,
@@ -177,11 +181,14 @@ export function poolSlotStats(): PoolSlotStat[] {
  * rather than having to select the damaged text to repair it.
  */
 export function repaintLeaf(leafId: number | null): void {
-  for (const slot of slots) {
-    if (slot.currentLeafId === null || slot.parked) continue;
-    if (leafId !== null && slot.currentLeafId !== leafId) continue;
-    repaintStaleSlot(slot);
-  }
+  repaintSlots(
+    slots.filter(
+      (s) =>
+        s.currentLeafId !== null &&
+        !s.parked &&
+        (leafId === null || s.currentLeafId === leafId),
+    ),
+  );
 }
 
 // Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
@@ -614,7 +621,7 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   }
 
   if (fast) {
-    if (stale) repaintStaleSlot(slot);
+    if (stale) repaintSlots([slot]);
     if (adapter?.isLeafFocused(p.leafId)) slot.term.focus();
   } else {
     scheduleUnhide(slot, stale || hadWebgl);
@@ -624,7 +631,7 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
 }
 
 /**
- * Repaint a slot whose GPU state is no longer trusted.
+ * Repaint slots whose GPU state is no longer trusted.
  *
  * `refresh()` only re-runs the renderer over the cell model; it cannot re-upload
  * the WebGL glyph atlas, so a slot whose atlas texture lost its contents keeps
@@ -637,15 +644,36 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
  * loses it across OS sleep, and this pool additionally forces context loss when
  * recycling slots). The refresh stays as a floor for the non-WebGL renderer,
  * where clearing the atlas is a no-op.
+ *
+ * A renderer attached here uploads every atlas page into its new context, so
+ * the atlas is cleared only when a target kept an older context.
  */
-function repaintStaleSlot(slot: Slot): void {
-  if (!slot.webglAddon) attachWebgl(slot);
-  try {
-    slot.term.clearTextureAtlas();
-  } catch {}
-  try {
-    slot.term.refresh(0, slot.term.rows - 1);
-  } catch {}
+function repaintSlots(targets: Slot[]): void {
+  const clear = needsAtlasClear(
+    targets.map((s) => ({ hasWebgl: !!s.webglAddon })),
+  );
+  for (const slot of targets) {
+    if (!slot.webglAddon) attachWebgl(slot);
+  }
+  if (clear) clearSharedAtlas();
+  for (const slot of targets) {
+    try {
+      slot.term.refresh(0, slot.term.rows - 1);
+    } catch {}
+  }
+}
+
+// Slots with the same font and theme share one atlas, and xterm clears only
+// the model of the renderer that asks. Every other renderer kept drawing from
+// glyph positions that now held different glyphs, so repainting one pane
+// corrupted its neighbours until their text was selected.
+function clearSharedAtlas(): void {
+  for (const slot of slots) {
+    if (!slot.webglAddon) continue;
+    try {
+      slot.term.clearTextureAtlas();
+    } catch {}
+  }
 }
 
 function scheduleUnhide(slot: Slot, stale: boolean): void {
@@ -653,7 +681,7 @@ function scheduleUnhide(slot: Slot, stale: boolean): void {
     slot.unhideRaf = requestAnimationFrame(() => {
       slot.unhideRaf = null;
       slot.host.style.visibility = "";
-      if (stale) repaintStaleSlot(slot);
+      if (stale) repaintSlots([slot]);
       const leafId = slot.currentLeafId;
       if (leafId !== null && adapter?.isLeafFocused(leafId)) {
         slot.term.focus();
@@ -730,7 +758,7 @@ function setupResizeObserver(slot: Slot, p: AcquireParams): void {
       slot.repaintTimer = setTimeout(() => {
         slot.repaintTimer = null;
         if (slot.currentLeafId !== p.leafId || slot.parked) return;
-        repaintStaleSlot(slot);
+        repaintSlots([slot]);
       }, RESIZE_REPAINT_DEBOUNCE_MS);
     }, FIT_DEBOUNCE_MS);
   });
