@@ -13,6 +13,7 @@ import {
   type ILink,
   type ILinkProvider,
 } from "@xterm/xterm";
+import { atlasBytes, atlasResetDelay } from "./atlasBudget";
 import type { TerminalFileLink } from "./fileLinks";
 import { shouldCursorBlink } from "./cursorBlink";
 import {
@@ -931,6 +932,10 @@ function attachWebgl(slot: Slot): void {
         }
       }, WEBGL_RECOVERY_DELAY_MS);
     });
+    // A page merged into a larger one is never read again, so its backing
+    // store is released now instead of whenever the canvas is collected.
+    webgl.onRemoveTextureAtlasCanvas(releaseCanvasStore);
+    webgl.onAddTextureAtlasCanvas(scheduleAtlasCheck);
     slot.term.loadAddon(webgl);
     const after = elem.querySelectorAll<HTMLCanvasElement>("canvas");
     const added: HTMLCanvasElement[] = [];
@@ -988,10 +993,94 @@ function releaseCanvasContext(canvas: HTMLCanvasElement): void {
       if (ext && !gl.isContextLost()) ext.loseContext();
     } catch {}
   }
+  releaseCanvasStore(canvas);
+}
+
+function releaseCanvasStore(canvas: HTMLCanvasElement): void {
   try {
     canvas.width = 0;
     canvas.height = 0;
   } catch {}
+}
+
+const ATLAS_CHECK_DEBOUNCE_MS = 1_000;
+let atlasCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAtlasResetAt: number | null = null;
+
+function atlasPages(slot: Slot): HTMLCanvasElement[] {
+  try {
+    const renderer = (
+      slot.webglAddon as unknown as {
+        _renderer?: { _charAtlas?: { pages?: { canvas?: unknown }[] } };
+      } | null
+    )?._renderer;
+    const pages = renderer?._charAtlas?.pages;
+    if (!Array.isArray(pages)) return [];
+    const out: HTMLCanvasElement[] = [];
+    for (const page of pages) {
+      if (page?.canvas instanceof HTMLCanvasElement) out.push(page.canvas);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Slots with the same font and theme share one atlas, so pages are counted once.
+function liveAtlasPages(): Set<HTMLCanvasElement> {
+  const pages = new Set<HTMLCanvasElement>();
+  for (const slot of slots) {
+    for (const canvas of atlasPages(slot)) pages.add(canvas);
+  }
+  return pages;
+}
+
+export function poolAtlasBytes(): number {
+  return atlasBytes(liveAtlasPages());
+}
+
+function scheduleAtlasCheck(): void {
+  if (atlasCheckTimer !== null) return;
+  atlasCheckTimer = setTimeout(checkAtlasBudget, ATLAS_CHECK_DEBOUNCE_MS);
+}
+
+function checkAtlasBudget(): void {
+  atlasCheckTimer = null;
+  const pages = liveAtlasPages();
+  const delay = atlasResetDelay(
+    atlasBytes(pages),
+    lastAtlasResetAt,
+    performance.now(),
+  );
+  if (delay === null) return;
+  if (delay > 0) {
+    atlasCheckTimer = setTimeout(checkAtlasBudget, delay);
+    return;
+  }
+  resetAtlases(pages);
+}
+
+/**
+ * Rebuild every WebGL renderer against a fresh atlas holding only the glyphs
+ * on screen. Every renderer is disposed before any is re-attached: a slot that
+ * re-attached while another still owned the old atlas would join it again.
+ */
+function resetAtlases(pages: Set<HTMLCanvasElement>): void {
+  lastAtlasResetAt = performance.now();
+  const rebind: Slot[] = [];
+  for (const slot of slots) {
+    if (!slot.webglAddon) continue;
+    if (slot.currentLeafId !== null && !slot.parked) rebind.push(slot);
+    cancelWebglReap(slot);
+    disposeSlotWebgl(slot);
+  }
+  for (const canvas of pages) releaseCanvasStore(canvas);
+  for (const slot of rebind) {
+    attachWebgl(slot);
+    try {
+      slot.term.refresh(0, slot.term.rows - 1);
+    } catch {}
+  }
 }
 
 export function applyWebglPreference(enabled: boolean): void {

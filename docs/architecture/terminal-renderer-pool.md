@@ -50,6 +50,12 @@ If only a snapshot exists, `bindSlot` clears the terminal, resizes, writes the s
 
 WebGL addons are created when a slot becomes visible and reaped after a grace period when parked. The addon recovers from context loss on sleep/wake or GPU reset.
 
+### Glyph atlas budget
+
+xterm's WebGL glyph atlas only grows. `clearTextureAtlas` wipes the pages but keeps their size, pages merge into larger ones up to `MAX_TEXTURE_SIZE` (16384 on Apple GPUs, where a single page can reach 1 GiB), and every WebGL context uploads its own mipmapped copy of each page. Slots with the same font and theme share one atlas, so it survives every individual slot rebind, and days of colourful agent output (truecolor diffs, spinners) pin that memory in the webview's graphics footprint.
+
+The pool therefore caps it (`lib/atlasBudget.ts`, pure and tested). Each time a page is added, a debounced check sums the live atlas pages (deduplicated across slots); above `ATLAS_BUDGET_BYTES` (32 MiB) every WebGL renderer is disposed and the visible ones re-attached, which builds a fresh atlas holding only the glyphs on screen. All renderers are disposed before any is re-attached, since a slot re-attaching while another still owns the old atlas would join it again. Rebuilds are rate limited by `ATLAS_RESET_MIN_INTERVAL_MS` so a screen that genuinely needs a large atlas cannot loop. Page canvases are released (`width = height = 0`) as soon as they are merged away or the atlas is rebuilt, rather than whenever the canvas is collected. `terminalDebugStats().atlasBytes` reports the current size in dev builds.
+
 ## Invariants
 
 - Never allow the pool to grow without bound; max is `POOL_MAX_SIZE`.
@@ -57,6 +63,7 @@ WebGL addons are created when a slot becomes visible and reaped after a grace pe
 - A hidden busy leaf keeps its live grid parked with `display:none`.
 - An idle hidden leaf releases its slot but the buffer continues parsing bytes.
 - The DormantRing only buffers bytes for leaves without any slot.
+- The shared glyph atlas never exceeds `ATLAS_BUDGET_BYTES` for longer than one rate-limit interval.
 
 ## See also
 
