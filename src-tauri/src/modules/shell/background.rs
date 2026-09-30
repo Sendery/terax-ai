@@ -13,6 +13,30 @@ use crate::modules::workspace::{resolve_path, WorkspaceEnv};
 
 const RING_CAP: usize = 4 * 1024 * 1024;
 
+/// Exited processes kept around so their logs can still be read. Every
+/// headless task run and every `bash_background` call used to stay in the map
+/// for the life of the app, each holding up to `RING_CAP` of captured output.
+pub const MAX_EXITED_RETAINED: usize = 8;
+
+/// Handles to drop so that no more than `keep` exited processes remain.
+///
+/// Handles are minted monotonically, so the lowest ones are the oldest; the
+/// newest exited entries survive because a caller normally reads a process's
+/// final logs right after it ends. Running processes are never retired.
+pub fn handles_to_retire(procs: &[(u32, bool)], keep: usize) -> Vec<u32> {
+    let mut exited: Vec<u32> = procs
+        .iter()
+        .filter(|(_, exited)| *exited)
+        .map(|(handle, _)| *handle)
+        .collect();
+    if exited.len() <= keep {
+        return Vec::new();
+    }
+    exited.sort_unstable();
+    exited.truncate(exited.len() - keep);
+    exited
+}
+
 pub struct BackgroundProc {
     pub command: String,
     pub cwd: Option<String>,
@@ -187,4 +211,28 @@ pub fn spawn(
     }
 
     Ok(proc)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handles_to_retire;
+
+    #[test]
+    fn keeps_every_running_process_and_the_newest_exited_ones() {
+        let procs = [(1, true), (2, false), (3, true), (4, true), (5, false), (6, true)];
+        assert_eq!(handles_to_retire(&procs, 2), vec![1, 3]);
+    }
+
+    #[test]
+    fn retires_nothing_while_within_the_cap() {
+        let procs = [(1, true), (2, true), (3, false)];
+        assert!(handles_to_retire(&procs, 2).is_empty());
+        assert!(handles_to_retire(&[], 0).is_empty());
+    }
+
+    #[test]
+    fn a_zero_cap_retires_every_exited_process() {
+        let procs = [(7, true), (8, false), (9, true)];
+        assert_eq!(handles_to_retire(&procs, 0), vec![7, 9]);
+    }
 }

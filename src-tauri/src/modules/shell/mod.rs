@@ -242,7 +242,22 @@ pub fn shell_bg_spawn(
     authorize_spawn_cwd(&registry, cwd.as_deref(), &workspace)?;
     let proc = background::spawn(command, cwd, workspace)?;
     let id = state.next_bg_id.fetch_add(1, Ordering::Relaxed);
-    state.bg.write().unwrap().insert(id, proc);
+    let retired = {
+        let mut map = state.bg.write().unwrap();
+        map.insert(id, proc);
+        let status: Vec<(u32, bool)> = map
+            .iter()
+            .map(|(handle, p)| (*handle, p.exited.load(Ordering::Acquire)))
+            .collect();
+        let retired = background::handles_to_retire(&status, background::MAX_EXITED_RETAINED);
+        for handle in &retired {
+            map.remove(handle);
+        }
+        retired
+    };
+    if !retired.is_empty() {
+        log::debug!("shell_bg_spawn: retired {} exited process(es)", retired.len());
+    }
     Ok(id)
 }
 
