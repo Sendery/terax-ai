@@ -10,7 +10,7 @@ The pool lives in `src/modules/terminal/lib/rendererPool.ts`.
 
 ## Slot lifecycle
 
-- `POOL_MAX_SIZE` is 5 (`rendererPool.ts:22`). Each slot owns one xterm `Terminal`, `FitAddon`, `SearchAddon`, `SerializeAddon`, and optionally a `WebglAddon`.
+- `POOL_MAX_SIZE` is a soft cap of 5 and `POOL_HARD_MAX_SIZE` a hard cap of 16 (`lib/poolPolicy.ts`). Past the soft cap the pool grows instead of stealing a protected slot (visible, busy, or alt-screen): a parked busy slot has no WebGL context, so the cost is one xterm buffer, while stealing it would serialize a TUI mid-output. Every running Claude Code session counts as busy, so a workload of many split tabs with an agent per pane otherwise evicted one on almost every tab switch. Idle surplus slots are reaped back down. Each slot owns one xterm `Terminal`, `FitAddon`, `SearchAddon`, `SerializeAddon`, and optionally a `WebglAddon`.
 - A slot is created on demand and assigned to a leaf on bind.
 - `releaseSlot` detaches a slot from a leaf. If the leaf is idle, the slot is parked with `display:none` so xterm stops rendering but keeps parsing PTY bytes.
 - After a grace period, idle slots may be reaped to keep the pool size down.
@@ -28,7 +28,7 @@ When the leaf becomes visible again, `acquireSlot` looks for:
 1. A slot already bound to this leaf.
 2. A retained slot for this leaf (`retainedLeafId === leafId`) - fast path, no snapshot replay.
 3. A clean idle slot.
-4. If the pool is at max size, the lowest-scoring slot is evicted. Eviction serializes the retained buffer to a snapshot via `SerializeAddon` before stealing the slot.
+4. If the pool is at the soft cap and the lowest-scoring slot is protected, a new slot is created up to the hard cap. Otherwise the lowest-scoring slot is evicted. Eviction serializes the retained buffer to a snapshot via `SerializeAddon` before stealing the slot. A leaf serialized while busy replays its dormant bytes on the next bind and then gets a SIGWINCH kick, so a program that repaints part of the screen incrementally redraws it from scratch.
 
 ## The DormantRing
 
@@ -62,7 +62,7 @@ The pool therefore caps it (`lib/atlasBudget.ts`, pure and tested). Each time a 
 
 ## Invariants
 
-- Never allow the pool to grow without bound; max is `POOL_MAX_SIZE`.
+- Never allow the pool to grow without bound; past `POOL_MAX_SIZE` it grows only for protected slots, and never past `POOL_HARD_MAX_SIZE`.
 - Never serialize or evict a leaf that is mid-command or in alt-screen.
 - A hidden busy leaf keeps its live grid parked with `display:none`.
 - An idle hidden leaf releases its slot but the buffer continues parsing bytes.

@@ -15,6 +15,7 @@ import {
 } from "@xterm/xterm";
 import { atlasBytes, atlasResetDelay } from "./atlasBudget";
 import { needsAtlasClear } from "./atlasRepaint";
+import { POOL_MAX_SIZE, shouldGrowPool } from "./poolPolicy";
 import type { TerminalFileLink } from "./fileLinks";
 import { shouldCursorBlink } from "./cursorBlink";
 import {
@@ -24,7 +25,7 @@ import {
 import { terminalReadlineSequence } from "./keymap";
 import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 
-export const POOL_MAX_SIZE = 5;
+export { POOL_MAX_SIZE } from "./poolPolicy";
 const FIT_DEBOUNCE_MS = 8;
 const PTY_RESIZE_DEBOUNCE_MS = 256;
 /** Quiet period after the last resize before the atlas is re-uploaded. */
@@ -440,6 +441,16 @@ function evictionScore(s: Slot): number {
   );
 }
 
+function isProtected(s: Slot): boolean {
+  const leafId = s.currentLeafId;
+  if (leafId === null) return false;
+  return (
+    (adapter?.isLeafVisible(leafId) ?? false) ||
+    (adapter?.isLeafBusy(leafId) ?? false) ||
+    isAltScreen(s)
+  );
+}
+
 function pickSlotFor(leafId: number): PickResult {
   const retainedOwn = slots.find(
     (s) => s.currentLeafId === null && s.retainedLeafId === leafId,
@@ -472,6 +483,9 @@ function pickSlotFor(leafId: number): PickResult {
     }
   }
   const chosen = best!;
+  if (shouldGrowPool(slots.length, isProtected(chosen))) {
+    return { slot: createSlot(), previousLeafId: null };
+  }
   return { slot: chosen, previousLeafId: chosen.currentLeafId };
 }
 
@@ -483,6 +497,10 @@ export type AcquireParams = {
   // at the time it was released. When set, bindSlot skips ring replay
   // and kicks SIGWINCH so the TUI repaints from scratch.
   altScreen: boolean;
+  // True if the leaf was serialized while a command or agent was running.
+  // Its dormant bytes are replayed, then a SIGWINCH kick makes the program
+  // redraw whatever part of the screen it repaints incrementally.
+  busyAtRelease: boolean;
   drainRing: (write: (bytes: Uint8Array) => void) => void;
   shellExited: boolean;
   searchQuery: string | null;
@@ -616,7 +634,7 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
 
   applyCursorBlinkOnSlot(slot, adapter?.isLeafFocused(p.leafId) ?? false);
 
-  if (!fast && p.altScreen && !p.shellExited) {
+  if (!fast && (p.altScreen || p.busyAtRelease) && !p.shellExited) {
     adapter?.resolveLeaf(p.leafId)?.kickPty(slot.term.cols, slot.term.rows);
   }
 
