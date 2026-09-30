@@ -16,7 +16,7 @@ import type {
   NotificationKind,
 } from "../lib/types";
 import { useWindowFocus } from "../lib/useWindowFocus";
-import { useAgentStore } from "../store/agentStore";
+import { leafOwningPty, useAgentStore } from "../store/agentStore";
 import { useManagedAgentsStore } from "../store/managedAgentsStore";
 
 type Activate = (tabId: number, leafId: number) => void;
@@ -78,9 +78,18 @@ async function notify(
 }
 
 function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
-  const leafId = leafIdForPty(sig.id);
-  if (leafId === null) return;
   const store = useAgentStore.getState();
+  const leafId = leafIdForPty(sig.id);
+  if (leafId === null) {
+    // The pane closed or respawned its shell before the reader hit EOF, so
+    // the pty no longer maps to a leaf; the session it started still does.
+    if (sig.kind !== "exited") return;
+    const orphan = leafOwningPty(store.sessions, sig.id);
+    if (orphan === null) return;
+    store.finish(orphan);
+    useManagedAgentsStore.getState().remove(orphan);
+    return;
+  }
   const cwd = () => findPaneCwd(getCtx().tabs, leafId);
 
   switch (sig.kind) {
@@ -94,6 +103,7 @@ function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
         sig.agent ?? "agent",
         harness.integration,
         harness.harness,
+        sig.id,
       );
       void refreshDigest(leafId, cwd());
       return;

@@ -1,4 +1,4 @@
-import { ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
+import { type ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
 
 /**
  * cursor-agent `--output-format stream-json --stream-partial-output`.

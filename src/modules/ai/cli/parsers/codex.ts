@@ -1,4 +1,4 @@
-import { ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
+import { type ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
 
 /**
  * Codex `exec --json`. Emits a thread/turn/item event model. Items arrive as

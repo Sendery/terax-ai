@@ -1,4 +1,4 @@
-import { ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
+import { type ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
 
 /**
  * OpenCode `run --format json`. Each line is `{ type, part }` where `part` is a

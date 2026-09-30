@@ -73,6 +73,12 @@ export type AgentSession = {
   lastReason: AttentionReason | null;
   /** The transcript the agent reported, once its hooks bound the pane. */
   sessionId: string | null;
+  /**
+   * The PTY the signals come from. `exited` arrives after a closed pane has
+   * dropped its leaf-to-pty mapping, so this is what still names the session
+   * to finish.
+   */
+  ptyId: number | null;
   integration: AgentIntegration;
   harness: AgentHarness;
 };
