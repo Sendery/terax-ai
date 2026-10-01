@@ -53,7 +53,7 @@ export const RESTORE_SNAPSHOT_VERSION = 1;
  * costs a PTY plus a renderer slot, so an unbounded list would let a stored
  * file decide how much memory the next launch spends.
  */
-export const MAX_RESTORABLE_SESSIONS = 12;
+export const MAX_RESTORABLE_SESSIONS = 25;
 
 const MAX_TITLE_CHARS = 80;
 
