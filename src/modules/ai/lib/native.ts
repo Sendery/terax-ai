@@ -366,7 +366,7 @@ export const native = {
     subtitle?: string;
     body?: string;
     accent?: string;
-    /** PNG bytes of the agent's logo badge (`notificationBadge.ts`). */
+    /** PNG bytes of the composite icon (`notificationBadge.ts`), shown in place of the app icon. */
     icon?: number[];
     tone: NotificationTone;
     leafId?: number;
