@@ -5,8 +5,9 @@
 //! also carry a subtitle and a content image, and a click can be routed back to
 //! the pane it is about, which is what this module adds on top.
 //!
-//! Colour travels as that image: a badge whose ring is the tab's colour and
-//! whose centre is the state's, rendered once per pair and cached. Native
+//! Colour travels as that image: the agent's logo on a disc in the tab's
+//! colour, drawn by the webview, or failing that a badge whose ring is the
+//! tab's colour and whose centre is the state's, rendered once per pair. Native
 //! notification text cannot be coloured, so the title also leads with emoji
 //! marks for the tab and the state (built in the webview, see
 //! `agents/lib/describeEvent.ts`), which survive the title's truncation.
@@ -87,6 +88,9 @@ pub struct RichNotification {
     pub tone: Tone,
     pub leaf_id: Option<u32>,
     pub tab_id: Option<u32>,
+    /// PNG of the agent's logo on the tab's colour, drawn by the webview; the
+    /// badge stands in when it is absent or not a plausible PNG.
+    pub icon: Option<Vec<u8>>,
 }
 
 fn clip(text: &str, limit: usize) -> String {
@@ -159,14 +163,56 @@ fn encode_png(rgba: &[u8], size: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// The cached badge for an accent and tone, written once and reused.
-fn badge_path(accent: Option<[u8; 3]>, tone: Tone) -> Result<std::path::PathBuf, String> {
-    const NEUTRAL: [u8; 3] = [0x52, 0x52, 0x5B];
-    let accent = accent.unwrap_or(NEUTRAL);
+const MAX_ICON_BYTES: usize = 256 * 1024;
+const PNG_MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+/// The webview's image is only ever handed to macOS as a file it opens, but
+/// it still crosses the IPC boundary, so it must look like a bounded PNG.
+fn is_plausible_icon(bytes: &[u8]) -> bool {
+    bytes.len() <= MAX_ICON_BYTES && bytes.len() > PNG_MAGIC.len() && bytes.starts_with(PNG_MAGIC)
+}
+
+/// The cached file for a webview-drawn icon, named by its content so the same
+/// agent and colour reuse one file and the name never comes from the webview.
+fn icon_path(bytes: &[u8]) -> Result<std::path::PathBuf, String> {
+    use sha2::{Digest, Sha256};
+    if !is_plausible_icon(bytes) {
+        return Err("not a PNG icon".into());
+    }
+    let digest = Sha256::digest(bytes);
+    let hex: String = digest[..12].iter().map(|b| format!("{b:02x}")).collect();
+    let path = badges_dir()?.join(format!("agent-{hex}.png"));
+    if !path.exists() {
+        write_atomic(&path, bytes)?;
+    }
+    Ok(path)
+}
+
+fn badges_dir() -> Result<std::path::PathBuf, String> {
     let dir = dirs::cache_dir()
         .ok_or("no cache dir")?
         .join("terax-ai")
         .join("notify-badges");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+// Written beside the target and renamed, so a notification never reads a
+// half-written image.
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = path.with_extension(format!("png.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
+/// The cached badge for an accent and tone, written once and reused.
+fn badge_path(accent: Option<[u8; 3]>, tone: Tone) -> Result<std::path::PathBuf, String> {
+    const NEUTRAL: [u8; 3] = [0x52, 0x52, 0x5B];
+    let accent = accent.unwrap_or(NEUTRAL);
+    let dir = badges_dir()?;
     let name = format!(
         "{:02x}{:02x}{:02x}-{}.png",
         accent[0],
@@ -178,16 +224,8 @@ fn badge_path(accent: Option<[u8; 3]>, tone: Tone) -> Result<std::path::PathBuf,
     if path.exists() {
         return Ok(path);
     }
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let png = encode_png(&render_badge(accent, tone.rgb(), BADGE_SIZE), BADGE_SIZE)?;
-    // Written beside the target and renamed, so a notification never reads a
-    // half-written image.
-    let tmp = path.with_extension(format!("png.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, png).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e.to_string()
-    })?;
+    write_atomic(&path, &png)?;
     Ok(path)
 }
 
@@ -199,7 +237,7 @@ mod mac {
     use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
     use tauri::{Emitter, Manager};
 
-    use super::{badge_path, clip, parse_hex, RichNotification, MAX_BODY_CHARS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS};
+    use super::{badge_path, clip, icon_path, parse_hex, RichNotification, MAX_BODY_CHARS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS};
 
     /// A click is only reported to a sender that is waiting, and a banner the
     /// user never touches keeps its waiter until it leaves Notification
@@ -259,7 +297,11 @@ mod mac {
             .filter(|s| !s.is_empty());
         let body = clip(notification.body.as_deref().unwrap_or(""), MAX_BODY_CHARS);
         let accent = notification.accent.as_deref().and_then(parse_hex);
-        let image = badge_path(accent, notification.tone).ok();
+        let image = notification
+            .icon
+            .as_deref()
+            .and_then(|bytes| icon_path(bytes).ok())
+            .or_else(|| badge_path(accent, notification.tone).ok());
         let tone = notification.tone;
         let target = (notification.leaf_id, notification.tab_id);
         let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < MAX_WAITERS;
@@ -393,6 +435,18 @@ mod tests {
         .unwrap();
         assert_eq!(n.tone, Tone::Permission);
         assert_eq!(n.leaf_id, Some(7));
+        assert!(n.icon.is_none());
+    }
+
+    #[test]
+    fn accepts_only_a_bounded_png_icon() {
+        let png = encode_png(&render_badge([1, 2, 3], [4, 5, 6], 8), 8).unwrap();
+        assert!(is_plausible_icon(&png));
+        assert!(!is_plausible_icon(b"GIF89a not a png"));
+        assert!(!is_plausible_icon(PNG_MAGIC));
+        let mut huge = png.clone();
+        huge.resize(MAX_ICON_BYTES + 1, 0);
+        assert!(!is_plausible_icon(&huge));
     }
 }
 

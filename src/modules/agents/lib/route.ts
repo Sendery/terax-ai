@@ -2,6 +2,8 @@ import { native } from "@/modules/ai/lib/native";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { TAB_COLOR_CSS, type TabColor } from "@/modules/tabs";
 import { useAgentStore } from "../store/agentStore";
+import { displayAgent } from "./format";
+import { agentBadgePng } from "./notificationBadge";
 import { osNotify } from "./notify";
 import type {
   AgentSource,
@@ -94,23 +96,32 @@ export function routeAgentNotification({
     ...(sessionName ? { sessionName } : {}),
   });
 
-  void native
-    .agentNotify({
+  const accent = tabColor ? TAB_COLOR_CSS[tabColor] : null;
+  // The plain notification has no image, so it names the agent in words.
+  const fallback = () =>
+    void osNotify(
       title,
-      ...(subtitle ? { subtitle } : {}),
-      ...(body ? { body } : {}),
-      ...(tabColor ? { accent: TAB_COLOR_CSS[tabColor] } : {}),
-      tone,
-      ...(source === "terminal" ? { leafId, tabId } : {}),
-    })
+      [[displayAgent(agent), subtitle].filter(Boolean).join(" · "), body]
+        .filter(Boolean)
+        .join("\n"),
+    );
+
+  void agentBadgePng(agent, accent)
+    .then((icon) =>
+      native.agentNotify({
+        title,
+        ...(subtitle ? { subtitle } : {}),
+        ...(body ? { body } : {}),
+        ...(accent ? { accent } : {}),
+        ...(icon ? { icon } : {}),
+        tone,
+        ...(source === "terminal" ? { leafId, tabId } : {}),
+      }),
+    )
     .then((posted) => {
       // Only macOS has the rich path; elsewhere the plain notification carries
       // the same words.
-      if (!posted) {
-        void osNotify(title, [subtitle, body].filter(Boolean).join("\n"));
-      }
+      if (!posted) fallback();
     })
-    .catch(
-      () => void osNotify(title, [subtitle, body].filter(Boolean).join("\n")),
-    );
+    .catch(fallback);
 }

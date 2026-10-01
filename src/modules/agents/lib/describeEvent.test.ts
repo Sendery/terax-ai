@@ -41,7 +41,7 @@ describe("describeAgentEvent", () => {
     expect(d.title).toBe(
       `${NO_TAB_COLOR_MARK} ${TONE_MARK.permission} HACKATHON-MERGE`,
     );
-    expect(d.subtitle).toBe("Needs permission · slot-5 · Claude Code");
+    expect(d.subtitle).toBe("slot-5");
     expect(d.body).toBe("Claude needs your permission to use Bash");
     expect(d.tone).toBe("permission");
   });
@@ -56,7 +56,8 @@ describe("describeAgentEvent", () => {
     });
 
     expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.question} api`);
-    expect(d.subtitle).toBe("Asking you · Claude Code");
+    // The agent is the image, so a session named after its tab has no subtitle.
+    expect(d.subtitle).toBe("");
     expect(d.body).toBe("Which layout do you prefer?");
     expect(d.tone).toBe("question");
   });
@@ -75,7 +76,7 @@ describe("describeAgentEvent", () => {
     });
 
     expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK["turn-end"]} PURGA`);
-    expect(d.subtitle).toBe("Turn ended, your move · api · Claude Code");
+    expect(d.subtitle).toBe("api");
     expect(d.body).toBe("Freed 87 GB.");
     expect(d.tone).toBe("turn-end");
   });
@@ -100,7 +101,7 @@ describe("describeAgentEvent", () => {
 
     expect(d.title).toBe(`${NO_TAB_COLOR_MARK} ${TONE_MARK.subagent} api`);
     expect(d.subtitle).toBe(
-      "Subagent result · Claude Code · 2 subagents, 1 monitor · PR #112955",
+      "2 subagents, 1 monitor · PR #112955",
     );
   });
 
@@ -127,7 +128,7 @@ describe("describeAgentEvent", () => {
     expect(d.title).toBe(
       `${TAB_COLOR_MARK.blue} ${TONE_MARK.idle} WORKPLACES-PUSH-TRAIN`,
     );
-    expect(d.subtitle).toBe("Waiting for your prompt · slot-5 · Claude Code");
+    expect(d.subtitle).toBe("slot-5");
   });
 
   it("gives every state its own mark and keeps tab marks out of that set", () => {
