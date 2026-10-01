@@ -3,27 +3,60 @@ import { create } from "zustand";
 
 export type AgentPhase = "working" | "attention" | "finished" | "idle";
 
-type AgentSignal = { id: number; kind: string };
+/** Why an agent needs the user, when its hook could tell. */
+export type AttentionCause = "permission" | "question" | "idle";
+
+type AgentSignal = { id: number; kind: string; reason?: string | null };
 
 type AgentActivityStore = {
   phases: Record<number, AgentPhase>;
-  setPhase: (id: number, phase: AgentPhase) => void;
+  /** Set only while the pty's phase is `attention` and the cause is known. */
+  reasons: Record<number, AttentionCause>;
+  setPhase: (
+    id: number,
+    phase: AgentPhase,
+    reason?: AttentionCause | null,
+  ) => void;
   clear: (id: number) => void;
 };
 
+export function attentionCause(value: unknown): AttentionCause | null {
+  return value === "permission" || value === "question" || value === "idle"
+    ? value
+    : null;
+}
+
+function withoutKey<T>(
+  record: Record<number, T>,
+  id: number,
+): Record<number, T> {
+  if (!(id in record)) return record;
+  const next = { ...record };
+  delete next[id];
+  return next;
+}
+
 export const useAgentActivityStore = create<AgentActivityStore>((set) => ({
   phases: {},
-  setPhase: (id, phase) =>
+  reasons: {},
+  setPhase: (id, phase, reason = null) =>
     set((s) => {
-      if (s.phases[id] === phase) return s;
-      return { phases: { ...s.phases, [id]: phase } };
+      const cause = phase === "attention" ? reason : null;
+      if (s.phases[id] === phase && (s.reasons[id] ?? null) === cause) return s;
+      return {
+        phases: { ...s.phases, [id]: phase },
+        reasons: cause
+          ? { ...s.reasons, [id]: cause }
+          : withoutKey(s.reasons, id),
+      };
     }),
   clear: (id) =>
     set((s) => {
-      if (!(id in s.phases)) return s;
-      const next = { ...s.phases };
-      delete next[id];
-      return { phases: next };
+      if (!(id in s.phases) && !(id in s.reasons)) return s;
+      return {
+        phases: withoutKey(s.phases, id),
+        reasons: withoutKey(s.reasons, id),
+      };
     }),
 }));
 
@@ -80,7 +113,7 @@ export function ensureAgentActivityListener(
       onExited?.(id);
       return;
     }
-    store.setPhase(id, action);
+    store.setPhase(id, action, attentionCause(e.payload.reason));
     if (action === "finished") {
       finishedTimers.set(
         id,
@@ -101,7 +134,15 @@ export function isAgentActivePty(ptyId: number): boolean {
 export type AgentTabStatus = {
   top: "attention" | "working" | "finished" | null;
   count: number;
+  /** For `attention`, the most pressing known cause among those agents. */
+  reason: AttentionCause | null;
 };
+
+const CAUSE_PRIORITY: readonly AttentionCause[] = [
+  "permission",
+  "question",
+  "idle",
+];
 
 // Highest-severity phase wins the dot; `count` is how many agents share it, so
 // the number always matches what the dot represents (never over-counts across
@@ -109,13 +150,17 @@ export type AgentTabStatus = {
 export function aggregateAgentPhases(
   phases: Record<number, AgentPhase>,
   ptyIds: readonly number[],
+  reasons: Record<number, AttentionCause> = {},
 ): AgentTabStatus {
   const counts = { attention: 0, working: 0, finished: 0 };
+  const causes = new Set<AttentionCause>();
   for (const id of ptyIds) {
     const phase = phases[id];
     if (phase === "attention" || phase === "working" || phase === "finished") {
       counts[phase]++;
     }
+    const cause = phase === "attention" ? reasons[id] : undefined;
+    if (cause) causes.add(cause);
   }
   const top: AgentTabStatus["top"] =
     counts.attention > 0
@@ -125,5 +170,9 @@ export function aggregateAgentPhases(
         : counts.finished > 0
           ? "finished"
           : null;
-  return { top, count: top ? counts[top] : 0 };
+  const reason =
+    top === "attention"
+      ? (CAUSE_PRIORITY.find((cause) => causes.has(cause)) ?? null)
+      : null;
+  return { top, count: top ? counts[top] : 0, reason };
 }

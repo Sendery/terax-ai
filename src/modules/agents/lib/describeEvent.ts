@@ -1,4 +1,5 @@
 import type { TabColor } from "@/modules/tabs";
+import { TONE_MARK } from "./marks";
 import type {
   AttentionReason,
   DigestTaskKind,
@@ -45,6 +46,8 @@ export function notificationLabel(
   return NOTIFICATION_LABEL[kind];
 }
 
+export { TONE_MARK };
+
 // macOS draws the notification itself, so colour can only travel as text.
 // Emoji are written as escapes to keep the source free of them. The tab mark
 // is a coloured circle; there are fewer circles than tab colours, so teal,
@@ -62,17 +65,6 @@ export const TAB_COLOR_MARK: Record<TabColor, string> = {
   pink: "\u{1F7E3}",
 };
 export const NO_TAB_COLOR_MARK = "\u26AA";
-
-export const TONE_MARK: Record<NotificationTone, string> = {
-  permission: "\u{1F510}",
-  question: "\u2753",
-  idle: "\u{1F4AC}",
-  attention: "\u{1F514}",
-  "turn-end": "\u2705",
-  subagent: "\u{1F9E9}",
-  error: "\u274C",
-  exited: "\u{1F3C1}",
-};
 
 function oneLine(value: string): string {
   const collapsed = value.replace(/\s+/g, " ").trim();
