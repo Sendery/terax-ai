@@ -14,4 +14,9 @@ export {
   validateCommandRequest,
 } from "./lib/registry";
 export { buildAppSnapshot } from "./lib/snapshot";
-export type { AppSnapshot, SnapshotTab } from "./lib/snapshot";
+export type {
+  AppSnapshot,
+  SnapshotTab,
+  SnapshotTts,
+  SnapshotTtsInput,
+} from "./lib/snapshot";

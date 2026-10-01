@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  MODELS,
+  MODEL_CONTEXT_LIMITS,
+  isCliProvider,
   compatModelIdForEndpoint,
   endpointIdFromCompatModel,
   getModelContextLimit,
   isCompatModelId,
   migrateLegacyCompatEndpoint,
   modelKeepsReasoning,
+  oauthProviderFor,
+  providerNeedsKey,
+  providerRequiresOAuth,
   resolveModel,
   type CustomEndpoint,
 } from "./config";
@@ -100,5 +106,72 @@ describe("migrateLegacyCompatEndpoint", () => {
   it("skips migration when base URL or model id is missing", () => {
     expect(migrateLegacyCompatEndpoint("", "m", 1, "x")).toEqual([]);
     expect(migrateLegacyCompatEndpoint("u", "  ", 1, "x")).toEqual([]);
+  });
+});
+
+describe("subscription sign-in providers", () => {
+  it("maps each Terax provider to the backend login that authorises it", () => {
+    expect(oauthProviderFor("anthropic")).toBe("anthropic");
+    expect(oauthProviderFor("chatgpt-codex")).toBe("openai-codex");
+  });
+
+  it("leaves key-only providers without a login", () => {
+    expect(oauthProviderFor("openai")).toBeNull();
+    expect(oauthProviderFor("google")).toBeNull();
+  });
+
+  it("does not demand an API key for the ChatGPT subscription", () => {
+    // There is no key to demand: the plan is only reachable through OAuth, so
+    // requiring one would make the provider permanently unusable.
+    expect(providerNeedsKey("chatgpt-codex")).toBe(false);
+    expect(providerRequiresOAuth("chatgpt-codex")).toBe(true);
+  });
+
+  it("keeps Anthropic usable with either credential", () => {
+    expect(providerNeedsKey("anthropic")).toBe(true);
+    expect(providerRequiresOAuth("anthropic")).toBe(false);
+  });
+
+  it("gives the subscription copies of OpenAI models their own ids", () => {
+    // The catalogue is keyed by id, and these reach the same models through a
+    // different account, so they cannot reuse the API-key model ids.
+    const codex = MODELS.filter((m) => m.provider === "chatgpt-codex");
+    expect(codex.length).toBeGreaterThan(0);
+    for (const model of codex) {
+      expect(model.id.startsWith("codex-")).toBe(true);
+      expect(resolveModel(model.id).provider).toBe("chatgpt-codex");
+    }
+  });
+
+  it("keeps every catalogue model id unique", () => {
+    const ids = MODELS.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("model catalogue currency", () => {
+  it("offers the current frontier model of each major provider", () => {
+    // The catalogue is hand-maintained, so a model that shipped after the last
+    // edit is simply missing and nothing else notices.
+    const ids = new Set(MODELS.map((m) => m.id));
+    expect(ids).toContain("gpt-6-astra");
+    expect(ids).toContain("claude-opus-5-5");
+    expect(ids).toContain("claude-fable-5-1");
+    expect(ids).toContain("gemini-3.8-flash");
+  });
+
+  it("gives every model a context window except the CLI agents", () => {
+    // A CLI agent manages its own context, so it has no window to report.
+    // For everything else a missing entry silently falls back to 128K, which
+    // makes the usage indicator wrong rather than absent.
+    const missing = MODELS.filter(
+      (m) => !isCliProvider(m.provider) && !(m.id in MODEL_CONTEXT_LIMITS),
+    ).map((m) => m.id);
+    expect(missing).toEqual([]);
+  });
+
+  it("reports the million-token windows of the newest models", () => {
+    expect(getModelContextLimit("claude-opus-5-5")).toBe(1_000_000);
+    expect(getModelContextLimit("gpt-6-astra")).toBe(1_000_000);
   });
 });

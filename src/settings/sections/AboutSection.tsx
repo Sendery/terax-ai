@@ -28,6 +28,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { arch, platform } from "@tauri-apps/plugin-os";
 import { useEffect, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
+import { SandboxPanel } from "../components/SandboxPanel";
 
 const REPO_URL = `https://github.com/${BUILD_INFO.repository}`;
 const ORGANIZATION_URL = "https://github.com/Sendery";
@@ -132,6 +133,8 @@ export function AboutSection() {
   return (
     <div className="flex flex-col gap-6">
       <SectionHeader title="About" description="" />
+
+      <SandboxPanel />
 
       <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-card/60 p-5">
         <div className="flex min-w-0 items-center gap-4">

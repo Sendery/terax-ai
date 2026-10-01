@@ -17,6 +17,8 @@
 //! All commands take `&AppHandle` so we can resolve the data directory
 //! once via Tauri's path API.
 
+#[cfg(not(target_os = "linux"))]
+use super::profile;
 use std::sync::Mutex;
 
 use tauri::AppHandle;
@@ -112,6 +114,104 @@ fn entry(service: &str, account: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(service, account).map_err(|e| e.to_string())
 }
 
+/// Read one secret. Shared by the `secrets_get` command and by the modules
+/// that keep their own credentials in the same store (see `oauth`), so there is
+/// one code path per platform rather than one per caller.
+pub(crate) fn get_secret(
+    app: &AppHandle,
+    state: &SecretsState,
+    service: &str,
+    account: &str,
+) -> Result<Option<String>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let key = key(service, account);
+        with_store(app, state, |m| m.get(&key).cloned())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state);
+        let read = |service: &str| -> Result<Option<String>, String> {
+            match entry(service, account)?.get_password() {
+                Ok(v) => Ok(Some(v)),
+                Err(keyring::Error::NoEntry) => Ok(None),
+                Err(err) => Err(err.to_string()),
+            }
+        };
+        if !profile::is_sandbox() {
+            return read(service);
+        }
+        // A sandbox reads through to the installed app's keys and never writes them.
+        let own = read(&profile::scoped_service(service, true))?;
+        Ok(profile::overlay_secret(own, || read(service).ok().flatten()))
+    }
+}
+
+/// Write one secret. See `get_secret`.
+pub(crate) fn set_secret(
+    app: &AppHandle,
+    state: &SecretsState,
+    service: &str,
+    account: &str,
+    password: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let key = key(service, account);
+        with_store(app, state, |m| {
+            m.insert(key, password.to_string());
+        })?;
+        let snapshot = {
+            let guard = state.cache.lock().map_err(|e| e.to_string())?;
+            guard.as_ref().cloned().unwrap_or_default()
+        };
+        write_store(app, &snapshot)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state);
+        let e = entry(&profile::scoped_service(service, profile::is_sandbox()), account)?;
+        e.set_password(password).map_err(|e| e.to_string())
+    }
+}
+
+/// Remove one secret, treating "was not there" as success. See `get_secret`.
+pub(crate) fn delete_secret(
+    app: &AppHandle,
+    state: &SecretsState,
+    service: &str,
+    account: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let key = key(service, account);
+        with_store(app, state, |m| {
+            m.remove(&key);
+        })?;
+        let snapshot = {
+            let guard = state.cache.lock().map_err(|e| e.to_string())?;
+            guard.as_ref().cloned().unwrap_or_default()
+        };
+        write_store(app, &snapshot)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state);
+        if profile::is_sandbox() {
+            // Removing the sandbox entry alone would let the installed app's
+            // key show through again, so the deletion is recorded instead.
+            return entry(&profile::scoped_service(service, true), account)?
+                .set_password(profile::DELETED_SECRET)
+                .map_err(|e| e.to_string());
+        }
+        let e = entry(service, account)?;
+        match e.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn secrets_get(
     app: AppHandle,
@@ -119,22 +219,7 @@ pub async fn secrets_get(
     service: String,
     account: String,
 ) -> Result<Option<String>, String> {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = state; // capture
-        let key = key(&service, &account);
-        with_store(&app, &state, |m| m.get(&key).cloned())
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (app, state);
-        let e = entry(&service, &account)?;
-        match e.get_password() {
-            Ok(v) => Ok(Some(v)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(err) => Err(err.to_string()),
-        }
-    }
+    get_secret(&app, &state, &service, &account)
 }
 
 #[tauri::command]
@@ -145,24 +230,7 @@ pub async fn secrets_set(
     account: String,
     password: String,
 ) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    {
-        let key = key(&service, &account);
-        with_store(&app, &state, |m| {
-            m.insert(key, password);
-        })?;
-        let snapshot = {
-            let guard = state.cache.lock().map_err(|e| e.to_string())?;
-            guard.as_ref().cloned().unwrap_or_default()
-        };
-        write_store(&app, &snapshot)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (app, state);
-        let e = entry(&service, &account)?;
-        e.set_password(&password).map_err(|e| e.to_string())
-    }
+    set_secret(&app, &state, &service, &account, &password)
 }
 
 #[tauri::command]
@@ -172,27 +240,7 @@ pub async fn secrets_delete(
     service: String,
     account: String,
 ) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    {
-        let key = key(&service, &account);
-        with_store(&app, &state, |m| {
-            m.remove(&key);
-        })?;
-        let snapshot = {
-            let guard = state.cache.lock().map_err(|e| e.to_string())?;
-            guard.as_ref().cloned().unwrap_or_default()
-        };
-        write_store(&app, &snapshot)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (app, state);
-        let e = entry(&service, &account)?;
-        match e.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(err.to_string()),
-        }
-    }
+    delete_secret(&app, &state, &service, &account)
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -295,12 +343,21 @@ pub async fn secrets_get_all(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (app, state);
+        let read = |service: &str, account: &str| {
+            keyring::Entry::new(service, account)
+                .ok()
+                .and_then(|e| e.get_password().ok())
+        };
+        let sandbox = profile::is_sandbox();
         Ok(accounts
             .into_iter()
             .map(|a| {
-                keyring::Entry::new(&service, &a)
-                    .ok()
-                    .and_then(|e| e.get_password().ok())
+                if !sandbox {
+                    return read(&service, &a);
+                }
+                profile::overlay_secret(read(&profile::scoped_service(&service, true), &a), || {
+                    read(&service, &a)
+                })
             })
             .collect())
     }

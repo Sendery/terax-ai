@@ -1,11 +1,13 @@
 import {
   AlertCircleIcon,
   CommandIcon,
+  Copy01Icon,
   CpuIcon,
   Delete02Icon,
   Edit02Icon,
   Loading03Icon,
   PlayIcon,
+  Refresh01Icon,
   SquareArrowUpRightIcon,
   Timer01Icon,
 } from "@hugeicons/core-free-icons";
@@ -16,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { TAB_COLOR_CSS } from "@/modules/tabs";
 
+import { agentLabel } from "./lib/agents";
 import {
   formatCost,
   formatCountdown,
@@ -60,6 +63,8 @@ export function TaskCardView({
   onToggleEnabled,
   onRunNow,
   onEdit,
+  onClone,
+  onRegenerateSeed,
   onRemove,
   onRecover,
 }: {
@@ -71,6 +76,10 @@ export function TaskCardView({
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onRunNow: (id: string) => void;
   onEdit: (id: string) => void;
+  /** Copies the task, disabled, and opens it for editing. */
+  onClone?: (id: string) => void;
+  /** Points the task at a brand new agent session. */
+  onRegenerateSeed?: (id: string) => void;
   onRemove: (id: string) => void;
   /** Reopens the last run's Pi session in a new terminal tab. */
   onRecover?: (run: TaskRun) => void;
@@ -134,6 +143,8 @@ export function TaskCardView({
           {targetLabel(task.target)}
         </Chip>
         <Chip>{modeLabel(task.mode)}</Chip>
+        <Chip>{agentLabel(task.agent)}</Chip>
+        {task.model && <Chip>{task.model}</Chip>}
         {task.maxRuns !== undefined && (
           <Chip tone={exhausted ? "error" : "muted"}>
             {task.runCount}/{task.maxRuns}
@@ -205,6 +216,31 @@ export function TaskCardView({
         >
           <HugeiconsIcon icon={Edit02Icon} size={12} strokeWidth={2} />
         </Button>
+        {onClone && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            aria-label={`Duplicate ${task.name}`}
+            title="Duplicate into a new, disabled task"
+            onClick={() => onClone(task.id)}
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={12} strokeWidth={2} />
+          </Button>
+        )}
+        {onRegenerateSeed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            aria-label={`Start a new session for ${task.name}`}
+            title="New session seed: the next run starts a fresh session"
+            disabled={running}
+            onClick={() => onRegenerateSeed(task.id)}
+          >
+            <HugeiconsIcon icon={Refresh01Icon} size={12} strokeWidth={2} />
+          </Button>
+        )}
         {onRecover && lastRun && (
           <Button
             variant="ghost"

@@ -78,13 +78,18 @@ export class TeraxClient {
       });
       socket.on("data", (chunk: string) => {
         buffer += chunk;
-        if (Buffer.byteLength(buffer, "utf8") > MAX_FRAME_BYTES) {
+        const newline = buffer.indexOf("\n");
+        if (newline === -1) {
+          if (Buffer.byteLength(buffer, "utf8") > MAX_FRAME_BYTES) {
+            fail(new Error("Terax bridge response exceeded frame cap"));
+          }
+          return;
+        }
+        const line = buffer.slice(0, newline);
+        if (Buffer.byteLength(line, "utf8") > MAX_FRAME_BYTES) {
           fail(new Error("Terax bridge response exceeded frame cap"));
           return;
         }
-        const newline = buffer.indexOf("\n");
-        if (newline === -1) return;
-        const line = buffer.slice(0, newline);
         try {
           const response = decodeResponse(line, id);
           cleanup();

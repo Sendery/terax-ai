@@ -1,5 +1,11 @@
 import { isTabColor, type TabColor } from "@/modules/tabs";
 
+import {
+  DEFAULT_TASK_AGENT,
+  isTaskAgent,
+  newSessionSeed,
+  type TaskAgent,
+} from "./agents";
 import { isSchedule, type Schedule } from "./recurrence";
 
 /** A run is killed after this long. Matches the agreed operational limit. */
@@ -51,6 +57,12 @@ export type ScheduledTask = {
    *  session per run. */
   mode: TaskMode;
   target: TaskTarget;
+  /** Which agent CLI this task drives. */
+  agent: TaskAgent;
+  /** Names the session this task owns. Regenerating it is how a user asks for
+   *  a clean slate without losing the task itself. Absent on tasks stored
+   *  before seeds existed, which keep their legacy id-derived session. */
+  seed?: string;
   schedule: Schedule;
   sessions: PiSessionRef[];
   tabId?: number;
@@ -77,6 +89,8 @@ export type TaskInput = {
   schedule: Schedule;
   mode?: TaskMode;
   target?: TaskTarget;
+  agent?: TaskAgent;
+  seed?: string;
   sessions?: PiSessionRef[];
   tabId?: number;
   color?: TabColor;
@@ -115,6 +129,8 @@ export function createTask(input: TaskInput, now = Date.now()): ScheduledTask {
     enabled: input.enabled ?? true,
     mode: input.mode ?? "task",
     target: input.target ?? "tab",
+    agent: input.agent ?? DEFAULT_TASK_AGENT,
+    seed: input.seed ?? newSessionSeed(),
     schedule: input.schedule,
     sessions: input.sessions ? [...input.sessions] : [],
     cwd: input.cwd,
@@ -176,6 +192,8 @@ export function isScheduledTask(value: unknown): value is ScheduledTask {
   if (typeof value.enabled !== "boolean") return false;
   if (!TASK_MODES.includes(value.mode as TaskMode)) return false;
   if (!TASK_TARGETS.includes(value.target as TaskTarget)) return false;
+  if (!isTaskAgent(value.agent)) return false;
+  if (value.seed !== undefined && !isNonEmptyString(value.seed)) return false;
   if (!MISSED_POLICIES.includes(value.missed as MissedPolicy)) return false;
   if (!OVERLAP_POLICIES.includes(value.overlap as OverlapPolicy)) return false;
   if (!isSchedule(value.schedule)) return false;

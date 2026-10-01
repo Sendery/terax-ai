@@ -112,6 +112,15 @@ describe("taskInputFromCommand", () => {
   });
 });
 
+  it("assigns the task to the requested agent CLI", () => {
+    const input = taskInputFromCommand(
+      { name: "n", prompt: "p", schedule: "every:5m", agent: "codex" },
+      "/tmp",
+    );
+    if ("error" in input) throw new Error(input.error);
+    expect(input.agent).toBe("codex");
+  });
+
 describe("taskPatchFromCommand", () => {
   it("patches only the given fields", () => {
     const patch = taskPatchFromCommand({ name: "  Renamed " }, make());
@@ -155,6 +164,13 @@ describe("taskSummary", () => {
     expect(summary.schedule).toBe("every:1h");
     expect(summary.scheduleLabel).toBe("Every hour");
     expect(summary.nextRun).toBe("in 1h");
+  });
+
+  it("reports the agent and model a run would use", () => {
+    const summary = taskSummary(make({ agent: "claude", model: "sonnet" }), [], NOW);
+    expect(summary.agent).toBe("claude");
+    expect(summary.model).toBe("sonnet");
+    expect(taskSummary(make(), [], NOW).model).toBeNull();
   });
 
   it("includes the prompt, unlike the app snapshot", () => {

@@ -4,7 +4,6 @@ import {
   stepCountIs,
   streamText,
   type LanguageModel,
-  type ModelMessage,
   type UIMessage,
 } from "ai";
 import {
@@ -19,19 +18,57 @@ import {
   MLX_DEFAULT_BASE_URL,
   modelKeepsReasoning,
   OLLAMA_DEFAULT_BASE_URL,
+  oauthProviderFor,
   providerNeedsKey,
   resolveModel,
   selectSystemPrompt,
   type CustomEndpoint,
+  type OAuthProviderId,
   type ProviderId,
 } from "../config";
 import { runCliAgentStream } from "../cli";
 import { buildTools, type ToolContext } from "../tools/tools";
 import { compactModelMessagesDetailed } from "./compact";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
-import { createProxyFetch } from "./proxyFetch";
+import { oauthAccessToken, type OAuthAccessToken } from "./oauth";
+import { prepareAgentPrompt } from "./prompt";
+import { createProxyFetch, proxyFetch } from "./proxyFetch";
 
 const localProxyFetch = createProxyFetch({ allowPrivateNetwork: true });
+
+/** Model id prefix that marks the ChatGPT-subscription copies of OpenAI models. */
+const CODEX_MODEL_PREFIX = "codex-";
+
+/**
+ * A fetch that authorises every request with a token checked at call time.
+ *
+ * The token is not captured when the model is built: an OAuth access token
+ * lives about an hour, a chat session can outlive that, and Rust refreshes on
+ * demand. Asking per request also means a sign-out takes effect on the next
+ * message rather than after a restart.
+ *
+ * Requests go through the Rust proxy rather than the webview's fetch so the
+ * token never appears in a renderer-visible request.
+ */
+function createOAuthFetch(
+  provider: OAuthProviderId,
+  authHeaders: (token: OAuthAccessToken) => Record<string, string>,
+): typeof fetch {
+  return async (input, init) => {
+    let token: OAuthAccessToken;
+    try {
+      token = await oauthAccessToken(provider);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`${detail}. Open Settings → Models to connect.`);
+    }
+    const headers = new Headers(init?.headers);
+    for (const [name, value] of Object.entries(authHeaders(token))) {
+      headers.set(name, value);
+    }
+    return proxyFetch(input, { ...init, headers });
+  };
+}
 
 const TOOL_LABELS: Record<string, (input: Record<string, unknown>) => string> =
   {
@@ -83,7 +120,12 @@ export async function buildLanguageModel(
   options: BuildModelOptions = {},
   customEndpointKey?: string | null,
 ): Promise<LanguageModel> {
-  if (providerNeedsKey(provider) && !keys[provider]) {
+  // A provider with a subscription sign-in is authorised either way, so the
+  // key requirement only bites when neither credential is available. An
+  // explicit API key wins: it is the one the user last typed.
+  const oauthProvider = oauthProviderFor(provider);
+  const useOAuth = oauthProvider !== null && !keys[provider];
+  if (providerNeedsKey(provider) && !keys[provider] && !useOAuth) {
     throw new Error(
       `No API key configured for ${provider}. Open Settings → AI to add one.`,
     );
@@ -94,7 +136,7 @@ export async function buildLanguageModel(
   const ollamaURL = options.ollamaBaseURL ?? OLLAMA_DEFAULT_BASE_URL;
   const compatURL = options.openaiCompatibleBaseURL ?? "";
   const epKey = customEndpointKey ?? "";
-  const cacheKey = `${provider} ${key} ${epKey} ${resolvedModelId} ${lmstudioURL} ${mlxURL} ${ollamaURL} ${compatURL}`;
+  const cacheKey = `${provider} ${key} ${useOAuth ? "oauth" : "key"} ${epKey} ${resolvedModelId} ${lmstudioURL} ${mlxURL} ${ollamaURL} ${compatURL}`;
   const hit = modelCache.get(cacheKey);
   if (hit) return hit;
 
@@ -107,7 +149,24 @@ export async function buildLanguageModel(
     }
     case "anthropic": {
       const { createAnthropic } = await import("@ai-sdk/anthropic");
-      built = createAnthropic({ apiKey: key })(resolvedModelId);
+      if (useOAuth) {
+        built = createAnthropic({
+          // Overwritten per request by the OAuth fetch; the SDK only needs a
+          // non-empty value here to build a request at all.
+          apiKey: "oauth",
+          fetch: createOAuthFetch("anthropic", (token) => ({
+            // A subscription token authenticates through x-api-key, not a
+            // bearer header, and the betas are what make the endpoint accept
+            // an OAuth credential instead of a console key.
+            "x-api-key": token.token,
+            "anthropic-beta": "oauth-2025-04-20,claude-code-20250219",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "x-app": "cli",
+          })),
+        })(resolvedModelId);
+      } else {
+        built = createAnthropic({ apiKey: key })(resolvedModelId);
+      }
       break;
     }
     case "google": {
@@ -208,6 +267,27 @@ export async function buildLanguageModel(
         baseURL: ollamaURL,
         fetch: localProxyFetch,
       })(resolvedModelId);
+      break;
+    }
+    case "chatgpt-codex": {
+      // A ChatGPT subscription does not reach the public OpenAI API: it talks
+      // to the Codex backend, which is the Responses API behind a different
+      // host and an account header taken from the token.
+      const { createOpenAI } = await import("@ai-sdk/openai");
+      const wireModelId = resolvedModelId.startsWith(CODEX_MODEL_PREFIX)
+        ? resolvedModelId.slice(CODEX_MODEL_PREFIX.length)
+        : resolvedModelId;
+      built = createOpenAI({
+        apiKey: "oauth",
+        baseURL: "https://chatgpt.com/backend-api/codex",
+        fetch: createOAuthFetch("openai-codex", (token) => ({
+          Authorization: `Bearer ${token.token}`,
+          ...(token.accountId
+            ? { "chatgpt-account-id": token.accountId }
+            : {}),
+          originator: "terax",
+        })),
+      }).responses(wireModelId);
       break;
     }
     case "cli-claude":
@@ -331,28 +411,6 @@ function buildStableSystem(
   return `${base}${memoryBlock}${personaBlock}${customBlock}`;
 }
 
-// OpenAI / Gemini / DeepSeek apply prefix caching automatically; only
-// Anthropic needs explicit breakpoints. Mark the stable system prefix and
-// the rotating conversation tail.
-function applyCacheBreakpoints(
-  messages: ModelMessage[],
-  provider: ProviderId,
-): ModelMessage[] {
-  if (provider !== "anthropic" || messages.length === 0) return messages;
-  const marker = {
-    anthropic: { cacheControl: { type: "ephemeral" as const } },
-  };
-  const withMarker = (m: ModelMessage): ModelMessage => ({
-    ...m,
-    providerOptions: { ...(m.providerOptions ?? {}), ...marker },
-  });
-  const out = messages.slice();
-  out[0] = withMarker(out[0]);
-  const lastIdx = out.length - 1;
-  if (lastIdx > 0) out[lastIdx] = withMarker(out[lastIdx]);
-  return out;
-}
-
 export type AgentUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -460,18 +518,19 @@ export async function runAgentStream(opts: RunAgentOptions) {
     opts.onCompact?.({ droppedCount: compact.droppedCount });
   }
 
-  const messages: ModelMessage[] = [{ role: "system", content: stableSystem }];
-  if (opts.planMode) {
-    messages.push({ role: "system", content: PLAN_MODE_PROMPT });
-  }
-  messages.push(...compactedHistory);
-
-  const finalMessages = applyCacheBreakpoints(messages, provider);
+  const prompt = prepareAgentPrompt(
+    stableSystem,
+    opts.planMode ? PLAN_MODE_PROMPT : null,
+    compactedHistory,
+    provider,
+  );
 
   let stepsSeen = 0;
   return streamText({
     model,
-    messages: finalMessages,
+    system: prompt.system,
+    messages: prompt.messages,
+    allowSystemInMessages: false,
     tools: buildTools(opts.toolContext),
     stopWhen: stepCountIs(MAX_AGENT_STEPS),
     abortSignal: opts.abortSignal,

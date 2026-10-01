@@ -34,6 +34,7 @@ import {
   Cancel01Icon,
   Clock01Icon,
   ComputerTerminal02Icon,
+  Flowchart01Icon,
   GitBranchIcon,
   GitCompareIcon,
   Globe02Icon,
@@ -51,6 +52,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AgentTabBadge } from "./AgentTabBadge";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
 
@@ -63,6 +65,7 @@ type Props = {
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
+  onNewMermaid: () => void;
   onNewGitGraph: () => void;
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
@@ -85,6 +88,7 @@ export function TabBar({
   onNewPrivate,
   onNewPreview,
   onNewEditor,
+  onNewMermaid,
   onNewGitGraph,
   onClose,
   onPin,
@@ -383,6 +387,7 @@ export function TabBar({
                       />
                     ) : null}
                   </span>
+                  <AgentTabBadge tab={t} />
                   {tabs.length > 1 && (
                     <span
                       role="button"
@@ -563,6 +568,14 @@ export function TabBar({
                 {fmtShortcut(MOD_KEY, "P")}
               </span>
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewMermaid()}>
+              <HugeiconsIcon
+                icon={Flowchart01Icon}
+                size={14}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">Mermaid</span>
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewGitGraph()}>
               <HugeiconsIcon
                 icon={GitBranchIcon}
@@ -596,6 +609,16 @@ export function TabIcon({ tab }: { tab: Tab }) {
     return (
       <HugeiconsIcon
         icon={Globe02Icon}
+        size={14}
+        strokeWidth={2}
+        className="shrink-0"
+      />
+    );
+  }
+  if (tab.kind === "mermaid") {
+    return (
+      <HugeiconsIcon
+        icon={Flowchart01Icon}
         size={14}
         strokeWidth={2}
         className="shrink-0"

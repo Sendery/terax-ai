@@ -33,6 +33,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { GraphRail, MAX_VISIBLE_LANES, railWidth } from "./GraphRail";
+import { commitMatches } from "./lib/filter";
+import { relativeCommitTime } from "./lib/relativeTime";
+import { RefBadges } from "./RefBadges";
 import {
   EMPTY_GRAPH_STATE,
   layoutGraph,
@@ -141,21 +144,6 @@ function authorTint(key: string): string {
     hash = (hash * 31 + key.charCodeAt(i)) | 0;
   }
   return AUTHOR_TINTS[Math.abs(hash) % AUTHOR_TINTS.length];
-}
-
-function compactDate(secs: number): string {
-  if (!secs) return "";
-  const d = new Date(secs * 1000);
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const month = d.toLocaleString(undefined, { month: "short" });
-  const day = String(d.getDate()).padStart(2, "0");
-  if (sameYear) {
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${month} ${day}  ${hh}:${mm}`;
-  }
-  return `${month} ${day} ${d.getFullYear()}`;
 }
 
 function statusTone(code: string): string {
@@ -293,17 +281,7 @@ export function GitHistoryPane({
   const filtered = useMemo(() => {
     const q = activeSearch.toLowerCase();
     if (!q) return commits;
-    return commits.filter((c) => {
-      const subject = c.subject.toLowerCase();
-      const author = c.author.toLowerCase();
-      const email = c.authorEmail.toLowerCase();
-      return (
-        subject.includes(q) ||
-        author.includes(q) ||
-        email.includes(q) ||
-        c.shortSha.includes(q)
-      );
-    });
+    return commits.filter((c) => commitMatches(c, q));
   }, [commits, activeSearch]);
 
   const virtualizer = useVirtualizer({
@@ -547,7 +525,7 @@ export function GitHistoryPane({
               <div className="min-w-0">Subject</div>
               <div />
               <div className="ml-2">Author</div>
-              <div className="text-right">Date</div>
+              <div className="text-right">Age</div>
               <div className="text-right">Changes</div>
             </div>
             <div
@@ -703,7 +681,7 @@ const CommitRow = memo(function CommitRow({
   gridTemplate,
   onClick,
 }: CommitRowProps) {
-  const date = compactDate(commit.timestampSecs);
+  const date = relativeCommitTime(commit.timestampSecs, Date.now() / 1000);
   const initials = authorInitials(commit.author);
   const totalStat = commit.insertions + commit.deletions;
   return (
@@ -729,19 +707,28 @@ const CommitRow = memo(function CommitRow({
       <span className="pl-px font-mono text-[10.5px] tabular-nums text-muted-foreground/80">
         {commit.shortSha}
       </span>
-      <span
-        className={cn(
-          "min-w-0 truncate text-[12px] leading-tight",
-          active
-            ? "font-semibold text-foreground"
-            : "font-medium text-foreground/95",
-        )}
-      >
-        {commit.subject ? (
-          highlight(commit.subject, query)
-        ) : (
-          <span className="text-muted-foreground">(no subject)</span>
-        )}
+      <span className="flex min-w-0 items-center gap-1.5">
+        {/* Refs lead the message, the way `git log --decorate` prints them:
+            they are short and fixed, so the subject is what gives way. */}
+        <RefBadges
+          refs={commit.refs}
+          limit={2}
+          className="max-w-[45%] shrink-0"
+        />
+        <span
+          className={cn(
+            "min-w-0 truncate text-[12px] leading-tight",
+            active
+              ? "font-semibold text-foreground"
+              : "font-medium text-foreground/95",
+          )}
+        >
+          {commit.subject ? (
+            highlight(commit.subject, query)
+          ) : (
+            <span className="text-muted-foreground">(no subject)</span>
+          )}
+        </span>
       </span>
       <span aria-hidden />
       <span
@@ -760,7 +747,10 @@ const CommitRow = memo(function CommitRow({
           {commit.author ? highlight(commit.author, query) : "Unknown"}
         </span>
       </span>
-      <span className="text-right font-mono text-[10.5px] tabular-nums text-muted-foreground/75">
+      <span
+        className="text-right font-mono text-[10.5px] tabular-nums text-muted-foreground/75"
+        title={absoluteTime(commit.timestampSecs)}
+      >
         {date}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1.5 font-mono text-[10px] tabular-nums">
@@ -861,6 +851,16 @@ function CommitDetail({
           <span className="text-muted-foreground/45">·</span>
           <span className="shrink-0 tabular-nums">{absolute}</span>
         </div>
+
+        {commit.refs.length > 0 ? (
+          <RefBadges refs={commit.refs} limit={8} className="mt-2 flex-wrap" />
+        ) : null}
+
+        {commit.body ? (
+          <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-muted-foreground">
+            {commit.body}
+          </p>
+        ) : null}
 
         <div className="mt-2.5 flex items-center gap-1">
           <Button

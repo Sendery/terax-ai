@@ -89,6 +89,16 @@ export function tabColorStyle(color: TabColor, active: boolean): TabColorStyle {
   };
 }
 
+/**
+ * Colour of the seam between split terminals. It follows the tab accent so a
+ * split reads as belonging to its tab; an uncoloured tab falls back to
+ * `--muted-foreground`, which carries in both themes. `--border` and even
+ * `--ring` read as almost nothing at this width against a terminal background.
+ */
+export function paneDividerColor(color: TabColor | undefined): string {
+  return color ? TAB_COLOR_CSS[color] : "var(--muted-foreground)";
+}
+
 export function tabAccessibleLabel(
   title: string,
   color: TabColor | undefined,

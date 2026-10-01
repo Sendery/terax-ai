@@ -10,6 +10,11 @@ const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "pi"];
 // OSC 777 marker our Claude Code hooks emit via `terminalSequence`.
 const TERAX_MARKER: &[u8] = b"notify;Terax;";
 
+/// Upper bound on the text an agent may attach to a signal. A notification
+/// shows a line, not a transcript, and the payload arrives over a terminal
+/// stream any process can write to.
+pub const MAX_SIGNAL_TEXT: usize = 160;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
     Ground,
@@ -28,29 +33,140 @@ enum Status {
 pub enum Transition {
     Started { agent: String },
     Working,
-    Attention,
-    Finished,
+    /// The agent is blocked on the user. `text` is what it said it needs and
+    /// `reason` which kind of block it is, when the hook could tell.
+    Attention {
+        text: Option<String>,
+        reason: Option<&'static str>,
+    },
+    /// The agent ended a turn. `text` is its closing line, when it reported one.
+    Finished { text: Option<String> },
+    /// A subagent the session launched came back. The session itself carries
+    /// on, so this never changes whether it is working or waiting.
+    Subagent { text: Option<String> },
+    /// The transcript this leaf is writing, as the agent itself reported it.
+    /// Emitted once per change so the webview never has to guess which file
+    /// belongs to which pane.
+    Bound { session_id: String },
     Exited,
 }
 
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSignal {
     pub id: u32,
     pub kind: &'static str,
     pub agent: Option<String>,
+    /// Line the agent attached to the event, already bounded and stripped of
+    /// control characters. Absent when it reported none.
+    pub text: Option<String>,
+    /// Why an `attention` signal fired: `permission`, `question` or `idle`.
+    pub reason: Option<&'static str>,
+    /// Only set on `bound`, and always a safe id.
+    pub session_id: Option<String>,
 }
 
 impl Transition {
     pub fn into_signal(self, id: u32) -> AgentSignal {
+        let signal = |kind: &'static str| AgentSignal {
+            id,
+            kind,
+            agent: None,
+            text: None,
+            reason: None,
+            session_id: None,
+        };
         match self {
-            Transition::Started { agent } => {
-                AgentSignal { id, kind: "started", agent: Some(agent) }
-            }
-            Transition::Working => AgentSignal { id, kind: "working", agent: None },
-            Transition::Attention => AgentSignal { id, kind: "attention", agent: None },
-            Transition::Finished => AgentSignal { id, kind: "finished", agent: None },
-            Transition::Exited => AgentSignal { id, kind: "exited", agent: None },
+            Transition::Started { agent } => AgentSignal {
+                agent: Some(agent),
+                ..signal("started")
+            },
+            Transition::Working => signal("working"),
+            Transition::Attention { text, reason } => AgentSignal {
+                text,
+                reason,
+                ..signal("attention")
+            },
+            Transition::Finished { text } => AgentSignal {
+                text,
+                ..signal("finished")
+            },
+            Transition::Subagent { text } => AgentSignal {
+                text,
+                ..signal("subagent")
+            },
+            Transition::Bound { session_id } => AgentSignal {
+                session_id: Some(session_id),
+                ..signal("bound")
+            },
+            Transition::Exited => signal("exited"),
         }
+    }
+}
+
+/// Bounds and strips the free text an agent attached to an event.
+///
+/// It arrives over a terminal stream any process can write to, so control
+/// characters are removed and the length is capped before it reaches the UI.
+fn clean_text(raw: &[u8]) -> Option<String> {
+    let text: String = String::from_utf8_lossy(raw)
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(MAX_SIGNAL_TEXT)
+        .collect();
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// One hook event after the agent name: `<event>[:<detail>][;sid=<id>][;<text>]`.
+///
+/// Hooks installed before the detail and session fields existed still write
+/// `<event>[;<text>]` and parse to the same event without them. The text is
+/// the rest of the payload, so it may contain the field separator.
+#[derive(Debug, PartialEq, Eq)]
+struct HookEvent<'a> {
+    event: &'a [u8],
+    detail: &'a [u8],
+    session_id: Option<String>,
+    text: Option<String>,
+}
+
+fn parse_hook_event(payload: &[u8]) -> HookEvent<'_> {
+    let (head, mut rest) = match payload.iter().position(|b| *b == b';') {
+        Some(i) => (&payload[..i], Some(&payload[i + 1..])),
+        None => (payload, None),
+    };
+    let (event, detail) = match head.iter().position(|b| *b == b':') {
+        Some(i) => (&head[..i], &head[i + 1..]),
+        None => (head, &head[..0]),
+    };
+    let mut session_id = None;
+    if let Some(after) = rest.and_then(|r| r.strip_prefix(b"sid=")) {
+        let end = after.iter().position(|b| *b == b';').unwrap_or(after.len());
+        let id = String::from_utf8_lossy(&after[..end]).into_owned();
+        // The id is later used to resolve a file, so a crafted one is dropped
+        // here rather than trusted downstream.
+        if crate::modules::agentsessions::is_safe_session_id(&id) {
+            session_id = Some(id);
+        }
+        rest = after.get(end + 1..);
+    }
+    HookEvent {
+        event,
+        detail,
+        session_id,
+        text: rest.and_then(clean_text),
+    }
+}
+
+/// Claude's `notification_type`, reduced to the three blocks the UI names.
+/// First-party adapters may send the short form directly.
+fn attention_reason(detail: &[u8]) -> Option<&'static str> {
+    match detail {
+        b"permission_prompt" | b"permission" => Some("permission"),
+        b"elicitation_dialog" | b"question" => Some("question"),
+        b"idle_prompt" | b"idle" => Some("idle"),
+        _ => None,
     }
 }
 
@@ -60,6 +176,7 @@ pub struct AgentDetector {
     osc: Vec<u8>,
     armed: bool,
     status: Status,
+    session_id: Option<String>,
 }
 
 impl AgentDetector {
@@ -74,6 +191,7 @@ impl AgentDetector {
             osc: Vec::new(),
             armed: false,
             status: Status::Working,
+            session_id: None,
         }
     }
 
@@ -142,6 +260,8 @@ impl AgentDetector {
     fn disarm(&mut self) {
         self.armed = false;
         self.status = Status::Working;
+        // A new process in this pane may well write a different transcript.
+        self.session_id = None;
     }
 
     fn finish_osc<F: FnMut(Transition)>(&mut self, emit: &mut F) {
@@ -172,22 +292,37 @@ impl AgentDetector {
                     _ => None,
                 })
                 .unwrap_or(("claude", marker));
-            match event {
-                b"working" => {
-                    self.ensure_armed_as(agent, emit);
-                    self.set_working(emit);
+            let hook = parse_hook_event(event);
+            let known = matches!(
+                hook.event,
+                b"working" | b"attention" | b"finished" | b"subagent"
+            );
+            // A successful login is reported through the same hook, but it
+            // asks nothing of the user.
+            if !known || (hook.event == b"attention" && hook.detail == b"auth_success") {
+                return;
+            }
+            self.ensure_armed_as(agent, emit);
+            if let Some(id) = hook.session_id {
+                if self.session_id.as_deref() != Some(id.as_str()) {
+                    self.session_id = Some(id.clone());
+                    emit(Transition::Bound { session_id: id });
                 }
+            }
+            match hook.event {
+                b"working" => self.set_working(emit),
                 b"attention" => {
-                    self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
-                    emit(Transition::Attention);
+                    emit(Transition::Attention {
+                        text: hook.text,
+                        reason: attention_reason(hook.detail),
+                    });
                 }
                 b"finished" => {
-                    self.ensure_armed_as(agent, emit);
                     self.status = Status::Waiting;
-                    emit(Transition::Finished);
+                    emit(Transition::Finished { text: hook.text });
                 }
-                _ => {}
+                _ => emit(Transition::Subagent { text: hook.text }),
             }
             return;
         }
@@ -235,7 +370,10 @@ impl AgentDetector {
     fn generic_attention<F: FnMut(Transition)>(&mut self, emit: &mut F) {
         if self.armed {
             self.status = Status::Waiting;
-            emit(Transition::Attention);
+            emit(Transition::Attention {
+                text: None,
+                reason: None,
+            });
         }
     }
 
@@ -347,10 +485,10 @@ mod tests {
     fn terax_marker_drives_status() {
         let mut d = AgentDetector::new();
         run(&mut d, &osc("133;C;claude"));
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention { text: None, reason: None }]);
         assert_eq!(run(&mut d, &osc("777;notify;Terax;working")), vec![Transition::Working]);
         assert!(run(&mut d, &osc("777;notify;Terax;working")).is_empty());
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;finished")), vec![Transition::Finished]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;finished")), vec![Transition::Finished { text: None }]);
     }
 
     #[test]
@@ -358,7 +496,7 @@ mod tests {
         let mut d = AgentDetector::new();
         assert_eq!(
             run(&mut d, &osc("777;notify;Terax;attention")),
-            vec![started("claude"), Transition::Attention]
+            vec![started("claude"), Transition::Attention { text: None, reason: None }]
         );
     }
 
@@ -385,8 +523,8 @@ mod tests {
         let mut d = AgentDetector::new();
         assert!(run(&mut d, &osc("777;notify;Other;ready")).is_empty());
         run(&mut d, &osc("133;C;codex"));
-        assert_eq!(run(&mut d, &osc("777;notify;Codex;ready")), vec![Transition::Attention]);
-        assert_eq!(run(&mut d, &osc("9;needs you")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Codex;ready")), vec![Transition::Attention { text: None, reason: None }]);
+        assert_eq!(run(&mut d, &osc("9;needs you")), vec![Transition::Attention { text: None, reason: None }]);
         assert!(run(&mut d, &osc("9;4;1;50")).is_empty());
     }
 
@@ -438,6 +576,214 @@ mod tests {
         seq.extend(std::iter::repeat_n(b'x', OSC_MAX + 100));
         seq.extend_from_slice(&[ESC, ST_FINAL]);
         assert!(run(&mut d, &seq).is_empty());
-        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention]);
+        assert_eq!(run(&mut d, &osc("777;notify;Terax;attention")), vec![Transition::Attention { text: None, reason: None }]);
+    }
+}
+
+#[cfg(test)]
+mod message_tests {
+    use super::*;
+
+    fn osc_seq(body: &str) -> Vec<u8> {
+        let mut v = vec![ESC, OSC_INTRO];
+        v.extend_from_slice(body.as_bytes());
+        v.push(BEL);
+        v
+    }
+
+    fn feed(d: &mut AgentDetector, bytes: &[u8]) -> Vec<Transition> {
+        let mut out = Vec::new();
+        d.process(bytes, |t| out.push(t));
+        out
+    }
+
+    #[test]
+    fn carries_the_text_a_hook_reported() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(
+            &mut d,
+            &osc_seq("777;notify;Terax;attention;Claude needs your permission to use Bash"),
+        );
+
+        assert_eq!(
+            out,
+            vec![
+                Transition::Started { agent: "claude".into() },
+                Transition::Attention {
+                    text: Some("Claude needs your permission to use Bash".into()),
+                    reason: None,
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_semicolons_inside_the_text() {
+        // The message is the rest of the payload, so it may contain the field
+        // separator without being cut short.
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished;built; ran tests"));
+
+        assert_eq!(
+            out.last(),
+            Some(&Transition::Finished { text: Some("built; ran tests".into()) })
+        );
+    }
+
+    #[test]
+    fn tolerates_an_event_with_no_text() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished"));
+
+        assert_eq!(out.last(), Some(&Transition::Finished { text: None }));
+    }
+
+    #[test]
+    fn treats_an_empty_text_as_none() {
+        // A hook whose extraction found nothing still emits the trailing
+        // separator; that must not surface as an empty line in the UI.
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;finished;"));
+
+        assert_eq!(out.last(), Some(&Transition::Finished { text: None }));
+    }
+
+    #[test]
+    fn reads_text_for_a_named_adapter() {
+        let mut d = AgentDetector::new();
+
+        let out = feed(&mut d, &osc_seq("777;notify;Terax;pi;attention;pick a branch"));
+
+        assert_eq!(
+            out,
+            vec![
+                Transition::Started { agent: "pi".into() },
+                Transition::Attention { text: Some("pick a branch".into()), reason: None }
+            ]
+        );
+    }
+
+    #[test]
+    fn bounds_a_long_message() {
+        let mut d = AgentDetector::new();
+        let long = "x".repeat(400);
+
+        let out = feed(&mut d, &osc_seq(&format!("777;notify;Terax;attention;{long}")));
+
+        let Some(Transition::Attention { text: Some(text), reason: None }) = out.last() else {
+            panic!("expected attention with text");
+        };
+        assert_eq!(text.chars().count(), MAX_SIGNAL_TEXT);
+    }
+
+    fn armed_claude() -> AgentDetector {
+        let mut d = AgentDetector::new();
+        feed(&mut d, &osc_seq("133;C;claude"));
+        d
+    }
+
+    #[test]
+    fn names_why_the_agent_is_blocked() {
+        let mut d = armed_claude();
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;attention:permission_prompt;sid=;Claude needs your permission to use Bash")),
+            vec![Transition::Attention {
+                text: Some("Claude needs your permission to use Bash".into()),
+                reason: Some("permission"),
+            }]
+        );
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;attention:question;sid=;")),
+            vec![Transition::Attention { text: None, reason: Some("question") }]
+        );
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;attention:idle_prompt")),
+            vec![Transition::Attention { text: None, reason: Some("idle") }]
+        );
+    }
+
+    #[test]
+    fn binds_the_session_once_and_again_only_when_it_changes() {
+        let mut d = armed_claude();
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;working:;sid=abc-123;")),
+            // Already working since the command started, so only the binding is new.
+            vec![Transition::Bound { session_id: "abc-123".into() }]
+        );
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;finished:;sid=abc-123;done")),
+            vec![Transition::Finished { text: Some("done".into()) }]
+        );
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;working:;sid=def;")),
+            vec![Transition::Bound { session_id: "def".into() }, Transition::Working]
+        );
+    }
+
+    #[test]
+    fn forgets_the_session_when_the_process_exits() {
+        let mut d = armed_claude();
+        feed(&mut d, &osc_seq("777;notify;Terax;working:;sid=abc;"));
+        feed(&mut d, &osc_seq("133;D;0"));
+        feed(&mut d, &osc_seq("133;C;claude"));
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;working:;sid=abc;")),
+            vec![Transition::Bound { session_id: "abc".into() }]
+        );
+    }
+
+    #[test]
+    fn drops_a_session_id_that_could_escape_the_sessions_directory() {
+        let mut d = armed_claude();
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;finished:;sid=../../etc;")),
+            vec![Transition::Finished { text: None }]
+        );
+    }
+
+    #[test]
+    fn reports_a_subagent_without_touching_the_session_status() {
+        let mut d = armed_claude();
+        feed(&mut d, &osc_seq("777;notify;Terax;working"));
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;subagent:;sid=;")),
+            vec![Transition::Subagent { text: None }]
+        );
+        // Still working: the next working marker is a no-op.
+        assert!(feed(&mut d, &osc_seq("777;notify;Terax;working")).is_empty());
+    }
+
+    #[test]
+    fn a_login_notice_asks_nothing_of_the_user() {
+        let mut d = armed_claude();
+        assert!(feed(&mut d, &osc_seq("777;notify;Terax;attention:auth_success;sid=;")).is_empty());
+    }
+
+    #[test]
+    fn hooks_installed_before_the_new_fields_still_parse() {
+        let mut d = armed_claude();
+        assert_eq!(
+            feed(&mut d, &osc_seq("777;notify;Terax;attention;Claude is waiting")),
+            vec![Transition::Attention { text: Some("Claude is waiting".into()), reason: None }]
+        );
+    }
+
+    #[test]
+    fn the_signal_carries_reason_and_session_to_the_webview() {
+        let json = serde_json::to_value(
+            Transition::Attention { text: None, reason: Some("question") }.into_signal(7),
+        )
+        .unwrap();
+        assert_eq!(json["kind"], "attention");
+        assert_eq!(json["reason"], "question");
+        let bound = serde_json::to_value(
+            Transition::Bound { session_id: "abc".into() }.into_signal(7),
+        )
+        .unwrap();
+        assert_eq!(bound["sessionId"], "abc");
     }
 }

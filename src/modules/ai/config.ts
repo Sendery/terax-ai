@@ -14,6 +14,7 @@ export type ProviderId =
   | "lmstudio"
   | "mlx"
   | "ollama"
+  | "chatgpt-codex"
   | "cli-claude"
   | "cli-codex"
   | "cli-cursor"
@@ -31,6 +32,27 @@ export const CLI_PROVIDERS: Partial<Record<ProviderId, "claude" | "codex" | "cur
 
 export function isCliProvider(id: ProviderId): boolean {
   return id in CLI_PROVIDERS;
+}
+
+/** Ids understood by the Rust OAuth module. Not the same namespace as
+ *  `ProviderId`: one Terax provider maps to at most one subscription login. */
+export type OAuthProviderId = "anthropic" | "openai-codex";
+
+/** Providers that can be authorised with a browser sign-in instead of (or as
+ *  well as) an API key. Anthropic accepts both; the ChatGPT subscription has no
+ *  API key at all, so OAuth is the only way in. */
+export const OAUTH_PROVIDERS: Partial<Record<ProviderId, OAuthProviderId>> = {
+  anthropic: "anthropic",
+  "chatgpt-codex": "openai-codex",
+};
+
+export function oauthProviderFor(id: ProviderId): OAuthProviderId | null {
+  return OAUTH_PROVIDERS[id] ?? null;
+}
+
+/** True when a browser sign-in is the only way to authorise this provider. */
+export function providerRequiresOAuth(id: ProviderId): boolean {
+  return oauthProviderFor(id) !== null && !providerSupportsKey(id);
 }
 
 export type ProviderInfo = {
@@ -137,6 +159,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     consoleUrl: "https://ollama.com/download",
   },
   {
+    id: "chatgpt-codex",
+    label: "ChatGPT (Codex)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://chatgpt.com/codex",
+  },
+  {
     id: "cli-claude",
     label: "Claude Code (CLI)",
     keyringAccount: "",
@@ -235,12 +264,30 @@ export type ModelInfo = {
 export const MODELS = [
   // ── OpenAI ────────────────────────────────────────────────────────────────
   {
+    id: "gpt-6-astra",
+    provider: "openai",
+    label: "GPT-6 Astra",
+    hint: "Flagship",
+    description: "OpenAI's frontier model for computer use, browsing and software engineering.",
+    capabilities: { intelligence: 5, speed: 3, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
     id: "gpt-5.5",
     provider: "openai",
     label: "GPT-5.5",
     hint: "Flagship",
     description: "Frontier reasoning and code.",
     capabilities: { intelligence: 5, speed: 3, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "gpt-5.5-pro",
+    provider: "openai",
+    label: "GPT-5.5 Pro",
+    hint: "Max",
+    description: "Highest-accuracy version for the hardest professional and agentic tasks.",
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
     tags: ["vision", "reasoning", "tools", "coding"],
   },
   {
@@ -282,11 +329,56 @@ export const MODELS = [
 
   // ── Anthropic ─────────────────────────────────────────────────────────────
   {
+    id: "claude-fable-5-1",
+    provider: "anthropic",
+    label: "Claude Fable 5.1",
+    hint: "Max",
+    description: "Anthropic's most capable model, for the hardest reasoning and long-horizon agentic work.",
+    capabilities: { intelligence: 5, speed: 1, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-opus-5-5",
+    provider: "anthropic",
+    label: "Claude Opus 5.5",
+    hint: "Best",
+    description: "The current Opus: frontier coding and agentic work, cheaper than Opus 5.",
+    capabilities: { intelligence: 5, speed: 2, cost: 2 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-opus-5",
+    provider: "anthropic",
+    label: "Claude Opus 5",
+    hint: "Strong",
+    description: "Deep reasoning and long-horizon agentic coding.",
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-sonnet-5",
+    provider: "anthropic",
+    label: "Claude Sonnet 5",
+    hint: "Balanced",
+    description: "Everyday workhorse with a million-token window.",
+    capabilities: { intelligence: 4, speed: 4, cost: 3 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "claude-opus-4-8",
+    provider: "anthropic",
+    label: "Claude Opus 4.8",
+    hint: "Best",
+    description: "Anthropic's most capable model for complex reasoning and long-horizon agentic coding.",
+    capabilities: { intelligence: 5, speed: 2, cost: 1 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
     id: "claude-opus-4-7",
     provider: "anthropic",
     label: "Claude Opus 4.7",
-    hint: "Best",
-    description: "Anthropic's flagship for long reasoning.",
+    hint: "Previous",
+    description: "Previous-gen flagship for long reasoning.",
     capabilities: { intelligence: 5, speed: 2, cost: 1 },
     tags: ["vision", "reasoning", "tools", "coding"],
   },
@@ -319,6 +411,15 @@ export const MODELS = [
   },
 
   // ── Google ────────────────────────────────────────────────────────────────
+  {
+    id: "gemini-3.8-flash",
+    provider: "google",
+    label: "Gemini 3.8 Flash",
+    hint: "Fast",
+    description: "Google's current workhorse: Pro-level intelligence at Flash speed.",
+    capabilities: { intelligence: 4, speed: 5, cost: 4 },
+    tags: ["vision", "tools", "coding"],
+  },
   {
     id: "gemini-3.5-flash",
     provider: "google",
@@ -401,6 +502,24 @@ export const MODELS = [
     description: "Cheaper Grok 4 with vision and reasoning.",
     capabilities: { intelligence: 4, speed: 4, cost: 4 },
     tags: ["vision", "reasoning", "tools"],
+  },
+  {
+    id: "grok-4.3",
+    provider: "xai",
+    label: "Grok 4.3",
+    hint: "Flagship",
+    description: "Most intelligent and fastest Grok. Strong agentic tool use and 1M context.",
+    capabilities: { intelligence: 5, speed: 4, cost: 2 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+  {
+    id: "grok-build-0.1",
+    provider: "xai",
+    label: "Grok Build 0.1",
+    hint: "Coding",
+    description: "Specialized fast coding model for agentic workflows (powers Grok Build CLI).",
+    capabilities: { intelligence: 4, speed: 5, cost: 4 },
+    tags: ["tools", "coding"],
   },
 
   // ── DeepSeek ──────────────────────────────────────────────────────────────
@@ -569,6 +688,29 @@ export const MODELS = [
     capabilities: { intelligence: 3, speed: 3, cost: 5 },
   },
 
+  // ── ChatGPT subscription (Codex backend, browser sign-in, no API key) ─────
+  // Ids carry a `codex-` prefix because the catalogue is keyed by id and these
+  // reach the same OpenAI models through a different account and endpoint.
+  // `buildLanguageModel` strips the prefix to get the wire model id.
+  {
+    id: "codex-gpt-5.3-codex",
+    provider: "chatgpt-codex",
+    label: "GPT-5.3 Codex",
+    hint: "Codex",
+    description: "Tuned for code and tool use, billed to your ChatGPT plan.",
+    capabilities: { intelligence: 4, speed: 4, cost: 5 },
+    tags: ["tools", "coding"],
+  },
+  {
+    id: "codex-gpt-5.5",
+    provider: "chatgpt-codex",
+    label: "GPT-5.5",
+    hint: "Codex",
+    description: "Frontier reasoning, billed to your ChatGPT plan.",
+    capabilities: { intelligence: 5, speed: 3, cost: 5 },
+    tags: ["vision", "reasoning", "tools", "coding"],
+  },
+
   // ── Local CLI agents (no API key; the installed CLI runs its own agent) ───
   {
     id: "cli-claude-agent",
@@ -666,15 +808,23 @@ export const DEFAULT_MODEL_ID: ModelId = "gpt-5.4-mini";
  *  context-usage indicator in the AI mini-window header. Conservative
  *  estimates — actual provider limits may shift. */
 export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gpt-6-astra": 1_000_000,
   "gpt-5.5": 1_050_000,
+  "gpt-5.5-pro": 1_050_000,
   "gpt-5.4-mini": 400_000,
   "gpt-5.4-nano": 400_000,
   "gpt-5.3-codex": 400_000,
   "gpt-4.1-mini": 128_000,
+  "claude-fable-5-1": 1_000_000,
+  "claude-opus-5-5": 1_000_000,
+  "claude-opus-5": 1_000_000,
+  "claude-sonnet-5": 1_000_000,
   "claude-opus-4-7": 200_000,
+  "claude-opus-4-8": 1_000_000,
   "claude-sonnet-4-6": 200_000,
   "claude-haiku-4-5": 200_000,
   "claude-opus-4-6": 200_000,
+  "gemini-3.8-flash": 1_000_000,
   "gemini-3.5-flash": 1_000_000,
   "gemini-3.1-flash-lite": 1_000_000,
   "gemini-3.1-pro-preview": 1_000_000,
@@ -684,6 +834,8 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "grok-4.20-reasoning": 2_000_000,
   "grok-4.20-non-reasoning": 2_000_000,
   "grok-4-fast-reasoning": 2_000_000,
+  "grok-4.3": 1_000_000,
+  "grok-build-0.1": 256_000,
   "deepseek-v4-pro": 1_000_000,
   "deepseek-v4-flash": 1_000_000,
   "deepseek-reasoner": 128_000,
@@ -693,6 +845,10 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "openai/gpt-oss-20b": 128_000,
   "llama-3.3-70b-versatile": 128_000,
   "deepseek-r1-distill-llama-70b": 128_000,
+  // The subscription copies reach the same OpenAI models, so they carry the
+  // same windows; without an entry the usage indicator would understate them.
+  "codex-gpt-5.3-codex": 400_000,
+  "codex-gpt-5.5": 1_050_000,
   "openrouter-custom": 256_000,
   "openai-compatible-custom": 128_000,
   "lmstudio-local": 32_000,
@@ -721,12 +877,19 @@ export type ModelPricing = {
 };
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  "gpt-6-astra": { input: 10, output: 50, cacheRead: 1 },
   "gpt-5.5": { input: 5, output: 15, cacheRead: 0.5 },
+  "gpt-5.5-pro": { input: 30, output: 180 },
   "gpt-5.4-mini": { input: 0.4, output: 1.6, cacheRead: 0.04 },
   "gpt-5.4-nano": { input: 0.1, output: 0.4, cacheRead: 0.01 },
   "gpt-5.3-codex": { input: 1.5, output: 6, cacheRead: 0.15 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6, cacheRead: 0.1 },
+  "claude-fable-5-1": { input: 10, output: 50, cacheRead: 0.25 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
+  "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5 },
+  "claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2 },
   "claude-opus-4-7": { input: 15, output: 75, cacheRead: 1.5 },
+  "claude-opus-4-8": { input: 5, output: 25, cacheRead: 0.5 },
   "claude-opus-4-6": { input: 15, output: 75, cacheRead: 1.5 },
   "claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.3 },
   "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1 },
@@ -739,6 +902,8 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "grok-4.20-reasoning": { input: 3, output: 15 },
   "grok-4.20-non-reasoning": { input: 1, output: 5 },
   "grok-4-fast-reasoning": { input: 0.2, output: 0.5 },
+  "grok-4.3": { input: 1.25, output: 2.5 },
+  "grok-build-0.1": { input: 1, output: 2 },
   "deepseek-v4-pro": { input: 0.28, output: 1.1, cacheRead: 0.028 },
   "deepseek-v4-flash": { input: 0.07, output: 0.27, cacheRead: 0.007 },
   "deepseek-reasoner": { input: 0.55, output: 2.19, cacheRead: 0.14 },
@@ -765,6 +930,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "mlx",
   "ollama",
   "openai-compatible",
+  "chatgpt-codex",
   "cli-claude",
   "cli-codex",
   "cli-cursor",
@@ -795,7 +961,7 @@ export const DEFAULT_AUTOCOMPLETE_MODEL: Partial<Record<ProviderId, string>> = {
   openai: "gpt-5.4-nano",
   anthropic: "claude-haiku-4-5",
   google: "gemini-2.5-flash",
-  xai: "grok-4-fast-reasoning",
+  xai: "grok-4.3",
   deepseek: "deepseek-v4-flash",
   openrouter: "openai/gpt-5.4-mini",
   "openai-compatible": "",
@@ -902,6 +1068,7 @@ const LITE_SYSTEM_PROMPT_MODEL_IDS = new Set<string>([
   "llama3.3-70b",
   "llama-3.3-70b-versatile",
   "qwen-3-32b",
+  "grok-build-0.1",
 ]);
 
 export function selectSystemPrompt(modelId: string | undefined): string {

@@ -37,8 +37,11 @@ export type ShortcutId =
   | "view.zoomReset"
   | "view.zenMode"
   | "ai.toggle"
+  | "ai.toggleMini"
   | "ai.askSelection"
   | "notes.addSelection"
+  | "tts.readSelection"
+  | "tts.stop"
   | "settings.open"
   | "sidebar.toggle"
   | "editor.undo"
@@ -53,6 +56,7 @@ export type ShortcutGroup =
   | "Search"
   | "AI"
   | "Notes"
+  | "Voice"
   | "View"
   | "Editor";
 
@@ -248,6 +252,12 @@ export const SHORTCUTS: Shortcut[] = [
     defaultBindings: [{ [MOD_PROP]: true, key: "i" }],
   },
   {
+    id: "ai.toggleMini",
+    label: "Toggle AI chat window",
+    group: "AI",
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "i" }],
+  },
+  {
     id: "ai.askSelection",
     label: "Ask AI about selection",
     group: "AI",
@@ -258,6 +268,23 @@ export const SHORTCUTS: Shortcut[] = [
     label: "Add selection to notes",
     group: "Notes",
     defaultBindings: [{ [MOD_PROP]: true, key: "l" }],
+  },
+  {
+    id: "tts.readSelection",
+    label: "Read selection aloud",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "r" }],
+  },
+  {
+    id: "tts.stop",
+    label: "Stop reading aloud",
+    group: "Voice",
+    // Both encodings of the same chord: `e.key` is the shifted character on a
+    // US layout and the unshifted one on layouts where Shift+. stays a period.
+    defaultBindings: [
+      { [MOD_PROP]: true, shift: true, key: "." },
+      { [MOD_PROP]: true, shift: true, key: ">" },
+    ],
   },
   {
     id: "sidebar.toggle",
@@ -307,7 +334,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "view.zenMode",
     label: "Toggle zen mode",
     group: "View",
-    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "z" }],
+    defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "'" }],
   },
   // Editor entries are display-only: CodeMirror's historyKeymap binds these
   // keys natively. We register them here so the shortcuts dialog can surface
@@ -337,12 +364,36 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   "Search",
   "AI",
   "Notes",
+  "Voice",
   "Editor",
 ];
 
 /**
  * Matching logic: checks if a KeyboardEvent matches a KeyBinding.
  */
+const CODE_TO_KEY: Record<string, string> = {
+  Backslash: "\\",
+  Slash: "/",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Backquote: "`",
+  Minus: "-",
+  Equal: "=",
+  Space: " ",
+};
+
+// Option and Shift combinations rewrite e.key (macOS Option gives "«", "…",
+// dead keys; Shift turns "." into ">"); the physical key survives in e.code.
+function keyFromCode(code: string): string | null {
+  if (code.startsWith("Key")) return code.slice(3).toLowerCase();
+  if (code.startsWith("Digit")) return code.slice(5);
+  return CODE_TO_KEY[code] ?? null;
+}
+
 export function matchBinding(
   e: KeyboardEvent,
   binding: KeyBinding,
@@ -355,7 +406,8 @@ export function matchBinding(
   if (id === "tab.selectByIndex") {
     if (!/^[1-9]$/.test(e.key)) return false;
   } else if (eventKey !== bindingKey) {
-    return false;
+    if (!binding.alt && !binding.shift) return false;
+    if (keyFromCode(e.code) !== bindingKey) return false;
   }
 
   return (

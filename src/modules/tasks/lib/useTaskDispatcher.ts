@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 
 import {
-  buildPiArgv,
+  buildAgentArgv,
   formatCommandLine,
   promptKeystrokes,
   recoverCommandLine,
@@ -21,8 +21,9 @@ const POLL_MS = 2_000;
 export type TabTarget = {
   tabId: number;
   leafId: number;
-  /** True when pi is already running in this leaf and only needs the prompt. */
-  piRunning: boolean;
+  /** True when this task's agent is already running in the leaf and only needs
+   *  the prompt. */
+  agentRunning: boolean;
 };
 
 export type DispatcherDeps = {
@@ -30,7 +31,10 @@ export type DispatcherDeps = {
   paused: boolean;
   shellFlavor: ShellFlavor;
   recordRun: (run: TaskRun) => void;
-  markDispatched: (taskId: string, at: number) => void;
+  /** Records the run against the task. The session id is passed so the task can
+   *  remember the session it owns, which is what tells the next run whether to
+   *  create or resume it. */
+  markDispatched: (taskId: string, at: number, sessionId: string) => void;
   disableTask: (taskId: string) => void;
   notify: (message: string, tone: "info" | "warning" | "error") => void;
   /** Focuses or creates the terminal tab that owns this task. */
@@ -123,9 +127,14 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
   );
 
   const runHeadless = useCallback(
-    async (task: ScheduledTask, run: TaskRun, sessionId: string) => {
+    async (
+      task: ScheduledTask,
+      run: TaskRun,
+      sessionId: string,
+      resume: boolean,
+    ) => {
       const d = depsRef.current;
-      const argv = buildPiArgv(task, sessionId, { headless: true });
+      const argv = buildAgentArgv(task, sessionId, { headless: true, resume });
       const commandLine = formatCommandLine(argv, d.shellFlavor);
       try {
         // The user consented to this directory when creating the task.
@@ -203,7 +212,12 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
   );
 
   const runInTab = useCallback(
-    async (task: ScheduledTask, run: TaskRun, sessionId: string) => {
+    async (
+      task: ScheduledTask,
+      run: TaskRun,
+      sessionId: string,
+      resume: boolean,
+    ) => {
       const d = depsRef.current;
       try {
         const target = await d.ensureTab(task);
@@ -231,8 +245,11 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
           );
           return;
         }
-        if (!target.piRunning) {
-          const argv = buildPiArgv(task, sessionId, { headless: false });
+        if (!target.agentRunning) {
+          const argv = buildAgentArgv(task, sessionId, {
+            headless: false,
+            resume,
+          });
           d.writeToLeaf(
             target.leafId,
             `${formatCommandLine(argv, d.shellFlavor)}\r`,
@@ -263,7 +280,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
             endedAt: Date.now(),
             message: handoffMessage(result, {
               tabId: target.tabId,
-              reused: target.piRunning,
+              reused: target.agentRunning,
             }),
           }),
           true,
@@ -287,24 +304,31 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
     (task: ScheduledTask, trigger: RunTrigger) => {
       const now = Date.now();
       const sessionId = sessionIdFor(task, now);
+      // The task only remembers a session once a run has created it, so this is
+      // also the answer to "does this session already exist".
+      const resume = task.sessions.some((session) => session.id === sessionId);
       const run = newRun(
         {
           taskId: task.id,
           sessionId,
           cwd: task.cwd,
           trigger,
+          agent: task.agent,
           attempt: (attemptsRef.current.get(task.id) ?? 0) + 1,
         },
         now,
       );
       depsRef.current.recordRun(run);
-      depsRef.current.markDispatched(task.id, now);
+      depsRef.current.markDispatched(task.id, now, sessionId);
       setQueue((current) => ({
         running: [...current.running, { taskId: task.id, startedAt: now }],
         pending: current.pending.filter((id) => id !== task.id),
       }));
-      if (task.target === "headless") void runHeadless(task, run, sessionId);
-      else void runInTab(task, run, sessionId);
+      if (task.target === "headless") {
+        void runHeadless(task, run, sessionId, resume);
+      } else {
+        void runInTab(task, run, sessionId, resume);
+      }
     },
     [runHeadless, runInTab],
   );
@@ -357,7 +381,10 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
     const d = depsRef.current;
     d.openTerminalWith(
       run.cwd,
-      recoverCommandLine({ cwd: run.cwd, sessionId: run.sessionId }, d.shellFlavor),
+      recoverCommandLine(
+        { cwd: run.cwd, sessionId: run.sessionId, agent: run.agent },
+        d.shellFlavor,
+      ),
     );
   }, []);
 

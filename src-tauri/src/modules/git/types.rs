@@ -95,6 +95,29 @@ pub struct GitCommitFileChange {
     pub is_binary: bool,
 }
 
+/// What a decoration on a commit points at. `git log --decorate=full` spells
+/// these out as ref paths, so they are distinguished here rather than guessed
+/// from a short name: a local branch may legitimately be called `origin/x`.
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitRefKind {
+    Branch,
+    Remote,
+    Tag,
+    /// Detached HEAD, or a ref namespace the view does not model.
+    Other,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRef {
+    /// Display name: the branch, remote branch or tag, without its ref prefix.
+    pub name: String,
+    pub kind: GitRefKind,
+    /// True when HEAD points here, so the view can mark the checked-out ref.
+    pub is_head: bool,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitLogEntry {
@@ -105,9 +128,54 @@ pub struct GitLogEntry {
     pub timestamp_secs: i64,
     pub parents: Vec<String>,
     pub subject: String,
+    /// Commit message beyond the subject, trailing whitespace trimmed.
+    pub body: String,
+    /// Branches, remote branches and tags pointing at this commit.
+    pub refs: Vec<GitRef>,
     pub files_changed: u32,
     pub insertions: u32,
     pub deletions: u32,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchList {
+    /// Checked-out branch, absent on a detached HEAD.
+    pub current: Option<String>,
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+    /// Branch a review should default to comparing against.
+    pub default_base: Option<String>,
+}
+
+/// One file changed across a review range.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRangeFile {
+    pub path: String,
+    /// Previous path when the change is a rename or copy.
+    pub original_path: Option<String>,
+    /// Porcelain status letter: A, M, D, R, C or T.
+    pub status: String,
+    pub status_label: String,
+    pub added: u32,
+    pub removed: u32,
+    pub is_binary: bool,
+}
+
+/// What a branch contains relative to the branch it would merge into.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRangeSummary {
+    /// Commit the two branches last shared, which is what the review diffs from.
+    pub merge_base: String,
+    pub base: String,
+    pub head: String,
+    /// Commits on head that base does not have.
+    pub ahead: u32,
+    /// Commits on base that head does not have, so the reviewer knows it is stale.
+    pub behind: u32,
+    pub files: Vec<GitRangeFile>,
 }
 
 #[derive(Serialize)]
@@ -138,5 +206,219 @@ impl TextSource {
             TextSource::Text(text) => text,
             TextSource::Missing | TextSource::Binary => String::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod serde_shape_tests {
+    use super::*;
+
+    #[test]
+    fn repo_info_serializes_camel_case() {
+        let info = GitRepoInfo {
+            repo_root: "/repo".into(),
+            branch: "main".into(),
+            upstream: Some("origin/main".into()),
+            is_detached: false,
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "repoRoot": "/repo",
+                "branch": "main",
+                "upstream": "origin/main",
+                "isDetached": false,
+            })
+        );
+    }
+
+    #[test]
+    fn changed_file_serializes_all_fields_camel_case() {
+        let file = GitChangedFile {
+            path: "src/a.ts".into(),
+            original_path: Some("src/old.ts".into()),
+            index_status: "R".into(),
+            worktree_status: " ".into(),
+            staged: true,
+            unstaged: false,
+            untracked: false,
+            status_label: "renamed".into(),
+            added: 3,
+            removed: 1,
+            is_binary: false,
+        };
+        let json = serde_json::to_value(&file).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "path": "src/a.ts",
+                "originalPath": "src/old.ts",
+                "indexStatus": "R",
+                "worktreeStatus": " ",
+                "staged": true,
+                "unstaged": false,
+                "untracked": false,
+                "statusLabel": "renamed",
+                "added": 3,
+                "removed": 1,
+                "isBinary": false,
+            })
+        );
+    }
+
+    #[test]
+    fn status_snapshot_nests_changed_files() {
+        let snapshot = GitStatusSnapshot {
+            repo_root: "/repo".into(),
+            branch: "main".into(),
+            upstream: None,
+            ahead: 2,
+            behind: 1,
+            is_detached: true,
+            truncated: false,
+            changed_files: vec![],
+        };
+        let json = serde_json::to_value(&snapshot).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "repoRoot": "/repo",
+                "branch": "main",
+                "upstream": null,
+                "ahead": 2,
+                "behind": 1,
+                "isDetached": true,
+                "truncated": false,
+                "changedFiles": [],
+            })
+        );
+    }
+
+    #[test]
+    fn panel_snapshot_allows_null_repo_and_status() {
+        let panel = GitPanelSnapshot {
+            repo: None,
+            status: None,
+        };
+        let json = serde_json::to_value(&panel).unwrap();
+        assert_eq!(json, serde_json::json!({ "repo": null, "status": null }));
+    }
+
+    #[test]
+    fn diff_content_result_keys_stay_camel_case() {
+        let diff = GitDiffContentResult {
+            original_content: "a".into(),
+            modified_content: "b".into(),
+            is_binary: false,
+            fallback_patch: "".into(),
+            truncated: true,
+        };
+        let json = serde_json::to_value(&diff).unwrap();
+        for key in [
+            "originalContent",
+            "modifiedContent",
+            "isBinary",
+            "fallbackPatch",
+            "truncated",
+        ] {
+            assert!(json.get(key).is_some(), "missing key {key}");
+        }
+    }
+
+    #[test]
+    fn commit_result_and_file_change_keep_their_contract() {
+        let commit = GitCommitResult {
+            commit_sha: "abc123".into(),
+            summary: "msg".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&commit).unwrap(),
+            serde_json::json!({ "commitSha": "abc123", "summary": "msg" })
+        );
+
+        let change = GitCommitFileChange {
+            path: "f.rs".into(),
+            original_path: None,
+            status: "M".into(),
+            status_label: "modified".into(),
+            added: 3,
+            removed: 4,
+            is_binary: false,
+        };
+        let json = serde_json::to_value(&change).unwrap();
+        assert_eq!(json["originalPath"], serde_json::Value::Null);
+        for key in ["path", "status", "statusLabel", "added", "removed", "isBinary"] {
+            assert!(json.get(key).is_some(), "missing key {key}");
+        }
+    }
+
+    #[test]
+    fn log_entry_stats_use_camel_case_names() {
+        let entry = GitLogEntry {
+            sha: "deadbeef".into(),
+            short_sha: "deadbee".into(),
+            author: "A".into(),
+            author_email: "a@example.com".into(),
+            timestamp_secs: 1_700_000_000,
+            parents: vec!["p0".into()],
+            subject: "s".into(),
+            body: "".into(),
+            refs: Vec::new(),
+            files_changed: 2,
+            insertions: 10,
+            deletions: 5,
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        for key in [
+            "shortSha",
+            "authorEmail",
+            "timestampSecs",
+            "filesChanged",
+            "insertions",
+            "deletions",
+            "body",
+            "refs",
+        ] {
+            assert!(json.get(key).is_some(), "missing key {key}");
+        }
+        assert_eq!(json["parents"], serde_json::json!(["p0"]));
+    }
+
+    #[test]
+    fn push_and_branch_results_serialize_as_named() {
+        let push = GitPushResult {
+            remote: Some("origin".into()),
+            branch: None,
+            pushed: true,
+        };
+        assert_eq!(
+            serde_json::to_value(&push).unwrap(),
+            serde_json::json!({ "remote": "origin", "branch": null, "pushed": true })
+        );
+
+        let list = GitBranchList {
+            current: Some("main".into()),
+            local: vec!["main".into(), "feature".into()],
+            remote: vec!["origin/main".into()],
+            default_base: Some("main".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&list).unwrap(),
+            serde_json::json!({
+                "current": "main",
+                "local": ["main", "feature"],
+                "remote": ["origin/main"],
+                "defaultBase": "main",
+            })
+        );
+    }
+
+    #[test]
+    fn discard_entry_deserializes_from_camel_case_json() {
+        let entry: DiscardEntry =
+            serde_json::from_str(r#"{ "path": "x.txt", "untracked": true }"#).unwrap();
+        assert_eq!(entry.path, "x.txt");
+        assert!(entry.untracked);
     }
 }

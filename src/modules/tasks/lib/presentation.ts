@@ -1,3 +1,4 @@
+import { agentLabel } from "./agents";
 import type { Schedule, Weekday } from "./recurrence";
 import {
   isExhausted,
@@ -150,6 +151,7 @@ export function taskAccessibleLabel(
   const parts = [
     task.name,
     scheduleLabel(task.schedule),
+    agentLabel(task.agent),
     task.enabled ? "enabled" : "disabled",
   ];
   if (isExhausted(task)) parts.push("run budget spent");

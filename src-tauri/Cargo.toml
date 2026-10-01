@@ -38,6 +38,7 @@ tauri-plugin-os = "2"
 tauri-plugin-store = "2"
 tauri-plugin-process = "2"
 tauri-plugin-notification = "2"
+png = "0.17"
 reqwest = { version = "0.12", default-features = false, features = [
 	"rustls-tls",
 	"stream",
@@ -47,6 +48,9 @@ futures-util = "0.3"
 tokio = { version = "1", default-features = false, features = ["rt"] }
 tempfile = "3"
 notify = "8.2.0"
+sha2 = "0.10"
+getrandom = "0.3"
+which = "8.0.4"
 
 [dev-dependencies]
 proptest = "1"
@@ -59,6 +63,7 @@ libc = "0.2"
 keyring = { version = "3.6", default-features = false, features = [
 	"apple-native",
 ] }
+mac-notification-sys = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSUserDefaults"] }
 
@@ -76,6 +81,7 @@ windows-sys = { version = "0.61", features = [
 	"Win32_Security_Cryptography",
 	"Win32_System_JobObjects",
 	"Win32_System_Threading",
+	"Win32_System_ProcessStatus",
 	"Win32_System_Diagnostics_ToolHelp",
 ] }
 
@@ -93,3 +99,8 @@ lto = "fat"
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# rust-lang/rust#110536: stripping proc-macro dylibs breaks the dlopen rustc does
+# at compile time on macOS, reported as a bogus E0463. Never shipped, so nothing to strip.
+[profile.release.build-override]
+strip = false

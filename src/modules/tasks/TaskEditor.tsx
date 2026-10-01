@@ -24,18 +24,29 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 import {
+  agentCapabilities,
+  agentLabel,
+  agentModelPresets,
+  DEFAULT_TASK_AGENT,
+  TASK_AGENTS,
+  type TaskAgent,
+} from "./lib/agents";
+import type { TaskDefaults } from "./lib/collection";
+import {
   missedPolicyLabel,
   modeDescription,
   overlapPolicyLabel,
   scheduleLabel,
 } from "./lib/presentation";
 import {
+  fromDateAndTime,
   isSchedule,
   MIN_INTERVAL_MINUTES,
   type Schedule,
+  toDateInput,
+  toTimeInput,
   type Weekday,
 } from "./lib/recurrence";
-import { formatScheduleSpec, parseScheduleSpec } from "./lib/spec";
 import {
   MISSED_POLICIES,
   type MissedPolicy,
@@ -46,6 +57,33 @@ import {
   type TaskMode,
   type TaskTarget,
 } from "./lib/task";
+
+/** Sentinel values for the model select, which mixes presets with two states
+ *  that are not model names. */
+const MODEL_INHERIT = "\u0000inherit";
+const MODEL_CUSTOM = "\u0000custom";
+
+function agentHint(agent: TaskAgent): string {
+  switch (agent) {
+    case "claude":
+      return "Runs the claude command line.";
+    case "codex":
+      return "Runs the codex command line.";
+    default:
+      return "Runs the pi command line.";
+  }
+}
+
+function sessionHint(agent: TaskAgent): string {
+  switch (agent) {
+    case "claude":
+      return "A UUID, or empty to let Terax own the session.";
+    case "codex":
+      return "Codex mints its own ids: a task resumes its most recent session in this directory.";
+    default:
+      return "Leave empty to let Terax create and own the session.";
+  }
+}
 
 const DAY_LABELS: readonly { value: Weekday; label: string }[] = [
   { value: 1, label: "M" },
@@ -203,11 +241,10 @@ function ScheduleBuilder({
           </Field>
           <Field label="Time">
             <Input
+              type="time"
               value={schedule.time}
               onChange={(e) => onChange({ ...schedule, time: e.target.value })}
-              placeholder="HH:MM"
-              inputMode="numeric"
-              className="h-8 w-24 font-mono text-xs"
+              className="h-8 w-28 font-mono text-xs"
               aria-label="Time of day, 24 hour HH:MM"
             />
           </Field>
@@ -236,20 +273,19 @@ function ScheduleBuilder({
           </Field>
           <Field label="Starting">
             <Input
+              type="date"
               value={schedule.from}
               onChange={(e) => onChange({ ...schedule, from: e.target.value })}
-              placeholder="YYYY-MM-DD"
-              className="h-8 w-32 font-mono text-xs"
+              className="h-8 w-40 font-mono text-xs"
               aria-label="Anchor date, YYYY-MM-DD"
             />
           </Field>
           <Field label="Time">
             <Input
+              type="time"
               value={schedule.time}
               onChange={(e) => onChange({ ...schedule, time: e.target.value })}
-              placeholder="HH:MM"
-              inputMode="numeric"
-              className="h-8 w-24 font-mono text-xs"
+              className="h-8 w-28 font-mono text-xs"
               aria-label="Time of day, 24 hour HH:MM"
             />
           </Field>
@@ -280,11 +316,10 @@ function ScheduleBuilder({
           </Field>
           <Field label="Time">
             <Input
+              type="time"
               value={schedule.time}
               onChange={(e) => onChange({ ...schedule, time: e.target.value })}
-              placeholder="HH:MM"
-              inputMode="numeric"
-              className="h-8 w-24 font-mono text-xs"
+              className="h-8 w-28 font-mono text-xs"
               aria-label="Time of day, 24 hour HH:MM"
             />
           </Field>
@@ -292,18 +327,41 @@ function ScheduleBuilder({
       )}
 
       {schedule.kind === "once" && (
-        <Field label="At">
-          <Input
-            value={formatScheduleSpec(schedule).replace(/^once:/, "")}
-            onChange={(e) => {
-              const parsed = parseScheduleSpec(`once:${e.target.value.trim()}`);
-              if (parsed) onChange(parsed);
-            }}
-            placeholder="YYYY-MM-DDTHH:MM"
-            className="h-8 w-48 font-mono text-xs"
-            aria-label="Date and time, YYYY-MM-DDTHH:MM"
-          />
-        </Field>
+        // Date and hour are edited separately. A single combined text field
+        // could not be edited at all: every intermediate keystroke made the
+        // whole instant unparseable, so the change was thrown away.
+        <div className="flex flex-wrap gap-3">
+          <Field label="Date">
+            <Input
+              type="date"
+              value={toDateInput(schedule.at)}
+              onChange={(e) => {
+                const at = fromDateAndTime(
+                  e.target.value,
+                  toTimeInput(schedule.at),
+                );
+                if (at !== null) onChange({ kind: "once", at });
+              }}
+              className="h-8 w-40 font-mono text-xs"
+              aria-label="Date, YYYY-MM-DD"
+            />
+          </Field>
+          <Field label="Time">
+            <Input
+              type="time"
+              value={toTimeInput(schedule.at)}
+              onChange={(e) => {
+                const at = fromDateAndTime(
+                  toDateInput(schedule.at),
+                  e.target.value,
+                );
+                if (at !== null) onChange({ kind: "once", at });
+              }}
+              className="h-8 w-28 font-mono text-xs"
+              aria-label="Time of day, 24 hour HH:MM"
+            />
+          </Field>
+        </div>
       )}
 
       <p className="text-[11px] text-muted-foreground">
@@ -322,6 +380,7 @@ export type TaskDraft = {
   schedule: Schedule;
   target: TaskTarget;
   mode: TaskMode;
+  agent: TaskAgent;
   missed: MissedPolicy;
   overlap: OverlapPolicy;
   retries: number;
@@ -329,28 +388,44 @@ export type TaskDraft = {
   maxRuns: string;
   sessionId: string;
   model: string;
+  /** The model was typed rather than chosen, so the text field stays open. */
+  customModel: boolean;
   provider: string;
   thinking: string;
 };
 
-function draftFrom(task: ScheduledTask | null, fallbackCwd: string): TaskDraft {
+/**
+ * The draft a form starts from. Editing shows the task; creating starts from
+ * the parameters the user chose last, because a second task is almost always a
+ * variation of the first, and retyping the schedule, agent and policies every
+ * time is the friction this removes. Content is never inherited.
+ */
+export function draftFrom(
+  task: ScheduledTask | null,
+  fallbackCwd: string,
+  defaults: TaskDefaults | null = null,
+): TaskDraft {
   if (!task) {
+    const model = defaults?.model ?? "";
+    const agent = defaults?.agent ?? DEFAULT_TASK_AGENT;
     return {
       name: "",
       prompt: "",
-      cwd: fallbackCwd,
-      schedule: defaultSchedule("everyN"),
-      target: "tab",
-      mode: "task",
-      missed: "runOnce",
-      overlap: "queue",
-      retries: 2,
-      thenDisable: true,
+      cwd: fallbackCwd || (defaults?.cwd ?? ""),
+      schedule: defaults?.schedule ?? defaultSchedule("everyN"),
+      target: defaults?.target ?? "tab",
+      mode: defaults?.mode ?? "task",
+      agent,
+      missed: defaults?.missed ?? "runOnce",
+      overlap: defaults?.overlap ?? "queue",
+      retries: defaults?.failure.retries ?? 2,
+      thenDisable: defaults?.failure.thenDisable ?? true,
       maxRuns: "",
       sessionId: "",
-      model: "",
-      provider: "",
-      thinking: "",
+      model,
+      customModel: isCustomModel(agent, model),
+      provider: defaults?.provider ?? "",
+      thinking: defaults?.thinking ?? "",
     };
   }
   return {
@@ -360,6 +435,7 @@ function draftFrom(task: ScheduledTask | null, fallbackCwd: string): TaskDraft {
     schedule: task.schedule,
     target: task.target,
     mode: task.mode,
+    agent: task.agent,
     missed: task.missed,
     overlap: task.overlap,
     retries: task.failure.retries,
@@ -367,8 +443,33 @@ function draftFrom(task: ScheduledTask | null, fallbackCwd: string): TaskDraft {
     maxRuns: task.maxRuns === undefined ? "" : String(task.maxRuns),
     sessionId: task.sessions[0]?.id ?? "",
     model: task.model ?? "",
+    customModel: isCustomModel(task.agent, task.model ?? ""),
     provider: task.provider ?? "",
     thinking: task.thinking ?? "",
+  };
+}
+
+function isCustomModel(agent: TaskAgent, model: string): boolean {
+  if (model.trim() === "") return false;
+  return !agentModelPresets(agent).some((preset) => preset.value === model);
+}
+
+/** Keeps the model consistent with the agent: a preset that only means
+ *  something to the previous CLI is dropped, a typed value is kept. */
+export function retargetModel(
+  draft: TaskDraft,
+  agent: TaskAgent,
+): Pick<TaskDraft, "agent" | "model" | "customModel"> {
+  if (draft.customModel || draft.model.trim() === "") {
+    return { agent, model: draft.model, customModel: draft.customModel };
+  }
+  const stillValid = agentModelPresets(agent).some(
+    (preset) => preset.value === draft.model,
+  );
+  return {
+    agent,
+    model: stillValid ? draft.model : "",
+    customModel: false,
   };
 }
 
@@ -382,6 +483,7 @@ export function toTaskInput(draft: TaskDraft): TaskInput {
     schedule: draft.schedule,
     target: draft.target,
     mode: draft.mode,
+    agent: draft.agent,
     missed: draft.missed,
     overlap: draft.overlap,
     failure: { retries: draft.retries, thenDisable: draft.thenDisable },
@@ -399,6 +501,7 @@ export function TaskEditor({
   open,
   task,
   defaultCwd,
+  defaults = null,
   onSubmit,
   onCancel,
 }: {
@@ -406,12 +509,14 @@ export function TaskEditor({
   /** Null opens the editor in create mode. */
   task: ScheduledTask | null;
   defaultCwd: string;
+  /** Parameters a new task starts from. Ignored when editing. */
+  defaults?: TaskDefaults | null;
   onSubmit: (input: TaskInput) => void;
   onCancel: () => void;
 }) {
   const isEdit = task !== null;
   const [draft, setDraft] = useState<TaskDraft>(() =>
-    draftFrom(task, defaultCwd),
+    draftFrom(task, defaultCwd, defaults),
   );
   const [acknowledged, setAcknowledged] = useState(false);
   const [seed, setSeed] = useState<string | null>(task?.id ?? null);
@@ -420,7 +525,7 @@ export function TaskEditor({
   const key = task?.id ?? "new";
   if (seed !== key && open) {
     setSeed(key);
-    setDraft(draftFrom(task, defaultCwd));
+    setDraft(draftFrom(task, defaultCwd, defaults));
     setAcknowledged(false);
   }
 
@@ -452,7 +557,7 @@ export function TaskEditor({
             {isEdit ? "Edit scheduled task" : "New scheduled task"}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Wakes a Pi session with this prompt on the schedule below.
+            Wakes an agent session with this prompt on the schedule below.
           </DialogDescription>
         </DialogHeader>
 
@@ -483,6 +588,88 @@ export function TaskEditor({
             schedule={draft.schedule}
             onChange={(next) => patch("schedule", next)}
           />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Agent" hint={agentHint(draft.agent)}>
+              <Select
+                value={draft.agent}
+                onValueChange={(value) =>
+                  setDraft((current) => ({
+                    ...current,
+                    ...retargetModel(current, value as TaskAgent),
+                  }))
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_AGENTS.map((agent) => (
+                    <SelectItem key={agent} value={agent} className="text-xs">
+                      {agentLabel(agent)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Model" hint="Inherit uses the agent's own default.">
+              <Select
+                value={
+                  draft.customModel
+                    ? MODEL_CUSTOM
+                    : draft.model === ""
+                      ? MODEL_INHERIT
+                      : draft.model
+                }
+                onValueChange={(value) =>
+                  setDraft((current) => {
+                    if (value === MODEL_INHERIT) {
+                      return { ...current, model: "", customModel: false };
+                    }
+                    if (value === MODEL_CUSTOM) {
+                      return { ...current, customModel: true };
+                    }
+                    return { ...current, model: value, customModel: false };
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={MODEL_INHERIT} className="text-xs">
+                    Inherit default
+                  </SelectItem>
+                  {agentModelPresets(draft.agent).map((preset) => (
+                    <SelectItem
+                      key={preset.value}
+                      value={preset.value}
+                      className="text-xs"
+                    >
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={MODEL_CUSTOM} className="text-xs">
+                    Custom…
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          {draft.customModel && (
+            <Field
+              label="Custom model"
+              hint="Passed verbatim to the agent command line."
+            >
+              <Input
+                value={draft.model}
+                onChange={(e) => patch("model", e.target.value)}
+                placeholder="gpt-5.1-codex"
+                className="h-8 font-mono text-xs"
+              />
+            </Field>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Run in">
@@ -536,8 +723,8 @@ export function TaskEditor({
           </Field>
 
           <Field
-            label="Pi session id"
-            hint="Leave empty to let Terax create and own the session."
+            label="Session id"
+            hint={sessionHint(draft.agent)}
           >
             <Input
               value={draft.sessionId}
@@ -586,7 +773,7 @@ export function TaskEditor({
             </Field>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Retries">
               <Input
                 type="number"
@@ -608,14 +795,6 @@ export function TaskEditor({
                 value={draft.maxRuns}
                 onChange={(e) => patch("maxRuns", e.target.value)}
                 placeholder="unlimited"
-                className="h-8 text-xs"
-              />
-            </Field>
-            <Field label="Model" hint="Empty inherits pi defaults.">
-              <Input
-                value={draft.model}
-                onChange={(e) => patch("model", e.target.value)}
-                placeholder="inherit"
                 className="h-8 text-xs"
               />
             </Field>
@@ -648,7 +827,8 @@ export function TaskEditor({
                 htmlFor="task-acknowledge"
                 className="text-[11px] font-normal leading-snug text-foreground"
               >
-                I understand this runs pi unattended in{" "}
+                I understand this runs {agentCapabilities(draft.agent).binary}{" "}
+              unattended in{" "}
                 <code className="font-mono">
                   {draft.cwd || "the chosen directory"}
                 </code>{" "}

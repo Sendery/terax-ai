@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { VERSION_FILES } from "./set-version.mjs";
 
 const args = process.argv.slice(2);
 const version = args[0];
@@ -21,14 +22,10 @@ if (!version || version === "--help" || version === "-h") {
   process.exit(version ? 0 : 1);
 }
 
-const files = [
-  "package.json",
-  "src-tauri/tauri.conf.json",
-  "src-tauri/Cargo.toml",
-  "src-tauri/Cargo.lock",
-];
+// Restore exactly what set-version.mjs writes, so a temporary versioned build
+// never leaves the working tree dirty for the next release staging run.
 const snapshots = new Map(
-  files.map((path) => [path, readFileSync(path, "utf8")]),
+  VERSION_FILES.map((path) => [path, readFileSync(path, "utf8")]),
 );
 const cargoBin = join(homedir(), ".cargo", "bin");
 const tauriCli = join(

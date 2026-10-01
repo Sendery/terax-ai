@@ -1,6 +1,7 @@
 import {
   ChatGptIcon,
   ClaudeIcon,
+  GoogleGeminiIcon,
   PiIcon,
   RoboticIcon,
 } from "@hugeicons/core-free-icons";
@@ -20,13 +21,18 @@ export function iconForHarness(harness: AgentHarness): IconSvgElement {
   }
 }
 
-function iconFor(agent: string, harness?: AgentHarness): IconSvgElement {
+export function isTeraxAgent(agent: string): boolean {
+  return agent.toLowerCase().includes("terax");
+}
+
+export function iconFor(agent: string, harness?: AgentHarness): IconSvgElement {
   if (harness !== undefined) return iconForHarness(harness);
   const a = agent.toLowerCase();
   if (a === "pi" || a.startsWith("pi ")) return PiIcon;
   if (a.includes("claude")) return ClaudeIcon;
   if (a.includes("codex") || a.includes("gpt") || a.includes("openai"))
     return ChatGptIcon;
+  if (a.includes("gemini")) return GoogleGeminiIcon;
   return RoboticIcon;
 }
 
@@ -41,7 +47,7 @@ export function AgentIcon({
   className?: string;
   harness?: AgentHarness;
 }) {
-  if (harness === undefined && agent.toLowerCase().includes("terax")) {
+  if (harness === undefined && isTeraxAgent(agent)) {
     return (
       <img
         src="/logo.png"

@@ -15,7 +15,17 @@ import {
   type SttProvider,
 } from "@/modules/ai/config";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
+import {
+  isTtsDevice,
+  isTtsLanguage,
+  type TtsDevice,
+  type TtsLanguage,
+} from "@/modules/tts/lib/engines";
 import type { KeyBinding, ShortcutId } from "@/modules/shortcuts/shortcuts";
+import {
+  sanitizeHiddenFilesMap,
+  type HiddenFilesMap,
+} from "@/modules/source-control/lib/hiddenFiles";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
@@ -142,12 +152,22 @@ export type Preferences = {
   sttProvider: SttProvider;
   groqSttModel: string;
   whispercppBaseURL: string;
+  /** Language "read aloud" speaks in when the caller names none. */
+  ttsDefaultLanguage: TtsLanguage;
+  /** Compute device the speech sidecar is started with. */
+  ttsDevice: TtsDevice;
+  /** Minutes of silence before running speech engines are stopped. 0 keeps
+   *  them resident. */
+  ttsIdleStopMinutes: number;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
   editorWordWrap: boolean;
   showHidden: boolean;
   explorerGitDecorations: boolean;
+  /** Paths muted in the Source Control panel, keyed by repo root.
+   *  A view filter only: nothing is written to .gitignore. */
+  sourceControlHiddenFiles: HiddenFilesMap;
   terminalWebglEnabled: boolean;
   terminalCursorBlink: boolean;
   terminalFontFamily: string;
@@ -158,13 +178,31 @@ export type Preferences = {
   lastWslDistro: string | null;
   zoomLevel: number;
   agentNotifications: boolean;
+  /** What to do with the agent sessions that were live at the last shutdown. */
+  restoreAgentSessions: AgentSessionRestorePolicy;
   shortcuts: Record<ShortcutId, KeyBinding[]>;
   editorAutoSave: boolean;
   editorAutoSaveDelay: number;
+  lspActivation: Record<string, LspActivation>;
+  lspCustomServers: LspCustomServer[];
+};
+
+export type LspActivation = "enabled" | "dismissed";
+
+export type LspCustomServer = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  /** languageResolver id -> LSP languageId */
+  languages: Record<string, string>;
+  rootMarkers: string[];
 };
 
 const STORE_PATH = "terax-settings.json";
 const KEY_THEME = "theme";
+const KEY_LSP_ACTIVATION = "lspActivation";
+const KEY_LSP_CUSTOM_SERVERS = "lspCustomServers";
 const KEY_THEME_ID = "themeId";
 const KEY_BG_KIND = "backgroundKind";
 const KEY_BG_IMAGE_ID = "backgroundImageId";
@@ -200,6 +238,23 @@ const KEY_CLI_AGENT_PERMISSION = "cliAgentPermission";
 const KEY_STT_PROVIDER = "sttProvider";
 const KEY_GROQ_STT_MODEL = "groqSttModel";
 const KEY_WHISPERCPP_BASE_URL = "whispercppBaseURL";
+const KEY_TTS_DEFAULT_LANGUAGE = "ttsDefaultLanguage";
+const KEY_TTS_DEVICE = "ttsDevice";
+const KEY_TTS_IDLE_STOP_MINUTES = "ttsIdleStopMinutes";
+
+export const TTS_IDLE_STOP_MIN = 0;
+export const TTS_IDLE_STOP_MAX = 240;
+export const TTS_IDLE_STOP_DEFAULT = 10;
+
+export function coerceTtsIdleStopMinutes(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return TTS_IDLE_STOP_DEFAULT;
+  }
+  return Math.min(
+    TTS_IDLE_STOP_MAX,
+    Math.max(TTS_IDLE_STOP_MIN, Math.round(value)),
+  );
+}
 const KEY_FAVORITE_MODELS = "favoriteModelIds";
 const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
@@ -207,6 +262,7 @@ const KEY_EDITOR_WORD_WRAP = "editorWordWrap";
 const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
 const KEY_EXPLORER_GIT_DECORATIONS = "explorerGitDecorations";
+const KEY_SC_HIDDEN_FILES = "sourceControlHiddenFiles";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
 const KEY_TERMINAL_CURSOR_BLINK = "terminalCursorBlink";
 const KEY_TERMINAL_FONT_FAMILY = "terminalFontFamily";
@@ -217,6 +273,29 @@ const KEY_TERMINAL_SCROLLBACK = "terminalScrollback";
 const KEY_LAST_WSL_DISTRO = "lastWslDistro";
 const KEY_ZOOM_LEVEL = "zoomLevel";
 const KEY_AGENT_NOTIFICATIONS = "agentNotifications";
+const KEY_RESTORE_AGENT_SESSIONS = "restoreAgentSessions";
+
+export const AGENT_SESSION_RESTORE_POLICIES = [
+  "ask",
+  "always",
+  "never",
+] as const;
+export type AgentSessionRestorePolicy =
+  (typeof AGENT_SESSION_RESTORE_POLICIES)[number];
+export function isAgentSessionRestorePolicy(
+  value: unknown,
+): value is AgentSessionRestorePolicy {
+  return (
+    typeof value === "string" &&
+    (AGENT_SESSION_RESTORE_POLICIES as readonly string[]).includes(value)
+  );
+}
+
+function coerceRestorePolicy(value: unknown): AgentSessionRestorePolicy {
+  return isAgentSessionRestorePolicy(value)
+    ? value
+    : DEFAULT_PREFERENCES.restoreAgentSessions;
+}
 const KEY_SHORTCUTS = "shortcuts";
 const KEY_EDITOR_AUTO_SAVE = "editorAutoSave";
 const KEY_EDITOR_AUTO_SAVE_DELAY = "editorAutoSaveDelay";
@@ -237,6 +316,8 @@ export const TERMINAL_SCROLLBACK_PRESETS = [
 ] as const;
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  lspActivation: {},
+  lspCustomServers: [],
   theme: "system",
   themeId: DEFAULT_THEME_ID,
   backgroundKind: "none",
@@ -267,12 +348,16 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sttProvider: DEFAULT_STT_PROVIDER,
   groqSttModel: "whisper-large-v3-turbo",
   whispercppBaseURL: WHISPERCPP_DEFAULT_BASE_URL,
+  ttsDefaultLanguage: "es-ES",
+  ttsDevice: "auto",
+  ttsIdleStopMinutes: TTS_IDLE_STOP_DEFAULT,
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
   editorWordWrap: false,
   showHidden: false,
   explorerGitDecorations: true,
+  sourceControlHiddenFiles: {},
   terminalWebglEnabled: true,
   terminalCursorBlink: false,
   terminalFontFamily: "",
@@ -283,6 +368,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lastWslDistro: null,
   zoomLevel: 1.0,
   agentNotifications: true,
+  restoreAgentSessions: "ask",
   shortcuts: {} as Record<ShortcutId, KeyBinding[]>,
   editorAutoSave: false,
   editorAutoSaveDelay: 1000,
@@ -309,6 +395,12 @@ export async function loadPreferences(): Promise<Preferences> {
   const map = new Map<string, unknown>(entries);
   const get = <T>(k: string): T | undefined => map.get(k) as T | undefined;
   return {
+    lspActivation:
+      get<Record<string, LspActivation>>(KEY_LSP_ACTIVATION) ??
+      DEFAULT_PREFERENCES.lspActivation,
+    lspCustomServers:
+      get<LspCustomServer[]>(KEY_LSP_CUSTOM_SERVERS) ??
+      DEFAULT_PREFERENCES.lspCustomServers,
     theme: get<ThemePref>(KEY_THEME) ?? DEFAULT_PREFERENCES.theme,
     themeId: get<string>(KEY_THEME_ID) ?? DEFAULT_PREFERENCES.themeId,
     backgroundKind:
@@ -398,6 +490,19 @@ export async function loadPreferences(): Promise<Preferences> {
       get<string>(KEY_GROQ_STT_MODEL) ?? DEFAULT_PREFERENCES.groqSttModel,
     whispercppBaseURL:
       get<string>(KEY_WHISPERCPP_BASE_URL) ?? DEFAULT_PREFERENCES.whispercppBaseURL,
+    ttsDefaultLanguage: ((): TtsLanguage => {
+      const stored = get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
+      return isTtsLanguage(stored)
+        ? stored
+        : DEFAULT_PREFERENCES.ttsDefaultLanguage;
+    })(),
+    ttsDevice: ((): TtsDevice => {
+      const stored = get<unknown>(KEY_TTS_DEVICE);
+      return isTtsDevice(stored) ? stored : DEFAULT_PREFERENCES.ttsDevice;
+    })(),
+    ttsIdleStopMinutes: coerceTtsIdleStopMinutes(
+      get<unknown>(KEY_TTS_IDLE_STOP_MINUTES),
+    ),
     favoriteModelIds: (
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds
@@ -415,6 +520,9 @@ export async function loadPreferences(): Promise<Preferences> {
     explorerGitDecorations:
       get<boolean>(KEY_EXPLORER_GIT_DECORATIONS) ??
       DEFAULT_PREFERENCES.explorerGitDecorations,
+    sourceControlHiddenFiles: sanitizeHiddenFilesMap(
+      get<unknown>(KEY_SC_HIDDEN_FILES),
+    ),
     terminalWebglEnabled:
       get<boolean>(KEY_TERMINAL_WEBGL_ENABLED) ??
       DEFAULT_PREFERENCES.terminalWebglEnabled,
@@ -445,6 +553,9 @@ export async function loadPreferences(): Promise<Preferences> {
     agentNotifications:
       get<boolean>(KEY_AGENT_NOTIFICATIONS) ??
       DEFAULT_PREFERENCES.agentNotifications,
+    restoreAgentSessions: coerceRestorePolicy(
+      get<unknown>(KEY_RESTORE_AGENT_SESSIONS),
+    ),
     shortcuts:
       get<Record<ShortcutId, KeyBinding[]>>(KEY_SHORTCUTS) ??
       DEFAULT_PREFERENCES.shortcuts,
@@ -456,6 +567,25 @@ export async function loadPreferences(): Promise<Preferences> {
         DEFAULT_PREFERENCES.editorAutoSaveDelay,
     ),
   };
+}
+
+export async function setLspActivation(
+  id: string,
+  value: LspActivation | null,
+): Promise<void> {
+  const current =
+    ((await store.get(KEY_LSP_ACTIVATION)) as Record<string, LspActivation>) ??
+    {};
+  const next = { ...current };
+  if (value === null) delete next[id];
+  else next[id] = value;
+  await writePref(KEY_LSP_ACTIVATION, next);
+}
+
+export async function setLspCustomServers(
+  value: LspCustomServer[],
+): Promise<void> {
+  await writePref(KEY_LSP_CUSTOM_SERVERS, value);
 }
 
 export async function setTheme(value: ThemePref): Promise<void> {
@@ -515,6 +645,12 @@ export async function setAutostart(value: boolean): Promise<void> {
 
 export async function setRestoreWindowState(value: boolean): Promise<void> {
   await writePref(KEY_RESTORE_WINDOW, value);
+}
+
+export async function setRestoreAgentSessions(
+  value: AgentSessionRestorePolicy,
+): Promise<void> {
+  await writePref(KEY_RESTORE_AGENT_SESSIONS, value);
 }
 
 export async function setUpdateChannel(value: UpdateChannel): Promise<void> {
@@ -604,6 +740,18 @@ export async function setWhispercppBaseURL(value: string): Promise<void> {
   await writePref(KEY_WHISPERCPP_BASE_URL, value.trim());
 }
 
+export async function setTtsDefaultLanguage(value: TtsLanguage): Promise<void> {
+  await writePref(KEY_TTS_DEFAULT_LANGUAGE, value);
+}
+
+export async function setTtsDevice(value: TtsDevice): Promise<void> {
+  await writePref(KEY_TTS_DEVICE, value);
+}
+
+export async function setTtsIdleStopMinutes(value: number): Promise<void> {
+  await writePref(KEY_TTS_IDLE_STOP_MINUTES, coerceTtsIdleStopMinutes(value));
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -626,6 +774,12 @@ export async function setShowHidden(value: boolean): Promise<void> {
 
 export async function setExplorerGitDecorations(value: boolean): Promise<void> {
   await writePref(KEY_EXPLORER_GIT_DECORATIONS, value);
+}
+
+export async function setSourceControlHiddenFiles(
+  value: HiddenFilesMap,
+): Promise<void> {
+  await writePref(KEY_SC_HIDDEN_FILES, sanitizeHiddenFilesMap(value));
 }
 
 export async function setTerminalWebglEnabled(value: boolean): Promise<void> {
@@ -720,6 +874,8 @@ export async function onPreferencesChange(
   cb: (key: PrefKey, value: unknown) => void,
 ): Promise<UnlistenFn> {
   const map: Record<string, PrefKey> = {
+    [KEY_LSP_ACTIVATION]: "lspActivation",
+    [KEY_LSP_CUSTOM_SERVERS]: "lspCustomServers",
     [KEY_THEME]: "theme",
     [KEY_THEME_ID]: "themeId",
     [KEY_BG_KIND]: "backgroundKind",
@@ -750,12 +906,16 @@ export async function onPreferencesChange(
     [KEY_STT_PROVIDER]: "sttProvider",
     [KEY_GROQ_STT_MODEL]: "groqSttModel",
     [KEY_WHISPERCPP_BASE_URL]: "whispercppBaseURL",
+    [KEY_TTS_DEFAULT_LANGUAGE]: "ttsDefaultLanguage",
+    [KEY_TTS_DEVICE]: "ttsDevice",
+    [KEY_TTS_IDLE_STOP_MINUTES]: "ttsIdleStopMinutes",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",
     [KEY_EDITOR_WORD_WRAP]: "editorWordWrap",
     [KEY_SHOW_HIDDEN]: "showHidden",
     [KEY_EXPLORER_GIT_DECORATIONS]: "explorerGitDecorations",
+    [KEY_SC_HIDDEN_FILES]: "sourceControlHiddenFiles",
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_CURSOR_BLINK]: "terminalCursorBlink",
     [KEY_TERMINAL_FONT_FAMILY]: "terminalFontFamily",
@@ -766,6 +926,7 @@ export async function onPreferencesChange(
     [KEY_LAST_WSL_DISTRO]: "lastWslDistro",
     [KEY_ZOOM_LEVEL]: "zoomLevel",
     [KEY_AGENT_NOTIFICATIONS]: "agentNotifications",
+    [KEY_RESTORE_AGENT_SESSIONS]: "restoreAgentSessions",
     [KEY_SHORTCUTS]: "shortcuts",
     [KEY_EDITOR_AUTO_SAVE]: "editorAutoSave",
     [KEY_EDITOR_AUTO_SAVE_DELAY]: "editorAutoSaveDelay",

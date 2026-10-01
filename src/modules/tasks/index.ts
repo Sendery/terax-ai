@@ -1,11 +1,28 @@
 export {
+  type AgentCapabilities,
+  agentCapabilities,
+  agentLabel,
+  agentModelPresets,
+  DEFAULT_TASK_AGENT,
+  isTaskAgent,
+  type ModelPreset,
+  newSessionSeed,
+  type SessionNaming,
+  TASK_AGENTS,
+  type TaskAgent,
+} from "./lib/agents";
+export {
   applyMissedGrouping,
+  cloneTask,
   moveTask,
+  recentTaskDefaults,
+  regenerateSeed,
   removeTask,
   reschedule,
   setTaskEnabled,
   sortTasksByNextRun,
   type MissedGroup,
+  type TaskDefaults,
   type TaskPatch,
   updateTask,
   upsertTask,
@@ -34,11 +51,14 @@ export {
 } from "./lib/policies";
 export {
   countMissedOccurrences,
+  fromDateAndTime,
   isSchedule,
   MIN_INTERVAL_MINUTES,
   nextOccurrence,
   type Schedule,
   type ScheduleKind,
+  toDateInput,
+  toTimeInput,
   type Weekday,
 } from "./lib/recurrence";
 export {
@@ -93,11 +113,19 @@ export {
   useTasksPanel,
 } from "./lib/useTasksPanel";
 export { TaskCardView } from "./TaskCardView";
-export { TaskEditor, type TaskDraft, toTaskInput } from "./TaskEditor";
+export {
+  draftFrom,
+  retargetModel,
+  TaskEditor,
+  type TaskDraft,
+  toTaskInput,
+} from "./TaskEditor";
 export { TasksPanel } from "./TasksPanel";
 export {
-  buildPiArgv,
+  type ArgvOptions,
+  buildAgentArgv,
   formatCommandLine,
+  isUuidSessionId,
   promptKeystrokes,
   recoverCommandLine,
   sessionIdFor,

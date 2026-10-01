@@ -7,6 +7,7 @@ If a guide conflicts with `TERAX.md`, `TERAX.md` wins.
 ## Getting started
 
 - [TERAX.md](../TERAX.md) - the architecture source of truth; read this first
+- [CHANGELOG.md](../CHANGELOG.md) - what landed on `qa`, by commit
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - how to contribute, quality bar, project layout
 
 ## Architecture guides
@@ -19,7 +20,10 @@ If a guide conflicts with `TERAX.md`, `TERAX.md` wins.
 
 ## Feature guides
 
+- [Reviewing a branch locally](branch-review.md) - the Review branch button, what it compares, and the two diff view toggles.
+- [Mermaid diagrams](mermaid-diagrams.md) - the Mermaid tab, Source and Visual modes, the visual editing subset, and how positions are stored.
 - [Scheduled tasks](scheduled-tasks.md) - waking Pi sessions on a schedule, run targets, accounting, and the recovery, overlap and failure policies.
+- [Reading text aloud](tts.md) - local speech output: the private directory, engines and models, voice profiles, the read-aloud surfaces, and the Pi commands.
 
 ## Contributing guides
 

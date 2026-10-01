@@ -1,6 +1,5 @@
 import { isMarkdownPath } from "@/lib/utils";
 import type { NoteCard } from "@/modules/notes/lib/cards";
-import type { TabColor } from "./tabColors";
 import {
   findLeafCwd,
   hasLeaf,
@@ -14,7 +13,15 @@ import {
   splitLeaf,
 } from "@/modules/terminal/lib/panes";
 import { disposeSession } from "@/modules/terminal/lib/useTerminalSession";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { replaceMermaidTab } from "./mermaidTabMutation";
+import type { TabColor } from "./tabColors";
 
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
@@ -71,6 +78,19 @@ export type MarkdownTab = TabBase & {
   path: string;
 };
 
+export type MermaidVisualLayout = {
+  kind: "flowchart";
+  positions: Record<string, { x: number; y: number }>;
+};
+
+export type MermaidTab = TabBase & {
+  id: number;
+  kind: "mermaid";
+  title: string;
+  source: string;
+  visualLayout?: MermaidVisualLayout;
+};
+
 export type AiDiffStatus = "pending" | "approved" | "rejected";
 
 export type AiDiffTab = TabBase & {
@@ -116,11 +136,25 @@ export type GitCommitFileDiffTab = TabBase & {
   originalPath: string | null;
 };
 
+/** A local review of one branch against the branch it would merge into. */
+export type PrReviewTab = TabBase & {
+  id: number;
+  kind: "pr-review";
+  title: string;
+  repoRoot: string;
+  /** Branch under review. */
+  head: string;
+  /** Branch it is compared against; the user can change it in the pane. */
+  base: string;
+};
+
 export type Tab =
+  | PrReviewTab
   | TerminalTab
   | EditorTab
   | PreviewTab
   | MarkdownTab
+  | MermaidTab
   | AiDiffTab
   | GitDiffTab
   | GitHistoryTab
@@ -173,6 +207,14 @@ export function applyTabPatch(tab: Tab, patch: TabPatch): Tab {
     };
   }
   if (tab.kind === "markdown") {
+    return {
+      ...tab,
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...customTitlePatch,
+      ...colorPatch,
+    };
+  }
+  if (tab.kind === "mermaid") {
     return {
       ...tab,
       ...(patch.title !== undefined && { title: patch.title }),
@@ -273,6 +315,60 @@ export function reorderTabsByGap(
   return next;
 }
 
+/**
+ * Moves a tab to a destination index inside its own space.
+ *
+ * Spaces share one array, so the index is counted over the tab's own strip;
+ * splicing by absolute position would drag it into a neighbouring space. The
+ * index is clamped, so a caller does not have to know the strip's length.
+ */
+export function moveTabToIndex(
+  tabs: readonly Tab[],
+  tabId: number,
+  index: number,
+): { tabs: Tab[]; index: number | null } {
+  const moved = tabs.find((t) => t.id === tabId);
+  if (!moved) return { tabs: tabs as Tab[], index: null };
+  const sameSpace = tabs.filter((t) => t.spaceId === moved.spaceId);
+  const from = sameSpace.findIndex((t) => t.id === tabId);
+  const target = Math.max(0, Math.min(Math.trunc(index), sameSpace.length - 1));
+  if (target === from) return { tabs: tabs as Tab[], index: target };
+
+  const anchor = sameSpace[target];
+  const next = tabs.filter((t) => t.id !== tabId);
+  const anchorIdx = next.findIndex((t) => t.id === anchor.id);
+  next.splice(target > from ? anchorIdx + 1 : anchorIdx, 0, moved);
+  return { tabs: next, index: target };
+}
+
+/**
+ * Pins an editor tab, or returns it to the preview slot.
+ *
+ * A space has exactly one preview slot: the tab the next opened file replaces.
+ * Unpinning therefore pins whichever tab held the slot, otherwise two tabs
+ * would claim it and the next open would replace an unpredictable one.
+ */
+export function setTabPinnedInList(
+  tabs: readonly Tab[],
+  tabId: number,
+  pinned: boolean,
+): { tabs: Tab[]; changed: boolean } {
+  const target = tabs.find((t) => t.id === tabId);
+  if (target?.kind !== "editor") {
+    return { tabs: tabs as Tab[], changed: false };
+  }
+  return {
+    tabs: tabs.map((t) => {
+      if (t.id === tabId) return { ...t, preview: !pinned };
+      if (!pinned && t.kind === "editor" && t.spaceId === target.spaceId) {
+        return t.preview ? { ...t, preview: false } : t;
+      }
+      return t;
+    }),
+    changed: true,
+  };
+}
+
 export function useTabs(initial?: Partial<TerminalTab>) {
   const [tabs, setTabs] = useState<Tab[]>(() => {
     const tabId = 1;
@@ -315,6 +411,17 @@ export function useTabs(initial?: Partial<TerminalTab>) {
       return curr.map((x) => (x.id === activeId ? { ...x, cold: false } : x));
     });
   }, [activeId, booted]);
+
+  // Spawns a restored tab where it sits, without stealing focus. Session
+  // restore needs the shell of every reopened agent, not just the focused one,
+  // and activation can only warm one tab.
+  const warmTab = useCallback((tabId: number) => {
+    setTabs((curr) => {
+      const t = curr.find((x) => x.id === tabId);
+      if (!t?.cold) return curr;
+      return curr.map((x) => (x.id === tabId ? { ...x, cold: false } : x));
+    });
+  }, []);
 
   const allocId = useCallback(() => nextIdRef.current++, []);
 
@@ -720,6 +827,58 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     return targetId;
   }, []);
 
+  const newMermaidTab = useCallback(
+    (source: string, title = "Mermaid diagram") => {
+      const id = nextIdRef.current++;
+      startTransition(() => {
+        setTabs((curr) => [
+          ...curr,
+          {
+            id,
+            kind: "mermaid",
+            spaceId: activeSpaceIdRef.current,
+            title,
+            source,
+          } satisfies MermaidTab,
+        ]);
+        setActiveId(id);
+      });
+      return id;
+    },
+    [],
+  );
+
+  const updateMermaidSource = useCallback((id: number, source: string) => {
+    setTabs((curr) =>
+      curr.map((tab) =>
+        tab.id === id && tab.kind === "mermaid" ? { ...tab, source } : tab,
+      ),
+    );
+  }, []);
+
+  const replaceMermaidTabContent = useCallback(
+    (id: number, source: string, title?: string) => {
+      const result = replaceMermaidTab(tabsRef.current, id, source, title);
+      if (!result.updated) return false;
+      setTabs(result.tabs);
+      return true;
+    },
+    [],
+  );
+
+  const updateMermaidVisualLayout = useCallback(
+    (id: number, visualLayout: MermaidVisualLayout | undefined) => {
+      setTabs((curr) =>
+        curr.map((tab) =>
+          tab.id === id && tab.kind === "mermaid"
+            ? { ...tab, visualLayout }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
   const setMarkdownView = useCallback(
     (id: number, mode: "rendered" | "raw") => {
       setTabs((curr) =>
@@ -817,6 +976,56 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     },
     [],
   );
+
+  const openPrReviewTab = useCallback(
+    (input: { repoRoot: string; head: string; base: string }) => {
+      const curr = tabsRef.current;
+      // One review per branch: reopening from the panel should return to the
+      // review already in progress rather than start a second copy of it.
+      const existing = curr.find(
+        (t) =>
+          t.kind === "pr-review" &&
+          t.repoRoot === input.repoRoot &&
+          t.head === input.head,
+      );
+      const title = `Review ${input.head}`;
+      if (existing) {
+        const nextTabs = curr.map((t) =>
+          t.id === existing.id ? { ...t, title, base: input.base } : t,
+        );
+        tabsRef.current = nextTabs;
+        setTabs(nextTabs);
+        setActiveId(existing.id);
+        return existing.id;
+      }
+      const id = nextIdRef.current++;
+      const nextTabs = [
+        ...curr,
+        {
+          id,
+          kind: "pr-review",
+          spaceId: activeSpaceIdRef.current,
+          title,
+          repoRoot: input.repoRoot,
+          head: input.head,
+          base: input.base,
+        } satisfies PrReviewTab,
+      ];
+      tabsRef.current = nextTabs;
+      setTabs(nextTabs);
+      setActiveId(id);
+      return id;
+    },
+    [],
+  );
+
+  const setPrReviewBase = useCallback((tabId: number, base: string) => {
+    setTabs((curr) =>
+      curr.map((t) =>
+        t.id === tabId && t.kind === "pr-review" ? { ...t, base } : t,
+      ),
+    );
+  }, []);
 
   const openCommitFileDiffTab = useCallback(
     (input: {
@@ -1093,6 +1302,22 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     setTabs((prev) => reorderTabsByGap(prev, fromId, toGapIndex));
   }, []);
 
+  const moveTab = useCallback((tabId: number, index: number) => {
+    const result = moveTabToIndex(tabsRef.current, tabId, index);
+    if (result.index === null) return null;
+    tabsRef.current = result.tabs;
+    setTabs(result.tabs);
+    return result.index;
+  }, []);
+
+  const setTabPinned = useCallback((tabId: number, pinned: boolean) => {
+    const result = setTabPinnedInList(tabsRef.current, tabId, pinned);
+    if (!result.changed) return false;
+    tabsRef.current = result.tabs;
+    setTabs(result.tabs);
+    return true;
+  }, []);
+
   return {
     tabs,
     activeId,
@@ -1102,7 +1327,10 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     moveTabToSpace,
     reorderTab,
     reorderTabByGap,
+    moveTab,
+    setTabPinned,
     newTabInSpace,
+    warmTab,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,
@@ -1114,11 +1342,17 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newMermaidTab,
+    updateMermaidSource,
+    replaceMermaidTabContent,
+    updateMermaidVisualLayout,
     setMarkdownView,
     openAiDiffTab,
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openPrReviewTab,
+    setPrReviewBase,
     setAiDiffStatus,
     closeAiDiffTab,
     closeTab,

@@ -1,15 +1,18 @@
-import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 import { AiDiffStack, EditorStack, GitDiffStack } from "@/modules/editor";
 import { GitHistoryStack } from "@/modules/git-history";
 import { MarkdownStack } from "@/modules/markdown";
+import { MermaidStack } from "@/modules/mermaid";
+import { PrReviewStack } from "@/modules/pr-review";
 import { PreviewStack } from "@/modules/preview";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
+import type { ComponentProps } from "react";
 
 type TerminalStackProps = ComponentProps<typeof TerminalStack>;
 type EditorStackProps = ComponentProps<typeof EditorStack>;
 type PreviewStackProps = ComponentProps<typeof PreviewStack>;
+type MermaidStackProps = ComponentProps<typeof MermaidStack>;
 type AiDiffStackProps = ComponentProps<typeof AiDiffStack>;
 type GitHistoryStackProps = ComponentProps<typeof GitHistoryStack>;
 
@@ -23,6 +26,9 @@ type Props = {
   onExit: TerminalStackProps["onExit"];
   onFocusLeaf: TerminalStackProps["onFocusLeaf"];
   onOpenFileLink: TerminalStackProps["onOpenFileLink"];
+  onReadAloud: TerminalStackProps["onReadAloud"];
+  onStopReading: TerminalStackProps["onStopReading"];
+  selectionActions: TerminalStackProps["selectionActions"];
   homePath?: TerminalStackProps["homePath"];
   registerEditorHandle: EditorStackProps["registerHandle"];
   onEditorDirtyChange: EditorStackProps["onDirtyChange"];
@@ -32,8 +38,11 @@ type Props = {
   onAiDiffAccept: AiDiffStackProps["onAccept"];
   onAiDiffReject: AiDiffStackProps["onReject"];
   onOpenCommitFile: GitHistoryStackProps["onOpenCommitFile"];
+  onPrReviewBaseChange: (tabId: number, base: string) => void;
   onGitHistorySearchHandle: GitHistoryStackProps["onSearchHandle"];
   onSetMarkdownView: EditorStackProps["onSetMarkdownView"];
+  onMermaidSourceChange: MermaidStackProps["onSourceChange"];
+  onMermaidVisualLayoutChange: MermaidStackProps["onVisualLayoutChange"];
 };
 
 /**
@@ -51,6 +60,9 @@ export function WorkspaceSurface({
   onExit,
   onFocusLeaf,
   onOpenFileLink,
+  onReadAloud,
+  onStopReading,
+  selectionActions,
   homePath,
   registerEditorHandle,
   onEditorDirtyChange,
@@ -60,17 +72,22 @@ export function WorkspaceSurface({
   onAiDiffAccept,
   onAiDiffReject,
   onOpenCommitFile,
+  onPrReviewBaseChange,
   onGitHistorySearchHandle,
   onSetMarkdownView,
+  onMermaidSourceChange,
+  onMermaidVisualLayoutChange,
 }: Props) {
   const kind = activeTab?.kind;
   const isTerminalTab = kind === "terminal";
   const isEditorTab = kind === "editor";
   const isPreviewTab = kind === "preview";
   const isMarkdownTab = kind === "markdown";
+  const isMermaidTab = kind === "mermaid";
   const isAiDiffTab = kind === "ai-diff";
   const isGitDiffTab = kind === "git-diff" || kind === "git-commit-file";
   const isGitHistoryTab = kind === "git-history";
+  const isPrReviewTab = kind === "pr-review";
 
   return (
     <div className="relative h-full min-h-0">
@@ -90,6 +107,9 @@ export function WorkspaceSurface({
           onExit={onExit}
           onFocusLeaf={onFocusLeaf}
           onOpenFileLink={onOpenFileLink}
+          onReadAloud={onReadAloud}
+          onStopReading={onStopReading}
+          selectionActions={selectionActions}
           homePath={homePath}
         />
       </div>
@@ -139,6 +159,20 @@ export function WorkspaceSurface({
       <div
         className={cn(
           "absolute inset-0 px-3 pt-2 pb-2",
+          !isMermaidTab && "invisible pointer-events-none",
+        )}
+        aria-hidden={!isMermaidTab}
+      >
+        <MermaidStack
+          tabs={tabs.filter((tab) => tab.kind === "mermaid")}
+          activeId={activeId}
+          onSourceChange={onMermaidSourceChange}
+          onVisualLayoutChange={onMermaidVisualLayoutChange}
+        />
+      </div>
+      <div
+        className={cn(
+          "absolute inset-0 px-3 pt-2 pb-2",
           !isAiDiffTab && "invisible pointer-events-none",
         )}
         aria-hidden={!isAiDiffTab}
@@ -171,6 +205,19 @@ export function WorkspaceSurface({
           activeId={activeId}
           onOpenCommitFile={onOpenCommitFile}
           onSearchHandle={onGitHistorySearchHandle}
+        />
+      </div>
+      <div
+        className={cn(
+          "absolute inset-0 px-3 pt-2 pb-2",
+          !isPrReviewTab && "invisible pointer-events-none",
+        )}
+        aria-hidden={!isPrReviewTab}
+      >
+        <PrReviewStack
+          tabs={tabs}
+          activeId={activeId}
+          onBaseChange={onPrReviewBaseChange}
         />
       </div>
     </div>

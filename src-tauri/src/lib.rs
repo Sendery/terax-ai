@@ -1,8 +1,9 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, capture, fs, git, history, net, pi, pisessions, pty, scheduler, secrets,
-    shell, slotmonit, waker, workspace,
+    agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, net, notify, oauth, pi,
+    pisessions, profile,
+    pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -172,6 +173,12 @@ async fn close_notes_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // The profile scopes cache paths and OS unit names, so it is fixed from the
+    // identifier compiled into this binary before anything, the wake path
+    // included, resolves one.
+    let context = tauri::generate_context!();
+    profile::init(&context.config().identifier);
+
     // A waker invocation is meant to be almost free. Ask a live instance to
     // handle it, or read the exported deadline, and exit before building an app
     // when there is nothing to do. This is the only single-instance guard: normal
@@ -213,6 +220,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(pi::PiBridgeState::default())
         .setup(move |_app| {
+            // Before any store is read: stores load lazily from the webview, and
+            // the webview has not started yet.
+            profile::seed_on_launch(_app.handle());
             // macOS skips parent() for the settings window, so tie its lifecycle
             // to the main window here instead. Other platforms keep parent().
             #[cfg(target_os = "macos")]
@@ -250,8 +260,10 @@ pub fn run() {
         .manage(fs::watch::FsWatchState::default())
         .manage(agent_cli::AgentCliState::default())
         .manage(history::HistoryState::default())
+        .manage(lsp::LspState::default())
         .manage(scheduler::SchedulerState::default())
         .manage(fs::grep::ContentSearchState::default())
+        .manage(tts::TtsState::default())
         .manage({
             let registry = workspace::WorkspaceRegistry::default();
             workspace::bootstrap_registry(&registry);
@@ -284,6 +296,12 @@ pub fn run() {
             fs::mutate::fs_copy,
             fs::watch::fs_watch_add,
             fs::watch::fs_watch_remove,
+            lsp::lsp_detect,
+            lsp::lsp_host_pid,
+            lsp::lsp_resolve_root,
+            lsp::lsp_spawn,
+            lsp::lsp_send,
+            lsp::lsp_kill,
             fs::search::fs_search,
             fs::search::fs_list_files,
             fs::grep::fs_grep,
@@ -305,6 +323,9 @@ pub fn run() {
             git::commands::git_show_commit,
             git::commands::git_commit_files,
             git::commands::git_commit_file_diff,
+            git::commands::git_branches,
+            git::commands::git_range_summary,
+            git::commands::git_range_file_diff,
             git::commands::git_remote_url,
             shell::shell_run_command,
             shell::shell_session_open,
@@ -322,6 +343,13 @@ pub fn run() {
             pisessions::pi_session_offset,
             pisessions::pi_session_usage,
             pisessions::pi_sessions_list,
+            agentdigest::agent_session_digest,
+            notify::agent_notify,
+            profile::app_profile,
+            profile::sandbox_reset_from_installed,
+            agentsessions::agent_session_read,
+            agentsessions::agent_sessions_list,
+            agentsessions::agent_session_branch,
             slotmonit::slot_monit_query,
             workspace::wsl_list_distros,
             workspace::wsl_default_distro,
@@ -342,6 +370,12 @@ pub fn run() {
             secrets::secrets_set,
             secrets::secrets_delete,
             secrets::secrets_get_all,
+            oauth::oauth_begin,
+            oauth::oauth_complete,
+            oauth::oauth_cancel,
+            oauth::oauth_status,
+            oauth::oauth_logout,
+            oauth::oauth_access_token,
             net::lm_ping,
             net::ai_http_request,
             net::ai_http_stream,
@@ -350,7 +384,45 @@ pub fn run() {
             history::history_commands,
             history::history_record,
             history::history_list,
+            tts::commands::tts_layout,
+            tts::commands::tts_status,
+            tts::commands::tts_install_runtime,
+            tts::commands::tts_install_engine,
+            tts::commands::tts_remove_engine,
+            tts::commands::tts_download_model,
+            tts::commands::tts_remove_model,
+            tts::commands::tts_job_logs,
+            tts::commands::tts_job_cancel,
+            tts::commands::tts_start,
+            tts::commands::tts_stop,
+            tts::commands::tts_stop_all,
+            tts::commands::tts_models_list,
+            tts::commands::tts_models_purge,
+            tts::commands::tts_purge_all,
+            tts::commands::tts_reveal_dir,
+            tts::commands::tts_sample_import,
+            tts::commands::tts_sample_remove,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // A TTS sidecar is a Python process holding a loaded model; unlike a
+            // PTY it has no window event of its own, so it is killed from the
+            // app's own exit path as well as from `Drop for TtsState`.
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                if let Some(state) = app.try_state::<tts::TtsState>() {
+                    state.kill_all();
+                }
+            }
+            // LSP servers exit on stdin EOF, but destructors are not guaranteed
+            // on process exit; kill explicitly.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<lsp::LspState>() {
+                    state.kill_all();
+                }
+            }
+        });
 }

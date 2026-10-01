@@ -10,6 +10,11 @@ import {
 import { BlockOverlay } from "./block/BlockOverlay";
 import { BlockWatermark } from "./block/BlockWatermark";
 import {
+  TerminalContextMenu,
+  type ReadAloudOptions,
+  type TerminalSelectionActions,
+} from "./TerminalContextMenu";
+import {
   focusLeafInput,
   submitToLeaf,
   useTerminalSession,
@@ -40,6 +45,12 @@ type Props = {
   onExit?: (leafId: number, code: number) => void;
   onCwd?: (leafId: number, cwd: string) => void;
   onOpenFileLink?: (path: string) => void;
+  onReadAloud?: (text: string, options: ReadAloudOptions) => void;
+  onStopReading?: () => void;
+  /** Ask Terax / Add to Note / Open Mermaid, shared with the selection popup. */
+  selectionActions?: TerminalSelectionActions;
+  /** Hides Read aloud, the same way a private terminal is hidden from AI. */
+  privateTerminal?: boolean;
 };
 
 export const TerminalPane = memo(
@@ -55,12 +66,18 @@ export const TerminalPane = memo(
       onExit,
       onCwd,
       onOpenFileLink,
+      onReadAloud,
+      onStopReading,
+      selectionActions,
+      privateTerminal = false,
     },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
     const downYRef = useRef<number | null>(null);
-    const { resolvedMode, themeId, customThemes } = useTheme();
+    const menuSelectionRef = useRef<string | null>(null);
+    const preClickSelectionRef = useRef<string | null>(null);
+    const { resolvedMode, activeTheme } = useTheme();
 
     const session = useTerminalSession({
       leafId,
@@ -80,7 +97,7 @@ export const TerminalPane = memo(
       // Defer one frame so CSS-variable token resolution sees the new class.
       const id = requestAnimationFrame(() => session.applyTheme());
       return () => cancelAnimationFrame(id);
-    }, [resolvedMode, themeId, customThemes, session]);
+    }, [resolvedMode, activeTheme, session]);
 
     useImperativeHandle(
       ref,
@@ -99,59 +116,104 @@ export const TerminalPane = memo(
       pointerEvents: visible ? ("auto" as const) : ("none" as const),
     };
 
+    // A right-click reaches xterm first and can replace the selection with the
+    // word under the cursor (its macOS default), so the selection is also read
+    // in the capture phase. What is highlighted when the menu opens wins; the
+    // pre-click text is the fallback for the paths that clear it.
+    const captureMenuSelection = (event: { button: number }) => {
+      if (event.button !== 2) return;
+      preClickSelectionRef.current = session.getSelection();
+    };
+    const onMenuOpen = () => {
+      menuSelectionRef.current =
+        session.getSelection() ?? preClickSelectionRef.current;
+      preClickSelectionRef.current = null;
+    };
+    const menuProps = {
+      leafId,
+      readSelection: () => menuSelectionRef.current,
+      onReadAloud,
+      onStopReading,
+      selectionActions,
+      onRestoreFocus: () => {
+        // In a blocks pane the editor, not the grid, holds focus at the prompt.
+        // Focusing the grid would move the caret out of the input the user was
+        // typing in, so a right-click would cost them their place.
+        if (blocks && session.blockMode === "prompt") focusLeafInput(leafId);
+        else session.focus();
+      },
+      privateTerminal,
+    };
+
     const promptReady = session.blockMode === "prompt";
 
     if (blocks) {
       return (
-        <div
-          className="zoom-exempt flex h-full w-full flex-col"
-          style={hideStyle}
-        >
-          <div className="relative min-h-0 flex-1">
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: terminal surface; pointer selects command blocks */}
-            <div
-              ref={containerRef}
-              className="absolute inset-0 z-0"
-              onMouseDown={(e) => {
-                downYRef.current = e.clientY;
-              }}
-              onMouseUp={(e) => {
-                const moved =
-                  downYRef.current != null &&
-                  Math.abs(e.clientY - downYRef.current) > 4;
-                downYRef.current = null;
-                if (!moved) session.selectBlockAt(e.clientY);
-                if (session.blockMode === "prompt") focusLeafInput(leafId);
-              }}
-            />
-            <BlockWatermark
-              leafId={leafId}
-              subscribe={session.subscribeBlocks}
-            />
-            <BlockOverlay
-              subscribe={session.subscribeBlocks}
-              getVisible={session.visibleBlocks}
-              readOutput={(id) => session.readBlockId(id)?.output ?? null}
-              searchBlock={session.searchBlock}
-              revealMatch={session.revealMatch}
-              clearSearch={session.clearSearch}
-              promptReady={promptReady}
-              onRunAgain={(cmd) => submitToLeaf(leafId, cmd)}
-              onRestoreFocus={() => {
-                if (session.blockMode === "prompt") focusLeafInput(leafId);
-              }}
-            />
+        <TerminalContextMenu {...menuProps}>
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: terminal surface; the pointer handlers only snapshot the selection for the context menu */}
+          <div
+            className="zoom-exempt flex h-full w-full flex-col"
+            style={hideStyle}
+            onMouseDownCapture={captureMenuSelection}
+            onContextMenu={onMenuOpen}
+          >
+            <div className="relative min-h-0 flex-1">
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: terminal surface; pointer selects command blocks */}
+              <div
+                ref={containerRef}
+                className="absolute inset-0 z-0"
+                // Selecting a block is a primary-button gesture. The secondary
+                // button only opens the context menu: letting it through here
+                // moved the block selection and the focus out from under the
+                // menu that was opening.
+                onMouseDown={(e) => {
+                  if (e.button !== 0) return;
+                  downYRef.current = e.clientY;
+                }}
+                onMouseUp={(e) => {
+                  if (e.button !== 0) return;
+                  const moved =
+                    downYRef.current != null &&
+                    Math.abs(e.clientY - downYRef.current) > 4;
+                  downYRef.current = null;
+                  if (!moved) session.selectBlockAt(e.clientY);
+                  if (session.blockMode === "prompt") focusLeafInput(leafId);
+                }}
+              />
+              <BlockWatermark
+                leafId={leafId}
+                subscribe={session.subscribeBlocks}
+              />
+              <BlockOverlay
+                subscribe={session.subscribeBlocks}
+                getVisible={session.visibleBlocks}
+                readOutput={(id) => session.readBlockId(id)?.output ?? null}
+                searchBlock={session.searchBlock}
+                revealMatch={session.revealMatch}
+                clearSearch={session.clearSearch}
+                promptReady={promptReady}
+                onRunAgain={(cmd) => submitToLeaf(leafId, cmd)}
+                onRestoreFocus={() => {
+                  if (session.blockMode === "prompt") focusLeafInput(leafId);
+                }}
+              />
+            </div>
           </div>
-        </div>
+        </TerminalContextMenu>
       );
     }
 
     return (
-      <div
-        ref={containerRef}
-        className="zoom-exempt h-full w-full"
-        style={hideStyle}
-      />
+      <TerminalContextMenu {...menuProps}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: terminal surface; the pointer handlers only snapshot the selection for the context menu */}
+        <div
+          ref={containerRef}
+          className="zoom-exempt h-full w-full"
+          style={hideStyle}
+          onMouseDownCapture={captureMenuSelection}
+          onContextMenu={onMenuOpen}
+        />
+      </TerminalContextMenu>
     );
   }),
 );

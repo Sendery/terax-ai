@@ -34,12 +34,20 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `sidebar.show`
 - `sidebar.hide`
 - `tab.openFile`
+- `preview.open`
+- `mermaid.open`
+- `mermaid.update`
 - `tab.focus`
 - `tab.close`
 - `tab.rename`
 - `tab.resetTitle`
 - `tab.setColor`
+- `tab.move`
+- `tab.setPinned`
 - `git.diff.open`
+- `git.history.open`
+- `git.commitFile.open`
+- `search.content`
 - `settings.open`
 - `agent-monitor.show`
 - `agent-monitor.hide`
@@ -60,12 +68,22 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tasks.list`
 - `tasks.add`
 - `tasks.update`
+- `tasks.clone`
+- `tasks.reseed`
 - `tasks.remove`
 - `tasks.run`
 - `tasks.setEnabled`
 - `tasks.pauseAll`
 - `tasks.resumeAll`
 - `tasks.wake`
+- `tts.status`
+- `tts.start`
+- `tts.stop`
+- `tts.install`
+- `tts.download`
+- `tts.voices`
+- `tts.speak`
+- `tts.stopSpeaking`
 
 Call `app.commands` for the authoritative catalog with every payload argument,
 its type, and the closed value set of each enum. That catalog is generated from
@@ -74,7 +92,118 @@ what is enforced; this list is a convenience and `app.commands` wins.
 
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, and scheduled-task APIs. It does not expose AI diff approval internals.
 
-`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. `tasks.list` returns a prompt only because asking for it is an explicit request.
+`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. The `tts` section reports which speech engines are installed and running, which models are downloaded, and whether the window is speaking, never the text being read, a sidecar token, or a voice sample path. `tasks.list` returns a prompt only because asking for it is an explicit request.
+
+### mermaid.open
+
+Open Mermaid source in Terax's split editor and live diagram preview. Markdown fences are removed automatically. Source is limited to 48 KiB UTF-8; the authenticated bridge accepts frames up to 384 KiB so JSON escaping cannot make an otherwise valid maximum-size source exceed the transport cap.
+
+```json
+{ "id": "mermaid.open", "payload": { "source": "flowchart LR\nA-->B", "title": "Build flow" } }
+```
+
+Sources up to 24 KiB use CodeMirror with a debounced live preview. Larger valid sources remain editable and persist normally through a lightweight text editor, but live preview pauses to keep the UI responsive. The preview uses Mermaid strict security, locks flowchart configuration against source directives, disables HTML flowchart labels, discards stale async results, and displays SVG as an inert image rather than injecting it as HTML. `title` is optional and limited to 80 characters.
+
+### mermaid.update
+
+Replace the source of a Mermaid tab previously opened by Pi or identified through
+the redacted snapshot. The command updates only a tab whose kind is `mermaid`,
+clears stale private visual-layout metadata, and never returns the source.
+
+```json
+{ "id": "mermaid.update", "payload": { "tabId": 13, "source": "flowchart LR\nA-->C", "title": "Build flow v2" } }
+```
+
+`source` follows the same fence normalization and 48 KiB UTF-8 limit as
+`mermaid.open`. `title` is optional; omitting it preserves the current title. The
+command does not focus the tab automatically; call `tab.focus` when the updated
+diagram should become active. Visual undo/redo is transient UI state and is not
+persisted, returned through Pi, or included in snapshots.
+
+### tts.speak
+
+Read text aloud through the local speech engine. Nothing leaves the machine: a
+private Python sidecar synthesizes the audio and the webview plays it.
+
+```json
+{ "id": "tts.speak", "payload": { "text": "The build passed.", "language": "es-ES" } }
+```
+
+`text` is capped at 8192 characters after trimming and split into
+sentence-sized chunks. `voiceId` (from `tts.voices`) pins one profile and wins
+over `language`; `language` (`es-ES` or `en-US`) picks that language's default
+profile; omitting both uses the preferred language. A request that resolves to
+no profile fails with `command_failed` before any audio starts.
+
+The reply is `{ voiceId, chunks, truncated, started: true }` and arrives as soon
+as the queue is running, not when the audio ends: starting an engine and loading
+a model take longer than the bridge's 15 second UI window. Poll `tts.status` and
+read `speech` (`{ speaking, voiceId, progress, error }`) to follow or diagnose
+playback, and call `tts.stopSpeaking` to silence it.
+
+`tts.status` reports the runtime, every engine (installed, running, device,
+size), every model (downloaded, size), background jobs and disk usage, with the
+per-launch sidecar token removed. `tts.install` and `tts.download` return a
+`jobId` whose progress appears in `tts.status.jobs`; both download hundreds of
+megabytes, so they belong behind an explicit user decision. `tts.start` returns
+`{ starting: true }` for the same timeout reason, and `tts.stop` shuts a sidecar
+down and frees its memory.
+
+Private terminal text is never offered for speech, and the snapshot's `tts`
+section carries engine and model state only. Full user guide:
+[`docs/tts.md`](tts.md).
+
+### git.history.open
+
+Open the commit graph for a repository. An already open graph for the same
+repository is focused instead of duplicated.
+
+```json
+{ "id": "git.history.open", "payload": { "repoRoot": "/repo", "branch": "main" } }
+```
+
+`branch` only titles the tab. The result reports `{ tabId }`.
+
+### git.commitFile.open
+
+Open a file's diff as it was at one commit.
+
+```json
+{ "id": "git.commitFile.open", "payload": { "repoRoot": "/repo", "sha": "0a1b2c3", "path": "src/main.ts" } }
+```
+
+`sha` must be 7 to 40 hexadecimal characters: it reaches git as an argument, so
+revision expressions such as `HEAD~1` are rejected rather than resolved. Pass
+`originalPath` when the commit renamed the file and `subject` to show the commit
+message in the tab. A tab already open for the same repository, commit and path
+is focused instead of duplicated.
+
+### search.content
+
+Search file contents under a root with a regular expression, honoring
+`.gitignore`.
+
+```json
+{ "id": "search.content", "payload": { "query": "TODO\\(", "root": "/repo", "maxResults": 20 } }
+```
+
+Returns `{ hits, truncated, filesScanned }` where each hit is
+`{ path, rel, line, text }`. This command reads; it opens no tab. Follow it with
+`tab.openFile` to open a hit. The root and every hit pass the same read
+deny-list the in-app AI tools use, so a match can never reveal a path the agent
+is not allowed to read. `maxResults` is 1 to 500 and defaults to 50.
+
+### tab.move and tab.setPinned
+
+```json
+{ "id": "tab.move", "payload": { "tabId": 4, "index": 0 } }
+{ "id": "tab.setPinned", "payload": { "tabId": 4, "pinned": true } }
+```
+
+`index` is counted inside the tab's own space and is clamped to that strip.
+`tab.setPinned` applies to editor tabs: a space has exactly one preview slot,
+the tab the next opened file replaces, so unpinning a tab pins whichever tab
+held the slot.
 
 ### app.capture
 
@@ -131,7 +260,7 @@ Rust owns the external listener in `src-tauri/src/modules/pi.rs`.
 - Port: ephemeral per app launch
 - Auth: per-launch random token
 - Discovery file: user cache directory, `terax-ai/pi-bridge.json`
-- Frame cap: 64 KiB
+- Frame cap: 384 KiB
 - Request timeout: 5 seconds for frame IO, 15 seconds for UI response
 
 Rust validates protocol version, token, frame size, and command allowlist, then emits a Tauri event to the React bridge. React executes the frontend registry command and replies through the `external_command_respond` Tauri command.
@@ -140,10 +269,11 @@ The discovery file is written atomically. Terax removes stale discovery data on 
 
 ## Pi Package
 
-The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus development and visual-QA skills. The extension registers five tools:
+The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus the development, visual-QA and local-speech skills. The extension registers six tools:
 
 - `terax_get_state`: returns the redacted Terax snapshot.
 - `terax_call`: calls only allowlisted Terax registry commands.
+- `terax_speak`: reads a short text aloud through `tts.speak`.
 - `terax_wait`: waits for a short interval before the next state check.
 - `terax_development_guide`: returns project contribution points for a feature, native window, setting, shortcut, or app command.
 - `terax_visual_qa`: returns screenshot evidence, records short MP4s, or compares the UI against a project baseline.

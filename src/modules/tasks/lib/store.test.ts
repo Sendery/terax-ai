@@ -59,6 +59,20 @@ describe("parseStoredTasks", () => {
     expect(parseStoredTasks(stored)).toEqual([good]);
   });
 
+  it("migrates a task stored before agents existed to pi", () => {
+    const legacy = { ...task("legacy") } as Record<string, unknown>;
+    delete legacy.agent;
+    delete legacy.seed;
+    const [restored] = parseStoredTasks([legacy]);
+    expect(restored.agent).toBe("pi");
+    // No seed is invented: the task keeps the session id it already used.
+    expect(restored.seed).toBeUndefined();
+  });
+
+  it("drops an entry whose agent is not a supported CLI", () => {
+    expect(parseStoredTasks([{ ...task("bad"), agent: "gemini" }])).toEqual([]);
+  });
+
   it("drops duplicate ids, keeping the first", () => {
     const first = task("first");
     const clone = { ...task("second"), id: first.id };

@@ -1,20 +1,22 @@
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useChatStore } from "@/modules/ai";
 import { AgentStatusPill } from "@/modules/ai/components/AgentStatusPill";
 import {
   AiOpenButton,
   AiStatusBarControls,
 } from "@/modules/ai/components/AiStatusBarControls";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { LspStatusPill } from "@/modules/lsp";
+import type { WorkspaceEnv } from "@/modules/workspace";
 import { IncognitoIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SlotMonitorIndicator } from "@/modules/slot-monitor";
+import { SpeakingPill, TtsEngineControl } from "@/modules/tts";
 import { CwdBreadcrumb } from "./CwdBreadcrumb";
 import { WorkspaceEnvSelector } from "./WorkspaceEnvSelector";
-import type { WorkspaceEnv } from "@/modules/workspace";
 
 type Props = {
   cwd: string | null;
@@ -39,16 +41,17 @@ export function StatusBar({
   privateActive,
 }: Props) {
   const panelOpen = useChatStore((s) => s.panelOpen);
-  const openPanel = useChatStore((s) => s.openPanel);
+  const togglePanel = useChatStore((s) => s.togglePanel);
 
   return (
     <footer
       data-capture-target="statusbar"
-      className="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-card/60 px-3 text-[11px]"
+      className="flex h-8 shrink-0 items-center justify-between gap-3 overflow-hidden border-t border-border/60 bg-card/60 px-3 text-[11px]"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <WorkspaceEnvSelector onSelect={onWorkspaceChange} />
         <CwdBreadcrumb cwd={cwd} filePath={filePath} home={home} onCd={onCd} />
+        <LspStatusPill filePath={filePath ?? null} />
         {privateActive ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -57,20 +60,29 @@ export function StatusBar({
                 <span>Private: hidden from AI</span>
               </span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-64 text-[11px] leading-relaxed">
+            <TooltipContent
+              side="top"
+              className="max-w-64 text-[11px] leading-relaxed"
+            >
               AI can't see this terminal's output. Use it for secrets, SSH, or
               anything you don't want sent to the model.
             </TooltipContent>
           </Tooltip>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
+      {/* Every control shares one row, so the group yields instead of pushing
+          its trailing members off the bar: labels here shorten to an ellipsis
+          and only then does the breadcrumb on the left give up more room. */}
+      <div className="flex min-w-0 shrink items-center justify-end gap-1.5">
         <AgentStatusPill onClick={onOpenMini} />
         {panelOpen && hasComposer ? (
           <AiStatusBarControls />
         ) : (
-          <AiOpenButton onOpen={openPanel} />
+          <AiOpenButton open={panelOpen} onToggle={togglePanel} />
         )}
+        {/* Speech keeps its transport, engine and history side by side. */}
+        <SpeakingPill />
+        <TtsEngineControl />
         <SlotMonitorIndicator cwd={cwd} />
       </div>
     </footer>

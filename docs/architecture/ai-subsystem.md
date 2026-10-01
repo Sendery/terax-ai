@@ -31,6 +31,45 @@ Model metadata (context limits, costs, reasoning behavior) lives in the model re
 
 Keys are never persisted outside the OS keychain / Linux secrets file.
 
+### Subscription sign-in (OAuth)
+
+Two providers can be authorised with a browser login against a paid plan
+instead of an API key: **Anthropic** (Claude Pro/Max) and **ChatGPT (Codex)**,
+which is a separate `chatgpt-codex` provider because a ChatGPT plan does not
+reach the public OpenAI API — it talks to the Codex backend, which is the
+Responses API behind `https://chatgpt.com/backend-api/codex` plus an account
+header taken from the token.
+
+The flow lives in `src-tauri/src/modules/oauth.rs`, not in the webview:
+
+- It is authorization code + PKCE (S256) against a **loopback** listener on the
+  port the provider has registered for the client id (53692 for Anthropic, 1455
+  for Codex). The webview cannot open a socket, and these ports are not
+  negotiable.
+- Credentials go into the same store as API keys (`secrets`), one account per
+  provider, as `<provider>-oauth`.
+- **Tokens never enter the renderer's storage.** `oauth_access_token` hands one
+  out per request, refreshing first when it is within two minutes of expiry, so
+  a credential revoked upstream stops working on the next message rather than
+  at the next app start.
+- `createOAuthFetch` in `agent.ts` applies the per-provider headers and routes
+  the request through the Rust proxy. Anthropic authenticates through
+  `x-api-key` (not a bearer header) and needs the `oauth-2025-04-20` and
+  `claude-code-20250219` betas; Codex uses a bearer token plus
+  `chatgpt-account-id`.
+
+An API key always wins over a sign-in for the same provider: it is the
+credential the user typed most recently and deliberately.
+
+Adding a provider is adding a `ProviderConfig` to `PROVIDERS` in `oauth.rs` and
+an entry to `OAUTH_PROVIDERS` in `config.ts`. Antigravity (Google) is
+deliberately absent: every public implementation needs a client secret lifted
+out of Google's binary, and Google's terms forbid third-party clients, so
+shipping it would put the user's account at risk of suspension.
+
+Using any subscription outside its vendor's own apps is between the user and
+their provider's terms; the Settings panel says so before the first connection.
+
 ## Agent run loop
 
 `runAgentStream` (`agent.ts:391`):
@@ -86,6 +125,7 @@ AI-proposed file edits open in an `ai-diff` tab. The user accepts or rejects per
 
 - Keep the Vercel AI SDK v6 chat shape (`streamText`, tools, step limits); the rest of the UI depends on it.
 - Keys only via `secrets_*` commands; never disk, settings store, or `localStorage`.
+- OAuth tokens live in Rust; the renderer sees an expiry and an account label, and asks for a token per request.
 - New providers must justify their bundle cost and unique value.
 - Mutating tools require approval; read-only tools still pass the deny-list.
 

@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  NotificationTone,
+  SessionDigest,
+} from "@/modules/agents/lib/types";
+import type { SessionAgent } from "@/modules/session-graph/lib/entries";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 
 export type ReadResult =
@@ -94,6 +99,16 @@ export type GitPushResult = {
   pushed: boolean;
 };
 
+export type GitRefKind = "branch" | "remote" | "tag" | "other";
+
+export type GitRef = {
+  /** Branch, remote branch or tag name, without its ref prefix. */
+  name: string;
+  kind: GitRefKind;
+  /** True when HEAD points here. */
+  isHead: boolean;
+};
+
 export type GitLogEntry = {
   sha: string;
   shortSha: string;
@@ -102,9 +117,43 @@ export type GitLogEntry = {
   timestampSecs: number;
   parents: string[];
   subject: string;
+  /** Commit message beyond the subject. Empty when there is none. */
+  body: string;
+  refs: GitRef[];
   filesChanged: number;
   insertions: number;
   deletions: number;
+};
+
+export type GitBranchList = {
+  /** Checked-out branch, absent on a detached HEAD. */
+  current: string | null;
+  local: string[];
+  remote: string[];
+  /** Branch a review should default to comparing against. */
+  defaultBase: string | null;
+};
+
+export type GitRangeFile = {
+  path: string;
+  /** Previous path when the change is a rename or copy. */
+  originalPath: string | null;
+  /** Porcelain status letter: A, M, D, R, C or T. */
+  status: string;
+  statusLabel: string;
+  added: number;
+  removed: number;
+  isBinary: boolean;
+};
+
+export type GitRangeSummary = {
+  /** Commit the branches last shared, which is what the review diffs from. */
+  mergeBase: string;
+  base: string;
+  head: string;
+  ahead: number;
+  behind: number;
+  files: GitRangeFile[];
 };
 
 export type GitCommitFileChange = {
@@ -267,6 +316,81 @@ export const native = {
         sizeBytes: number;
       }[]
     >("pi_sessions_list", { limit: limit ?? null }),
+  /**
+   * Reads a transcript slice for the session-graph panel. Payloads are projected
+   * down to what a row renders, so pass the previous `nextOffset` to follow a
+   * live transcript instead of re-reading it.
+   */
+  agentSessionRead: (
+    agent: SessionAgent,
+    sessionId: string,
+    fromOffset: number,
+  ) =>
+    invoke<{
+      jsonl: string;
+      nextOffset: number;
+      totalBytes: number;
+      truncated: boolean;
+    }>("agent_session_read", { agent, sessionId, fromOffset }),
+  /**
+   * Writes a new pi session holding the path from the root to one entry, and
+   * returns it. Additive: the original transcript is only read, so this is safe
+   * while an agent is running.
+   */
+  agentSessionBranch: (sessionId: string, entryId: string) =>
+    invoke<{ sessionId: string; path: string; entryCount: number }>(
+      "agent_session_branch",
+      { sessionId, entryId },
+    ),
+  /**
+   * Live digest of a session's transcript: name, recap, pending question,
+   * running tasks, PRs and artifacts. Incremental on the Rust side, so a call
+   * costs only what was appended since the previous one.
+   */
+  agentSessionDigest: (
+    agent: "claude" | "pi" | "codex",
+    sessionId: string | null,
+    cwd: string | null,
+  ) =>
+    invoke<SessionDigest | null>("agent_session_digest", {
+      agent,
+      sessionId,
+      cwd,
+    }),
+  /**
+   * Posts a notification with a subtitle, a colour badge and a click target.
+   * Resolves false where no rich path exists, so the caller falls back.
+   */
+  agentNotify: (notification: {
+    title: string;
+    subtitle?: string;
+    body?: string;
+    accent?: string;
+    /** PNG bytes of the composite icon (`notificationBadge.ts`), shown in place of the app icon. */
+    icon?: number[];
+    tone: NotificationTone;
+    leafId?: number;
+    tabId?: number;
+  }) => invoke<boolean>("agent_notify", { notification }),
+  /** Which Terax this is: the installed app, or a sandbox on a copy of its data. */
+  appProfile: () => invoke<"production" | "sandbox">("app_profile"),
+  /** Replaces the sandbox's data with a fresh copy on the next launch. */
+  sandboxResetFromInstalled: () => invoke<void>("sandbox_reset_from_installed"),
+  agentSessionsList: (agent: SessionAgent, cwd?: string, limit?: number) =>
+    invoke<
+      {
+        id: string;
+        agent: SessionAgent;
+        cwd: string | null;
+        modifiedMs: number;
+        sizeBytes: number;
+        parentSessionId: string | null;
+      }[]
+    >("agent_sessions_list", {
+      agent,
+      cwd: cwd ?? null,
+      limit: limit ?? null,
+    }),
   shellBgList: () =>
     invoke<
       {
@@ -382,6 +506,33 @@ export const native = {
       sha,
       path,
       originalPath: originalPath ?? null,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitBranches: (repoRoot: string) =>
+    invoke<GitBranchList>("git_branches", {
+      repoRoot,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitRangeSummary: (repoRoot: string, base: string, head: string) =>
+    invoke<GitRangeSummary>("git_range_summary", {
+      repoRoot,
+      base,
+      head,
+      workspace: currentWorkspaceEnv(),
+    }),
+  gitRangeFileDiff: (params: {
+    repoRoot: string;
+    baseRev: string;
+    headRev: string;
+    path: string;
+    originalPath?: string | null;
+  }) =>
+    invoke<GitDiffContentResult>("git_range_file_diff", {
+      repoRoot: params.repoRoot,
+      baseRev: params.baseRev,
+      headRev: params.headRev,
+      path: params.path,
+      originalPath: params.originalPath ?? null,
       workspace: currentWorkspaceEnv(),
     }),
   gitRemoteUrl: (repoRoot: string, name?: string) =>

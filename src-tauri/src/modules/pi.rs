@@ -15,7 +15,9 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
-pub const MAX_FRAME_BYTES: usize = 64 * 1024;
+// Mirrors packages/pi-terax: a 48 KiB source can expand sixfold when JSON
+// escapes control characters, plus the authenticated request envelope.
+pub const MAX_FRAME_BYTES: usize = 384 * 1024;
 const FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 const UI_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 const EVENT_EXTERNAL_COMMAND: &str = "terax:external-command";
@@ -165,12 +167,20 @@ fn is_allowed_command(command: &str) -> bool {
             | "sidebar.show"
             | "sidebar.hide"
             | "tab.openFile"
+            | "preview.open"
+            | "mermaid.open"
+            | "mermaid.update"
             | "tab.focus"
             | "tab.close"
             | "tab.rename"
             | "tab.resetTitle"
             | "tab.setColor"
+            | "tab.move"
+            | "tab.setPinned"
             | "git.diff.open"
+            | "git.history.open"
+            | "git.commitFile.open"
+            | "search.content"
             | "settings.open"
             | "agent-monitor.show"
             | "agent-monitor.hide"
@@ -187,16 +197,29 @@ fn is_allowed_command(command: &str) -> bool {
             | "tasks.show"
             | "tasks.hide"
             | "tasks.toggle"
+            | "history.show"
+            | "history.hide"
+            | "history.toggle"
             | "tasks.openEditor"
             | "tasks.list"
             | "tasks.add"
             | "tasks.update"
+            | "tasks.clone"
+            | "tasks.reseed"
             | "tasks.remove"
             | "tasks.run"
             | "tasks.setEnabled"
             | "tasks.pauseAll"
             | "tasks.resumeAll"
             | "tasks.wake"
+            | "tts.status"
+            | "tts.start"
+            | "tts.stop"
+            | "tts.install"
+            | "tts.download"
+            | "tts.voices"
+            | "tts.speak"
+            | "tts.stopSpeaking"
     )
 }
 
@@ -241,12 +264,15 @@ pub fn decode_request_line(line: &[u8], token: &str) -> Result<ClientRequest, Pr
     Ok(request)
 }
 
-fn cache_file_path() -> Result<PathBuf, String> {
-    let base = dirs::cache_dir().ok_or_else(|| "Unable to resolve cache directory".to_string())?;
-    Ok(base.join("terax-ai").join("pi-bridge.json"))
+/// Where this instance advertises its bridge. Scoped by profile, so a sandbox
+/// never takes the bridge over from the installed app.
+pub(crate) fn cache_file_path() -> Result<PathBuf, String> {
+    let base = super::profile::cache_root()
+        .ok_or_else(|| "Unable to resolve cache directory".to_string())?;
+    Ok(base.join("pi-bridge.json"))
 }
 
-fn random_token() -> Result<String, String> {
+pub(crate) fn random_token() -> Result<String, String> {
     let mut bytes = [0_u8; 32];
     fill_random(&mut bytes)?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
@@ -479,6 +505,33 @@ mod tests {
     }
 
     #[test]
+    fn accepts_an_exact_cap_frame_excluding_the_newline_delimiter() {
+        let mut input = vec![b'a'; MAX_FRAME_BYTES];
+        input.push(b'\n');
+
+        let frame = read_frame(&mut &input[..]).expect("exact-cap frame");
+        assert_eq!(frame.len(), MAX_FRAME_BYTES);
+    }
+
+    #[test]
+    fn accepts_worst_case_maximum_mermaid_source_frame() {
+        let source = "\u{1}".repeat(48 * 1024);
+        let mut frame = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "id": "r-max",
+            "token": "tok",
+            "command": "mermaid.open",
+            "payload": { "source": source },
+        }))
+        .expect("serialize request");
+        frame.push(b'\n');
+
+        let decoded = read_frame(&mut &frame[..]).expect("accepted Mermaid request frame");
+        let request = decode_request_line(&decoded, "tok").expect("valid Mermaid request");
+        assert_eq!(request.command, "mermaid.open");
+    }
+
+    #[test]
     fn allows_agent_monitor_commands() {
         for command in ["agent-monitor.show", "agent-monitor.hide", "agent-monitor.toggle"] {
             let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
@@ -497,15 +550,37 @@ mod tests {
     }
 
     #[test]
+    fn allows_mermaid_open_command() {
+        let line = br#"{"version":1,"id":"r3","token":"tok","command":"mermaid.open","payload":{"source":"flowchart LR\nA-->B"}}"#;
+        let request = decode_request_line(line, "tok").expect("mermaid.open must be allowed");
+
+        assert_eq!(request.command, "mermaid.open");
+    }
+
+    #[test]
+    fn allows_mermaid_update_command() {
+        let line = br#"{"version":1,"id":"r4","token":"tok","command":"mermaid.update","payload":{"tabId":3,"source":"flowchart LR\nA-->C"}}"#;
+        let request =
+            decode_request_line(line, "tok").expect("mermaid.update must be allowed");
+
+        assert_eq!(request.command, "mermaid.update");
+    }
+
+    #[test]
     fn allows_every_scheduled_task_command() {
         for command in [
             "tasks.show",
             "tasks.hide",
             "tasks.toggle",
+            "history.show",
+            "history.hide",
+            "history.toggle",
             "tasks.openEditor",
             "tasks.list",
             "tasks.add",
             "tasks.update",
+            "tasks.clone",
+            "tasks.reseed",
             "tasks.remove",
             "tasks.run",
             "tasks.setEnabled",
@@ -516,6 +591,26 @@ mod tests {
             let line = format!(
                 r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#
             );
+            let request = decode_request_line(line.as_bytes(), "tok")
+                .unwrap_or_else(|_| panic!("{command} must be allowed"));
+
+            assert_eq!(request.command, command);
+        }
+    }
+
+    #[test]
+    fn allows_every_tts_command() {
+        for command in [
+            "tts.status",
+            "tts.start",
+            "tts.stop",
+            "tts.install",
+            "tts.download",
+            "tts.voices",
+            "tts.speak",
+            "tts.stopSpeaking",
+        ] {
+            let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
             let request = decode_request_line(line.as_bytes(), "tok")
                 .unwrap_or_else(|_| panic!("{command} must be allowed"));
 

@@ -1,4 +1,9 @@
 import { TAB_COLORS } from "@/modules/tabs";
+import {
+  TTS_ENGINES,
+  TTS_LANGUAGES,
+  TTS_MODELS,
+} from "@/modules/tts/lib/engines";
 import { describe, expect, it, vi } from "vitest";
 import {
   COMMAND_IDS,
@@ -21,11 +26,33 @@ function handlers(): CommandHandlers {
     showSidebar: vi.fn(async () => ({ visible: true, view: "explorer" })),
     hideSidebar: vi.fn(async () => ({ visible: false })),
     openFile: vi.fn(async () => ({ tabId: 7 })),
+    openPreview: vi.fn(async () => ({
+      tabId: 12,
+      url: "http://localhost:19432/",
+      created: true,
+    })),
+    openMermaid: vi.fn(async () => ({
+      tabId: 13,
+      title: "Mermaid diagram",
+    })),
+    updateMermaid: vi.fn(async () => ({
+      tabId: 13,
+      title: "Updated diagram",
+    })),
     focusTab: vi.fn(async () => ({ tabId: 2 })),
     closeTab: vi.fn(async () => ({ requested: true })),
     renameTab: vi.fn(async () => ({ tabId: 2 })),
     resetTabTitle: vi.fn(async () => ({ tabId: 2 })),
     openGitDiff: vi.fn(async () => ({ tabId: 8 })),
+    openGitHistory: vi.fn(async () => ({ tabId: 21 })),
+    openCommitFile: vi.fn(async () => ({ tabId: 22 })),
+    searchContent: vi.fn(async () => ({
+      hits: [{ path: "/repo/a.ts", rel: "a.ts", line: 3, text: "TODO" }],
+      truncated: false,
+      filesScanned: 12,
+    })),
+    moveTab: vi.fn(async () => ({ tabId: 4, index: 0 })),
+    setTabPinned: vi.fn(async () => ({ tabId: 4, pinned: true })),
     openSettings: vi.fn(async () => ({ opened: true })),
     setTabColor: vi.fn(async () => ({ tabId: 2 })),
     getBuildInfo: vi.fn(() => ({
@@ -57,18 +84,164 @@ function handlers(): CommandHandlers {
     showTasks: vi.fn(() => ({ visible: true })),
     hideTasks: vi.fn(() => ({ visible: false })),
     toggleTasks: vi.fn(() => ({ toggled: true })),
+    showHistory: vi.fn(() => ({ visible: true })),
+    hideHistory: vi.fn(() => ({ visible: false })),
+    toggleHistory: vi.fn(() => ({ toggled: true })),
     openTaskEditor: vi.fn(() => ({ opened: true })),
     listTasks: vi.fn(() => ({ paused: false, tasks: [] })),
     addTask: vi.fn(() => ({ id: "st-1" })),
     updateTask: vi.fn(() => ({ id: "st-1", updated: true })),
+    cloneTask: vi.fn(() => ({ id: "st-2", source: "st-1", enabled: false })),
+    reseedTask: vi.fn(() => ({ id: "st-1", reseeded: true })),
     removeTask: vi.fn(() => ({ id: "st-1", removed: true })),
     runTask: vi.fn(() => ({ id: "st-1", started: true })),
     setTaskEnabled: vi.fn(() => ({ id: "st-1", enabled: false })),
     pauseAllTasks: vi.fn(() => ({ paused: true })),
     resumeAllTasks: vi.fn(() => ({ paused: false })),
     wakeTasks: vi.fn(() => ({ dispatched: 0 })),
+    getTtsStatus: vi.fn(() => ({
+      runtime: { installed: true, uvVersion: "0.12.9", pythonVersion: "3.11" },
+      engines: [],
+      models: [],
+      jobs: [],
+      diskUsageBytes: 0,
+      speech: {
+        speaking: false,
+        voiceId: null,
+        progress: { index: 0, total: 0 },
+        error: null,
+      },
+    })),
+    startTtsEngine: vi.fn(() => ({ engine: "kokoro", starting: true })),
+    stopTtsEngine: vi.fn(() => ({ stopped: ["kokoro"] })),
+    installTtsEngine: vi.fn(() => ({ jobId: 3 })),
+    downloadTtsModel: vi.fn(() => ({ jobId: 4 })),
+    listTtsVoices: vi.fn(() => ({ voices: [] })),
+    speakTts: vi.fn(() => ({
+      voiceId: "builtin-es-dora",
+      chunks: 2,
+      truncated: false,
+      started: true,
+    })),
+    stopTtsSpeaking: vi.fn(() => ({ stopped: true })),
   };
 }
+
+describe("mermaid.open", () => {
+  it("validates source and an optional title", () => {
+    expect(
+      validateCommandRequest({
+        id: "mermaid.open",
+        payload: { source: "flowchart LR\nA-->B", title: "Build flow" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "mermaid.open",
+        payload: { source: "flowchart LR\nA-->B", title: "Build flow" },
+      },
+    });
+    expect(
+      validateCommandRequest({
+        id: "mermaid.open",
+        payload: { source: "   " },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("normalizes fenced terminal selections before dispatch", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({
+      id: "mermaid.open",
+      payload: { source: "```mermaid\r\nflowchart TD\r\nA-->B\r\n```" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(h.openMermaid).toHaveBeenCalledWith({
+      source: "flowchart TD\nA-->B",
+      title: undefined,
+    });
+  });
+
+  it("documents source as required and title as optional", () => {
+    const entry = describeCommands().commands.find(
+      (command) => command.id === "mermaid.open",
+    );
+    expect(entry?.params).toEqual([
+      expect.objectContaining({
+        name: "source",
+        type: "string",
+        required: true,
+      }),
+      expect.objectContaining({
+        name: "title",
+        type: "string",
+        required: false,
+      }),
+    ]);
+  });
+});
+
+describe("mermaid.update", () => {
+  it("validates a target tab, normalizes source, and dispatches without exposing source", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const result = await registry.call({
+      id: "mermaid.update",
+      payload: {
+        tabId: 13,
+        source: "```mermaid\r\nflowchart TD\r\nA-->C\r\n```",
+        title: "Updated diagram",
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: { tabId: 13, title: "Updated diagram" },
+    });
+    expect(h.updateMermaid).toHaveBeenCalledWith({
+      tabId: 13,
+      source: "flowchart TD\nA-->C",
+      title: "Updated diagram",
+    });
+    expect(JSON.stringify(result)).not.toContain("flowchart");
+  });
+
+  it("rejects a missing tab id, empty source, and oversized source", () => {
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { source: "flowchart LR\nA-->B" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { tabId: 13, source: "   " },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "mermaid.update",
+        payload: { tabId: 13, source: "A".repeat(48 * 1024 + 1) },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("documents tab id and source as required and title as optional", () => {
+    const entry = describeCommands().commands.find(
+      (command) => command.id === "mermaid.update",
+    );
+    expect(
+      entry?.params.map(({ name, required }) => ({ name, required })),
+    ).toEqual([
+      { name: "tabId", required: true },
+      { name: "source", required: true },
+      { name: "title", required: false },
+    ]);
+  });
+});
 
 describe("notes commands", () => {
   it("accepts the no-payload notes commands", () => {
@@ -86,7 +259,8 @@ describe("notes commands", () => {
 
   it("validates notes.add content", () => {
     expect(
-      validateCommandRequest({ id: "notes.add", payload: { content: "hi" } }).ok,
+      validateCommandRequest({ id: "notes.add", payload: { content: "hi" } })
+        .ok,
     ).toBe(true);
     expect(validateCommandRequest({ id: "notes.add", payload: {} }).ok).toBe(
       false,
@@ -114,7 +288,8 @@ describe("notes commands", () => {
     ).toBe(true);
     // missing id
     expect(
-      validateCommandRequest({ id: "notes.update", payload: { title: "x" } }).ok,
+      validateCommandRequest({ id: "notes.update", payload: { title: "x" } })
+        .ok,
     ).toBe(false);
     // no editable field
     expect(
@@ -275,6 +450,95 @@ describe("app.capture", () => {
   });
 });
 
+describe("preview.open command", () => {
+  it("accepts loopback http(s) URLs", () => {
+    for (const url of [
+      "http://localhost:19432/",
+      "http://127.0.0.1:5173/canvas",
+      "https://localhost:8443",
+    ]) {
+      expect(
+        validateCommandRequest({ id: "preview.open", payload: { url } }).ok,
+        url,
+      ).toBe(true);
+    }
+  });
+
+  it("requires payload.url", () => {
+    expect(validateCommandRequest({ id: "preview.open", payload: {} })).toEqual(
+      {
+        ok: false,
+        error: {
+          code: "invalid_payload",
+          message: "preview.open requires payload.url",
+        },
+      },
+    );
+    expect(
+      validateCommandRequest({ id: "preview.open", payload: undefined }).ok,
+    ).toBe(false);
+  });
+
+  it("rejects non-loopback and non-http URLs", () => {
+    for (const url of [
+      "http://example.com",
+      "https://localhost.evil.com/",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "localhost:19432",
+      42,
+    ]) {
+      const result = validateCommandRequest({
+        id: "preview.open",
+        payload: { url },
+      });
+      expect(result.ok, String(url)).toBe(false);
+    }
+  });
+
+  it("passes an optional title through and rejects a non-string title", () => {
+    expect(
+      validateCommandRequest({
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: "Excalidraw" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: "Excalidraw" },
+      },
+    });
+    expect(
+      validateCommandRequest({
+        id: "preview.open",
+        payload: { url: "http://localhost:19432/", title: 7 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("dispatches valid requests and never calls the handler on rejection", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    const ok = await registry.call({
+      id: "preview.open",
+      payload: { url: "http://localhost:19432/" },
+    });
+    expect(ok).toEqual({
+      ok: true,
+      value: { tabId: 12, url: "http://localhost:19432/", created: true },
+    });
+    expect(h.openPreview).toHaveBeenCalledTimes(1);
+
+    const rejected = await registry.call({
+      id: "preview.open",
+      payload: { url: "http://example.com" },
+    });
+    expect(rejected.ok).toBe(false);
+    expect(h.openPreview).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("describeCommands", () => {
   it("documents a schema entry for every command id", () => {
     const catalog = describeCommands();
@@ -423,12 +687,20 @@ describe("command registry", () => {
       "sidebar.show",
       "sidebar.hide",
       "tab.openFile",
+      "preview.open",
+      "mermaid.open",
+      "mermaid.update",
       "tab.focus",
       "tab.close",
       "tab.rename",
       "tab.resetTitle",
       "tab.setColor",
+      "tab.move",
+      "tab.setPinned",
       "git.diff.open",
+      "git.history.open",
+      "git.commitFile.open",
+      "search.content",
       "settings.open",
       "agent-monitor.show",
       "agent-monitor.hide",
@@ -445,27 +717,67 @@ describe("command registry", () => {
       "tasks.show",
       "tasks.hide",
       "tasks.toggle",
+      "history.show",
+      "history.hide",
+      "history.toggle",
       "tasks.openEditor",
       "tasks.list",
       "tasks.add",
       "tasks.update",
+      "tasks.clone",
+      "tasks.reseed",
       "tasks.remove",
       "tasks.run",
       "tasks.setEnabled",
       "tasks.pauseAll",
       "tasks.resumeAll",
       "tasks.wake",
+      "tts.status",
+      "tts.start",
+      "tts.stop",
+      "tts.install",
+      "tts.download",
+      "tts.voices",
+      "tts.speak",
+      "tts.stopSpeaking",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });
 });
 
 describe("scheduled task commands", () => {
+  it("routes the history panel commands to their handlers", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    expect((await reg.call({ id: "history.show" })).ok).toBe(true);
+    expect((await reg.call({ id: "history.hide" })).ok).toBe(true);
+    expect((await reg.call({ id: "history.toggle" })).ok).toBe(true);
+
+    expect(h.showHistory).toHaveBeenCalledTimes(1);
+    expect(h.hideHistory).toHaveBeenCalledTimes(1);
+    expect(h.toggleHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a history command that carries a payload, without running it", async () => {
+    // A rejected command must not reach the handler at all.
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const res = await reg.call({ id: "history.toggle", payload: { on: true } });
+
+    expect(res.ok).toBe(false);
+    expect(h.toggleHistory).not.toHaveBeenCalled();
+  });
+
   it("accepts the no-payload task commands", () => {
     for (const id of [
       "tasks.show",
       "tasks.hide",
       "tasks.toggle",
+      "history.show",
+      "history.hide",
+      "history.toggle",
       "tasks.list",
       "tasks.pauseAll",
       "tasks.resumeAll",
@@ -589,7 +901,8 @@ describe("scheduled task commands", () => {
 
   it("requires an id plus one field to update a task", () => {
     expect(
-      validateCommandRequest({ id: "tasks.update", payload: { id: "st-1" } }).ok,
+      validateCommandRequest({ id: "tasks.update", payload: { id: "st-1" } })
+        .ok,
     ).toBe(false);
     expect(
       validateCommandRequest({
@@ -755,5 +1068,456 @@ describe("tab.setColor command", () => {
     expect((result as { ok: false; error: { code: string } }).error.code).toBe(
       "command_failed",
     );
+  });
+});
+
+describe("task agent payloads", () => {
+  it("accepts the three supported agent CLIs", () => {
+    for (const agent of ["pi", "claude", "codex"]) {
+      expect(
+        validateCommandRequest({
+          id: "tasks.add",
+          payload: { name: "n", prompt: "p", schedule: "every:5m", agent },
+        }).ok,
+      ).toBe(true);
+    }
+  });
+
+  it("rejects an agent outside the closed set", () => {
+    const result = validateCommandRequest({
+      id: "tasks.add",
+      payload: {
+        name: "n",
+        prompt: "p",
+        schedule: "every:5m",
+        agent: "gemini",
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("invalid_payload");
+  });
+
+  it("documents the agent argument in the catalog", () => {
+    const add = describeCommands().commands.find((c) => c.id === "tasks.add");
+    const agent = add?.params.find((param) => param.name === "agent");
+    expect(agent?.type).toBe("enum");
+    expect(agent?.values).toEqual(["pi", "claude", "codex"]);
+  });
+});
+
+describe("tasks.clone and tasks.reseed", () => {
+  it("are exposed to Pi", () => {
+    expect(PI_ALLOWED_COMMAND_IDS).toContain("tasks.clone");
+    expect(PI_ALLOWED_COMMAND_IDS).toContain("tasks.reseed");
+  });
+
+  it("require the id of an existing task", () => {
+    for (const id of ["tasks.clone", "tasks.reseed"] as const) {
+      expect(validateCommandRequest({ id, payload: { id: "st-1" } }).ok).toBe(
+        true,
+      );
+      for (const bad of [undefined, {}, { id: "" }, { id: 7 }]) {
+        expect(validateCommandRequest({ id, payload: bad }).ok).toBe(false);
+      }
+    }
+  });
+
+  it("describes both in the catalog", () => {
+    const catalog = describeCommands().commands;
+    for (const id of ["tasks.clone", "tasks.reseed"]) {
+      const command = catalog.find((entry) => entry.id === id);
+      expect(command?.params).toEqual([
+        expect.objectContaining({ name: "id", type: "string", required: true }),
+      ]);
+    }
+  });
+});
+
+describe("surfaces that had no bridge command", () => {
+  it("opens the git history graph for a repository", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "git.history.open",
+      payload: { repoRoot: "/repo", branch: "main" },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 21 } });
+    expect(h.openGitHistory).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      branch: "main",
+    });
+  });
+
+  it("requires a repository root for the history graph", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({ id: "git.history.open", payload: {} });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("opens a file as it was at a commit", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "git.commitFile.open",
+      payload: {
+        repoRoot: "/repo",
+        sha: "0123456789abcdef0123456789abcdef01234567",
+        path: "src/main.ts",
+      },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 22 } });
+    expect(h.openCommitFile).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      sha: "0123456789abcdef0123456789abcdef01234567",
+      path: "src/main.ts",
+      originalPath: null,
+      subject: undefined,
+    });
+  });
+
+  it("rejects a commit that is not a hexadecimal sha", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "git.commitFile.open",
+      payload: { repoRoot: "/repo", sha: "HEAD~1; rm -rf /", path: "a.ts" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("carries a rename through to the commit file tab", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    await reg.call({
+      id: "git.commitFile.open",
+      payload: {
+        repoRoot: "/repo",
+        sha: "abc1234",
+        path: "src/new.ts",
+        originalPath: "src/old.ts",
+        subject: "rename it",
+      },
+    });
+
+    expect(h.openCommitFile).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      sha: "abc1234",
+      path: "src/new.ts",
+      originalPath: "src/old.ts",
+      subject: "rename it",
+    });
+  });
+
+  it("searches file contents under a root", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "search.content",
+      payload: { query: "TODO", root: "/repo", maxResults: 5 },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        hits: [{ path: "/repo/a.ts", rel: "a.ts", line: 3, text: "TODO" }],
+        truncated: false,
+        filesScanned: 12,
+      },
+    });
+    expect(h.searchContent).toHaveBeenCalledWith({
+      query: "TODO",
+      root: "/repo",
+      caseInsensitive: undefined,
+      maxResults: 5,
+    });
+  });
+
+  it("rejects an empty search query", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "search.content",
+      payload: { query: "   ", root: "/repo" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("keeps the search result cap inside the supported range", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    for (const maxResults of [0, 501]) {
+      expect(
+        await reg.call({
+          id: "search.content",
+          payload: { query: "TODO", root: "/repo", maxResults },
+        }),
+      ).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
+    }
+  });
+
+  it("reorders a tab within its strip", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "tab.move",
+      payload: { tabId: 4, index: 0 },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 4, index: 0 } });
+    expect(h.moveTab).toHaveBeenCalledWith({ tabId: 4, index: 0 });
+  });
+
+  it("refuses a negative destination index", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "tab.move",
+      payload: { tabId: 4, index: -1 },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+
+  it("pins a preview tab so the next file does not replace it", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const result = await reg.call({
+      id: "tab.setPinned",
+      payload: { tabId: 4, pinned: true },
+    });
+
+    expect(result).toEqual({ ok: true, value: { tabId: 4, pinned: true } });
+    expect(h.setTabPinned).toHaveBeenCalledWith({ tabId: 4, pinned: true });
+  });
+
+  it("requires the pinned flag to be a boolean", async () => {
+    const reg = createCommandRegistry(handlers());
+
+    const result = await reg.call({
+      id: "tab.setPinned",
+      payload: { tabId: 4, pinned: "yes" },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+  });
+});
+
+describe("local speech commands", () => {
+  it("routes every tts command to its handler", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    expect((await reg.call({ id: "tts.status" })).ok).toBe(true);
+    expect((await reg.call({ id: "tts.voices" })).ok).toBe(true);
+    expect((await reg.call({ id: "tts.stopSpeaking" })).ok).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.start", payload: { engine: "kokoro" } })).ok,
+    ).toBe(true);
+    expect((await reg.call({ id: "tts.stop", payload: {} })).ok).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.install", payload: { engine: "chatterbox" } }))
+        .ok,
+    ).toBe(true);
+    expect(
+      (
+        await reg.call({
+          id: "tts.download",
+          payload: { model: "kokoro-82m" },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      (await reg.call({ id: "tts.speak", payload: { text: "Ready." } })).ok,
+    ).toBe(true);
+
+    expect(h.getTtsStatus).toHaveBeenCalledTimes(1);
+    expect(h.listTtsVoices).toHaveBeenCalledTimes(1);
+    expect(h.stopTtsSpeaking).toHaveBeenCalledTimes(1);
+    expect(h.startTtsEngine).toHaveBeenCalledWith({ engine: "kokoro" });
+    expect(h.stopTtsEngine).toHaveBeenCalledWith({ engine: undefined });
+    expect(h.installTtsEngine).toHaveBeenCalledWith({ engine: "chatterbox" });
+    expect(h.downloadTtsModel).toHaveBeenCalledWith({ model: "kokoro-82m" });
+    expect(h.speakTts).toHaveBeenCalledWith({
+      text: "Ready.",
+      voiceId: undefined,
+      language: undefined,
+    });
+  });
+
+  it("accepts an omitted engine on tts.stop and rejects an unknown one", () => {
+    expect(validateCommandRequest({ id: "tts.stop" })).toEqual({
+      ok: true,
+      value: { id: "tts.stop", payload: { engine: undefined } },
+    });
+    expect(
+      validateCommandRequest({ id: "tts.stop", payload: { engine: "piper" } })
+        .ok,
+    ).toBe(false);
+  });
+
+  it("closes the engine and model sets", () => {
+    expect(
+      validateCommandRequest({ id: "tts.start", payload: { engine: "piper" } })
+        .ok,
+    ).toBe(false);
+    expect(validateCommandRequest({ id: "tts.install", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({
+        id: "tts.download",
+        payload: { model: "kokoro-82m-v2" },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("trims speech text, caps it at 8192 characters, and closes the language set", () => {
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "  Build finished.  ", language: "es-ES" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "tts.speak",
+        payload: {
+          text: "Build finished.",
+          voiceId: undefined,
+          language: "es-ES",
+        },
+      },
+    });
+    expect(
+      validateCommandRequest({ id: "tts.speak", payload: { text: "   " } }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "a".repeat(8193) },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "a".repeat(8192) },
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "hola", language: "fr-FR" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "hola", voiceId: 7 },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("refuses a payload on the read-only speech commands", () => {
+    for (const id of ["tts.status", "tts.voices", "tts.stopSpeaking"]) {
+      expect(
+        validateCommandRequest({ id, payload: { engine: "kokoro" } }).ok,
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("does not reach a handler when the payload is rejected", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    const rejected = await reg.call({
+      id: "tts.speak",
+      payload: { text: "" },
+    });
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: { code: "invalid_payload" },
+    });
+    expect(h.speakTts).not.toHaveBeenCalled();
+
+    const badEngine = await reg.call({
+      id: "tts.start",
+      payload: { engine: "espeak" },
+    });
+
+    expect(badEngine.ok).toBe(false);
+    expect(h.startTtsEngine).not.toHaveBeenCalled();
+    expect(h.installTtsEngine).not.toHaveBeenCalled();
+  });
+
+  it("documents the speech commands with their closed value sets", () => {
+    const catalog = describeCommands();
+    const speak = catalog.commands.find((c) => c.id === "tts.speak");
+    expect(speak?.params.map((p) => p.name)).toEqual([
+      "text",
+      "voiceId",
+      "language",
+    ]);
+    expect(speak?.params.find((p) => p.name === "language")?.values).toEqual([
+      ...TTS_LANGUAGES,
+    ]);
+    const start = catalog.commands.find((c) => c.id === "tts.start");
+    expect(start?.params[0]).toMatchObject({
+      name: "engine",
+      type: "enum",
+      required: true,
+    });
+    expect(start?.params[0]?.values).toEqual([...TTS_ENGINES]);
+    const download = catalog.commands.find((c) => c.id === "tts.download");
+    expect(download?.params[0]?.values).toEqual([...TTS_MODELS]);
+    const stop = catalog.commands.find((c) => c.id === "tts.stop");
+    expect(stop?.params[0]?.required).toBe(false);
+    expect(catalog.commands.find((c) => c.id === "tts.status")?.params).toEqual(
+      [],
+    );
+  });
+
+  it("offers the voice settings tab to settings.open", () => {
+    expect(
+      validateCommandRequest({
+        id: "settings.open",
+        payload: { tab: "voice" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: { id: "settings.open", payload: { tab: "voice" } },
+    });
+    const tab = describeCommands()
+      .commands.find((c) => c.id === "settings.open")
+      ?.params.find((p) => p.name === "tab");
+    expect(tab?.values).toContain("voice");
   });
 });

@@ -9,11 +9,12 @@ export type SelectionAskAiProps = {
   y: number;
   onAsk: () => void;
   onAddToNote: () => void;
+  onOpenMermaid: () => void;
   onDismiss: () => void;
 };
 
 const W = 168;
-const H = 62;
+const H = 93;
 const GAP = 10;
 
 function ActionRow({
@@ -22,7 +23,7 @@ function ActionRow({
   onClick,
 }: {
   label: string;
-  shortcutKey: string;
+  shortcutKey?: string;
   onClick: () => void;
 }) {
   return (
@@ -35,11 +36,13 @@ function ActionRow({
       className="flex h-7 w-full items-center justify-between gap-2 px-2 text-xs hover:bg-accent"
     >
       <span>{label}</span>
-      <KbdGroup>
-        <Kbd className="h-4 min-w-4 px-1 text-[10px]">
-          {fmtShortcut(MOD_KEY, shortcutKey)}
-        </Kbd>
-      </KbdGroup>
+      {shortcutKey ? (
+        <KbdGroup>
+          <Kbd className="h-4 min-w-4 px-1 text-[10px]">
+            {fmtShortcut(MOD_KEY, shortcutKey)}
+          </Kbd>
+        </KbdGroup>
+      ) : null}
     </button>
   );
 }
@@ -50,6 +53,7 @@ export function SelectionAskAi({
   y,
   onAsk,
   onAddToNote,
+  onOpenMermaid,
   onDismiss,
 }: SelectionAskAiProps) {
   const pos = useRef({ top: 0, left: 0 });
@@ -82,6 +86,8 @@ export function SelectionAskAi({
         <ActionRow label="Ask Terax" shortcutKey="J" onClick={onAsk} />
         <div className="h-px bg-border/60" />
         <ActionRow label="Add to Note" shortcutKey="L" onClick={onAddToNote} />
+        <div className="h-px bg-border/60" />
+        <ActionRow label="Open Mermaid" onClick={onOpenMermaid} />
       </div>
     </div>
   );

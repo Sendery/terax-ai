@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { VERSION_FILES } from "./set-version.mjs";
 
-const scriptPath = join(dirname(fileURLToPath(import.meta.url)), "set-version.mjs");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const scriptPath = join(scriptDir, "set-version.mjs");
 
 function seedProject(root) {
   mkdirSync(join(root, "src-tauri"), { recursive: true });
@@ -64,6 +66,19 @@ describe("set-version version lockstep", () => {
     expect(readFileSync(join(root, "src-tauri", "Cargo.toml"), "utf8")).toContain(
       'version = "1.2.3"',
     );
+  });
+
+  it("restores every versioned file after a versioned build", () => {
+    // A build that leaves any versioned file dirty breaks the next release
+    // staging run, which requires a completely clean working tree.
+    const buildVersion = readFileSync(join(scriptDir, "build-version.mjs"), "utf8");
+    expect(VERSION_FILES).toContain("packages/pi-terax/package.json");
+    expect(buildVersion).toContain("VERSION_FILES");
+    for (const file of VERSION_FILES) {
+      expect(buildVersion).not.toMatch(
+        new RegExp(`^\\s*"${file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}",`, "m"),
+      );
+    }
   });
 
   it("leaves files untouched on a dry run", () => {

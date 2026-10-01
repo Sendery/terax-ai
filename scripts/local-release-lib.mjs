@@ -2,12 +2,44 @@ import { basename, join } from "node:path";
 
 const SEMVER = /^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/;
 const DEFAULT_REPOSITORY = "Sendery/terax-ai";
+/**
+ * Client keys the Tauri updater can ask for. `tauri-plugin-updater` builds its
+ * lookup key from the *compile-time* architecture (`darwin-aarch64` or
+ * `darwin-x86_64`) and does a plain map lookup with no universal fallback, so a
+ * universal macOS build must still answer both macOS keys.
+ */
 export const REQUIRED_UPDATER_TARGETS = [
   "linux-x86_64",
   "windows-x86_64",
   "darwin-aarch64",
   "darwin-x86_64",
 ];
+
+/** Build plans, which may cover more than one client key. */
+const UPDATER_PLAN_TARGETS = [...REQUIRED_UPDATER_TARGETS, "darwin-universal"];
+
+/**
+ * Client keys served by one staged build plan.
+ */
+export function updaterKeysFor(planTarget) {
+  if (planTarget === "darwin-universal") return ["darwin-aarch64", "darwin-x86_64"];
+  return [planTarget];
+}
+
+/**
+ * Human-facing architecture label used in download names. Apple architecture
+ * jargon (`aarch64`, `x64`) made users pick the wrong macOS installer, so macOS
+ * assets are labelled the way the Apple menu labels the hardware.
+ */
+const ASSET_LABELS = {
+  "darwin-universal": "apple_silicon_intel",
+  "darwin-aarch64": "apple_silicon",
+  "darwin-x86_64": "intel",
+};
+
+export function assetLabel(planTarget) {
+  return ASSET_LABELS[planTarget] ?? planTarget;
+}
 
 export function parseReleaseArgs(args) {
   const versionIndex = args.findIndex((arg) => SEMVER.test(arg));
@@ -50,16 +82,27 @@ function architectureName(arch) {
   return null;
 }
 
+export const MACOS_UNIVERSAL_RUST_TARGET = "universal-apple-darwin";
+
+const MACOS_RUST_TARGETS = {
+  [MACOS_UNIVERSAL_RUST_TARGET]: "darwin-universal",
+  "aarch64-apple-darwin": "darwin-aarch64",
+  "x86_64-apple-darwin": "darwin-x86_64",
+};
+
 export function platformBuildPlan({ platform, arch, target }) {
   const nativeArch = architectureName(arch);
   if (platform === "darwin") {
-    const rustTarget = target ?? `${nativeArch}-apple-darwin`;
-    if (!nativeArch || !["aarch64-apple-darwin", "x86_64-apple-darwin"].includes(rustTarget)) {
+    // Default to one universal artifact so users never have to pick an
+    // architecture, and so the host architecture cannot change what ships.
+    const rustTarget = target ?? MACOS_UNIVERSAL_RUST_TARGET;
+    const updaterTarget = MACOS_RUST_TARGETS[rustTarget];
+    if (!nativeArch || !updaterTarget) {
       throw new Error(`Unsupported local release platform: ${platform}/${arch}/${rustTarget}`);
     }
-    const releaseArch = rustTarget.startsWith("aarch64") ? "aarch64" : "x86_64";
     return {
-      updaterTarget: `darwin-${releaseArch}`,
+      updaterTarget,
+      updaterKeys: updaterKeysFor(updaterTarget),
       rustTarget,
       bundles: ["app", "dmg"],
       bundleRoot: join("src-tauri", "target", rustTarget, "release", "bundle"),
@@ -71,6 +114,7 @@ export function platformBuildPlan({ platform, arch, target }) {
   if (platform === "linux" && nativeArch === "x86_64" && !target) {
     return {
       updaterTarget: "linux-x86_64",
+      updaterKeys: ["linux-x86_64"],
       rustTarget: undefined,
       bundles: ["appimage", "deb", "rpm"],
       bundleRoot: join("src-tauri", "target", "release", "bundle"),
@@ -79,6 +123,7 @@ export function platformBuildPlan({ platform, arch, target }) {
   if (platform === "win32" && nativeArch === "x86_64" && !target) {
     return {
       updaterTarget: "windows-x86_64",
+      updaterKeys: ["windows-x86_64"],
       rustTarget: undefined,
       bundles: ["nsis", "msi"],
       bundleRoot: join("src-tauri", "target", "release", "bundle"),
@@ -88,6 +133,7 @@ export function platformBuildPlan({ platform, arch, target }) {
 }
 
 function updaterSuffix(target) {
+  if (target === "darwin-universal") return ".app.tar.gz";
   if (target.startsWith("linux-")) return ".AppImage";
   if (target.startsWith("windows-")) return ".exe";
   if (target.startsWith("darwin-")) return ".app.tar.gz";
@@ -129,40 +175,49 @@ export function releaseAssetName(version, updaterTarget, file, digest) {
   if (!/^[a-f0-9]{16}$/i.test(digest ?? "")) {
     throw new Error("Release asset names require a 16-character content digest");
   }
-  return `Terax_${version}_${updaterTarget}_${digest.toLowerCase()}${compoundExtension(basename(file))}`;
+  return `Terax_${version}_${assetLabel(updaterTarget)}_${digest.toLowerCase()}${compoundExtension(basename(file))}`;
 }
 
-export function compatibilityAssetName(version, updaterTarget, file) {
+/**
+ * Fixed aliases already baked into shipped installers and the Nix expression.
+ * These names are a compatibility contract, so they keep the old architecture
+ * jargon even though new downloads use the intuitive labels. A universal build
+ * answers both macOS aliases from the one artifact.
+ */
+export function compatibilityAssetNames(version, updaterTarget, file) {
   if (updaterTarget === "linux-x86_64" && file.endsWith(".deb")) {
-    return `Terax_${version}_amd64.deb`;
+    return [`Terax_${version}_amd64.deb`];
   }
-  if (updaterTarget === "darwin-aarch64" && file.endsWith(".app.tar.gz")) {
-    return "Terax_aarch64.app.tar.gz";
+  if (file.endsWith(".app.tar.gz")) {
+    const aliases = {
+      "darwin-aarch64": ["Terax_aarch64.app.tar.gz"],
+      "darwin-x86_64": ["Terax_x64.app.tar.gz"],
+      "darwin-universal": ["Terax_aarch64.app.tar.gz", "Terax_x64.app.tar.gz"],
+    };
+    return aliases[updaterTarget] ?? [];
   }
-  if (updaterTarget === "darwin-x86_64" && file.endsWith(".app.tar.gz")) {
-    return "Terax_x64.app.tar.gz";
-  }
-  return null;
+  return [];
 }
 
 export function buildUpdaterFragment({
   version,
   updaterTarget,
+  updaterKeys,
   assetName,
   signature,
   repository = DEFAULT_REPOSITORY,
   commit,
 }) {
   if (!commit?.trim()) throw new Error("Updater fragments require a source commit");
+  const entry = {
+    signature: signature.trim(),
+    url: `https://github.com/${repository}/releases/download/v${version}/${encodeURIComponent(assetName)}`,
+  };
+  const keys = updaterKeys ?? updaterKeysFor(updaterTarget);
   return {
     version,
     commit: commit.trim(),
-    platforms: {
-      [updaterTarget]: {
-        signature: signature.trim(),
-        url: `https://github.com/${repository}/releases/download/v${version}/${encodeURIComponent(assetName)}`,
-      },
-    },
+    platforms: Object.fromEntries(keys.map((key) => [key, { ...entry }])),
   };
 }
 
@@ -236,7 +291,7 @@ export function assertSigningKeyMatches(encodedPublicKey, signatureText) {
 }
 
 export function validateUpdaterFragment(fragment, context) {
-  if (!REQUIRED_UPDATER_TARGETS.includes(context.expectedTarget)) {
+  if (!UPDATER_PLAN_TARGETS.includes(context.expectedTarget)) {
     throw new Error(`Unknown supported updater target: ${context.expectedTarget}`);
   }
   if (fragment.version !== context.version) {
@@ -245,31 +300,40 @@ export function validateUpdaterFragment(fragment, context) {
   if (fragment.commit !== context.commit) {
     throw new Error(`Updater fragment does not match source commit ${context.commit}`);
   }
+  const expectedKeys = updaterKeysFor(context.expectedTarget);
   const targets = Object.keys(fragment.platforms ?? {});
-  if (targets.length !== 1 || targets[0] !== context.expectedTarget) {
-    throw new Error(`Updater fragment must contain exactly target ${context.expectedTarget}`);
-  }
-  const entry = fragment.platforms[context.expectedTarget];
-  if (!entry?.signature?.trim() || !entry?.url) {
-    throw new Error(`Incomplete updater target: ${context.expectedTarget}`);
+  const missing = expectedKeys.filter((key) => !targets.includes(key));
+  const unexpected = targets.filter((key) => !expectedKeys.includes(key));
+  if (missing.length > 0 || unexpected.length > 0) {
+    throw new Error(
+      `Updater fragment must contain exactly target ${expectedKeys.join(", ")}; missing ${
+        missing.join(", ") || "none"
+      }, unexpected ${unexpected.join(", ") || "none"}`,
+    );
   }
   const expectedPrefix = `https://github.com/${context.repository}/releases/download/v${context.version}/`;
-  if (!entry.url.startsWith(expectedPrefix)) {
-    throw new Error(`Updater URL does not use the expected GitHub release: ${entry.url}`);
-  }
-  const assetName = decodeURIComponent(entry.url.slice(expectedPrefix.length));
-  const assetPrefix = `Terax_${context.version}_${context.expectedTarget}_`;
+  const assetPrefix = `Terax_${context.version}_${assetLabel(context.expectedTarget)}_`;
   const suffix = updaterSuffix(context.expectedTarget);
-  const digest = assetName.slice(assetPrefix.length, -suffix.length);
-  if (
-    !assetName.startsWith(assetPrefix) ||
-    !assetName.endsWith(suffix) ||
-    !/^[a-f0-9]{16}$/i.test(digest)
-  ) {
-    throw new Error(`Updater asset name does not contain the required content digest: ${assetName}`);
-  }
-  if (!context.assetNames.has(assetName)) {
-    throw new Error(`Updater URL references missing release asset: ${assetName}`);
+  for (const key of expectedKeys) {
+    const entry = fragment.platforms[key];
+    if (!entry?.signature?.trim() || !entry?.url) {
+      throw new Error(`Incomplete updater target: ${key}`);
+    }
+    if (!entry.url.startsWith(expectedPrefix)) {
+      throw new Error(`Updater URL does not use the expected GitHub release: ${entry.url}`);
+    }
+    const assetName = decodeURIComponent(entry.url.slice(expectedPrefix.length));
+    const digest = assetName.slice(assetPrefix.length, -suffix.length);
+    if (
+      !assetName.startsWith(assetPrefix) ||
+      !assetName.endsWith(suffix) ||
+      !/^[a-f0-9]{16}$/i.test(digest)
+    ) {
+      throw new Error(`Updater asset name does not contain the required content digest: ${assetName}`);
+    }
+    if (!context.assetNames.has(assetName)) {
+      throw new Error(`Updater URL references missing release asset: ${assetName}`);
+    }
   }
 }
 

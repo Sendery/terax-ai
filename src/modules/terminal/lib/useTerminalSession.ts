@@ -3,7 +3,14 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { invoke } from "@tauri-apps/api/core";
 import type { SearchAddon } from "@xterm/addon-search";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BlockDecorations,
   type BlockMatch,
@@ -29,10 +36,8 @@ import {
   acquireSlot,
   applyBackgroundActive,
   applyCursorBlink,
-  applyFontFamily,
-  applyFontSize,
-  applyFontWeight,
   applyLetterSpacing,
+  applyTerminalFont,
   applyTheme as applyPoolTheme,
   applyScrollback,
   applyWebglPreference,
@@ -44,12 +49,14 @@ import {
   getSlotForLeaf,
   isLeafAltScreen,
   parkLeafSlot,
+  poolAtlasBytes,
   poolSize,
   poolSlotStats,
   refreshLeafSlot,
   releaseSlot,
   setSlotFocused,
 } from "./rendererPool";
+import { useTerminalFont } from "./useTerminalFont";
 
 type Callbacks = {
   onSearchReady?: (addon: SearchAddon) => void;
@@ -100,6 +107,9 @@ type Session = {
   // at the most recent release. Read once on the next bind to trigger a
   // SIGWINCH-driven repaint instead of replaying dormant bytes.
   altScreenAtRelease: boolean;
+  // Serialized while a command or agent owned the terminal: the next bind
+  // replays its bytes and then kicks a repaint (see AcquireParams).
+  busyAtRelease: boolean;
   // OSC 133 C..D window (or blocks running mode): a foreground process owns
   // the terminal, so the leaf must keep its live grid while hidden.
   commandRunning: boolean;
@@ -149,6 +159,15 @@ export function whenSessionReady(
   });
 }
 
+const PENDING_INPUT_MAX = 256 * 1024;
+
+// Input typed before the pty attaches is queued and flushed on attach. Cap the
+// queue so a large paste into a still-spawning pane can't grow it without bound.
+function queuePendingInput(s: Session, data: string): void {
+  if (s.pendingInput.length + data.length > PENDING_INPUT_MAX) return;
+  s.pendingInput += data;
+}
+
 export function writeToSession(leafId: number, data: string): boolean {
   const s = sessions.get(leafId);
   if (!s || s.shellExited) return false;
@@ -156,7 +175,7 @@ export function writeToSession(leafId: number, data: string): boolean {
     void s.pty.write(data);
     return true;
   }
-  s.pendingInput += data;
+  queuePendingInput(s, data);
   return true;
 }
 
@@ -169,7 +188,7 @@ export function submitToLeaf(leafId: number, text: string): void {
     ? `\x1b[200~${text}\x1b[201~\r`
     : `${text}\r`;
   if (s.pty) void s.pty.write(data);
-  else s.pendingInput += data;
+  else queuePendingInput(s, data);
 }
 
 export function interruptLeaf(leafId: number): void {
@@ -305,6 +324,10 @@ export function leafIdForPty(ptyId: number): number | null {
   return null;
 }
 
+export function ptyIdForLeaf(leafId: number): number | null {
+  return sessions.get(leafId)?.pty?.id ?? null;
+}
+
 function leafBusy(s: Session): boolean {
   return s.commandRunning || (s.pty !== null && isAgentActivePty(s.pty.id));
 }
@@ -391,7 +414,7 @@ configureRendererPool({
           return;
         }
         if (s.pty) void s.pty.write(data);
-        else s.pendingInput += data;
+        else queuePendingInput(s, data);
       },
       shiftEnterSequence: () =>
         shiftEnterSequence(s.keyboardProtocol.modifyOtherKeys),
@@ -447,6 +470,7 @@ configureRendererPool({
     if (out.cols > 0) s.cols = out.cols;
     if (out.rows > 0) s.rows = out.rows;
     s.altScreenAtRelease = out.altScreen;
+    s.busyAtRelease = leafBusy(s);
   },
 });
 
@@ -508,6 +532,7 @@ function ensureSession(
     inputActive: false,
     everSubmitted: false,
     altScreenAtRelease: false,
+    busyAtRelease: false,
     commandRunning: false,
     hiddenReleaseTimer: null,
     spawnFailed: false,
@@ -633,12 +658,15 @@ function applyBlockMode(leafId: number, mode: BlockMode): void {
 function bindLeafToSlot(leafId: number, s: Session): void {
   if (!s.container) return;
   const altScreen = s.altScreenAtRelease;
+  const busyAtRelease = s.busyAtRelease;
   s.altScreenAtRelease = false;
+  s.busyAtRelease = false;
   acquireSlot({
     leafId,
     container: s.container,
     snapshot: s.snapshot,
     altScreen,
+    busyAtRelease,
     drainRing: (write) => s.dormantRing.drain(write),
     // Keep stdin alive after a spawn failure so Enter can trigger the retry.
     shellExited: s.shellExited && !s.spawnFailed,
@@ -776,6 +804,7 @@ export async function respawnSession(
   s.pendingExit = null;
   s.pendingInput = "";
   s.altScreenAtRelease = false;
+  s.busyAtRelease = false;
   s.commandRunning = false;
   s.spawnFailed = false;
   cancelHiddenRelease(s);
@@ -929,21 +958,15 @@ export function useTerminalSession({
     };
   }, [leafId, blocks]);
 
-  const fontSize = usePreferencesStore((p) => p.terminalFontSize);
+  const { fontFamily, fontWeight, fontSize } = useTerminalFont();
   const zoomLevel = usePreferencesStore((p) => p.zoomLevel);
-  useEffect(() => {
-    applyFontSize(Math.max(4, Math.round(fontSize * zoomLevel)));
-  }, [fontSize, zoomLevel]);
-
-  const fontFamily = usePreferencesStore((p) => p.terminalFontFamily);
-  useEffect(() => {
-    applyFontFamily(fontFamily);
-  }, [fontFamily]);
-
-  const fontWeight = usePreferencesStore((p) => p.terminalFontWeight);
-  useEffect(() => {
-    applyFontWeight(fontWeight);
-  }, [fontWeight]);
+  useLayoutEffect(() => {
+    applyTerminalFont({
+      fontFamily,
+      fontWeight,
+      fontSize: Math.max(4, Math.round(fontSize * zoomLevel)),
+    });
+  }, [fontFamily, fontWeight, fontSize, zoomLevel]);
 
   const letterSpacing = usePreferencesStore((p) => p.terminalLetterSpacing);
   useEffect(() => {
@@ -1000,7 +1023,7 @@ export function useTerminalSession({
       const s = sessions.get(leafId);
       if (!s || s.shellExited) return;
       if (s.pty) void s.pty.write(data);
-      else s.pendingInput += data;
+      else queuePendingInput(s, data);
     },
     [leafId],
   );
@@ -1164,6 +1187,7 @@ export function terminalDebugStats() {
   return {
     poolSize: poolSize(),
     webglContexts: slots.filter((s) => s.webgl).length,
+    atlasBytes: poolAtlasBytes(),
     idleSlots: slots.filter((s) => s.leafId === null).length,
     slots,
     sessionCount: liveSessions.length,

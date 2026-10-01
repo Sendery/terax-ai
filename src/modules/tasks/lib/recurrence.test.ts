@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   countMissedOccurrences,
+  fromDateAndTime,
   isSchedule,
   MIN_INTERVAL_MINUTES,
   nextOccurrence,
   type Schedule,
+  toDateInput,
+  toTimeInput,
 } from "./recurrence";
 
 /** Local-time epoch builder so expectations never depend on the runner's TZ. */
@@ -242,5 +245,44 @@ describe("isSchedule", () => {
       { kind: "dates", dates: ["2026-13-40"], time: "10:00" },
     ];
     for (const candidate of invalid) expect(isSchedule(candidate)).toBe(false);
+  });
+});
+
+describe("date and time inputs", () => {
+  it("splits an instant into the two fields a form edits", () => {
+    const instant = at(2026, 8, 4, 9, 15);
+    expect(toDateInput(instant)).toBe("2026-08-04");
+    expect(toTimeInput(instant)).toBe("09:15");
+  });
+
+  it("pads single digit months, days, hours and minutes", () => {
+    expect(toDateInput(at(2026, 1, 2, 3, 4))).toBe("2026-01-02");
+    expect(toTimeInput(at(2026, 1, 2, 3, 4))).toBe("03:04");
+  });
+
+  it("recombines the two fields into the same local instant", () => {
+    const instant = at(2026, 8, 4, 9, 15);
+    expect(fromDateAndTime("2026-08-04", "09:15")).toBe(instant);
+  });
+
+  it("round-trips midnight, which is the value a plain date field produces", () => {
+    const midnight = at(2026, 8, 4);
+    expect(fromDateAndTime(toDateInput(midnight), toTimeInput(midnight))).toBe(
+      midnight,
+    );
+  });
+
+  it("rejects a half typed field instead of guessing an instant", () => {
+    for (const [date, time] of [
+      ["", "09:15"],
+      ["2026-08-04", ""],
+      ["2026-8-4", "09:15"],
+      ["2026-02-30", "09:15"],
+      ["2026-08-04", "9:15"],
+      ["2026-08-04", "24:00"],
+      ["2026-08-04", "09:60"],
+    ]) {
+      expect(fromDateAndTime(date, time)).toBeNull();
+    }
   });
 });

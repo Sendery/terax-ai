@@ -1,3 +1,4 @@
+import type { TaskAgent } from "./agents";
 import type { TaskPatch } from "./collection";
 import { formatCountdown, scheduleLabel } from "./presentation";
 import { aggregateTaskUsage, type TaskRun } from "./runs";
@@ -13,6 +14,7 @@ export type TaskCommandInput = {
   cwd?: string;
   target?: ScheduledTask["target"];
   mode?: ScheduledTask["mode"];
+  agent?: TaskAgent;
   missed?: ScheduledTask["missed"];
   overlap?: ScheduledTask["overlap"];
   sessionId?: string;
@@ -27,6 +29,7 @@ function shared(input: TaskCommandInput, cwd: string): Partial<TaskInput> {
   return {
     ...(input.target !== undefined ? { target: input.target } : {}),
     ...(input.mode !== undefined ? { mode: input.mode } : {}),
+    ...(input.agent !== undefined ? { agent: input.agent } : {}),
     ...(input.missed !== undefined ? { missed: input.missed } : {}),
     ...(input.overlap !== undefined ? { overlap: input.overlap } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
@@ -96,6 +99,8 @@ export type TaskSummary = {
   enabled: boolean;
   mode: ScheduledTask["mode"];
   target: ScheduledTask["target"];
+  agent: TaskAgent;
+  model: string | null;
   missed: ScheduledTask["missed"];
   overlap: ScheduledTask["overlap"];
   cwd: string;
@@ -146,6 +151,8 @@ export function taskSummary(
     enabled: task.enabled,
     mode: task.mode,
     target: task.target,
+    agent: task.agent,
+    model: task.model ?? null,
     missed: task.missed,
     overlap: task.overlap,
     cwd: task.cwd,

@@ -1,3 +1,4 @@
+import { TONE_MARK } from "@/modules/agents/lib/describeEvent";
 import { routeAgentNotification } from "@/modules/agents/lib/route";
 import { useWindowFocus } from "@/modules/agents/lib/useWindowFocus";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
@@ -46,28 +47,37 @@ export function LocalAgentNotificationsBridge() {
     if (was === status) return;
 
     const fire = (
-      kind: "attention" | "finished" | "error",
+      kind: "attention" | "turn-end" | "error",
       title: string,
       body?: string,
-    ) =>
+    ) => {
+      const tone = kind === "attention" ? "permission" : kind;
       routeAgentNotification({
         source: "local",
         agent: AGENT,
         kind,
-        title,
+        // No tab and so no tab colour: the state mark alone leads the title.
+        title: `${TONE_MARK[tone]} ${title}`,
+        // The built-in agent has no tab, so the subtitle names where it lives;
+        // the image is the Terax logo.
+        subtitle: "AI panel",
         body,
+        tone,
         focused: focusedRef.current,
         visible: visibleRef.current,
-        allowToast: true,
-        onActivate: () => useChatStore.getState().openPanel(),
       });
+    };
 
     if (status === "awaiting-approval") {
       fire("attention", "Terax needs your approval", "Approve a tool to continue");
     } else if (status === "error") {
       fire("error", "Terax run failed", error ?? undefined);
     } else if (status === "idle" && isBusy(was)) {
-      fire("finished", "Terax finished", "Your task is ready");
+      fire(
+        "turn-end",
+        "Terax finished, waiting for your prompt",
+        useChatStore.getState().agentMeta.step ?? "Your task is ready",
+      );
     }
   }, [status, error]);
 

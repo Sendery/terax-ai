@@ -10,7 +10,7 @@ The pool lives in `src/modules/terminal/lib/rendererPool.ts`.
 
 ## Slot lifecycle
 
-- `POOL_MAX_SIZE` is 5 (`rendererPool.ts:22`). Each slot owns one xterm `Terminal`, `FitAddon`, `SearchAddon`, `SerializeAddon`, and optionally a `WebglAddon`.
+- `POOL_MAX_SIZE` is a soft cap of 5 and `POOL_HARD_MAX_SIZE` a hard cap of 16 (`lib/poolPolicy.ts`). Past the soft cap the pool grows instead of stealing a protected slot (visible, busy, or alt-screen): a parked busy slot has no WebGL context, so the cost is one xterm buffer, while stealing it would serialize a TUI mid-output. Every running Claude Code session counts as busy, so a workload of many split tabs with an agent per pane otherwise evicted one on almost every tab switch. Idle surplus slots are reaped back down. Each slot owns one xterm `Terminal`, `FitAddon`, `SearchAddon`, `SerializeAddon`, and optionally a `WebglAddon`.
 - A slot is created on demand and assigned to a leaf on bind.
 - `releaseSlot` detaches a slot from a leaf. If the leaf is idle, the slot is parked with `display:none` so xterm stops rendering but keeps parsing PTY bytes.
 - After a grace period, idle slots may be reaped to keep the pool size down.
@@ -28,7 +28,7 @@ When the leaf becomes visible again, `acquireSlot` looks for:
 1. A slot already bound to this leaf.
 2. A retained slot for this leaf (`retainedLeafId === leafId`) - fast path, no snapshot replay.
 3. A clean idle slot.
-4. If the pool is at max size, the lowest-scoring slot is evicted. Eviction serializes the retained buffer to a snapshot via `SerializeAddon` before stealing the slot.
+4. If the pool is at the soft cap and the lowest-scoring slot is protected, a new slot is created up to the hard cap. Otherwise the lowest-scoring slot is evicted. Eviction serializes the retained buffer to a snapshot via `SerializeAddon` before stealing the slot. A leaf serialized while busy replays its dormant bytes on the next bind and then gets a SIGWINCH kick, so a program that repaints part of the screen incrementally redraws it from scratch.
 
 ## The DormantRing
 
@@ -50,13 +50,25 @@ If only a snapshot exists, `bindSlot` clears the terminal, resizes, writes the s
 
 WebGL addons are created when a slot becomes visible and reaped after a grace period when parked. The addon recovers from context loss on sleep/wake or GPU reset.
 
+### Repainting a shared atlas
+
+Slots with the same font and theme share one glyph atlas, and `clearTextureAtlas` clears only the model of the renderer that calls it. Clearing the atlas for one pane therefore left every other renderer drawing from glyph positions that now held different glyphs: corrupt text in the neighbouring panes that only selecting it repaired. `repaintSlots` never clears for one slot alone: when any target kept an existing WebGL context, `clearSharedAtlas` clears it through every slot with a renderer, so each one invalidates its model. A renderer attached during the same repaint uploads every page into a fresh context and needs no clear at all (`lib/atlasRepaint.ts`), which is the common re-bind case.
+
+### Glyph atlas budget
+
+xterm's WebGL glyph atlas only grows. `clearTextureAtlas` wipes the pages but keeps their size, pages merge into larger ones up to `MAX_TEXTURE_SIZE` (16384 on Apple GPUs, where a single page can reach 1 GiB), and every WebGL context uploads its own mipmapped copy of each page. Slots with the same font and theme share one atlas, so it survives every individual slot rebind, and days of colourful agent output (truecolor diffs, spinners) pin that memory in the webview's graphics footprint.
+
+The pool therefore caps it (`lib/atlasBudget.ts`, pure and tested). Each time a page is added, a debounced check sums the live atlas pages (deduplicated across slots); above `ATLAS_BUDGET_BYTES` (32 MiB) every WebGL renderer is disposed and the visible ones re-attached, which builds a fresh atlas holding only the glyphs on screen. All renderers are disposed before any is re-attached, since a slot re-attaching while another still owns the old atlas would join it again. Rebuilds are rate limited by `ATLAS_RESET_MIN_INTERVAL_MS` so a screen that genuinely needs a large atlas cannot loop. Page canvases are released (`width = height = 0`) as soon as they are merged away or the atlas is rebuilt, rather than whenever the canvas is collected. `terminalDebugStats().atlasBytes` reports the current size in dev builds.
+
 ## Invariants
 
-- Never allow the pool to grow without bound; max is `POOL_MAX_SIZE`.
+- Never allow the pool to grow without bound; past `POOL_MAX_SIZE` it grows only for protected slots, and never past `POOL_HARD_MAX_SIZE`.
 - Never serialize or evict a leaf that is mid-command or in alt-screen.
 - A hidden busy leaf keeps its live grid parked with `display:none`.
 - An idle hidden leaf releases its slot but the buffer continues parsing bytes.
 - The DormantRing only buffers bytes for leaves without any slot.
+- The shared glyph atlas is never cleared for one slot alone.
+- The shared glyph atlas never exceeds `ATLAS_BUDGET_BYTES` for longer than one rate-limit interval.
 
 ## See also
 

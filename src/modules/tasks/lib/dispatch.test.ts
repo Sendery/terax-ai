@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildPiArgv,
+  buildAgentArgv,
   formatCommandLine,
   promptKeystrokes,
   recoverCommandLine,
@@ -25,9 +25,12 @@ function make(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
       NOW,
     ),
     id: "st-abc",
+    seed: undefined,
     ...overrides,
   };
 }
+
+const SEED = "739c3224-00f8-4504-99a4-06708d16dfeb";
 
 describe("sessionIdFor", () => {
   it("reuses the configured session so a task accumulates context", () => {
@@ -39,10 +42,25 @@ describe("sessionIdFor", () => {
     expect(sessionIdFor(task, NOW + 3_600_000)).toBe("019fc4f0");
   });
 
-  it("owns a stable session id when none was configured", () => {
+  it("owns a stable legacy session id when there is no seed", () => {
     const task = make({ mode: "task" });
     expect(sessionIdFor(task, NOW)).toBe("terax-st-abc");
     expect(sessionIdFor(task, NOW + 3_600_000)).toBe("terax-st-abc");
+  });
+
+  it("names the session after the seed, so regenerating it starts a new one", () => {
+    const task = make({ mode: "task", seed: SEED });
+    expect(sessionIdFor(task, NOW)).toBe(SEED);
+    expect(sessionIdFor({ ...task, seed: "other-seed" }, NOW)).toBe("other-seed");
+  });
+
+  it("prefers an explicitly configured session over the seed", () => {
+    const task = make({
+      mode: "task",
+      seed: SEED,
+      sessions: [{ id: "019fc4f0", cwd: "/Users/dev/project" }],
+    });
+    expect(sessionIdFor(task, NOW)).toBe("019fc4f0");
   });
 
   it("mints a fresh timestamped session for every routine run", () => {
@@ -62,9 +80,9 @@ describe("sessionIdFor", () => {
   });
 });
 
-describe("buildPiArgv", () => {
+describe("buildAgentArgv for pi", () => {
   it("builds an interactive launch that reuses the session", () => {
-    expect(buildPiArgv(make(), "sess-1", { headless: false })).toEqual([
+    expect(buildAgentArgv(make(), "sess-1", { headless: false })).toEqual([
       "pi",
       "--session-id",
       "sess-1",
@@ -73,7 +91,7 @@ describe("buildPiArgv", () => {
 
   it("builds a headless run carrying the prompt", () => {
     expect(
-      buildPiArgv(make({ prompt: "check ci" }), "sess-1", { headless: true }),
+      buildAgentArgv(make({ prompt: "check ci" }), "sess-1", { headless: true }),
     ).toEqual(["pi", "--print", "--session-id", "sess-1", "check ci"]);
   });
 
@@ -83,7 +101,7 @@ describe("buildPiArgv", () => {
       provider: "anthropic",
       thinking: "high",
     });
-    expect(buildPiArgv(task, "sess-1", { headless: true })).toEqual([
+    expect(buildAgentArgv(task, "sess-1", { headless: true })).toEqual([
       "pi",
       "--print",
       "--provider",
@@ -99,17 +117,111 @@ describe("buildPiArgv", () => {
   });
 
   it("omits inherited options entirely rather than passing empty flags", () => {
-    const argv = buildPiArgv(make(), "sess-1", { headless: true });
+    const argv = buildAgentArgv(make(), "sess-1", { headless: true });
     expect(argv).not.toContain("--model");
     expect(argv).not.toContain("--provider");
     expect(argv).not.toContain("--thinking");
   });
 
+  it("keeps the same session flag whether or not the session already exists", () => {
+    const task = make();
+    expect(buildAgentArgv(task, "sess-1", { headless: false, resume: true })).toEqual(
+      buildAgentArgv(task, "sess-1", { headless: false }),
+    );
+  });
+
   it("never puts the prompt on an interactive launch, so it can be typed instead", () => {
-    const argv = buildPiArgv(make({ prompt: "line one\nline two" }), "s", {
+    const argv = buildAgentArgv(make({ prompt: "line one\nline two" }), "s", {
       headless: false,
     });
     expect(argv).not.toContain("line one\nline two");
+  });
+});
+
+describe("buildAgentArgv for claude", () => {
+  it("creates the session on the first run and resumes it afterwards", () => {
+    const task = make({ agent: "claude", mode: "task", seed: SEED });
+    expect(buildAgentArgv(task, SEED, { headless: false })).toEqual([
+      "claude",
+      "--session-id",
+      SEED,
+    ]);
+    expect(
+      buildAgentArgv(task, SEED, { headless: false, resume: true }),
+    ).toEqual(["claude", "--resume", SEED]);
+  });
+
+  it("pins nothing when the session id is not a uuid, which claude rejects", () => {
+    const task = make({ agent: "claude", mode: "task" });
+    const argv = buildAgentArgv(task, "terax-st-abc", { headless: false });
+    expect(argv).toEqual(["claude"]);
+  });
+
+  it("starts a fresh conversation for every routine run", () => {
+    const task = make({ agent: "claude", mode: "routine", seed: SEED });
+    expect(buildAgentArgv(task, SEED, { headless: false, resume: true })).toEqual([
+      "claude",
+    ]);
+  });
+
+  it("prints and carries the prompt when headless", () => {
+    const task = make({ agent: "claude", mode: "routine", model: "sonnet" });
+    expect(buildAgentArgv(task, "x", { headless: true })).toEqual([
+      "claude",
+      "--print",
+      "--model",
+      "sonnet",
+      "check ci",
+    ]);
+  });
+
+  it("never passes pi only options", () => {
+    const task = make({
+      agent: "claude",
+      provider: "anthropic",
+      thinking: "high",
+    });
+    const argv = buildAgentArgv(task, SEED, { headless: true });
+    expect(argv).not.toContain("--provider");
+    expect(argv).not.toContain("--thinking");
+  });
+});
+
+describe("buildAgentArgv for codex", () => {
+  it("launches interactively with the chosen model", () => {
+    const task = make({ agent: "codex", model: "gpt-5.1-codex" });
+    expect(buildAgentArgv(task, "x", { headless: false })).toEqual([
+      "codex",
+      "-m",
+      "gpt-5.1-codex",
+    ]);
+  });
+
+  it("resumes its most recent session, since codex mints its own ids", () => {
+    const task = make({ agent: "codex", mode: "task" });
+    expect(buildAgentArgv(task, "x", { headless: false, resume: true })).toEqual([
+      "codex",
+      "resume",
+      "--last",
+    ]);
+    expect(buildAgentArgv(task, "x", { headless: true, resume: true })).toEqual([
+      "codex",
+      "exec",
+      "resume",
+      "--last",
+      "check ci",
+    ]);
+  });
+
+  it("runs non-interactively through exec, with the subcommand first", () => {
+    const task = make({ agent: "codex", mode: "routine", model: "gpt-5.1" });
+    expect(buildAgentArgv(task, "x", { headless: true, resume: true })).toEqual([
+      "codex",
+      "exec",
+      "-m",
+      "gpt-5.1",
+      "check ci",
+    ]);
   });
 });
 
@@ -226,6 +338,30 @@ describe("recoverCommandLine", () => {
         "posix",
       ),
     ).toBe("cd /Users/dev/project && pi --session 019fc4f0");
+  });
+
+  it("reopens a claude run by session id", () => {
+    expect(
+      recoverCommandLine(
+        { cwd: "/dev", sessionId: SEED, agent: "claude" },
+        "posix",
+      ),
+    ).toBe(`cd /dev && claude --resume ${SEED}`);
+  });
+
+  it("falls back to the last claude conversation when the id is not a uuid", () => {
+    expect(
+      recoverCommandLine(
+        { cwd: "/dev", sessionId: "terax-st-abc-20260803T093000", agent: "claude" },
+        "posix",
+      ),
+    ).toBe("cd /dev && claude --continue");
+  });
+
+  it("reopens the most recent codex session in the run directory", () => {
+    expect(
+      recoverCommandLine({ cwd: "/dev", sessionId: "x", agent: "codex" }, "posix"),
+    ).toBe("cd /dev && codex resume --last");
   });
 
   it("quotes a directory containing spaces", () => {

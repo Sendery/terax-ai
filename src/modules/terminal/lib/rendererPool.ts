@@ -1,7 +1,7 @@
 import { resolveFontFamily } from "@/lib/fonts";
+import { openExternalUrl } from "@/lib/external-link";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { buildTerminalTheme } from "@/styles/terminalTheme";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -13,21 +13,23 @@ import {
   type ILink,
   type ILinkProvider,
 } from "@xterm/xterm";
+import { atlasBytes, atlasResetDelay } from "./atlasBudget";
+import { needsAtlasClear } from "./atlasRepaint";
+import { POOL_MAX_SIZE, shouldGrowPool } from "./poolPolicy";
 import type { TerminalFileLink } from "./fileLinks";
 import { shouldCursorBlink } from "./cursorBlink";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,
 } from "./terminalClipboard";
-import {
-  terminalDeleteSequence,
-  terminalLineNavigationSequence,
-  terminalWordNavigationSequence,
-} from "./keymap";
+import { terminalReadlineSequence } from "./keymap";
+import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 
-export const POOL_MAX_SIZE = 5;
+export { POOL_MAX_SIZE } from "./poolPolicy";
 const FIT_DEBOUNCE_MS = 8;
 const PTY_RESIZE_DEBOUNCE_MS = 256;
+/** Quiet period after the last resize before the atlas is re-uploaded. */
+const RESIZE_REPAINT_DEBOUNCE_MS = 300;
 const SNAPSHOT_SCROLLBACK_CAP = 5_000;
 
 export type SlotAdapter = {
@@ -73,6 +75,7 @@ export type Slot = {
   observer: ResizeObserver | null;
   fitTimer: ReturnType<typeof setTimeout> | null;
   ptyTimer: ReturnType<typeof setTimeout> | null;
+  repaintTimer: ReturnType<typeof setTimeout> | null;
   webglReapTimer: ReturnType<typeof setTimeout> | null;
   slotReapTimer: ReturnType<typeof setTimeout> | null;
   unhideRaf: number | null;
@@ -86,10 +89,18 @@ export type Slot = {
 const slots: Slot[] = [];
 let recyclerEl: HTMLDivElement | null = null;
 let adapter: SlotAdapter | null = null;
+let configuredFont: RendererFont | null = null;
+
+type RendererFont = {
+  fontFamily: string;
+  fontWeight: string;
+  fontSize: number;
+};
 
 let windowActive =
   typeof document === "undefined" || (!document.hidden && document.hasFocus());
 let windowActivityBound = false;
+let windowInactiveSince: number | null = null;
 let cursorBlinkEnabled = false;
 
 function bindWindowActivityListeners(): void {
@@ -104,6 +115,18 @@ function bindWindowActivityListeners(): void {
 function setWindowActive(active: boolean): void {
   if (windowActive === active) return;
   windowActive = active;
+  // A visible slot is never re-bound, so nothing else would ever repaint it.
+  // Suspect its GPU state only after the window was away long enough for the
+  // machine to have slept, rather than on every alt-tab: clearing the atlas
+  // re-rasterizes every glyph, which is not worth doing on a focus flicker.
+  const away =
+    windowInactiveSince === null ? 0 : performance.now() - windowInactiveSince;
+  windowInactiveSince = active ? null : performance.now();
+  if (active && away > SLOT_STALE_MS) {
+    repaintSlots(
+      slots.filter((s) => s.currentLeafId !== null && !s.parked),
+    );
+  }
   for (const slot of slots) {
     if (slot.currentLeafId === null) continue;
     applyCursorBlinkOnSlot(
@@ -152,6 +175,23 @@ export function poolSlotStats(): PoolSlotStat[] {
   }));
 }
 
+/**
+ * Force a repaint of one leaf, or of everything on screen when no leaf is
+ * given. GPU state can go bad in ways nothing here observes (a driver reset,
+ * an external display waking), so the user gets a way to ask for it directly
+ * rather than having to select the damaged text to repair it.
+ */
+export function repaintLeaf(leafId: number | null): void {
+  repaintSlots(
+    slots.filter(
+      (s) =>
+        s.currentLeafId !== null &&
+        !s.parked &&
+        (leafId === null || s.currentLeafId === leafId),
+    ),
+  );
+}
+
 // Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
 // dropped path as a real paste while a plain shell gets the literal text.
 export function pasteIntoLeaf(leafId: number, text: string): boolean {
@@ -183,11 +223,16 @@ function bgActive(
 
 function termOptions() {
   const prefs = usePreferencesStore.getState();
-  return {
+  const font = configuredFont ?? {
     fontFamily: resolveFontFamily(prefs.terminalFontFamily),
-    fontWeight: prefs.terminalFontWeight as FontWeight,
-    letterSpacing: prefs.terminalLetterSpacing,
+    fontWeight: prefs.terminalFontWeight,
     fontSize: Math.max(4, Math.round(prefs.terminalFontSize * prefs.zoomLevel)),
+  };
+  return {
+    fontFamily: font.fontFamily,
+    fontWeight: font.fontWeight as FontWeight,
+    letterSpacing: prefs.terminalLetterSpacing,
+    fontSize: font.fontSize,
     theme: buildTerminalTheme(),
     cursorBlink: false,
     cursorStyle: "bar" as const,
@@ -207,7 +252,12 @@ export function applyBackgroundActive(active: boolean): void {
 }
 
 function createSlot(): Slot {
-  const term = new Terminal(termOptions());
+  let focusTerminal = () => {};
+  const term = new Terminal({
+    ...termOptions(),
+    linkHandler: createTerminalLinkHandler(() => focusTerminal()),
+  });
+  focusTerminal = () => term.focus();
   const fitAddon = new FitAddon();
   const searchAddon = new SearchAddon();
   const serializeAddon = new SerializeAddon();
@@ -215,7 +265,9 @@ function createSlot(): Slot {
   term.loadAddon(searchAddon);
   term.loadAddon(serializeAddon);
   term.loadAddon(
-    new WebLinksAddon((_e, uri) => openUrl(uri).catch(console.error)),
+    new WebLinksAddon((_e, uri) => {
+      void openExternalUrl(uri, () => term.focus());
+    }),
   );
 
   const host = document.createElement("div");
@@ -240,6 +292,7 @@ function createSlot(): Slot {
     observer: null,
     fitTimer: null,
     ptyTimer: null,
+    repaintTimer: null,
     webglReapTimer: null,
     slotReapTimer: null,
     unhideRaf: null,
@@ -268,24 +321,13 @@ function createSlot(): Slot {
     if (leafId === null) return false;
     const bridge = adapter?.resolveLeaf(leafId);
     if (!bridge) return true;
-    const lineNavigation = terminalLineNavigationSequence(event, {
+    const readlineSequence = terminalReadlineSequence(event, {
       isMac: IS_MAC,
+      isAlternateScreen: isAltScreen(slot),
     });
-    if (lineNavigation) {
+    if (readlineSequence) {
       event.preventDefault();
-      if (event.type === "keydown") bridge.writeToPty(lineNavigation);
-      return false;
-    }
-    const wordNavigation = terminalWordNavigationSequence(event);
-    if (wordNavigation) {
-      event.preventDefault();
-      if (event.type === "keydown") bridge.writeToPty(wordNavigation);
-      return false;
-    }
-    const deleteSeq = terminalDeleteSequence(event, { isMac: IS_MAC });
-    if (deleteSeq) {
-      event.preventDefault();
-      if (event.type === "keydown") bridge.writeToPty(deleteSeq);
+      if (event.type === "keydown") bridge.writeToPty(readlineSequence);
       return false;
     }
     if (isShiftEnter(event)) {
@@ -339,10 +381,7 @@ function createFileLinkProvider(getSlot: () => Slot): ILinkProvider {
         callback(undefined);
         return;
       }
-      const line =
-        slot.term.buffer.active.getLine(bufferLineNumber)?.translateToString(true) ??
-        slot.term.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true) ??
-        "";
+      const line = readLinkRow(slot.term.buffer.active, bufferLineNumber);
       if (!line.trim()) {
         callback(undefined);
         return;
@@ -402,6 +441,16 @@ function evictionScore(s: Slot): number {
   );
 }
 
+function isProtected(s: Slot): boolean {
+  const leafId = s.currentLeafId;
+  if (leafId === null) return false;
+  return (
+    (adapter?.isLeafVisible(leafId) ?? false) ||
+    (adapter?.isLeafBusy(leafId) ?? false) ||
+    isAltScreen(s)
+  );
+}
+
 function pickSlotFor(leafId: number): PickResult {
   const retainedOwn = slots.find(
     (s) => s.currentLeafId === null && s.retainedLeafId === leafId,
@@ -434,6 +483,9 @@ function pickSlotFor(leafId: number): PickResult {
     }
   }
   const chosen = best!;
+  if (shouldGrowPool(slots.length, isProtected(chosen))) {
+    return { slot: createSlot(), previousLeafId: null };
+  }
   return { slot: chosen, previousLeafId: chosen.currentLeafId };
 }
 
@@ -445,6 +497,10 @@ export type AcquireParams = {
   // at the time it was released. When set, bindSlot skips ring replay
   // and kicks SIGWINCH so the TUI repaints from scratch.
   altScreen: boolean;
+  // True if the leaf was serialized while a command or agent was running.
+  // Its dormant bytes are replayed, then a SIGWINCH kick makes the program
+  // redraw whatever part of the screen it repaints incrementally.
+  busyAtRelease: boolean;
   drainRing: (write: (bytes: Uint8Array) => void) => void;
   shellExited: boolean;
   searchQuery: string | null;
@@ -578,17 +634,12 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
 
   applyCursorBlinkOnSlot(slot, adapter?.isLeafFocused(p.leafId) ?? false);
 
-  if (!fast && p.altScreen && !p.shellExited) {
+  if (!fast && (p.altScreen || p.busyAtRelease) && !p.shellExited) {
     adapter?.resolveLeaf(p.leafId)?.kickPty(slot.term.cols, slot.term.rows);
   }
 
   if (fast) {
-    if (stale) {
-      if (!slot.webglAddon) attachWebgl(slot);
-      try {
-        slot.term.refresh(0, slot.term.rows - 1);
-      } catch {}
-    }
+    if (stale) repaintSlots([slot]);
     if (adapter?.isLeafFocused(p.leafId)) slot.term.focus();
   } else {
     scheduleUnhide(slot, stale || hadWebgl);
@@ -597,17 +648,58 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
   p.onSearchReady(slot.searchAddon);
 }
 
+/**
+ * Repaint slots whose GPU state is no longer trusted.
+ *
+ * `refresh()` only re-runs the renderer over the cell model; it cannot re-upload
+ * the WebGL glyph atlas, so a slot whose atlas texture lost its contents keeps
+ * drawing corrupt glyphs no matter how often it is refreshed. Only cells whose
+ * appearance changes miss the atlas cache and get re-rasterized, which is why
+ * dragging a selection over the damaged text was the one thing that fixed it.
+ *
+ * `clearTextureAtlas` drops the atlas, invalidates the model and redraws the
+ * viewport, which is the documented remedy for a corrupt texture (Chromium
+ * loses it across OS sleep, and this pool additionally forces context loss when
+ * recycling slots). The refresh stays as a floor for the non-WebGL renderer,
+ * where clearing the atlas is a no-op.
+ *
+ * A renderer attached here uploads every atlas page into its new context, so
+ * the atlas is cleared only when a target kept an older context.
+ */
+function repaintSlots(targets: Slot[]): void {
+  const clear = needsAtlasClear(
+    targets.map((s) => ({ hasWebgl: !!s.webglAddon })),
+  );
+  for (const slot of targets) {
+    if (!slot.webglAddon) attachWebgl(slot);
+  }
+  if (clear) clearSharedAtlas();
+  for (const slot of targets) {
+    try {
+      slot.term.refresh(0, slot.term.rows - 1);
+    } catch {}
+  }
+}
+
+// Slots with the same font and theme share one atlas, and xterm clears only
+// the model of the renderer that asks. Every other renderer kept drawing from
+// glyph positions that now held different glyphs, so repainting one pane
+// corrupted its neighbours until their text was selected.
+function clearSharedAtlas(): void {
+  for (const slot of slots) {
+    if (!slot.webglAddon) continue;
+    try {
+      slot.term.clearTextureAtlas();
+    } catch {}
+  }
+}
+
 function scheduleUnhide(slot: Slot, stale: boolean): void {
   slot.unhideRaf = requestAnimationFrame(() => {
     slot.unhideRaf = requestAnimationFrame(() => {
       slot.unhideRaf = null;
       slot.host.style.visibility = "";
-      if (stale) {
-        if (!slot.webglAddon) attachWebgl(slot);
-        try {
-          slot.term.refresh(0, slot.term.rows - 1);
-        } catch {}
-      }
+      if (stale) repaintSlots([slot]);
       const leafId = slot.currentLeafId;
       if (leafId !== null && adapter?.isLeafFocused(leafId)) {
         slot.term.focus();
@@ -645,8 +737,10 @@ function setupResizeObserver(slot: Slot, p: AcquireParams): void {
   slot.observer?.disconnect();
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
 
   const container = p.container;
   const flushPty = () => {
@@ -673,6 +767,17 @@ function setupResizeObserver(slot: Slot, p: AcquireParams): void {
       slot.fitAddon.fit();
       if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
       slot.ptyTimer = setTimeout(flushPty, PTY_RESIZE_DEBOUNCE_MS);
+      // A resized canvas can keep drawing from an atlas laid out for the old
+      // one, which is how splitting a pane left the surviving one corrupt.
+      // This waits for the gesture to settle rather than riding the 8ms fit
+      // debounce: clearing the atlas re-rasterizes every glyph, so doing it
+      // per frame would make dragging a divider crawl.
+      if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
+      slot.repaintTimer = setTimeout(() => {
+        slot.repaintTimer = null;
+        if (slot.currentLeafId !== p.leafId || slot.parked) return;
+        repaintSlots([slot]);
+      }, RESIZE_REPAINT_DEBOUNCE_MS);
     }, FIT_DEBOUNCE_MS);
   });
   slot.observer.observe(container);
@@ -729,8 +834,10 @@ function detachSlotFromLeaf(slot: Slot, retain: boolean): void {
   slot.observer = null;
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
 
   cancelPendingUnhide(slot);
   slot.host.style.visibility = "";
@@ -805,8 +912,10 @@ function disposeSlot(slot: Slot): void {
   cancelPendingUnhide(slot);
   if (slot.fitTimer) clearTimeout(slot.fitTimer);
   if (slot.ptyTimer) clearTimeout(slot.ptyTimer);
+  if (slot.repaintTimer) clearTimeout(slot.repaintTimer);
   slot.fitTimer = null;
   slot.ptyTimer = null;
+  slot.repaintTimer = null;
   slot.observer?.disconnect();
   slot.observer = null;
   for (const d of slot.oscDisposers) {
@@ -869,6 +978,10 @@ function attachWebgl(slot: Slot): void {
         }
       }, WEBGL_RECOVERY_DELAY_MS);
     });
+    // A page merged into a larger one is never read again, so its backing
+    // store is released now instead of whenever the canvas is collected.
+    webgl.onRemoveTextureAtlasCanvas(releaseCanvasStore);
+    webgl.onAddTextureAtlasCanvas(scheduleAtlasCheck);
     slot.term.loadAddon(webgl);
     const after = elem.querySelectorAll<HTMLCanvasElement>("canvas");
     const added: HTMLCanvasElement[] = [];
@@ -926,10 +1039,94 @@ function releaseCanvasContext(canvas: HTMLCanvasElement): void {
       if (ext && !gl.isContextLost()) ext.loseContext();
     } catch {}
   }
+  releaseCanvasStore(canvas);
+}
+
+function releaseCanvasStore(canvas: HTMLCanvasElement): void {
   try {
     canvas.width = 0;
     canvas.height = 0;
   } catch {}
+}
+
+const ATLAS_CHECK_DEBOUNCE_MS = 1_000;
+let atlasCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAtlasResetAt: number | null = null;
+
+function atlasPages(slot: Slot): HTMLCanvasElement[] {
+  try {
+    const renderer = (
+      slot.webglAddon as unknown as {
+        _renderer?: { _charAtlas?: { pages?: { canvas?: unknown }[] } };
+      } | null
+    )?._renderer;
+    const pages = renderer?._charAtlas?.pages;
+    if (!Array.isArray(pages)) return [];
+    const out: HTMLCanvasElement[] = [];
+    for (const page of pages) {
+      if (page?.canvas instanceof HTMLCanvasElement) out.push(page.canvas);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Slots with the same font and theme share one atlas, so pages are counted once.
+function liveAtlasPages(): Set<HTMLCanvasElement> {
+  const pages = new Set<HTMLCanvasElement>();
+  for (const slot of slots) {
+    for (const canvas of atlasPages(slot)) pages.add(canvas);
+  }
+  return pages;
+}
+
+export function poolAtlasBytes(): number {
+  return atlasBytes(liveAtlasPages());
+}
+
+function scheduleAtlasCheck(): void {
+  if (atlasCheckTimer !== null) return;
+  atlasCheckTimer = setTimeout(checkAtlasBudget, ATLAS_CHECK_DEBOUNCE_MS);
+}
+
+function checkAtlasBudget(): void {
+  atlasCheckTimer = null;
+  const pages = liveAtlasPages();
+  const delay = atlasResetDelay(
+    atlasBytes(pages),
+    lastAtlasResetAt,
+    performance.now(),
+  );
+  if (delay === null) return;
+  if (delay > 0) {
+    atlasCheckTimer = setTimeout(checkAtlasBudget, delay);
+    return;
+  }
+  resetAtlases(pages);
+}
+
+/**
+ * Rebuild every WebGL renderer against a fresh atlas holding only the glyphs
+ * on screen. Every renderer is disposed before any is re-attached: a slot that
+ * re-attached while another still owned the old atlas would join it again.
+ */
+function resetAtlases(pages: Set<HTMLCanvasElement>): void {
+  lastAtlasResetAt = performance.now();
+  const rebind: Slot[] = [];
+  for (const slot of slots) {
+    if (!slot.webglAddon) continue;
+    if (slot.currentLeafId !== null && !slot.parked) rebind.push(slot);
+    cancelWebglReap(slot);
+    disposeSlotWebgl(slot);
+  }
+  for (const canvas of pages) releaseCanvasStore(canvas);
+  for (const slot of rebind) {
+    attachWebgl(slot);
+    try {
+      slot.term.refresh(0, slot.term.rows - 1);
+    } catch {}
+  }
 }
 
 export function applyWebglPreference(enabled: boolean): void {
@@ -965,14 +1162,6 @@ function refitSlot(slot: Slot): void {
     ?.resizePty(slot.term.cols, slot.term.rows);
 }
 
-export function applyFontSize(size: number): void {
-  for (const slot of slots) {
-    if (slot.term.options.fontSize === size) continue;
-    slot.term.options.fontSize = size;
-    refitSlot(slot);
-  }
-}
-
 export function applyLetterSpacing(spacing: number): void {
   for (const slot of slots) {
     if (slot.term.options.letterSpacing === spacing) continue;
@@ -981,19 +1170,27 @@ export function applyLetterSpacing(spacing: number): void {
   }
 }
 
-export function applyFontFamily(family: string): void {
-  const resolved = resolveFontFamily(family);
+export function applyTerminalFont(font: RendererFont): void {
+  const next = {
+    fontFamily: resolveFontFamily(font.fontFamily),
+    fontWeight: font.fontWeight,
+    fontSize: font.fontSize,
+  };
+  configuredFont = next;
   for (const slot of slots) {
-    if (slot.term.options.fontFamily === resolved) continue;
-    slot.term.options.fontFamily = resolved;
-    refitSlot(slot);
-  }
-}
-
-export function applyFontWeight(weight: string): void {
-  for (const slot of slots) {
-    if (slot.term.options.fontWeight === weight) continue;
-    slot.term.options.fontWeight = weight as FontWeight;
+    let refit = false;
+    if (slot.term.options.fontFamily !== next.fontFamily) {
+      slot.term.options.fontFamily = next.fontFamily;
+      refit = true;
+    }
+    if (slot.term.options.fontSize !== next.fontSize) {
+      slot.term.options.fontSize = next.fontSize;
+      refit = true;
+    }
+    if (slot.term.options.fontWeight !== next.fontWeight) {
+      slot.term.options.fontWeight = next.fontWeight as FontWeight;
+    }
+    if (refit) refitSlot(slot);
   }
 }
 

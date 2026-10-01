@@ -1,5 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 
+import { DEFAULT_TASK_AGENT } from "./agents";
 import { isTaskRun, type TaskRun } from "./runs";
 import { isScheduledTask, type ScheduledTask } from "./task";
 
@@ -15,13 +16,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Fills fields added after a task was first stored, before the entry reaches
+ * the validator. Only absent fields are filled: an entry that carries a value
+ * the current build does not accept is still rejected rather than repaired.
+ */
+function migrateStoredTask(entry: unknown): unknown {
+  if (!isRecord(entry)) return entry;
+  if (entry.agent !== undefined) return entry;
+  // Tasks written before agents existed always drove pi. They keep no seed, so
+  // their derived session id stays exactly what it was.
+  return { ...entry, agent: DEFAULT_TASK_AGENT };
+}
+
 /** Stored tasks are untrusted. An invalid entry is dropped so one bad record
  *  cannot take the whole panel down on boot. */
 export function parseStoredTasks(value: unknown): ScheduledTask[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const tasks: ScheduledTask[] = [];
-  for (const entry of value) {
+  for (const raw of value) {
+    const entry = migrateStoredTask(raw);
     if (!isScheduledTask(entry)) continue;
     if (seen.has(entry.id)) continue;
     seen.add(entry.id);

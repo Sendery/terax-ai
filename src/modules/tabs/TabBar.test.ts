@@ -42,3 +42,11 @@ describe("TabBar color submenu accessibility", () => {
     expect(hasAriaLabel || hasAriaDescription).toBe(true);
   });
 });
+
+describe("TabBar new-tab menu", () => {
+  it("offers a Mermaid entry, so a diagram tab is reachable without a selection", () => {
+    const menu = src.slice(src.indexOf("DropdownMenuContent"));
+    expect(menu).toMatch(/onSelect=\{\(\) => onNewMermaid\(\)\}/);
+    expect(menu).toMatch(/>Mermaid</);
+  });
+});

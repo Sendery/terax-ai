@@ -13,6 +13,14 @@ export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_WIDTH_STORAGE_KEY = "terax.sidebar.width";
 const SIDEBAR_VIEW_STORAGE_KEY = "terax.sidebar.view";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "terax.sidebar.collapsed";
+
+export function shouldPersistSidebarWidth(
+  width: number,
+  isUserInteraction: boolean,
+): boolean {
+  return isUserInteraction && width > 0;
+}
 
 function clampSidebarWidth(width: number): number {
   return Math.min(
@@ -43,6 +51,14 @@ function readSidebarView(): SidebarViewId {
   return "explorer";
 }
 
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 type FocusableExplorer = {
   focus: () => void;
   isFocused: () => boolean;
@@ -57,6 +73,8 @@ export function useSidebarPanel(
   const explorerReturnFocusRef = useRef<HTMLElement | null>(null);
   const [sidebarView, setSidebarViewState] =
     useState<SidebarViewId>(readSidebarView);
+  const [initialSidebarCollapsed] = useState(readSidebarCollapsed);
+  const collapsedRef = useRef(initialSidebarCollapsed);
 
   const persistSidebarView = useCallback((view: SidebarViewId) => {
     setSidebarViewState(view);
@@ -67,10 +85,23 @@ export function useSidebarPanel(
     }
   }, []);
 
+  const persistSidebarCollapsed = useCallback((collapsed: boolean) => {
+    if (collapsedRef.current === collapsed) return;
+    collapsedRef.current = collapsed;
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        collapsed ? "1" : "0",
+      );
+    } catch {
+      // storage may fail in private mode
+    }
+  }, []);
+
   const toggleSidebar = useCallback(() => {
     const p = sidebarRef.current;
     if (!p) return;
-    if (p.getSize().asPercentage <= 0) p.expand();
+    if (p.getSize().asPercentage <= 0) p.resize(`${sidebarWidthRef.current}px`);
     else p.collapse();
   }, []);
 
@@ -110,20 +141,24 @@ export function useSidebarPanel(
     [persistSidebarView, sidebarView],
   );
 
-  const persistSidebarWidth = useCallback((next: number) => {
-    sidebarWidthRef.current = next;
-    if (sidebarWidthWriteTimerRef.current) {
-      window.clearTimeout(sidebarWidthWriteTimerRef.current);
-    }
-    sidebarWidthWriteTimerRef.current = window.setTimeout(() => {
-      sidebarWidthWriteTimerRef.current = 0;
-      try {
-        window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(next));
-      } catch {
-        // ignore
+  const persistSidebarWidth = useCallback(
+    (next: number, isUserInteraction: boolean) => {
+      if (!shouldPersistSidebarWidth(next, isUserInteraction)) return;
+      sidebarWidthRef.current = next;
+      if (sidebarWidthWriteTimerRef.current) {
+        window.clearTimeout(sidebarWidthWriteTimerRef.current);
       }
-    }, 200);
-  }, []);
+      sidebarWidthWriteTimerRef.current = window.setTimeout(() => {
+        sidebarWidthWriteTimerRef.current = 0;
+        try {
+          window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(next));
+        } catch {
+          // ignore
+        }
+      }, 200);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -169,7 +204,9 @@ export function useSidebarPanel(
     sidebarRef,
     sidebarWidthRef,
     sidebarView,
+    initialSidebarCollapsed,
     persistSidebarView,
+    persistSidebarCollapsed,
     toggleSidebar,
     showSidebar,
     hideSidebar,

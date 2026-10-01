@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyMissedGrouping,
+  cloneTask,
   moveTask,
+  recentTaskDefaults,
+  regenerateSeed,
   removeTask,
   reschedule,
   setTaskEnabled,
@@ -28,6 +31,127 @@ function make(name: string, overrides: Partial<ScheduledTask> = {}): ScheduledTa
     ...overrides,
   };
 }
+
+describe("cloneTask", () => {
+  const source = make("Nightly", {
+    agent: "claude",
+    model: "sonnet",
+    seed: "739c3224-00f8-4504-99a4-06708d16dfeb",
+    sessions: [{ id: "739c3224-00f8-4504-99a4-06708d16dfeb", cwd: "/tmp" }],
+    runCount: 7,
+    lastRunAt: NOW,
+    nextRunAt: NOW + 60_000,
+    tabId: 3,
+  });
+
+  it("copies the configuration a user would otherwise retype", () => {
+    const copy = cloneTask(source, NOW + 1_000);
+    expect(copy.prompt).toBe(source.prompt);
+    expect(copy.schedule).toEqual(source.schedule);
+    expect(copy.agent).toBe("claude");
+    expect(copy.model).toBe("sonnet");
+    expect(copy.cwd).toBe(source.cwd);
+    expect(copy.missed).toBe(source.missed);
+    expect(copy.overlap).toBe(source.overlap);
+    expect(copy.failure).toEqual(source.failure);
+  });
+
+  it("is a separate task with its own history and session", () => {
+    const copy = cloneTask(source, NOW + 1_000);
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.name).toBe("Nightly (copy)");
+    expect(copy.runCount).toBe(0);
+    expect(copy.lastRunAt).toBeUndefined();
+    expect(copy.sessions).toEqual([]);
+    expect(copy.seed).not.toBe(source.seed);
+    expect(copy.createdAt).toBe(NOW + 1_000);
+    // The clone must not inherit the tab the original owns.
+    expect(copy.tabId).toBeUndefined();
+  });
+
+  it("lands disabled so it cannot fire while it is still being edited", () => {
+    expect(cloneTask(source, NOW).enabled).toBe(false);
+    expect(cloneTask(source, NOW).nextRunAt).toBeNull();
+  });
+
+  it("numbers further copies instead of repeating one name", () => {
+    const first = cloneTask(source, NOW, [source]);
+    const second = cloneTask(source, NOW, [source, first]);
+    expect(first.name).toBe("Nightly (copy)");
+    expect(second.name).toBe("Nightly (copy 2)");
+  });
+});
+
+describe("regenerateSeed", () => {
+  it("drops the session the task was pinned to and names a new one", () => {
+    const task = make("Nightly", {
+      seed: "739c3224-00f8-4504-99a4-06708d16dfeb",
+      sessions: [{ id: "739c3224-00f8-4504-99a4-06708d16dfeb", cwd: "/tmp" }],
+    });
+    const next = regenerateSeed(task);
+    expect(next.seed).not.toBe(task.seed);
+    expect(next.seed).toMatch(/^[0-9a-f-]{36}$/);
+    expect(next.sessions).toEqual([]);
+  });
+
+  it("keeps everything else, including the run budget already spent", () => {
+    const task = make("Nightly", { runCount: 4, maxRuns: 10 });
+    const next = regenerateSeed(task);
+    expect(next.runCount).toBe(4);
+    expect(next.maxRuns).toBe(10);
+    expect(next.id).toBe(task.id);
+    expect(next.name).toBe(task.name);
+  });
+});
+
+describe("recentTaskDefaults", () => {
+  it("has nothing to offer for an empty list", () => {
+    expect(recentTaskDefaults([])).toBeNull();
+  });
+
+  it("reuses the parameters of the most recently created task", () => {
+    const older = make("older", {
+      createdAt: NOW,
+      agent: "pi",
+      model: "opus",
+      target: "headless",
+    });
+    const newer = make("newer", {
+      createdAt: NOW + 5_000,
+      agent: "codex",
+      model: "gpt-5.1-codex",
+      target: "tab",
+      mode: "routine",
+      missed: "skip",
+      overlap: "parallel",
+      schedule: { kind: "weekly", days: [1], time: "07:30" },
+      failure: { retries: 0, thenDisable: false },
+      cwd: "/Users/dev/api",
+    });
+    const defaults = recentTaskDefaults([older, newer]);
+    expect(defaults).toEqual({
+      schedule: { kind: "weekly", days: [1], time: "07:30" },
+      target: "tab",
+      mode: "routine",
+      agent: "codex",
+      model: "gpt-5.1-codex",
+      provider: undefined,
+      thinking: undefined,
+      missed: "skip",
+      overlap: "parallel",
+      failure: { retries: 0, thenDisable: false },
+      cwd: "/Users/dev/api",
+    });
+  });
+
+  it("never carries the previous prompt, name or session over", () => {
+    const defaults = recentTaskDefaults([make("one")]);
+    expect(defaults).not.toBeNull();
+    expect(Object.keys(defaults ?? {})).not.toContain("prompt");
+    expect(Object.keys(defaults ?? {})).not.toContain("name");
+    expect(Object.keys(defaults ?? {})).not.toContain("seed");
+  });
+});
 
 describe("upsertTask", () => {
   it("appends a new task", () => {

@@ -4,9 +4,12 @@ import {
   type CaptureRequest,
   validateCaptureRequest,
 } from "@/modules/capture";
+import { validateMermaidSource } from "@/modules/mermaid";
+import { isLoopbackPreviewUrl } from "@/modules/preview";
 import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import type { SidebarViewId } from "@/modules/sidebar";
 import { isTabColor, TAB_COLORS, type TabColor } from "@/modules/tabs";
+import { TASK_AGENTS, type TaskAgent } from "@/modules/tasks/lib/agents";
 import { parseScheduleSpec } from "@/modules/tasks/lib/spec";
 import {
   MISSED_POLICIES,
@@ -18,6 +21,18 @@ import {
   type TaskMode,
   type TaskTarget,
 } from "@/modules/tasks/lib/task";
+import { DEFAULT_MAX_TOTAL } from "@/modules/tts/lib/chunk";
+import {
+  isTtsEngineId,
+  isTtsLanguage,
+  isTtsModelId,
+  TTS_ENGINES,
+  TTS_LANGUAGES,
+  TTS_MODELS,
+  type TtsEngineId,
+  type TtsLanguage,
+  type TtsModelId,
+} from "@/modules/tts/lib/engines";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
@@ -28,12 +43,20 @@ export const COMMAND_IDS = [
   "sidebar.show",
   "sidebar.hide",
   "tab.openFile",
+  "preview.open",
+  "mermaid.open",
+  "mermaid.update",
   "tab.focus",
   "tab.close",
   "tab.rename",
   "tab.resetTitle",
   "tab.setColor",
+  "tab.move",
+  "tab.setPinned",
   "git.diff.open",
+  "git.history.open",
+  "git.commitFile.open",
+  "search.content",
   "settings.open",
   "agent-monitor.show",
   "agent-monitor.hide",
@@ -50,16 +73,29 @@ export const COMMAND_IDS = [
   "tasks.show",
   "tasks.hide",
   "tasks.toggle",
+  "history.show",
+  "history.hide",
+  "history.toggle",
   "tasks.openEditor",
   "tasks.list",
   "tasks.add",
   "tasks.update",
+  "tasks.clone",
+  "tasks.reseed",
   "tasks.remove",
   "tasks.run",
   "tasks.setEnabled",
   "tasks.pauseAll",
   "tasks.resumeAll",
   "tasks.wake",
+  "tts.status",
+  "tts.start",
+  "tts.stop",
+  "tts.install",
+  "tts.download",
+  "tts.voices",
+  "tts.speak",
+  "tts.stopSpeaking",
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -89,17 +125,36 @@ export type CommandPayloads = {
   "sidebar.show": { view?: SidebarViewId };
   "sidebar.hide": undefined;
   "tab.openFile": { path: string; pin?: boolean };
+  "preview.open": { url: string; title?: string };
+  "mermaid.open": { source: string; title?: string };
+  "mermaid.update": { tabId: number; source: string; title?: string };
   "tab.focus": { tabId: number };
   "tab.close": { tabId?: number };
   "tab.rename": { tabId: number; title: string };
   "tab.resetTitle": { tabId: number };
   "tab.setColor": { tabId: number; color: TabColor | null };
+  "tab.move": { tabId: number; index: number };
+  "tab.setPinned": { tabId: number; pinned: boolean };
   "git.diff.open": {
     repoRoot: string;
     path: string;
     mode: "-" | "+";
     originalPath?: string | null;
     title?: string;
+  };
+  "git.history.open": { repoRoot: string; branch?: string };
+  "git.commitFile.open": {
+    repoRoot: string;
+    sha: string;
+    path: string;
+    originalPath?: string | null;
+    subject?: string;
+  };
+  "search.content": {
+    query: string;
+    root: string;
+    caseInsensitive?: boolean;
+    maxResults?: number;
   };
   "settings.open": { tab?: SettingsTab };
   "agent-monitor.show": undefined;
@@ -123,6 +178,9 @@ export type CommandPayloads = {
   "tasks.show": undefined;
   "tasks.hide": undefined;
   "tasks.toggle": undefined;
+  "history.show": undefined;
+  "history.hide": undefined;
+  "history.toggle": undefined;
   "tasks.openEditor": { id?: string };
   "tasks.list": undefined;
   "tasks.add": TaskCommandFields & {
@@ -137,12 +195,22 @@ export type CommandPayloads = {
     schedule?: string;
     enabled?: boolean;
   };
+  "tasks.clone": { id: string };
+  "tasks.reseed": { id: string };
   "tasks.remove": { id: string };
   "tasks.run": { id: string };
   "tasks.setEnabled": { id: string; enabled: boolean };
   "tasks.pauseAll": undefined;
   "tasks.resumeAll": undefined;
   "tasks.wake": undefined;
+  "tts.status": undefined;
+  "tts.start": { engine: TtsEngineId };
+  "tts.stop": { engine?: TtsEngineId };
+  "tts.install": { engine: TtsEngineId };
+  "tts.download": { model: TtsModelId };
+  "tts.voices": undefined;
+  "tts.speak": { text: string; voiceId?: string; language?: TtsLanguage };
+  "tts.stopSpeaking": undefined;
 };
 
 /** Optional configuration shared by tasks.add and tasks.update. */
@@ -150,6 +218,7 @@ export type TaskCommandFields = {
   cwd?: string;
   target?: TaskTarget;
   mode?: TaskMode;
+  agent?: TaskAgent;
   missed?: MissedPolicy;
   overlap?: OverlapPolicy;
   sessionId?: string;
@@ -212,6 +281,14 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     values: [...TASK_MODES],
   },
   {
+    name: "agent",
+    type: "enum",
+    required: false,
+    description:
+      "Agent CLI the run drives. pi and claude can be pinned to a session; codex mints its own ids and can only resume its most recent session in the directory.",
+    values: [...TASK_AGENTS],
+  },
+  {
     name: "missed",
     type: "enum",
     required: false,
@@ -236,19 +313,20 @@ const TASK_OPTIONAL_PARAMS: readonly CommandParamSchema[] = [
     name: "model",
     type: "string",
     required: false,
-    description: "Model for the run. Omit to inherit the pi default.",
+    description:
+      "Model for the run, passed verbatim to the agent CLI. Omit to inherit its default.",
   },
   {
     name: "provider",
     type: "string",
     required: false,
-    description: "Provider for the run. Omit to inherit the pi default.",
+    description: "Provider for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "thinking",
     type: "string",
     required: false,
-    description: "Thinking level for the run. Omit to inherit the pi default.",
+    description: "Thinking level for the run. Pi only. Omit to inherit its default.",
   },
   {
     name: "maxRuns",
@@ -397,6 +475,74 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "preview.open": {
+    id: "preview.open",
+    description:
+      "Open (or focus) a web preview tab for a loopback URL. Only http(s) URLs on localhost/127.0.0.1/[::1] are accepted.",
+    params: [
+      {
+        description:
+          "Loopback URL to load, including scheme (e.g. http://localhost:5173).",
+        name: "url",
+        required: true,
+        type: "string",
+      },
+      {
+        description:
+          "Custom tab title; defaults to a title derived from the URL.",
+        name: "title",
+        required: false,
+        type: "string",
+      },
+    ],
+  },
+  "mermaid.open": {
+    id: "mermaid.open",
+    description:
+      "Open Mermaid source in a live split editor and diagram preview tab.",
+    params: [
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description: "Mermaid source, with or without a fenced mermaid block.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Optional tab title, limited to 80 characters.",
+      },
+    ],
+  },
+  "mermaid.update": {
+    id: "mermaid.update",
+    description:
+      "Replace the source of an existing Mermaid tab without exposing its contents.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description:
+          "Id of the Mermaid tab returned by mermaid.open or app.snapshot.",
+      },
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description:
+          "Replacement Mermaid source, with or without a fenced block.",
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description:
+          "Optional replacement tab title, limited to 80 characters.",
+      },
+    ],
+  },
   "tab.focus": {
     id: "tab.focus",
     description: "Focus an existing tab by id.",
@@ -471,6 +617,46 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "tab.move": {
+    id: "tab.move",
+    description:
+      "Reorder a tab within its own space, by destination index in that space's strip.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the tab to move.",
+      },
+      {
+        name: "index",
+        type: "integer",
+        required: true,
+        description:
+          "Zero-based destination index inside the tab's space. Clamped to the strip.",
+      },
+    ],
+  },
+  "tab.setPinned": {
+    id: "tab.setPinned",
+    description:
+      "Pin or unpin an editor tab. A pinned tab keeps its slot; an unpinned one is the single preview slot the next opened file replaces.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: true,
+        description: "Id of the editor tab.",
+      },
+      {
+        name: "pinned",
+        type: "boolean",
+        required: true,
+        description:
+          "true to pin the tab, false to return it to the preview slot.",
+      },
+    ],
+  },
   "git.diff.open": {
     id: "git.diff.open",
     description: "Open a git diff tab for a file.",
@@ -509,6 +695,96 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       },
     ],
   },
+  "git.history.open": {
+    id: "git.history.open",
+    description:
+      "Open the commit graph for a repository. An already open graph for the same repository is focused instead of duplicated.",
+    params: [
+      {
+        name: "repoRoot",
+        type: "string",
+        required: true,
+        description: "Repository root path.",
+      },
+      {
+        name: "branch",
+        type: "string",
+        required: false,
+        description: "Branch name, used only to title the tab.",
+      },
+    ],
+  },
+  "git.commitFile.open": {
+    id: "git.commitFile.open",
+    description:
+      "Open a file's diff as it was at one commit. Reuses an open tab for the same repository, commit and path.",
+    params: [
+      {
+        name: "repoRoot",
+        type: "string",
+        required: true,
+        description: "Repository root path.",
+      },
+      {
+        name: "sha",
+        type: "string",
+        required: true,
+        description:
+          "Commit sha, 7 to 40 hexadecimal characters. Revision expressions are not accepted.",
+      },
+      {
+        name: "path",
+        type: "string",
+        required: true,
+        description: "File path relative to the repo, as of that commit.",
+      },
+      {
+        name: "originalPath",
+        type: "string",
+        required: false,
+        nullable: true,
+        description: "Previous path when the commit renamed the file.",
+      },
+      {
+        name: "subject",
+        type: "string",
+        required: false,
+        description: "Commit subject line, shown as context in the tab.",
+      },
+    ],
+  },
+  "search.content": {
+    id: "search.content",
+    description:
+      "Search file contents under a root with a regular expression, honoring .gitignore. Returns matches; it does not open a tab. Pair it with tab.openFile to open a hit.",
+    params: [
+      {
+        name: "query",
+        type: "string",
+        required: true,
+        description: "Regular expression in the ripgrep dialect.",
+      },
+      {
+        name: "root",
+        type: "string",
+        required: true,
+        description:
+          "Directory to search under. Must be an authorized workspace path.",
+      },
+      {
+        name: "caseInsensitive",
+        type: "boolean",
+        required: false,
+        description: "Match without regard to case.",
+      },
+      {
+        name: "maxResults",
+        type: "integer",
+        required: false,
+        description: "Maximum hits to return, 1 to 500. Defaults to 50.",
+      },
+    ],
+  },
   "settings.open": {
     id: "settings.open",
     description: "Open the settings window, optionally on a section.",
@@ -518,7 +794,15 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         type: "enum",
         required: false,
         description: "Settings section to deep-link.",
-        values: ["general", "models", "agents", "themes", "shortcuts", "about"],
+        values: [
+          "general",
+          "models",
+          "voice",
+          "agents",
+          "themes",
+          "shortcuts",
+          "about",
+        ],
       },
     ],
   },
@@ -646,6 +930,22 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description: "Toggle the scheduled tasks panel.",
     params: [],
   },
+  "history.show": {
+    id: "history.show",
+    description:
+      "Show the session history panel, which graphs the transcript of the agent running in the focused terminal.",
+    params: [],
+  },
+  "history.hide": {
+    id: "history.hide",
+    description: "Hide the session history panel.",
+    params: [],
+  },
+  "history.toggle": {
+    id: "history.toggle",
+    description: "Toggle the session history panel.",
+    params: [],
+  },
   "tasks.openEditor": {
     id: "tasks.openEditor",
     description:
@@ -676,6 +976,32 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
     description:
       "Edit a scheduled task by id. Provide at least one field besides the id.",
     params: [...TASK_UPDATE_PARAMS],
+  },
+  "tasks.clone": {
+    id: "tasks.clone",
+    description:
+      "Duplicate a scheduled task. The copy keeps the schedule, agent, model, directory and policies, starts with no run history and its own session, and lands disabled so it cannot fire before it has been reviewed. Opens it in the editor.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to duplicate.",
+      },
+    ],
+  },
+  "tasks.reseed": {
+    id: "tasks.reseed",
+    description:
+      "Point a task at a brand new agent session, so its next run starts with no accumulated context. Schedule, run budget and history are untouched.",
+    params: [
+      {
+        name: "id",
+        type: "string",
+        required: true,
+        description: "Id of the task to reseed.",
+      },
+    ],
   },
   "tasks.remove": {
     id: "tasks.remove",
@@ -737,6 +1063,109 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       "Re-evaluate the schedule now and dispatch anything due. This is what the optional OS-level waker calls, and confirming it is how a running instance takes ownership of a wake.",
     params: [],
   },
+  "tts.status": {
+    id: "tts.status",
+    description:
+      "Read the local speech stack: runtime, engines (installed, running, device), downloaded models, install jobs, disk usage, and what this window is speaking right now. Bearer tokens are never returned.",
+    params: [],
+  },
+  "tts.start": {
+    id: "tts.start",
+    description:
+      "Start an engine's local sidecar on the configured device. Returns as soon as the start is requested, because loading a model outlasts the bridge timeout; poll tts.status until the engine reports running.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: true,
+        description: "Engine whose sidecar should be started.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.stop": {
+    id: "tts.stop",
+    description:
+      "Stop one engine sidecar, or every running one when the engine is omitted, freeing its memory. Returns the engines that were stopped.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: false,
+        description: "Engine to stop; omit to stop every running engine.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.install": {
+    id: "tts.install",
+    description:
+      "Install an engine into the private speech directory, installing the Python runtime first when it is missing. Returns a job id; read its progress with tts.status.",
+    params: [
+      {
+        name: "engine",
+        type: "enum",
+        required: true,
+        description: "Engine to install.",
+        values: TTS_ENGINES,
+      },
+    ],
+  },
+  "tts.download": {
+    id: "tts.download",
+    description:
+      "Download a model's weights into the private speech directory. The model's engine must already be installed. Returns a job id; read its progress with tts.status.",
+    params: [
+      {
+        name: "model",
+        type: "enum",
+        required: true,
+        description: "Model to download.",
+        values: TTS_MODELS,
+      },
+    ],
+  },
+  "tts.voices": {
+    id: "tts.voices",
+    description:
+      "List the configured voice profiles with their model, language, voice source and which one is the default for each language.",
+    params: [],
+  },
+  "tts.speak": {
+    id: "tts.speak",
+    description:
+      "Read text aloud locally. Returns once the queue is running, not when the audio ends, because synthesis outlasts the bridge timeout; poll tts.status for progress. Text is capped at 8192 characters and split into sentence-sized chunks.",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        required: true,
+        description:
+          "Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally.",
+      },
+      {
+        name: "voiceId",
+        type: "string",
+        required: false,
+        description:
+          "Voice profile id from tts.voices. Wins over language when both are given.",
+      },
+      {
+        name: "language",
+        type: "enum",
+        required: false,
+        description:
+          "Language whose default voice profile should speak. Omit to use the preferred language.",
+        values: TTS_LANGUAGES,
+      },
+    ],
+  },
+  "tts.stopSpeaking": {
+    id: "tts.stopSpeaking",
+    description:
+      "Stop the audio this window is playing and drop the rest of the queue. The engine stays loaded.",
+    params: [],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -772,6 +1201,15 @@ export type CommandHandlers = {
   openFile: (
     payload: CommandPayloads["tab.openFile"],
   ) => Promise<unknown> | unknown;
+  openPreview: (
+    payload: CommandPayloads["preview.open"],
+  ) => Promise<unknown> | unknown;
+  openMermaid: (
+    payload: CommandPayloads["mermaid.open"],
+  ) => Promise<unknown> | unknown;
+  updateMermaid: (
+    payload: CommandPayloads["mermaid.update"],
+  ) => Promise<unknown> | unknown;
   focusTab: (
     payload: CommandPayloads["tab.focus"],
   ) => Promise<unknown> | unknown;
@@ -789,6 +1227,19 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   openGitDiff: (
     payload: CommandPayloads["git.diff.open"],
+  ) => Promise<unknown> | unknown;
+  openGitHistory: (
+    payload: CommandPayloads["git.history.open"],
+  ) => Promise<unknown> | unknown;
+  openCommitFile: (
+    payload: CommandPayloads["git.commitFile.open"],
+  ) => Promise<unknown> | unknown;
+  searchContent: (
+    payload: CommandPayloads["search.content"],
+  ) => Promise<unknown> | unknown;
+  moveTab: (payload: CommandPayloads["tab.move"]) => Promise<unknown> | unknown;
+  setTabPinned: (
+    payload: CommandPayloads["tab.setPinned"],
   ) => Promise<unknown> | unknown;
   openSettings: (
     payload: CommandPayloads["settings.open"],
@@ -814,6 +1265,9 @@ export type CommandHandlers = {
   showTasks: () => Promise<unknown> | unknown;
   hideTasks: () => Promise<unknown> | unknown;
   toggleTasks: () => Promise<unknown> | unknown;
+  showHistory: () => Promise<unknown> | unknown;
+  hideHistory: () => Promise<unknown> | unknown;
+  toggleHistory: () => Promise<unknown> | unknown;
   openTaskEditor: (
     payload: CommandPayloads["tasks.openEditor"],
   ) => Promise<unknown> | unknown;
@@ -823,6 +1277,12 @@ export type CommandHandlers = {
   ) => Promise<unknown> | unknown;
   updateTask: (
     payload: CommandPayloads["tasks.update"],
+  ) => Promise<unknown> | unknown;
+  cloneTask: (
+    payload: CommandPayloads["tasks.clone"],
+  ) => Promise<unknown> | unknown;
+  reseedTask: (
+    payload: CommandPayloads["tasks.reseed"],
   ) => Promise<unknown> | unknown;
   removeTask: (
     payload: CommandPayloads["tasks.remove"],
@@ -836,6 +1296,24 @@ export type CommandHandlers = {
   pauseAllTasks: () => Promise<unknown> | unknown;
   resumeAllTasks: () => Promise<unknown> | unknown;
   wakeTasks: () => Promise<unknown> | unknown;
+  getTtsStatus: () => Promise<unknown> | unknown;
+  startTtsEngine: (
+    payload: CommandPayloads["tts.start"],
+  ) => Promise<unknown> | unknown;
+  stopTtsEngine: (
+    payload: CommandPayloads["tts.stop"],
+  ) => Promise<unknown> | unknown;
+  installTtsEngine: (
+    payload: CommandPayloads["tts.install"],
+  ) => Promise<unknown> | unknown;
+  downloadTtsModel: (
+    payload: CommandPayloads["tts.download"],
+  ) => Promise<unknown> | unknown;
+  listTtsVoices: () => Promise<unknown> | unknown;
+  speakTts: (
+    payload: CommandPayloads["tts.speak"],
+  ) => Promise<unknown> | unknown;
+  stopTtsSpeaking: () => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -884,6 +1362,17 @@ function requireNumber(
   return { ok: true, value: value as number };
 }
 
+function validateOptionalString(
+  value: unknown,
+  id: CommandId,
+  key: string,
+): CommandResult<string | undefined> {
+  if (value === undefined || typeof value === "string") {
+    return { ok: true, value };
+  }
+  return invalidPayload(`${id} requires payload.${key} to be a string`);
+}
+
 function validateOptionalBoolean(
   value: unknown,
   id: CommandId,
@@ -906,6 +1395,7 @@ function validateSettingsTab(value: unknown): value is SettingsTab | undefined {
     value === undefined ||
     value === "general" ||
     value === "models" ||
+    value === "voice" ||
     value === "agents" ||
     value === "themes" ||
     value === "shortcuts" ||
@@ -950,10 +1440,16 @@ export function validateCommandRequest(
     id === "tasks.show" ||
     id === "tasks.hide" ||
     id === "tasks.toggle" ||
+    id === "history.show" ||
+    id === "history.hide" ||
+    id === "history.toggle" ||
     id === "tasks.list" ||
     id === "tasks.pauseAll" ||
     id === "tasks.resumeAll" ||
-    id === "tasks.wake"
+    id === "tasks.wake" ||
+    id === "tts.status" ||
+    id === "tts.voices" ||
+    id === "tts.stopSpeaking"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -965,7 +1461,8 @@ export function validateCommandRequest(
     id === "sidebar.show" ||
     id === "tab.close" ||
     id === "settings.open" ||
-    id === "tasks.openEditor";
+    id === "tasks.openEditor" ||
+    id === "tts.stop";
   const objectPayload =
     acceptsEmptyPayload && (payload === undefined || payload === null)
       ? ({ ok: true, value: {} } as const)
@@ -996,6 +1493,65 @@ export function validateCommandRequest(
     return {
       ok: true,
       value: { id, payload: { path: path.value, pin: pin.value } },
+    };
+  }
+
+  if (id === "preview.open") {
+    if (!isLoopbackPreviewUrl(obj.url)) {
+      return invalidPayload(
+        obj.url === undefined || obj.url === null || obj.url === ""
+          ? "preview.open requires payload.url"
+          : "preview.open requires payload.url to be an http(s) loopback URL",
+      );
+    }
+    const title = validateOptionalString(obj.title, id, "title");
+    if (!title.ok) return title;
+    return {
+      ok: true,
+      value: { id, payload: { url: obj.url, title: title.value } },
+    };
+  }
+
+  if (id === "mermaid.open") {
+    const rawSource = requireString(obj, "source", id);
+    if (!rawSource.ok) return rawSource;
+    const source = validateMermaidSource(rawSource.value);
+    if (!source.ok) return invalidPayload(source.message);
+    const rawTitle = validateOptionalString(obj.title, id, "title");
+    if (!rawTitle.ok) return rawTitle;
+    const title = rawTitle.value?.trim() || undefined;
+    if (title && title.length > 80) {
+      return invalidPayload(
+        "mermaid.open requires payload.title to be at most 80 characters",
+      );
+    }
+    return {
+      ok: true,
+      value: { id, payload: { source: source.source, title } },
+    };
+  }
+
+  if (id === "mermaid.update") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    const rawSource = requireString(obj, "source", id);
+    if (!rawSource.ok) return rawSource;
+    const source = validateMermaidSource(rawSource.value);
+    if (!source.ok) return invalidPayload(source.message);
+    const rawTitle = validateOptionalString(obj.title, id, "title");
+    if (!rawTitle.ok) return rawTitle;
+    const title = rawTitle.value?.trim() || undefined;
+    if (title && title.length > 80) {
+      return invalidPayload(
+        "mermaid.update requires payload.title to be at most 80 characters",
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { tabId: tabId.value, source: source.source, title },
+      },
     };
   }
 
@@ -1038,6 +1594,131 @@ export function validateCommandRequest(
     return {
       ok: true,
       value: { id, payload: { tabId: tabId.value, title: title.value } },
+    };
+  }
+
+  if (id === "tab.move") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    const index = requireNumber(obj, "index", id);
+    if (!index.ok) return index;
+    if (index.value < 0) {
+      return invalidPayload("tab.move requires payload.index to be at least 0");
+    }
+    return {
+      ok: true,
+      value: { id, payload: { tabId: tabId.value, index: index.value } },
+    };
+  }
+
+  if (id === "tab.setPinned") {
+    const tabId = requireNumber(obj, "tabId", id);
+    if (!tabId.ok) return tabId;
+    if (typeof obj.pinned !== "boolean") {
+      return invalidPayload(
+        "tab.setPinned requires payload.pinned to be a boolean",
+      );
+    }
+    return {
+      ok: true,
+      value: { id, payload: { tabId: tabId.value, pinned: obj.pinned } },
+    };
+  }
+
+  if (id === "git.history.open") {
+    const repoRoot = requireString(obj, "repoRoot", id);
+    if (!repoRoot.ok) return repoRoot;
+    const branch = validateOptionalString(obj.branch, id, "branch");
+    if (!branch.ok) return branch;
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { repoRoot: repoRoot.value, branch: branch.value },
+      },
+    };
+  }
+
+  if (id === "git.commitFile.open") {
+    const repoRoot = requireString(obj, "repoRoot", id);
+    if (!repoRoot.ok) return repoRoot;
+    const sha = requireString(obj, "sha", id);
+    if (!sha.ok) return sha;
+    // A sha reaches git as an argument, so only a literal object name is
+    // accepted here. Revision expressions such as HEAD~1 or @{u} are not.
+    if (!/^[0-9a-fA-F]{7,40}$/.test(sha.value)) {
+      return invalidPayload(
+        "git.commitFile.open requires payload.sha to be 7 to 40 hexadecimal characters",
+      );
+    }
+    const path = requireString(obj, "path", id);
+    if (!path.ok) return path;
+    if (
+      obj.originalPath !== undefined &&
+      obj.originalPath !== null &&
+      typeof obj.originalPath !== "string"
+    ) {
+      return invalidPayload(
+        "git.commitFile.open requires payload.originalPath to be a string",
+      );
+    }
+    const subject = validateOptionalString(obj.subject, id, "subject");
+    if (!subject.ok) return subject;
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          repoRoot: repoRoot.value,
+          sha: sha.value,
+          path: path.value,
+          originalPath: (obj.originalPath as string | null | undefined) ?? null,
+          subject: subject.value,
+        },
+      },
+    };
+  }
+
+  if (id === "search.content") {
+    const query = requireString(obj, "query", id);
+    if (!query.ok) return query;
+    if (!query.value.trim()) {
+      return invalidPayload(
+        "search.content requires a non-empty payload.query",
+      );
+    }
+    const root = requireString(obj, "root", id);
+    if (!root.ok) return root;
+    if (
+      obj.caseInsensitive !== undefined &&
+      typeof obj.caseInsensitive !== "boolean"
+    ) {
+      return invalidPayload(
+        "search.content requires payload.caseInsensitive to be a boolean",
+      );
+    }
+    let maxResults: number | undefined;
+    if (obj.maxResults !== undefined) {
+      const parsed = requireNumber(obj, "maxResults", id);
+      if (!parsed.ok) return parsed;
+      if (parsed.value < 1 || parsed.value > 500) {
+        return invalidPayload(
+          "search.content requires payload.maxResults between 1 and 500",
+        );
+      }
+      maxResults = parsed.value;
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          query: query.value,
+          root: root.value,
+          caseInsensitive: obj.caseInsensitive as boolean | undefined,
+          maxResults,
+        },
+      },
     };
   }
 
@@ -1100,12 +1781,18 @@ export function validateCommandRequest(
       const value = obj[key];
       if (value === undefined) continue;
       if (typeof value !== "string") {
-        return invalidPayload(`notes.update requires payload.${key} to be a string`);
+        return invalidPayload(
+          `notes.update requires payload.${key} to be a string`,
+        );
       }
       patch[key] = value;
     }
-    if (patch.title === undefined && patch.body === undefined &&
-        patch.url === undefined && patch.note === undefined) {
+    if (
+      patch.title === undefined &&
+      patch.body === undefined &&
+      patch.url === undefined &&
+      patch.note === undefined
+    ) {
       return invalidPayload(
         "notes.update requires at least one of title, body, url or note",
       );
@@ -1123,7 +1810,12 @@ export function validateCommandRequest(
     };
   }
 
-  if (id === "tasks.remove" || id === "tasks.run") {
+  if (
+    id === "tasks.remove" ||
+    id === "tasks.run" ||
+    id === "tasks.clone" ||
+    id === "tasks.reseed"
+  ) {
     const taskId = requireString(obj, "id", id);
     if (!taskId.ok) return taskId;
     return { ok: true, value: { id, payload: { id: taskId.value } } };
@@ -1143,6 +1835,74 @@ export function validateCommandRequest(
 
   if (id === "tasks.add" || id === "tasks.update") {
     return validateTaskPayload(id, obj);
+  }
+
+  if (id === "tts.start" || id === "tts.install") {
+    if (!isTtsEngineId(obj.engine)) {
+      return invalidPayload(
+        `${id} requires payload.engine to be one of ${TTS_ENGINES.join(", ")}`,
+      );
+    }
+    return { ok: true, value: { id, payload: { engine: obj.engine } } };
+  }
+
+  if (id === "tts.stop") {
+    if (obj.engine !== undefined && !isTtsEngineId(obj.engine)) {
+      return invalidPayload(
+        `tts.stop requires payload.engine to be one of ${TTS_ENGINES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: { engine: obj.engine as TtsEngineId | undefined },
+      },
+    };
+  }
+
+  if (id === "tts.download") {
+    if (!isTtsModelId(obj.model)) {
+      return invalidPayload(
+        `tts.download requires payload.model to be one of ${TTS_MODELS.join(", ")}`,
+      );
+    }
+    return { ok: true, value: { id, payload: { model: obj.model } } };
+  }
+
+  if (id === "tts.speak") {
+    const raw = requireString(obj, "text", id);
+    if (!raw.ok) return raw;
+    const text = raw.value.trim();
+    if (text.length === 0) {
+      return invalidPayload("tts.speak requires a non-empty payload.text");
+    }
+    if (text.length > DEFAULT_MAX_TOTAL) {
+      return invalidPayload(
+        `tts.speak requires payload.text to be at most ${DEFAULT_MAX_TOTAL} characters`,
+      );
+    }
+    if (obj.voiceId !== undefined && typeof obj.voiceId !== "string") {
+      return invalidPayload(
+        "tts.speak requires payload.voiceId to be a voice profile id",
+      );
+    }
+    if (obj.language !== undefined && !isTtsLanguage(obj.language)) {
+      return invalidPayload(
+        `tts.speak requires payload.language to be one of ${TTS_LANGUAGES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          text,
+          voiceId: obj.voiceId as string | undefined,
+          language: obj.language as TtsLanguage | undefined,
+        },
+      },
+    };
   }
 
   if (!validateSettingsTab(obj.tab)) {
@@ -1217,6 +1977,7 @@ function validateTaskPayload(
   const enums: readonly [string, readonly string[]][] = [
     ["target", TASK_TARGETS],
     ["mode", TASK_MODES],
+    ["agent", TASK_AGENTS],
     ["missed", MISSED_POLICIES],
     ["overlap", OVERLAP_POLICIES],
   ];
@@ -1287,6 +2048,12 @@ async function dispatchCommand(
       return handlers.hideSidebar();
     case "tab.openFile":
       return handlers.openFile(request.payload);
+    case "preview.open":
+      return handlers.openPreview(request.payload);
+    case "mermaid.open":
+      return handlers.openMermaid(request.payload);
+    case "mermaid.update":
+      return handlers.updateMermaid(request.payload);
     case "tab.focus":
       return handlers.focusTab(request.payload);
     case "tab.close":
@@ -1299,6 +2066,16 @@ async function dispatchCommand(
       return handlers.setTabColor(request.payload);
     case "git.diff.open":
       return handlers.openGitDiff(request.payload);
+    case "git.history.open":
+      return handlers.openGitHistory(request.payload);
+    case "git.commitFile.open":
+      return handlers.openCommitFile(request.payload);
+    case "search.content":
+      return handlers.searchContent(request.payload);
+    case "tab.move":
+      return handlers.moveTab(request.payload);
+    case "tab.setPinned":
+      return handlers.setTabPinned(request.payload);
     case "settings.open":
       return handlers.openSettings(request.payload);
     case "agent-monitor.show":
@@ -1331,6 +2108,12 @@ async function dispatchCommand(
       return handlers.hideTasks();
     case "tasks.toggle":
       return handlers.toggleTasks();
+    case "history.show":
+      return handlers.showHistory();
+    case "history.hide":
+      return handlers.hideHistory();
+    case "history.toggle":
+      return handlers.toggleHistory();
     case "tasks.openEditor":
       return handlers.openTaskEditor(request.payload);
     case "tasks.list":
@@ -1339,6 +2122,10 @@ async function dispatchCommand(
       return handlers.addTask(request.payload);
     case "tasks.update":
       return handlers.updateTask(request.payload);
+    case "tasks.clone":
+      return handlers.cloneTask(request.payload);
+    case "tasks.reseed":
+      return handlers.reseedTask(request.payload);
     case "tasks.remove":
       return handlers.removeTask(request.payload);
     case "tasks.run":
@@ -1351,6 +2138,22 @@ async function dispatchCommand(
       return handlers.resumeAllTasks();
     case "tasks.wake":
       return handlers.wakeTasks();
+    case "tts.status":
+      return handlers.getTtsStatus();
+    case "tts.start":
+      return handlers.startTtsEngine(request.payload);
+    case "tts.stop":
+      return handlers.stopTtsEngine(request.payload);
+    case "tts.install":
+      return handlers.installTtsEngine(request.payload);
+    case "tts.download":
+      return handlers.downloadTtsModel(request.payload);
+    case "tts.voices":
+      return handlers.listTtsVoices();
+    case "tts.speak":
+      return handlers.speakTts(request.payload);
+    case "tts.stopSpeaking":
+      return handlers.stopTtsSpeaking();
   }
 }
 

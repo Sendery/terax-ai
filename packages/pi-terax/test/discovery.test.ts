@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DISCOVERY_COMMAND_TIMEOUT_MS,
   discoverTerax,
+  discoveryFilePath,
   type DiscoveryCommandRunner,
 } from "../src/discovery.js";
 
@@ -114,5 +115,27 @@ describe("discoverTerax", () => {
     await expect(
       discoverTerax({ env: { XDG_CACHE_HOME: cacheDir }, platform: "linux" }),
     ).rejects.toThrow("Invalid Terax discovery file");
+  });
+});
+
+describe("discoveryFilePath", () => {
+  it("follows the Terax that owns the terminal", () => {
+    expect(
+      discoveryFilePath({
+        env: { TERAX_PI_DISCOVERY: "/Users/a/Library/Caches/terax-ai-sandbox/pi-bridge.json" },
+        platform: "darwin",
+      }),
+    ).toBe("/Users/a/Library/Caches/terax-ai-sandbox/pi-bridge.json");
+  });
+
+  it("ignores an advertised path that is not an absolute discovery file", () => {
+    for (const value of ["relative/pi-bridge.json", "/etc/passwd", ""]) {
+      expect(
+        discoveryFilePath({
+          env: { TERAX_PI_DISCOVERY: value, XDG_CACHE_HOME: "/c" },
+          platform: "linux",
+        }),
+      ).toBe("/c/terax-ai/pi-bridge.json");
+    }
   });
 });

@@ -13,6 +13,17 @@ import {
   workingDiffKey,
 } from "@/modules/editor/lib/diffCache";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { setSourceControlHiddenFiles } from "@/modules/settings/store";
+import {
+  clearHiddenPaths,
+  hiddenPathsFor,
+  MAX_HIDDEN_PER_REPO,
+  normalizeHiddenPath,
+  partitionHidden,
+  withHiddenPaths,
+  withoutHiddenPaths,
+  type HiddenFilesMap,
+} from "./lib/hiddenFiles";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SourceControlSummary } from "./useSourceControl";
 
@@ -82,7 +93,9 @@ type SourceControlPanelState = {
   actionMessage: string | null;
   stagedEntries: SourceControlEntry[];
   unstagedEntries: SourceControlEntry[];
-  fileEntries: SourceControlFileEntry[];
+  /** Rows the panel lists; muted ones are split out into hiddenFileEntries. */
+  fileEntries: readonly SourceControlFileEntry[];
+  hiddenFileEntries: readonly SourceControlFileEntry[];
   headerCheckState: CheckState;
   allClean: boolean;
   canPush: boolean;
@@ -108,6 +121,9 @@ type SourceControlPanelState = {
   cancelPendingDiscard: () => void;
   stageAllEntries: () => Promise<void>;
   unstageAllEntries: () => Promise<void>;
+  hideFile: (entry: SourceControlFileEntry) => Promise<void>;
+  revealFile: (entry: SourceControlFileEntry) => Promise<void>;
+  revealAllHiddenFiles: () => Promise<void>;
   generateCommitMessage: () => Promise<void>;
   commit: () => Promise<void>;
   push: () => Promise<void>;
@@ -393,6 +409,9 @@ export function useSourceControlPanel(
   const openrouterModelId = usePreferencesStore(
     (state) => state.openrouterModelId,
   );
+  const hiddenFilesMap = usePreferencesStore(
+    (state) => state.sourceControlHiddenFiles,
+  );
   const [panelState, setPanelState] = useState<PanelState>("closed");
   const [repo, setRepo] = useState<GitRepoInfo | null>(null);
   const [status, setStatus] = useState<GitStatusSnapshot | null>(null);
@@ -405,7 +424,7 @@ export function useSourceControlPanel(
     useState<SelectionTransition>("none");
   const [pendingDiscard, setPendingDiscard] = useState<
     | { scope: "single"; entry: SourceControlEntry }
-    | { scope: "all"; entries: SourceControlEntry[] }
+    | { scope: "all"; entries: readonly SourceControlEntry[] }
     | null
   >(null);
   const selectedRef = useRef<DiffSelection | null>(null);
@@ -431,7 +450,7 @@ export function useSourceControlPanel(
     [status],
   );
 
-  const fileEntries = useMemo<SourceControlFileEntry[]>(() => {
+  const allFileEntries = useMemo<SourceControlFileEntry[]>(() => {
     const seen = new Set<string>();
     const out: SourceControlFileEntry[] = [];
     for (const file of status?.changedFiles ?? []) {
@@ -463,6 +482,29 @@ export function useSourceControlPanel(
     }
     return out;
   }, [status]);
+
+  const hiddenPaths = useMemo(
+    () => hiddenPathsFor(hiddenFilesMap, repo?.repoRoot),
+    [hiddenFilesMap, repo?.repoRoot],
+  );
+
+  // Muting is a view filter: hidden files keep their real git status and stay
+  // in stagedEntries, so a hidden file that is already staged still commits.
+  // Only the listing and the bulk actions ("All", discard all) skip them.
+  const { visible: fileEntries, hidden: hiddenFileEntries } = useMemo(
+    () => partitionHidden(allFileEntries, hiddenPaths),
+    [allFileEntries, hiddenPaths],
+  );
+
+  const visibleStagedEntries = useMemo(
+    () => partitionHidden(stagedEntries, hiddenPaths).visible,
+    [hiddenPaths, stagedEntries],
+  );
+
+  const visibleUnstagedEntries = useMemo(
+    () => partitionHidden(unstagedEntries, hiddenPaths).visible,
+    [hiddenPaths, unstagedEntries],
+  );
 
   const headerCheckState = useMemo<CheckState>(() => {
     if (fileEntries.length === 0) return "unchecked";
@@ -737,9 +779,11 @@ export function useSourceControlPanel(
   );
 
   const requestDiscardAll = useCallback(() => {
-    if (!repo || summary.busyAction || unstagedEntries.length === 0) return;
-    setPendingDiscard({ scope: "all", entries: unstagedEntries });
-  }, [repo, summary.busyAction, unstagedEntries]);
+    if (!repo || summary.busyAction || visibleUnstagedEntries.length === 0) {
+      return;
+    }
+    setPendingDiscard({ scope: "all", entries: visibleUnstagedEntries });
+  }, [repo, summary.busyAction, visibleUnstagedEntries]);
 
   const cancelPendingDiscard = useCallback(() => {
     setPendingDiscard(null);
@@ -768,26 +812,26 @@ export function useSourceControlPanel(
   }, [pendingDiscard, repo, runMutation]);
 
   const stageAllEntries = useCallback(async () => {
-    if (!repo || unstagedEntries.length === 0) return;
-    const paths = new Set(unstagedEntries.map((entry) => entry.path));
+    if (!repo || visibleUnstagedEntries.length === 0) return;
+    const paths = new Set(visibleUnstagedEntries.map((entry) => entry.path));
     await runMutation(
       "stage:all",
       (s) => optimisticStage(s, paths),
       () => native.gitStage(repo.repoRoot, [...paths]),
       [...paths],
     );
-  }, [repo, runMutation, unstagedEntries]);
+  }, [repo, runMutation, visibleUnstagedEntries]);
 
   const unstageAllEntries = useCallback(async () => {
-    if (!repo || stagedEntries.length === 0) return;
-    const paths = new Set(stagedEntries.map((entry) => entry.path));
+    if (!repo || visibleStagedEntries.length === 0) return;
+    const paths = new Set(visibleStagedEntries.map((entry) => entry.path));
     await runMutation(
       "unstage:all",
       (s) => optimisticUnstage(s, paths),
       () => native.gitUnstage(repo.repoRoot, [...paths]),
       [...paths],
     );
-  }, [repo, runMutation, stagedEntries]);
+  }, [repo, runMutation, visibleStagedEntries]);
 
   const selectFile = useCallback(
     async (entry: SourceControlFileEntry) => {
@@ -858,6 +902,66 @@ export function useSourceControlPanel(
     },
     [repo, summary.busyAction],
   );
+
+  /**
+   * Persisting reads the live map instead of the rendered one: two quick
+   * hides would otherwise both build on the same stale snapshot and the
+   * second write would drop the first.
+   */
+  const persistHidden = useCallback(
+    async (
+      update: (current: HiddenFilesMap) => HiddenFilesMap,
+      onUnchanged?: (current: HiddenFilesMap) => void,
+    ) => {
+      const current = usePreferencesStore.getState().sourceControlHiddenFiles;
+      const next = update(current);
+      if (next === current) {
+        onUnchanged?.(current);
+        return;
+      }
+      try {
+        await setSourceControlHiddenFiles(next);
+        setActionError(null);
+      } catch (error) {
+        setActionError(normalizeError(error));
+      }
+    },
+    [],
+  );
+
+  const hideFile = useCallback(
+    async (entry: SourceControlFileEntry) => {
+      if (!repo) return;
+      await persistHidden(
+        (current) => withHiddenPaths(current, repo.repoRoot, [entry.path]),
+        (current) => {
+          const alreadyHidden = hiddenPathsFor(current, repo.repoRoot).has(
+            normalizeHiddenPath(entry.path),
+          );
+          if (alreadyHidden) return;
+          setActionError(
+            `Cannot hide more than ${MAX_HIDDEN_PER_REPO} files in one repository`,
+          );
+        },
+      );
+    },
+    [persistHidden, repo],
+  );
+
+  const revealFile = useCallback(
+    async (entry: SourceControlFileEntry) => {
+      if (!repo) return;
+      await persistHidden((current) =>
+        withoutHiddenPaths(current, repo.repoRoot, [entry.path]),
+      );
+    },
+    [persistHidden, repo],
+  );
+
+  const revealAllHiddenFiles = useCallback(async () => {
+    if (!repo) return;
+    await persistHidden((current) => clearHiddenPaths(current, repo.repoRoot));
+  }, [persistHidden, repo]);
 
   const generateCommitMessage = useCallback(async () => {
     if (!repo || stagedEntries.length === 0) return;
@@ -1009,6 +1113,7 @@ export function useSourceControlPanel(
     stagedEntries,
     unstagedEntries,
     fileEntries,
+    hiddenFileEntries,
     headerCheckState,
     allClean,
     canPush,
@@ -1034,6 +1139,9 @@ export function useSourceControlPanel(
     cancelPendingDiscard,
     stageAllEntries,
     unstageAllEntries,
+    hideFile,
+    revealFile,
+    revealAllHiddenFiles,
     generateCommitMessage,
     commit,
     push,

@@ -1,8 +1,8 @@
 # Scheduled tasks
 
-Scheduled tasks wake a Pi session with a prompt you wrote once, on a schedule or
-on demand. A task can run invisibly in the background or inside a terminal tab
-you can take over afterwards.
+Scheduled tasks wake an agent session with a prompt you wrote once, on a schedule
+or on demand. A task can run invisibly in the background or inside a terminal tab
+you can take over afterwards, and it can drive pi, Claude Code or Codex.
 
 Open the panel with the alarm-clock button in the header, next to notes.
 
@@ -15,10 +15,25 @@ Open the panel with the alarm-clock button in the header, next to notes.
 | Schedule | When it fires. See below. |
 | Run in | `Terminal tab` or `Headless`. |
 | Context | `Task` reuses one session so context accumulates. `Routine` starts a fresh session each run. |
-| Working directory | Where pi runs. Defaults to the active tab's directory. |
-| Pi session id | An existing session to wake. Leave empty and Terax owns one for the task. |
-| Model / provider / thinking | Per task. Leave empty to inherit your pi defaults. |
+| Agent | `Pi`, `Claude Code` or `Codex`. Decides which command line the run launches. |
+| Model | A preset for that agent, `Inherit default`, or a custom value passed verbatim. |
+| Working directory | Where the agent runs. Defaults to the active tab's directory. |
+| Session id | An existing session to wake. Leave empty and Terax owns one for the task. |
 | Max runs | Stop after N runs. Empty means unlimited. |
+
+A new task starts from the parameters of the last one you created — schedule,
+agent, model, directory and policies — so a second task is a small edit rather
+than a full form. Name and prompt are never inherited.
+
+## Agents
+
+| Agent | Launches | Session handling |
+| --- | --- | --- |
+| Pi | `pi` | `--session-id` accepts any id and creates it if missing. |
+| Claude Code | `claude` | `--session-id` needs a UUID and only works once; later runs use `--resume`. |
+| Codex | `codex` / `codex exec` | Codex mints its own ids, so a task resumes its most recent session in the directory (`codex resume --last`). |
+
+Provider and thinking level are pi-only options and are ignored by the other two.
 
 ## Schedules
 
@@ -33,17 +48,31 @@ compact text form, which is what the Pi commands accept:
 | `weekly:mon,wed@07:30` | Named weekdays. `weekdays` and `weekend` are shorthands. |
 | `days:3@06:00:2026-08-01` | Every N days, anchored on a date. |
 | `dates:2026-08-04,2026-08-09@12:00` | Specific calendar dates. |
-| `once:2026-08-04T09:15` | A single instant. |
+| `once:2026-08-04T09:15` | A single instant, edited as a date field and an hour field. |
 
 Times are your local wall clock and stay correct across daylight saving changes.
 
+## Duplicating a task and starting a new session
+
+The card has two buttons next to edit:
+
+- **Duplicate** copies the task with its schedule, agent, model, directory and
+  policies, opens the copy in the editor, and leaves it **disabled** so it
+  cannot fire while you are still changing it. Run history, the tab it was
+  linked to, and the session it accumulated stay with the original.
+- **New session seed** points the task at a brand new agent session. The next
+  run starts from an empty context instead of continuing the conversation the
+  task has been growing. Nothing else changes: the schedule, the runs already
+  spent and the history stay as they are.
+
 ## How a run happens
 
-**Headless** spawns `pi --print --session-id <id> "<prompt>"` in the task's
-directory, captures its output, and is killed if it exceeds 30 minutes.
+**Headless** spawns the agent's non-interactive form in the task's directory
+(`pi --print … "<prompt>"`, `claude --print … "<prompt>"`, `codex exec …
+"<prompt>"`), captures its output, and is killed if it exceeds 30 minutes.
 
 **Terminal tab** reuses the tab linked to the task, or creates one in the task's
-directory, launches `pi --session-id <id>` there, then types the prompt and
+directory, launches the agent there, then types the prompt and
 presses Enter. Line breaks are sent as Shift+Enter so a multiline prompt arrives
 intact, and the session stays live for you to continue by hand.
 

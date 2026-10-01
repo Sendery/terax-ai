@@ -16,7 +16,10 @@ import {
   AGENT_MONITOR_MIN_WIDTH,
   AgentMonitorPanel,
   AgentNotificationsBridge,
+  AgentRestoreDialog,
   useAgentMonitorPanel,
+  useAgentSessionCapture,
+  useAgentSessionRestore,
   useAgentStore,
 } from "@/modules/agents";
 import { captureSurface } from "@/modules/capture";
@@ -32,6 +35,10 @@ import {
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { native } from "@/modules/ai/lib/native";
+import {
+  checkReadable,
+  checkReadableCanonical,
+} from "@/modules/ai/lib/security";
 import { CommandPalette, createCommandItems } from "@/modules/command-palette";
 import {
   buildAppSnapshot,
@@ -45,12 +52,17 @@ import {
 } from "@/modules/editor";
 import { FileExplorer, type FileExplorerHandle } from "@/modules/explorer";
 import type { GitHistorySearchHandle } from "@/modules/git-history";
+import { setLspNavigator } from "@/modules/lsp";
 import {
   Header,
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
-import type { PreviewPaneHandle } from "@/modules/preview";
+import {
+  NEW_MERMAID_SOURCE,
+  validateMermaidSource,
+} from "@/modules/mermaid";
+import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
@@ -98,12 +110,24 @@ import {
   useTasksScheduler,
 } from "@/modules/tasks";
 import {
+  agentKindFromName,
+  GRAPH_MAX_WIDTH,
+  GRAPH_MIN_WIDTH,
+  SessionGraphPanel,
+  collectTerminalSources,
+  nextTerminalBinding,
+  type TerminalBinding,
+  useResolvedSession,
+  useSessionGraphPanel,
+} from "@/modules/session-graph";
+import {
   SourceControlPanel,
   useSourceControlContext,
 } from "@/modules/source-control";
 import { StatusBar } from "@/modules/statusbar";
 import {
   useTabs,
+  waitForMermaidTabReplacement,
   useWindowTitle,
   useWorkspaceCwd,
   DEFAULT_SPACE_ID,
@@ -129,6 +153,20 @@ import {
   useSpacesBoot,
 } from "@/modules/spaces";
 import { ThemeProvider, useThemeFileEditing } from "@/modules/theme";
+import {
+  speakText,
+  stopSpeaking,
+  ttsDownloadCommand,
+  ttsInstallCommand,
+  ttsSpeakCommand,
+  ttsStartCommand,
+  ttsStatusCommand,
+  ttsStopCommand,
+  ttsStopSpeakingCommand,
+  ttsVoicesCommand,
+  useTtsStore,
+  type SpeakOptions,
+} from "@/modules/tts";
 import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -140,8 +178,27 @@ import {
   WorkspaceInputBar,
 } from "./components/WorkspaceInputBar";
 import { WorkspaceSurface } from "./components/WorkspaceSurface";
+import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
+
+function waitForMermaidPane(tabId: number, timeoutMs = 5_000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (document.querySelector(`[data-mermaid-tab-id="${tabId}"]`)) {
+        resolve();
+        return;
+      }
+      if (performance.now() >= deadline) {
+        reject(new Error(`Mermaid tab ${tabId} did not mount in time`));
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
 
 export default function App() {
   const {
@@ -154,6 +211,7 @@ export default function App() {
     reorderTab,
     reorderTabByGap,
     newTabInSpace,
+    warmTab,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,
@@ -165,12 +223,20 @@ export default function App() {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    newMermaidTab,
+    updateMermaidSource,
+    replaceMermaidTabContent,
+    updateMermaidVisualLayout,
     setMarkdownView,
     openAiDiffTab,
     closeAiDiffTab,
     openGitDiffTab,
     openCommitHistoryTab,
     openCommitFileDiffTab,
+    openPrReviewTab,
+    setPrReviewBase,
+    moveTab,
+    setTabPinned,
     closeTab,
     updateTab,
     updateTabNotes,
@@ -188,6 +254,8 @@ export default function App() {
   // (e.g. cdInNewTab) read the latest pane state instead of a stale closure.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   const activeTerminalTab = useMemo(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -271,6 +339,37 @@ export default function App() {
     enabled: spacesHydrated,
   });
 
+  const restoreAgentSessionsPref = usePreferencesStore(
+    (s) => s.restoreAgentSessions,
+  );
+  // Preferences hydrate asynchronously, and asking before they land would
+  // ignore a stored "never".
+  const prefsHydrated = usePreferencesStore((s) => s.hydrated);
+  const getTabsForRestore = useCallback(() => tabsRef.current, []);
+  const knownSpaceIds = useCallback(
+    () => useSpaces.getState().spaces.map((s) => s.id),
+    [],
+  );
+  const getActiveSpaceId = useCallback(() => useSpaces.getState().activeId, []);
+  const agentRestore = useAgentSessionRestore({
+    ready: spacesHydrated && prefsHydrated,
+    policy: restoreAgentSessionsPref,
+    shellFlavor: IS_WINDOWS ? "windows" : "posix",
+    getTabs: getTabsForRestore,
+    knownSpaceIds,
+    activeSpaceId: getActiveSpaceId,
+    newTabInSpace,
+    warmTab,
+    setActiveId,
+  });
+  // Only starts once the restore decision is made, so the snapshot it
+  // overwrites is never the one still being offered to the user. Turning the
+  // feature off stops the writing too, so it costs nothing when unwanted.
+  useAgentSessionCapture({
+    tabs,
+    enabled: agentRestore.settled && restoreAgentSessionsPref !== "never",
+  });
+
   const prevSpaceRef = useRef(activeSpaceId);
   useEffect(() => {
     if (!spacesHydrated || !activeSpaceId) return;
@@ -308,7 +407,9 @@ export default function App() {
     sidebarRef,
     sidebarWidthRef,
     sidebarView,
+    initialSidebarCollapsed,
     persistSidebarView,
+    persistSidebarCollapsed,
     toggleSidebar,
     showSidebar,
     hideSidebar,
@@ -381,8 +482,10 @@ export default function App() {
   const miniOpen = useChatStore((s) => s.mini.open);
   const miniPresence = usePresence(miniOpen, 200);
   const openMini = useChatStore((s) => s.openMini);
+  const toggleMini = useChatStore((s) => s.toggleMini);
   const focusInput = useChatStore((s) => s.focusInput);
   const openPanel = useChatStore((s) => s.openPanel);
+  const closePanel = useChatStore((s) => s.closePanel);
   const panelOpen = useChatStore((s) => s.panelOpen);
   const setLive = useChatStore((s) => s.setLive);
   const respondToApproval = useChatStore((s) => s.respondToApproval);
@@ -479,6 +582,9 @@ export default function App() {
     handlePathDeleted,
   } = useTabCloseGuards({ tabs, disposeTab });
 
+  const { pendingAppClose, confirmAppClose, cancelAppClose } =
+    useAppCloseGuard(tabsRef);
+
   useEffect(() => {
     const live = new Set<number>();
     for (const t of tabs) {
@@ -530,18 +636,18 @@ export default function App() {
     return null;
   }, [tabs, activeId]);
 
+  // A real toggle in every state. Without a provider the panel shows the
+  // connect bar rather than jumping to Settings: that bar carries the same
+  // action, and routing elsewhere left the shortcut unable to close what the
+  // status-bar button had opened.
   const togglePanelAndFocus = useCallback(() => {
-    if (!hasComposer) {
-      void openSettingsWindow("models");
+    if (panelOpen) {
+      closePanel();
       return;
     }
-    if (panelOpen) {
-      useChatStore.getState().closePanel();
-    } else {
-      openPanel();
-      focusInput(null);
-    }
-  }, [hasComposer, panelOpen, openPanel, focusInput]);
+    openPanel();
+    if (hasComposer) focusInput(null);
+  }, [hasComposer, panelOpen, openPanel, closePanel, focusInput]);
 
   const attachSelection = useChatStore((s) => s.attachSelection);
 
@@ -562,39 +668,68 @@ export default function App() {
     [hasComposer, openPanel, focusInput],
   );
 
+  // The text-taking cores are what the terminal context menu calls, since it
+  // must act on the selection captured when it opened rather than re-reading a
+  // selection a right-click may already have replaced. The zero-argument
+  // wrappers keep the signature the shortcuts and command palette are wired to.
+  const askWithSelection = useCallback(
+    (selection: string) => {
+      if (!hasComposer) {
+        void openSettingsWindow("models");
+        return;
+      }
+      if (!selection.trim()) {
+        focusInput(null);
+        return;
+      }
+      const source: "terminal" | "editor" =
+        activeTab?.kind === "editor" ? "editor" : "terminal";
+      attachSelection(selection, source);
+    },
+    [hasComposer, focusInput, attachSelection, activeTab],
+  );
+
   const askFromSelection = useCallback(() => {
-    if (!hasComposer) {
-      void openSettingsWindow("models");
-      return;
-    }
-    const selection = captureActiveSelection();
-    if (!selection || !selection.trim()) {
-      focusInput(null);
-      return;
-    }
-    const source: "terminal" | "editor" =
-      activeTab?.kind === "editor" ? "editor" : "terminal";
-    attachSelection(selection, source);
-  }, [
-    hasComposer,
-    captureActiveSelection,
-    focusInput,
-    attachSelection,
-    activeTab,
-  ]);
+    askWithSelection(captureActiveSelection() ?? "");
+  }, [askWithSelection, captureActiveSelection]);
+
+  const addTextToNote = useCallback(
+    (selection: string) => {
+      if (!selection.trim()) return;
+      tabNotes.addFromInput(selection);
+      showNotesPanel();
+      if (notesDetached) void openNotesWindow();
+    },
+    [tabNotes, showNotesPanel, notesDetached],
+  );
 
   const addSelectionToNote = useCallback(() => {
-    const selection = captureActiveSelection();
-    if (!selection?.trim()) return;
-    tabNotes.addFromInput(selection);
-    showNotesPanel();
-    if (notesDetached) void openNotesWindow();
-  }, [
-    captureActiveSelection,
-    tabNotes,
-    showNotesPanel,
-    notesDetached,
-  ]);
+    addTextToNote(captureActiveSelection() ?? "");
+  }, [addTextToNote, captureActiveSelection]);
+
+  const speakAloud = useCallback((text: string, options: SpeakOptions = {}) => {
+    if (!text.trim()) return;
+    void speakText(text, options).catch((error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Reading aloud failed. Check Settings, Voice.",
+      );
+    });
+  }, []);
+
+  const readSelectionAloud = useCallback(
+    (options: SpeakOptions = {}) => {
+      const selection = captureActiveSelection();
+      if (!selection?.trim()) return;
+      speakAloud(selection, options);
+    },
+    [captureActiveSelection, speakAloud],
+  );
+
+  const stopReading = useCallback(() => {
+    stopSpeaking();
+  }, []);
 
   const { askPopup, setAskPopup, onAskFromSelection, onAddToNoteFromSelection } =
     useSelectionAskAi({
@@ -602,6 +737,41 @@ export default function App() {
       askFromSelection,
       addSelectionToNote,
     });
+  const openMermaidWithSource = useCallback(
+    (selection: string) => {
+      const source = validateMermaidSource(selection);
+      if (!source.ok) {
+        toast.error(source.message);
+        return;
+      }
+      newMermaidTab(source.source);
+      setAskPopup(null);
+    },
+    [newMermaidTab, setAskPopup],
+  );
+
+  /** A Mermaid tab started from scratch, from the new-tab menu or the palette. */
+  const openNewMermaidTab = useCallback(
+    () => newMermaidTab(NEW_MERMAID_SOURCE, "Untitled diagram"),
+    [newMermaidTab],
+  );
+
+  const onOpenMermaidFromSelection = useCallback(() => {
+    const selection = captureActiveSelection();
+    if (!selection) return;
+    openMermaidWithSource(selection);
+  }, [captureActiveSelection, openMermaidWithSource]);
+
+  // Same three actions the selection popup offers, so the terminal's right-click
+  // menu is a superset of it and the popup no longer needs to appear alongside.
+  const terminalSelectionActions = useMemo(
+    () => ({
+      onAsk: askWithSelection,
+      onAddToNote: addTextToNote,
+      onOpenMermaid: openMermaidWithSource,
+    }),
+    [askWithSelection, addTextToNote, openMermaidWithSource],
+  );
   const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
@@ -659,7 +829,7 @@ export default function App() {
         return Promise.resolve({
           tabId: linked.id,
           leafId,
-          piRunning: agent?.agent === "pi",
+          agentRunning: agent?.agent === task.agent,
         });
       }
       const tabId = newTab(task.cwd);
@@ -673,7 +843,7 @@ export default function App() {
             resolve(null);
             return;
           }
-          resolve({ tabId, leafId: tab.activeLeafId, piRunning: false });
+          resolve({ tabId, leafId: tab.activeLeafId, agentRunning: false });
         }, 120);
       });
     },
@@ -726,6 +896,16 @@ export default function App() {
     hideTasks: hideTasksPanel,
     persistTasksWidth,
   } = useTasksPanel();
+
+  const {
+    graphRef,
+    widthRef: graphWidthRef,
+    graphVisible,
+    hideGraph: hideGraphPanel,
+    showGraph: showGraphPanel,
+    toggleGraph: toggleGraphPanel,
+    persistGraphWidth,
+  } = useSessionGraphPanel();
   const scheduled = useScheduledTasks();
   const scheduledRef = useRef(scheduled);
   scheduledRef.current = scheduled;
@@ -738,12 +918,20 @@ export default function App() {
     [],
   );
   const markTaskDispatched = useCallback(
-    (taskId: string, at: number) => {
+    (taskId: string, at: number, sessionId: string) => {
       const task = scheduled.tasks.find((t) => t.id === taskId);
       if (!task) return;
+      // A task that accumulates context remembers the session this run created,
+      // so the next run knows to resume it instead of creating it again.
+      const owns =
+        task.mode === "task" &&
+        !task.sessions.some((session) => session.id === sessionId);
       scheduled.update(taskId, {
         lastRunAt: at,
         runCount: task.runCount + 1,
+        ...(owns
+          ? { sessions: [{ id: sessionId, cwd: task.cwd }, ...task.sessions] }
+          : {}),
       });
     },
     [scheduled],
@@ -788,6 +976,21 @@ export default function App() {
   const openNewTaskEditor = useCallback(() => {
     setEditingTaskId(null);
     setTaskEditorOpen(true);
+  }, []);
+  const cloneTaskAndEdit = useCallback(
+    (id: string) => {
+      const copy = scheduledRef.current.clone(id);
+      if (!copy) return;
+      setEditingTaskId(copy.id);
+      setTaskEditorOpen(true);
+      toast(`${copy.name} created, disabled until you enable it`);
+    },
+    [],
+  );
+  const regenerateTaskSeed = useCallback((id: string) => {
+    const task = scheduledRef.current.readTasks().find((t) => t.id === id);
+    scheduledRef.current.regenerate(id);
+    if (task) toast(`${task.name} will start a new session on its next run`);
   }, []);
   const openTaskEditor = useCallback((id: string) => {
     setEditingTaskId(id);
@@ -863,19 +1066,24 @@ export default function App() {
     activeTab?.kind === "editor" || activeTab?.kind === "markdown"
       ? activeTab.path
       : null;
-  const { sourceControl, toggleSourceControl, openGitGraphFromContext } =
-    useSourceControlContext({
-      activeTab,
-      tabs,
-      activeTerminalLeafCwd,
-      explorerRoot,
-      launchCwd,
-      launchCwdResolved,
-      home,
-      sidebarView,
-      cycleSidebarView,
-      openCommitHistoryTab,
-    });
+  const {
+    sourceControl,
+    toggleSourceControl,
+    openGitGraphFromContext,
+    openReviewFromContext,
+  } = useSourceControlContext({
+    activeTab,
+    tabs,
+    activeTerminalLeafCwd,
+    explorerRoot,
+    launchCwd,
+    launchCwdResolved,
+    home,
+    sidebarView,
+    cycleSidebarView,
+    openCommitHistoryTab,
+    openPrReviewTab,
+  });
   const explorerGitDecorations = usePreferencesStore(
     (s) => s.explorerGitDecorations,
   );
@@ -948,8 +1156,17 @@ export default function App() {
       "blocks.next": () => navigateFocusedBlocks(1),
       "search.focus": () => searchInlineRef.current?.focus(),
       "ai.toggle": togglePanelAndFocus,
+      "ai.toggleMini": () => {
+        if (!hasComposer) {
+          void openSettingsWindow("models");
+          return;
+        }
+        toggleMini();
+      },
       "ai.askSelection": askFromSelection,
       "notes.addSelection": addSelectionToNote,
+      "tts.readSelection": () => readSelectionAloud(),
+      "tts.stop": stopReading,
       "terminal.clearActive": clearActiveTerminal,
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -976,9 +1193,13 @@ export default function App() {
       focusNextPaneInTab,
       clearActiveTerminal,
       toggleSourceControl,
+      hasComposer,
       togglePanelAndFocus,
+      toggleMini,
       askFromSelection,
       addSelectionToNote,
+      readSelectionAloud,
+      stopReading,
       toggleSidebar,
       toggleExplorerFocus,
       zoomIn,
@@ -1002,10 +1223,14 @@ export default function App() {
         const sel = captureActiveSelection();
         return !sel || !sel.trim();
       }
-      if (id === "notes.addSelection") {
-        // Only claim the binding when there is a selection to add; otherwise
-        // let the key fall through (never preventDefault when disabled).
+      if (id === "notes.addSelection" || id === "tts.readSelection") {
+        // Only claim the binding when there is a selection to act on;
+        // otherwise let the key fall through (never preventDefault when
+        // disabled).
         return !captureActiveSelection()?.trim();
+      }
+      if (id === "tts.stop") {
+        return !useTtsStore.getState().speaking;
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -1180,6 +1405,70 @@ export default function App() {
   const activeCwdRef = useRef(activeCwd);
   activeCwdRef.current = activeCwd;
 
+  // The history panel follows whichever agent the focused terminal runs. Agent
+  // detection is heuristic and reports free-form names, so it is narrowed to the
+  // two agents that actually persist a navigable transcript. Subscribed rather
+  // than read from getState so the panel re-resolves when the agent changes.
+  const activeAgentName = useAgentStore((state) =>
+    activeLeafId != null ? (state.sessions[activeLeafId]?.agent ?? null) : null,
+  );
+  const graphAgentHint = agentKindFromName(activeAgentName);
+
+  const terminalTabs = useMemo(
+    () => tabs.filter((tab) => tab.kind === "terminal"),
+    [tabs],
+  );
+  const terminalSources = useMemo(
+    () =>
+      collectTerminalSources(
+        terminalTabs.map((tab) => ({
+          id: tab.id,
+          title: tab.title,
+          cwd: tab.cwd ?? null,
+          activeLeafId: tab.activeLeafId,
+          paneTree: tab.paneTree,
+        })),
+      ),
+    [terminalTabs],
+  );
+
+  // The panel follows the focused terminal, but focus moves to editors and
+  // diagrams constantly and those own no transcript, so the last terminal is
+  // held rather than blanking the panel mid-read.
+  const focusedTerminal = useMemo(
+    () =>
+      activeTab?.kind === "terminal" && activeCwd
+        ? {
+            tabId: activeTab.id,
+            leafId: activeTab.activeLeafId,
+            tabTitle: activeTab.title,
+            cwd: activeCwd,
+          }
+        : null,
+    [activeTab, activeCwd],
+  );
+  const terminalBindingRef = useRef<TerminalBinding | null>(null);
+  terminalBindingRef.current = nextTerminalBinding(
+    terminalBindingRef.current,
+    focusedTerminal,
+    terminalTabs.map((tab) => tab.id),
+  );
+  const graphBinding = terminalBindingRef.current;
+
+  const {
+    agent: graphAgent,
+    sessionId: graphSessionId,
+    candidates: graphCandidates,
+    groups: graphSourceGroups,
+  } = useResolvedSession(graphAgentHint, graphBinding, terminalSources);
+
+  const handlePrReviewBaseChange = useCallback(
+    (tabId: number, base: string) => {
+      setPrReviewBase(tabId, base);
+    },
+    [setPrReviewBase],
+  );
+
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
     const meta = create({
@@ -1271,6 +1560,7 @@ export default function App() {
             openNewPrivate: openNewPrivateTab,
             openNewEditor: () => setNewEditorOpen(true),
             openNewPreview: () => openPreviewTab(""),
+            openNewMermaid: openNewMermaidTab,
             openGitGraph: openGitGraphFromContext,
             toggleSourceControl,
             closeActiveTabOrPane: handleCloseTabOrPane,
@@ -1284,6 +1574,14 @@ export default function App() {
             newScheduledTask: openNewTaskEditor,
             toggleAi: togglePanelAndFocus,
             askAiSelection: askFromSelection,
+            hasSelection: Boolean(captureActiveSelection()?.trim()),
+            readSelectionAloud: () => readSelectionAloud(),
+            readSelectionAloudSpanish: () =>
+              readSelectionAloud({ language: "es-ES" }),
+            readSelectionAloudEnglish: () =>
+              readSelectionAloud({ language: "en-US" }),
+            stopReading,
+            openVoiceSettings: () => void openSettingsWindow("voice"),
             openSettings: () => void openSettingsWindow(),
             openKeyboardShortcuts: () => void openSettingsWindow("shortcuts"),
             spaces: useSpaces.getState().spaces,
@@ -1304,6 +1602,7 @@ export default function App() {
       openNewBlockTab,
       openNewPrivateTab,
       openPreviewTab,
+      openNewMermaidTab,
       openGitGraphFromContext,
       toggleSourceControl,
       handleCloseTabOrPane,
@@ -1314,6 +1613,9 @@ export default function App() {
       openNewTaskEditor,
       togglePanelAndFocus,
       askFromSelection,
+      captureActiveSelection,
+      readSelectionAloud,
+      stopReading,
       activeSpaceId,
       handleNewSpace,
     ],
@@ -1324,7 +1626,7 @@ export default function App() {
       getSnapshot: () =>
         buildAppSnapshot({
           tabs: tabsRef.current,
-          activeTabId: activeId,
+          activeTabId: activeIdRef.current,
           activeSpaceId,
           sidebar: {
             visible:
@@ -1332,11 +1634,11 @@ export default function App() {
                 sidebarWidthRef.current) > 0,
             view: sidebarView,
           },
-          ...(scheduledRef.current.tasks.length > 0
+          ...(scheduledRef.current.readTasks().length > 0
             ? {
                 scheduledTasks: {
                   paused: scheduledRef.current.paused,
-                  tasks: scheduledRef.current.tasks.map((task) => ({
+                  tasks: scheduledRef.current.readTasks().map((task) => ({
                     id: task.id,
                     name: task.name,
                     prompt: task.prompt,
@@ -1360,6 +1662,10 @@ export default function App() {
                 },
               }
             : {}),
+          tts: {
+            status: useTtsStore.getState().status,
+            speaking: useTtsStore.getState().speaking,
+          },
         }),
       getBuildInfo: () => ({
         repository: BUILD_INFO.repository,
@@ -1369,7 +1675,11 @@ export default function App() {
       }),
       capture: async (payload) => {
         try {
-          return await captureSurface(payload, tabsRef.current, activeId);
+          return await captureSurface(
+            payload,
+            tabsRef.current,
+            activeIdRef.current,
+          );
         } catch (error) {
           throw {
             code: "command_failed",
@@ -1389,12 +1699,57 @@ export default function App() {
         handleOpenFile(path, pin);
         return { opened: true };
       },
+      openPreview: ({ url, title }) => {
+        const existing = tabsRef.current.find(
+          (t) => t.kind === "preview" && samePreviewUrl(t.url, url),
+        );
+        const tabId = existing?.id ?? openPreviewTab(url);
+        if (existing) {
+          useSpaces.getState().setActive(existing.spaceId);
+          setActiveId(existing.id);
+        }
+        const customTitle = title?.trim();
+        if (customTitle) updateTab(tabId, { customTitle });
+        return { tabId, url, created: !existing };
+      },
+      openMermaid: async ({ source, title }) => {
+        const tabId = newMermaidTab(source, title ?? "Mermaid diagram");
+        await waitForMermaidPane(tabId);
+        return { tabId, title: title ?? "Mermaid diagram" };
+      },
+      updateMermaid: async ({ tabId, source, title }) => {
+        const tab = tabsRef.current.find((candidate) => candidate.id === tabId);
+        if (!tab || tab.kind !== "mermaid") {
+          throw {
+            code: "command_failed",
+            message: `Mermaid tab ${tabId} not found`,
+          };
+        }
+        const updated = replaceMermaidTabContent(tabId, source, title);
+        if (!updated) {
+          throw {
+            code: "command_failed",
+            message: `Mermaid tab ${tabId} could not be updated`,
+          };
+        }
+        const committed = await waitForMermaidTabReplacement(
+          () => tabsRef.current,
+          tabId,
+          source,
+          title,
+        );
+        return {
+          tabId,
+          title: committed.customTitle ?? committed.title,
+        };
+      },
       focusTab: ({ tabId }) => {
         const tab = tabsRef.current.find((t) => t.id === tabId);
         if (!tab) {
           throw { code: "command_failed", message: `Tab ${tabId} not found` };
         }
         useSpaces.getState().setActive(tab.spaceId);
+        activeIdRef.current = tabId;
         setActiveId(tabId);
         return { tabId, spaceId: tab.spaceId };
       },
@@ -1421,6 +1776,73 @@ export default function App() {
       openGitDiff: (payload) => {
         const tabId = openGitDiffTab(payload);
         return { tabId };
+      },
+      openGitHistory: ({ repoRoot, branch }) => {
+        const tabId = openCommitHistoryTab({ repoRoot, branch });
+        return { tabId };
+      },
+      openCommitFile: ({ repoRoot, sha, path, originalPath, subject }) => {
+        const tabId = openCommitFileDiffTab({
+          repoRoot,
+          sha,
+          shortSha: sha.slice(0, 7),
+          subject: subject ?? "",
+          path,
+          originalPath: originalPath ?? null,
+        });
+        return { tabId };
+      },
+      searchContent: async ({ query, root, caseInsensitive, maxResults }) => {
+        // Pi is an external caller, so the same deny-list the in-app AI tools
+        // use guards the root and every hit: a match must never reveal a path
+        // the agent is not allowed to read.
+        const safety = await checkReadableCanonical(root, (p) =>
+          native.canonicalize(p),
+        );
+        if (!safety.ok) {
+          throw { code: "command_failed", message: safety.reason };
+        }
+        let response: Awaited<ReturnType<typeof native.grep>>;
+        try {
+          response = await native.grep({
+            pattern: query,
+            root: safety.canonical,
+            caseInsensitive,
+            maxResults: maxResults ?? 50,
+          });
+        } catch (error) {
+          throw {
+            code: "command_failed",
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+        const hits = response.hits.filter((hit) => {
+          const absolute = hit.path.startsWith("/")
+            ? hit.path
+            : `${safety.canonical}/${hit.path}`;
+          return checkReadable(absolute).ok;
+        });
+        return {
+          hits,
+          truncated: response.truncated || hits.length !== response.hits.length,
+          filesScanned: response.files_scanned,
+        };
+      },
+      moveTab: ({ tabId, index }) => {
+        const moved = moveTab(tabId, index);
+        if (moved === null) {
+          throw { code: "command_failed", message: `Tab ${tabId} not found` };
+        }
+        return { tabId, index: moved };
+      },
+      setTabPinned: ({ tabId, pinned }) => {
+        if (!setTabPinned(tabId, pinned)) {
+          throw {
+            code: "command_failed",
+            message: `Tab ${tabId} is not an editor tab`,
+          };
+        }
+        return { tabId, pinned };
       },
       openSettings: ({ tab }) => {
         void openSettingsWindow(tab);
@@ -1516,9 +1938,23 @@ export default function App() {
         toggleTasks();
         return { toggled: true };
       },
+      showHistory: () => {
+        showGraphPanel();
+        return { visible: true };
+      },
+      hideHistory: () => {
+        hideGraphPanel();
+        return { visible: false };
+      },
+      toggleHistory: () => {
+        toggleGraphPanel();
+        return { toggled: true };
+      },
       openTaskEditor: ({ id }) => {
         if (id !== undefined) {
-          const current = scheduledRef.current.tasks.find((t) => t.id === id);
+          const current = scheduledRef.current
+            .readTasks()
+            .find((t) => t.id === id);
           if (!current) {
             throw { code: "command_failed", message: `Task ${id} not found` };
           }
@@ -1559,7 +1995,9 @@ export default function App() {
         };
       },
       updateTask: ({ id, ...fields }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1570,8 +2008,42 @@ export default function App() {
         scheduledRef.current.update(id, patch);
         return { id, updated: true };
       },
+      cloneTask: ({ id }) => {
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const copy = scheduledRef.current.clone(id);
+        if (!copy) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        setEditingTaskId(copy.id);
+        setTaskEditorOpen(true);
+        showTasksPanel();
+        // The copy is disabled on purpose: it exists to be edited first.
+        return {
+          id: copy.id,
+          source: id,
+          name: copy.name,
+          enabled: copy.enabled,
+        };
+      },
+      reseedTask: ({ id }) => {
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
+        if (!current) {
+          throw { code: "command_failed", message: `Task ${id} not found` };
+        }
+        const seed = scheduledRef.current.regenerate(id);
+        return { id, seed, reseeded: seed !== null };
+      },
       removeTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1579,7 +2051,9 @@ export default function App() {
         return { id, removed: true };
       },
       runTask: ({ id }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1587,7 +2061,9 @@ export default function App() {
         return { id, started: true };
       },
       setTaskEnabled: ({ id, enabled }) => {
-        const current = scheduledRef.current.tasks.find((t) => t.id === id);
+        const current = scheduledRef.current
+          .readTasks()
+          .find((t) => t.id === id);
         if (!current) {
           throw { code: "command_failed", message: `Task ${id} not found` };
         }
@@ -1607,6 +2083,14 @@ export default function App() {
         const dispatched = tasksSchedulerRef.current.wakeNow();
         return { dispatched, paused: scheduledRef.current.paused };
       },
+      getTtsStatus: () => ttsStatusCommand(),
+      startTtsEngine: ({ engine }) => ttsStartCommand(engine),
+      stopTtsEngine: ({ engine }) => ttsStopCommand(engine),
+      installTtsEngine: ({ engine }) => ttsInstallCommand(engine),
+      downloadTtsModel: ({ model }) => ttsDownloadCommand(model),
+      listTtsVoices: () => ttsVoicesCommand(),
+      speakTts: (payload) => ttsSpeakCommand(payload),
+      stopTtsSpeaking: () => ttsStopSpeakingCommand(),
     }),
     [
       activeId,
@@ -1617,6 +2101,9 @@ export default function App() {
       showAgentMonitor,
       hideAgentMonitor,
       toggleAgentMonitor,
+      showGraphPanel,
+      hideGraphPanel,
+      toggleGraphPanel,
       openTaskEditor,
       openNewTaskEditor,
       activeSpaceId,
@@ -1624,6 +2111,8 @@ export default function App() {
       handleOpenFile,
       hideSidebar,
       openGitDiffTab,
+      openPreviewTab,
+      newMermaidTab,
       setActiveId,
       showSidebar,
       sidebarRef,
@@ -1652,6 +2141,11 @@ export default function App() {
     },
     [openFileTab],
   );
+
+  useEffect(() => {
+    setLspNavigator({ openFile: openContentHit });
+    return () => setLspNavigator(null);
+  }, [openContentHit]);
 
   const insertHistoryCommand = useMemo(
     () =>
@@ -1690,6 +2184,7 @@ export default function App() {
               onNewPrivate={openNewPrivateTab}
               onNewPreview={() => openPreviewTab("")}
               onNewEditor={() => setNewEditorOpen(true)}
+              onNewMermaid={openNewMermaidTab}
               onNewGitGraph={openGitGraphFromContext}
               onClose={handleClose}
               onPin={pinTab}
@@ -1703,6 +2198,9 @@ export default function App() {
               tasksVisible={tasksVisible}
               onToggleAgentMonitor={toggleAgentMonitor}
               agentMonitorVisible={agentMonitorVisible}
+              onToggleSessionGraph={toggleGraphPanel}
+              sessionGraphVisible={graphVisible}
+              sessionGraphAgent={graphAgent}
               scheduledCount={
                 scheduled.tasks.filter((task) => task.enabled).length
               }
@@ -1721,17 +2219,23 @@ export default function App() {
             <ResizablePanelGroup
               orientation="horizontal"
               className="min-h-0 flex-1"
+              onLayoutChanged={(_, { isUserInteraction }) => {
+                const width = sidebarRef.current?.getSize().inPixels ?? 0;
+                persistSidebarWidth(width, isUserInteraction);
+              }}
             >
               <ResizablePanel
                 id="sidebar"
                 panelRef={sidebarRef}
-                defaultSize={`${sidebarWidthRef.current}px`}
+                defaultSize={
+                  initialSidebarCollapsed ? "0px" : `${sidebarWidthRef.current}px`
+                }
                 minSize={`${SIDEBAR_MIN_WIDTH}px`}
                 maxSize={`${SIDEBAR_MAX_WIDTH}px`}
                 collapsible
                 collapsedSize={0}
                 onResize={(size) => {
-                  if (size.inPixels > 0) persistSidebarWidth(size.inPixels);
+                  persistSidebarCollapsed(size.inPixels <= 0);
                 }}
               >
                 <div
@@ -1762,6 +2266,7 @@ export default function App() {
                         sourceControl={sourceControl}
                         onOpenDiff={openGitDiffTab}
                         onOpenGitGraph={openGitGraphFromContext}
+                        onOpenReview={openReviewFromContext}
                         onOpenFile={handleOpenFile}
                       />
                     )}
@@ -1791,6 +2296,9 @@ export default function App() {
                       onExit={handleLeafExit}
                       onFocusLeaf={handleFocusLeaf}
                       onOpenFileLink={handleOpenTerminalFileLink}
+                      onReadAloud={speakAloud}
+                      onStopReading={stopReading}
+                      selectionActions={terminalSelectionActions}
                       homePath={home}
                       registerEditorHandle={registerEditorHandle}
                       onEditorDirtyChange={handleEditorDirty}
@@ -1800,8 +2308,11 @@ export default function App() {
                       onAiDiffAccept={(id) => respondToApproval(id, true)}
                       onAiDiffReject={(id) => respondToApproval(id, false)}
                       onOpenCommitFile={openCommitFileDiffTab}
+                      onPrReviewBaseChange={handlePrReviewBaseChange}
                       onGitHistorySearchHandle={setGitHistoryHandle}
                       onSetMarkdownView={setMarkdownView}
+                      onMermaidSourceChange={updateMermaidSource}
+                      onMermaidVisualLayoutChange={updateMermaidVisualLayout}
                     />
                   </div>
 
@@ -1815,6 +2326,7 @@ export default function App() {
                     panelOpen={panelOpen}
                     keysLoaded={keysLoaded}
                     onConnect={() => void openSettingsWindow("models")}
+                    onDismiss={closePanel}
                   />
                 </div>
               </ResizablePanel>
@@ -1900,6 +2412,8 @@ export default function App() {
                   queuedIds={dispatcher.queuedIds}
                   onAdd={openNewTaskEditor}
                   onEdit={openTaskEditor}
+                  onClone={cloneTaskAndEdit}
+                  onRegenerateSeed={regenerateTaskSeed}
                   onRemove={scheduled.remove}
                   onToggleEnabled={scheduled.setEnabled}
                   onRunNow={(id) => dispatcher.run(id, "manual")}
@@ -1908,6 +2422,35 @@ export default function App() {
                   onHide={hideTasksPanel}
                 />
               </ResizablePanel>
+                </>
+              )}
+              {graphVisible && (
+                <>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel
+                    id="session-graph"
+                    panelRef={graphRef}
+                    defaultSize={`${graphWidthRef.current}px`}
+                    minSize={`${GRAPH_MIN_WIDTH}px`}
+                    maxSize={`${GRAPH_MAX_WIDTH}px`}
+                    onResize={(size) => {
+                      if (size.inPixels > 0) persistGraphWidth(size.inPixels);
+                    }}
+                  >
+                    <SessionGraphPanel
+                      agent={graphAgent}
+                      sessionId={graphSessionId}
+                      candidates={graphCandidates}
+                      sources={graphSourceGroups}
+                      boundTerminalKey={
+                        graphBinding
+                          ? `${graphBinding.tabId}:${graphBinding.leafId}`
+                          : null
+                      }
+                      subtitle={graphBinding?.tabTitle ?? null}
+                      onHide={hideGraphPanel}
+                    />
+                  </ResizablePanel>
                 </>
               )}
             </ResizablePanelGroup>
@@ -1955,6 +2498,7 @@ export default function App() {
               y={askPopup?.y ?? 0}
               onAsk={onAskFromSelection}
               onAddToNote={onAddToNoteFromSelection}
+              onOpenMermaid={onOpenMermaidFromSelection}
               onDismiss={() => setAskPopup(null)}
             />
           ) : null}
@@ -1982,12 +2526,19 @@ export default function App() {
             open={taskEditorOpen}
             task={editingTask}
             defaultCwd={activeCwd ?? home ?? ""}
+            defaults={scheduled.defaults}
             onSubmit={(input) => {
               if (editingTask) scheduled.update(editingTask.id, input);
               else scheduled.add(input);
               closeTaskEditor();
             }}
             onCancel={closeTaskEditor}
+          />
+
+          <AgentRestoreDialog
+            sessions={agentRestore.pending}
+            onRestore={agentRestore.restore}
+            onDismiss={agentRestore.dismiss}
           />
 
           <CloseDialogs
@@ -2001,6 +2552,9 @@ export default function App() {
             pendingDeleteTabs={pendingDeleteTabs}
             onCancelDeleteClose={cancelDeleteClose}
             onConfirmDeleteClose={confirmDeleteClose}
+            pendingAppClose={pendingAppClose}
+            onCancelAppClose={cancelAppClose}
+            onConfirmAppClose={confirmAppClose}
           />
         </div>
       </TooltipProvider>

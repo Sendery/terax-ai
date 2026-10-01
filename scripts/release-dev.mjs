@@ -5,7 +5,16 @@
  * signed and never generate updater manifests.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { developmentConfigOverride } from "./dev-release-config.mjs";
@@ -34,8 +43,17 @@ export function parseDevReleaseArgs(args) {
 export function nativeBuildPlan(platform = process.platform, arch = process.arch) {
   if (platform === "linux" && arch === "x64") return { bundles: "appimage,deb,rpm", root: "src-tauri/target/release/bundle", label: "Linux x86_64" };
   if (platform === "win32" && arch === "x64") return { bundles: "nsis,msi", root: "src-tauri/target/release/bundle", label: "Windows x86_64" };
-  if (platform === "darwin" && arch === "arm64") return { bundles: "app,dmg", target: "aarch64-apple-darwin", root: "src-tauri/target/aarch64-apple-darwin/release/bundle", label: "macOS ARM64" };
-  if (platform === "darwin" && arch === "x64") return { bundles: "app,dmg", target: "x86_64-apple-darwin", root: "src-tauri/target/x86_64-apple-darwin/release/bundle", label: "macOS x86_64" };
+  // One universal artifact covers both Mac architectures, so the host a Mac
+  // build runs on no longer decides what users can install.
+  if (platform === "darwin" && (arch === "arm64" || arch === "x64")) {
+    return {
+      bundles: "app,dmg",
+      target: "universal-apple-darwin",
+      rustTargets: ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+      root: "src-tauri/target/universal-apple-darwin/release/bundle",
+      label: "macOS Apple Silicon + Intel",
+    };
+  }
   throw new Error(`Unsupported native development-release host: ${platform}/${arch}. Use a matching native host; cross-platform packaging is intentionally unsupported.`);
 }
 
@@ -68,6 +86,37 @@ export function developmentArtifacts(root) {
   return filesRecursively(root).filter((file) => !file.endsWith(".sig"));
 }
 
+/**
+ * Tauri labels macOS bundles with Apple architecture jargon (`universal`,
+ * `aarch64`, `x64`). Publish the hardware names the Apple menu shows instead so
+ * nobody downloads an Intel build onto an Apple Silicon Mac by mistake.
+ */
+const MACOS_DOWNLOAD_LABELS = [
+  [/_universal(\.dmg|\.app\.tar\.gz)$/, "_apple_silicon_intel$1"],
+  [/_aarch64(\.dmg|\.app\.tar\.gz)$/, "_apple_silicon$1"],
+  [/_x64(\.dmg|\.app\.tar\.gz)$/, "_intel$1"],
+];
+
+export function downloadAssetName(name) {
+  for (const [pattern, replacement] of MACOS_DOWNLOAD_LABELS) {
+    if (pattern.test(name)) return name.replace(pattern, replacement);
+  }
+  return name;
+}
+
+/**
+ * Copy each artifact to its published name inside `stageRoot`, leaving the build
+ * output untouched, and return the paths to upload.
+ */
+export function stageDownloads(artifacts, stageRoot) {
+  mkdirSync(stageRoot, { recursive: true });
+  return artifacts.map((file) => {
+    const destination = join(stageRoot, downloadAssetName(basename(file)));
+    copyFileSync(file, destination);
+    return destination;
+  });
+}
+
 function main() {
   let options;
   let configPath;
@@ -90,11 +139,13 @@ function main() {
     writeFileSync(configPath, JSON.stringify(developmentConfigOverride(baseConfig)));
     run("pnpm", ["install", "--frozen-lockfile"], { cwd: cacheRoot });
     rmSync(join(cacheRoot, plan.root), { recursive: true, force: true });
+    for (const rustTarget of plan.rustTargets ?? []) run("rustup", ["target", "add", rustTarget], { capture: true });
     const buildArgs = ["scripts/build-version.mjs", options.version, "--", "--bundles", plan.bundles, "--no-sign", "--config", configPath];
     if (plan.target) buildArgs.push("--target", plan.target);
     run("node", buildArgs, { cwd: cacheRoot });
-    const artifacts = developmentArtifacts(join(cacheRoot, plan.root));
-    if (!artifacts.length) throw new Error(`No installers were produced below ${join(cacheRoot, plan.root)}. Check the preceding build trace.`);
+    const built = developmentArtifacts(join(cacheRoot, plan.root));
+    if (!built.length) throw new Error(`No installers were produced below ${join(cacheRoot, plan.root)}. Check the preceding build trace.`);
+    const artifacts = stageDownloads(built, join(cacheRoot, ".terax", "downloads", options.tag));
     trace("validated artifacts", { artifacts: artifacts.map((file) => basename(file)) });
     if (options.upload) run("gh", ["release", "upload", options.tag, ...artifacts, "--repo", options.repository, "--clobber"]);
     trace("development release completed", { tag: options.tag, uploaded: options.upload, artifacts: artifacts.map((file) => basename(file)) });

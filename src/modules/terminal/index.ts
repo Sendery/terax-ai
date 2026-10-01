@@ -7,10 +7,19 @@ export {
   leafHasForegroundProcess,
   leafIdForPty,
   navigateFocusedBlocks,
+  ptyIdForLeaf,
   respawnSession,
+  submitToLeaf,
   whenSessionReady,
   writeToSession,
 } from "./lib/useTerminalSession";
+export {
+  aggregateAgentPhases,
+  type AgentTabStatus,
+  type AttentionCause,
+  useAgentActivityStore,
+} from "./lib/agentActivity";
+export { repaintLeaf } from "./lib/rendererPool";
 export { useTerminalFileDrop } from "./lib/useTerminalFileDrop";
 export {
   findLeafCwd,
