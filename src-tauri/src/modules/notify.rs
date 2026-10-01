@@ -16,6 +16,14 @@
 //! unless its delegate says otherwise. The backend's delegate does not, so the
 //! one missing method is added to it at runtime rather than replacing it, which
 //! would lose the delivery and click callbacks it relies on.
+//!
+//! The backend only reports a click to a thread still blocked waiting for that
+//! notification, and a banner nobody touches waits in Notification Center
+//! indefinitely, so a bounded pool of waiters filled up within the hour and
+//! every later click merely raised the app. Clicks are instead read from the
+//! delegate itself: its activation method is wrapped once (the original still
+//! runs first) and the activated notification is matched back to its pane by
+//! the text it was posted with.
 
 // Only macOS has the rich path; elsewhere the helpers exist for the tests.
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -26,6 +34,43 @@ const MAX_TITLE_CHARS: usize = 120;
 const MAX_SUBTITLE_CHARS: usize = 160;
 const MAX_BODY_CHARS: usize = 400;
 const BADGE_SIZE: u32 = 128;
+/// Notifications whose click can still be routed; older ones only raise the app.
+const MAX_ACTIVATION_TARGETS: usize = 256;
+
+/// The pane a notification is about, as `(leaf_id, tab_id)`.
+pub type ActivationTarget = (Option<u32>, Option<u32>);
+
+/// What identifies a posted notification when macOS hands it back on click:
+/// the backend assigns its own identifier and exposes no user info, so the
+/// three texts it was posted with are the handle.
+pub fn activation_key(title: &str, subtitle: &str, body: &str) -> String {
+    format!("{title}\u{1f}{subtitle}\u{1f}{body}")
+}
+
+/// Recently posted notifications and where each one leads, newest last. A
+/// repeat of the same text moves to the end, so the latest pane wins.
+#[derive(Default)]
+pub struct ActivationTargets {
+    entries: std::collections::VecDeque<(String, ActivationTarget)>,
+}
+
+impl ActivationTargets {
+    pub const fn new() -> Self {
+        Self { entries: std::collections::VecDeque::new() }
+    }
+
+    pub fn record(&mut self, key: String, target: ActivationTarget) {
+        self.entries.retain(|(existing, _)| *existing != key);
+        self.entries.push_back((key, target));
+        while self.entries.len() > MAX_ACTIVATION_TARGETS {
+            self.entries.pop_front();
+        }
+    }
+
+    pub fn lookup(&self, key: &str) -> Option<ActivationTarget> {
+        self.entries.iter().rev().find(|(existing, _)| existing == key).map(|(_, target)| *target)
+    }
+}
 
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -231,21 +276,99 @@ fn badge_path(accent: Option<[u8; 3]>, tone: Tone) -> Result<std::path::PathBuf,
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Once;
+    use std::sync::{Mutex, Once, OnceLock};
 
+    use objc2::rc::Retained;
     use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
+    use objc2_foundation::NSString;
     use tauri::{Emitter, Manager};
 
     use super::{badge_path, clip, icon_path, parse_hex, RichNotification, MAX_BODY_CHARS, MAX_SUBTITLE_CHARS, MAX_TITLE_CHARS};
 
-    /// A click is only reported to a sender that is waiting, and a banner the
-    /// user never touches keeps its waiter until it leaves Notification
-    /// Center. Beyond this many, notifications are sent without click routing
-    /// so waiting threads stay bounded.
-    const MAX_WAITERS: usize = 8;
-    static WAITERS: AtomicUsize = AtomicUsize::new(0);
     static SETUP: Once = Once::new();
+    static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+    static TARGETS: Mutex<super::ActivationTargets> = Mutex::new(super::ActivationTargets::new());
+    /// The backend's own activation method, called before ours.
+    static ORIGINAL_ACTIVATE: OnceLock<Imp> = OnceLock::new();
+
+    type ActivateFn = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject);
+
+    fn as_string(text: Option<Retained<NSString>>) -> String {
+        text.map(|t| t.to_string()).unwrap_or_default()
+    }
+
+    /// The three texts a notification was posted with, as macOS returns them.
+    fn posted_texts(notification: *mut AnyObject) -> (String, String, String) {
+        // SAFETY: `notification` is the live NSUserNotification the delegate
+        // was handed; each getter returns nil or an autoreleased NSString.
+        unsafe {
+            let title: Option<Retained<NSString>> = objc2::msg_send![notification, title];
+            let subtitle: Option<Retained<NSString>> = objc2::msg_send![notification, subtitle];
+            let body: Option<Retained<NSString>> = objc2::msg_send![notification, informativeText];
+            (as_string(title), as_string(subtitle), as_string(body))
+        }
+    }
+
+    extern "C-unwind" fn activate(
+        this: *mut AnyObject,
+        cmd: Sel,
+        center: *mut AnyObject,
+        notification: *mut AnyObject,
+    ) {
+        if let Some(original) = ORIGINAL_ACTIVATE.get() {
+            // SAFETY: the stored IMP is the method this one replaced, with the
+            // same signature.
+            unsafe {
+                let original: ActivateFn = std::mem::transmute(*original);
+                original(this, cmd, center, notification);
+            }
+        }
+        if notification.is_null() {
+            return;
+        }
+        let (title, subtitle, body) = posted_texts(notification);
+        let key = super::activation_key(&title, &subtitle, &body);
+        let target = TARGETS.lock().ok().and_then(|targets| targets.lookup(&key));
+        let Some(app) = APP.get() else { return };
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+        if let Some((leaf_id, tab_id)) = target {
+            let _ = app.emit(
+                "terax:notification-activated",
+                serde_json::json!({ "leafId": leaf_id, "tabId": tab_id }),
+            );
+        }
+    }
+
+    /// Wraps the backend delegate's activation method so every click reaches
+    /// `activate`, including clicks on notifications sent without waiting.
+    pub(super) fn route_activations() {
+        if ORIGINAL_ACTIVATE.get().is_some() {
+            return;
+        }
+        let Some(class) = AnyClass::get(c"NotificationCenterDelegate") else {
+            return;
+        };
+        let sel = Sel::register(c"userNotificationCenter:didActivateNotification:");
+        // SAFETY: the replacement has the selector's signature (receiver,
+        // selector, two object arguments, no return value), and the original
+        // IMP is kept and called first.
+        unsafe {
+            let method = objc2::ffi::class_getInstanceMethod(class, sel);
+            if method.is_null() {
+                return;
+            }
+            let imp: Imp = std::mem::transmute(
+                activate as extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject),
+            );
+            if let Some(original) = objc2::ffi::method_setImplementation(method, imp) {
+                let _ = ORIGINAL_ACTIVATE.set(original);
+            }
+        }
+    }
 
     extern "C-unwind" fn present_while_frontmost(
         _this: *mut AnyObject,
@@ -287,6 +410,8 @@ mod mac {
                 &identifier
             });
             present_in_foreground();
+            let _ = APP.set(app.clone());
+            route_activations();
         });
 
         let title = clip(&notification.title, MAX_TITLE_CHARS);
@@ -304,11 +429,12 @@ mod mac {
             .or_else(|| badge_path(accent, notification.tone).ok());
         let tone = notification.tone;
         let target = (notification.leaf_id, notification.tab_id);
-        let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < MAX_WAITERS;
-        if !wait {
-            WAITERS.fetch_sub(1, Ordering::SeqCst);
+        if target.0.is_some() || target.1.is_some() {
+            let key = super::activation_key(&title, subtitle.as_deref().unwrap_or(""), &body);
+            if let Ok(mut targets) = TARGETS.lock() {
+                targets.record(key, target);
+            }
         }
-        let app = app.clone();
 
         std::thread::Builder::new()
             .name("terax-notify".into())
@@ -322,25 +448,10 @@ mod mac {
                 if tone.audible() {
                     n.sound(mac_notification_sys::Sound::Default);
                 }
-                if wait {
-                    n.wait_for_click(true);
-                } else {
-                    n.asynchronous(true);
-                }
-                let response = n.send();
-                if wait {
-                    WAITERS.fetch_sub(1, Ordering::SeqCst);
-                }
-                if matches!(response, Ok(mac_notification_sys::NotificationResponse::Click)) {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
-                    }
-                    let _ = app.emit(
-                        "terax:notification-activated",
-                        serde_json::json!({ "leafId": target.0, "tabId": target.1 }),
-                    );
+                // Clicks arrive through `activate`, so nothing waits here.
+                n.asynchronous(true);
+                if let Err(e) = n.send() {
+                    log::warn!("agent notification failed: {e}");
                 }
             })
             .map(|_| ())
@@ -439,6 +550,30 @@ mod tests {
     }
 
     #[test]
+    fn routes_a_click_to_the_latest_pane_posted_with_that_text() {
+        let mut targets = ActivationTargets::new();
+        let key = activation_key("t", "", "b");
+        targets.record(key.clone(), (Some(1), Some(2)));
+        targets.record(activation_key("other", "", "b"), (Some(3), Some(4)));
+        assert_eq!(targets.lookup(&key), Some((Some(1), Some(2))));
+        targets.record(key.clone(), (Some(5), Some(6)));
+        assert_eq!(targets.lookup(&key), Some((Some(5), Some(6))));
+        assert_eq!(targets.lookup(&activation_key("t", "s", "b")), None);
+    }
+
+    #[test]
+    fn forgets_the_oldest_targets_past_the_cap() {
+        let mut targets = ActivationTargets::new();
+        for i in 0..(MAX_ACTIVATION_TARGETS as u32 + 10) {
+            targets.record(activation_key(&i.to_string(), "", ""), (Some(i), None));
+        }
+        assert_eq!(targets.entries.len(), MAX_ACTIVATION_TARGETS);
+        assert_eq!(targets.lookup(&activation_key("0", "", "")), None);
+        let last = MAX_ACTIVATION_TARGETS as u32 + 9;
+        assert_eq!(targets.lookup(&activation_key(&last.to_string(), "", "")), Some((Some(last), None)));
+    }
+
+    #[test]
     fn accepts_only_a_bounded_png_icon() {
         let png = encode_png(&render_badge([1, 2, 3], [4, 5, 6], 8), 8).unwrap();
         assert!(is_plausible_icon(&png));
@@ -480,6 +615,28 @@ mod mac_tests {
             ]
         };
         assert!(present.as_bool());
+        let _: () = unsafe { msg_send![instance, release] };
+    }
+
+    #[test]
+    fn the_backend_delegate_routes_every_activation_through_terax() {
+        let _ = mac_notification_sys::Notification::default();
+        super::mac::route_activations();
+        // Idempotent: wrapping twice would make the wrapper call itself.
+        super::mac::route_activations();
+
+        let class = AnyClass::get(c"NotificationCenterDelegate").expect("backend delegate class");
+        let instance: *mut AnyObject = unsafe { msg_send![class, new] };
+        assert!(!instance.is_null());
+        // A nil notification runs the original method and returns without
+        // routing, which exercises the wrapper's signature and ABI.
+        let _: () = unsafe {
+            msg_send![
+                instance,
+                userNotificationCenter: std::ptr::null_mut::<AnyObject>(),
+                didActivateNotification: std::ptr::null_mut::<AnyObject>()
+            ]
+        };
         let _: () = unsafe { msg_send![instance, release] };
     }
 }

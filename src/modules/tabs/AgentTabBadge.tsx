@@ -1,5 +1,3 @@
-import { Tick02Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
 import {
   aggregateAgentPhases,
@@ -7,6 +5,7 @@ import {
   ptyIdForLeaf,
   useAgentActivityStore,
 } from "@/modules/terminal";
+import { tabStateMark } from "./lib/agentMark";
 import type { Tab } from "./lib/useTabs";
 
 // Fixed status hues (light/dark aware) matching the app's other status dots
@@ -18,6 +17,7 @@ const DOT_CLASS: Record<"working" | "attention", string> = {
 
 export function AgentTabBadge({ tab }: { tab: Tab }) {
   const phases = useAgentActivityStore((s) => s.phases);
+  const reasons = useAgentActivityStore((s) => s.reasons);
   if (tab.kind !== "terminal") return null;
 
   const ptyIds: number[] = [];
@@ -26,10 +26,12 @@ export function AgentTabBadge({ tab }: { tab: Tab }) {
     if (id !== null) ptyIds.push(id);
   }
 
-  const { top, count } = aggregateAgentPhases(phases, ptyIds);
+  const status = aggregateAgentPhases(phases, ptyIds, reasons);
+  const { top, count } = status;
   if (!top) return null;
 
-  const label = `${count} agent${count === 1 ? "" : "s"} · ${top}`;
+  const mark = tabStateMark(status);
+  const label = `${count} agent${count === 1 ? "" : "s"} · ${status.reason ?? top}`;
 
   return (
     <span
@@ -39,14 +41,7 @@ export function AgentTabBadge({ tab }: { tab: Tab }) {
       aria-label={label}
       title={label}
     >
-      {top === "finished" ? (
-        <HugeiconsIcon
-          icon={Tick02Icon}
-          size={11}
-          strokeWidth={2.5}
-          className="text-emerald-600 dark:text-emerald-400"
-        />
-      ) : (
+      {top === "finished" ? null : (
         <span className="relative flex size-2">
           <span
             className={cn(
@@ -62,6 +57,11 @@ export function AgentTabBadge({ tab }: { tab: Tab }) {
           />
         </span>
       )}
+      {mark ? (
+        <span aria-hidden className="text-[10px] leading-none">
+          {mark}
+        </span>
+      ) : null}
       {count > 1 ? (
         <span className="text-[9px] font-semibold tabular-nums text-foreground/70">
           {count}

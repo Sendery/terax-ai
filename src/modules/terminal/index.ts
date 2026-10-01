@@ -16,6 +16,7 @@ export {
 export {
   aggregateAgentPhases,
   type AgentTabStatus,
+  type AttentionCause,
   useAgentActivityStore,
 } from "./lib/agentActivity";
 export { repaintLeaf } from "./lib/rendererPool";
