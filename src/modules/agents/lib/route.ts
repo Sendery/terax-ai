@@ -106,7 +106,7 @@ export function routeAgentNotification({
         .join("\n"),
     );
 
-  void agentBadgePng(agent, accent)
+  void agentBadgePng(agent, accent, tone)
     .then((icon) =>
       native.agentNotify({
         title,

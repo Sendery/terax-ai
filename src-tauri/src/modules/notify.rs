@@ -5,9 +5,10 @@
 //! also carry a subtitle and a content image, and a click can be routed back to
 //! the pane it is about, which is what this module adds on top.
 //!
-//! Colour travels as that image: the agent's logo on a disc in the tab's
-//! colour, drawn by the webview, or failing that a badge whose ring is the
-//! tab's colour and whose centre is the state's, rendered once per pair. Native
+//! Colour travels as an icon the webview draws in place of the app icon: the
+//! Terax ribbon on a squircle in the tab's colour, the agent's logo top right
+//! and the state's mark bottom right. Failing that, a badge whose ring is the
+//! tab's colour and whose centre is the state's is the content image. Native
 //! notification text cannot be coloured, so the title also leads with emoji
 //! marks for the tab and the state (built in the webview, see
 //! `agents/lib/describeEvent.ts`), which survive the title's truncation.
@@ -133,8 +134,10 @@ pub struct RichNotification {
     pub tone: Tone,
     pub leaf_id: Option<u32>,
     pub tab_id: Option<u32>,
-    /// PNG of the agent's logo on the tab's colour, drawn by the webview; the
-    /// badge stands in when it is absent or not a plausible PNG.
+    /// PNG of the composite icon drawn by the webview (Terax ribbon on the
+    /// tab's colour, agent logo and state mark in the corners), shown in place
+    /// of the app icon; the badge stands in on the right when it is absent or
+    /// not a plausible PNG.
     pub icon: Option<Vec<u8>>,
 }
 
@@ -422,11 +425,10 @@ mod mac {
             .filter(|s| !s.is_empty());
         let body = clip(notification.body.as_deref().unwrap_or(""), MAX_BODY_CHARS);
         let accent = notification.accent.as_deref().and_then(parse_hex);
-        let image = notification
-            .icon
-            .as_deref()
-            .and_then(|bytes| icon_path(bytes).ok())
-            .or_else(|| badge_path(accent, notification.tone).ok());
+        // The webview's composite replaces the app icon on the left and needs
+        // no content image beside it; without one, the badge sits on the right.
+        let icon = notification.icon.as_deref().and_then(|bytes| icon_path(bytes).ok());
+        let image = if icon.is_some() { None } else { badge_path(accent, notification.tone).ok() };
         let tone = notification.tone;
         let target = (notification.leaf_id, notification.tab_id);
         if target.0.is_some() || target.1.is_some() {
@@ -439,9 +441,15 @@ mod mac {
         std::thread::Builder::new()
             .name("terax-notify".into())
             .spawn(move || {
+                let icon = icon.as_ref().and_then(|p| p.to_str());
                 let image = image.as_ref().and_then(|p| p.to_str());
                 let mut n = mac_notification_sys::Notification::default();
                 n.title(&title).message(&body).maybe_subtitle(subtitle.as_deref());
+                // `_identityImage`, private but stable since 10.9: macOS falls
+                // back to the Terax icon if a release ever ignores it.
+                if let Some(icon) = icon {
+                    n.app_icon(icon);
+                }
                 if let Some(image) = image {
                     n.content_image(image);
                 }
