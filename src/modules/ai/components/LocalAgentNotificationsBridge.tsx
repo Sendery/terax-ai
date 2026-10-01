@@ -58,8 +58,9 @@ export function LocalAgentNotificationsBridge() {
         kind,
         // No tab and so no tab colour: the state mark alone leads the title.
         title: `${TONE_MARK[tone]} ${title}`,
-        // The built-in agent has no tab, so the subtitle names where it lives.
-        subtitle: "Terax agent \u00b7 AI panel",
+        // The built-in agent has no tab, so the subtitle names where it lives;
+        // the image is the Terax logo.
+        subtitle: "AI panel",
         body,
         tone,
         focused: focusedRef.current,

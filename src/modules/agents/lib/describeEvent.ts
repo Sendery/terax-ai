@@ -46,22 +46,22 @@ export function notificationLabel(
 }
 
 // macOS draws the notification itself, so colour can only travel as text.
-// Emoji are written as escapes to keep the source free of them; the tab mark
-// comes from one family (hearts, the only one with a shade per tab colour)
-// and the state marks from pictographs, so the two never read as each other.
+// Emoji are written as escapes to keep the source free of them. The tab mark
+// is a coloured circle; there are fewer circles than tab colours, so teal,
+// indigo and pink share their nearest one and the subtitle still names the
+// tab. State marks are pictographs, so the two never read as each other.
 export const TAB_COLOR_MARK: Record<TabColor, string> = {
-  red: "\u2764\uFE0F",
-  orange: "\u{1F9E1}",
-  amber: "\u{1F49B}",
-  green: "\u{1F49A}",
-  teal: "\u{1FA75}",
-  blue: "\u{1F499}",
-  // Hearts have no indigo; it shares purple, and the subtitle names the tab.
-  indigo: "\u{1F49C}",
-  purple: "\u{1F49C}",
-  pink: "\u{1FA77}",
+  red: "\u{1F534}",
+  orange: "\u{1F7E0}",
+  amber: "\u{1F7E1}",
+  green: "\u{1F7E2}",
+  teal: "\u{1F7E2}",
+  blue: "\u{1F535}",
+  indigo: "\u{1F535}",
+  purple: "\u{1F7E3}",
+  pink: "\u{1F7E3}",
 };
-export const NO_TAB_COLOR_MARK = "\u{1F90D}";
+export const NO_TAB_COLOR_MARK = "\u26AA";
 
 export const TONE_MARK: Record<NotificationTone, string> = {
   permission: "\u{1F510}",
@@ -72,19 +72,6 @@ export const TONE_MARK: Record<NotificationTone, string> = {
   subagent: "\u{1F9E9}",
   error: "\u274C",
   exited: "\u{1F3C1}",
-};
-
-const STATE_LABEL: Record<NotificationTone, string> = {
-  permission: "Needs permission",
-  question: "Asking you",
-  idle: "Waiting for your prompt",
-  attention: "Needs your input",
-  // The turn is over and the next move is the user's, which is what they need
-  // to know; "finished" alone read as the whole task being done.
-  "turn-end": "Turn ended, your move",
-  subagent: "Subagent result",
-  error: "Failed",
-  exited: "Exited",
 };
 
 function oneLine(value: string): string {
@@ -165,8 +152,8 @@ export type AgentEventDescription = {
  * Turns an agent event into what a notification says.
  *
  * The title is the tab's colour mark, the state's mark and the session name;
- * the subtitle says the state in words, where it lives (tab, agent) and what
- * it still has running; the body is the most
+ * the subtitle says which tab it lives in and what it still has running (the
+ * agent is the image, see `notificationBadge.ts`); the body is the most
  * specific thing available, in order: the question it is blocked on, what the
  * agent said with the event, and its latest summary. A notification is never
  * just "Terax needs attention".
@@ -203,10 +190,9 @@ export function describeAgentEvent({
           : liveTasks(digest.tasks, startedAt),
       )
     : null;
+  // The agent is not named here: its logo is the notification's image.
   const where = [
-    STATE_LABEL[tone],
     sessionName !== tabTitle.trim() && tabTitle.trim() ? tabTitle.trim() : null,
-    agentLabel,
     tasks,
     digest?.prs.length
       ? `PR #${digest.prs[digest.prs.length - 1].number}`
