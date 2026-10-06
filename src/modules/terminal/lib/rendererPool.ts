@@ -24,6 +24,7 @@ import {
 } from "./terminalClipboard";
 import { terminalReadlineSequence } from "./keymap";
 import { createCompositionCommitFilter } from "./compositionCommit";
+import { isLinkActivation } from "./pointer";
 import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 
 export { POOL_MAX_SIZE } from "./poolPolicy";
@@ -266,7 +267,8 @@ function createSlot(): Slot {
   term.loadAddon(searchAddon);
   term.loadAddon(serializeAddon);
   term.loadAddon(
-    new WebLinksAddon((_e, uri) => {
+    new WebLinksAddon((event, uri) => {
+      if (!isLinkActivation(event, IS_MAC)) return;
       void openExternalUrl(uri, () => term.focus());
     }),
   );
@@ -428,7 +430,9 @@ function toXtermFileLink(
       start: { x: link.start + 1, y },
       end: { x: link.end, y },
     },
-    activate: () => bridge.openFileLink(link.path),
+    activate: (event) => {
+      if (isLinkActivation(event, IS_MAC)) bridge.openFileLink(link.path);
+    },
   };
 }
 

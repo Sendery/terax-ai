@@ -1,3 +1,4 @@
+import { IS_MAC } from "@/lib/platform";
 import { useTheme } from "@/modules/theme";
 import type { SearchAddon } from "@xterm/addon-search";
 import {
@@ -19,6 +20,7 @@ import {
   submitToLeaf,
   useTerminalSession,
 } from "./lib/useTerminalSession";
+import { isSecondaryClick } from "./lib/pointer";
 
 export type TerminalPaneHandle = {
   write: (data: string) => void;
@@ -116,13 +118,16 @@ export const TerminalPane = memo(
       pointerEvents: visible ? ("auto" as const) : ("none" as const),
     };
 
-    // A right-click reaches xterm first and can replace the selection with the
-    // word under the cursor (its macOS default), so the selection is also read
-    // in the capture phase. What is highlighted when the menu opens wins; the
-    // pre-click text is the fallback for the paths that clear it.
-    const captureMenuSelection = (event: { button: number }) => {
-      if (event.button !== 2) return;
+    // A right-click over a selection keeps it; only with nothing selected does
+    // xterm pick the word or link under the pointer. The pre-click text is the
+    // fallback for the paths that still clear it, such as Ctrl+click on macOS.
+    const captureMenuSelection = (event: {
+      button: number;
+      ctrlKey: boolean;
+    }) => {
+      if (!isSecondaryClick(event, IS_MAC)) return;
       preClickSelectionRef.current = session.getSelection();
+      session.prepareContextMenu();
     };
     const onMenuOpen = () => {
       menuSelectionRef.current =

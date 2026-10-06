@@ -1,4 +1,5 @@
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
+import { IS_MAC } from "@/lib/platform";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { invoke } from "@tauri-apps/api/core";
@@ -29,6 +30,7 @@ import {
   registerOsc52ClipboardHandler,
   registerPromptTracker,
 } from "./osc-handlers";
+import { rightClickSelectsWord } from "./pointer";
 import { openPty, type PtySession } from "./pty-bridge";
 import "../block/block.css";
 import { ensureAgentActivityListener, isAgentActivePty } from "./agentActivity";
@@ -1069,6 +1071,15 @@ export function useTerminalSession({
     return sel.length > 0 ? sel : null;
   }, [leafId]);
 
+  const prepareContextMenu = useCallback(() => {
+    const term = getSlotForLeaf(leafId)?.term;
+    if (!term) return;
+    term.options.rightClickSelectsWord = rightClickSelectsWord(
+      IS_MAC,
+      term.hasSelection(),
+    );
+  }, [leafId]);
+
   const applyTheme = useCallback(() => {
     applyPoolTheme();
   }, []);
@@ -1134,6 +1145,7 @@ export function useTerminalSession({
       shiftEnter,
       getBuffer,
       getSelection,
+      prepareContextMenu,
       applyTheme,
       blockMode,
       selectBlockAt,
@@ -1150,6 +1162,7 @@ export function useTerminalSession({
       shiftEnter,
       getBuffer,
       getSelection,
+      prepareContextMenu,
       applyTheme,
       blockMode,
       selectBlockAt,
