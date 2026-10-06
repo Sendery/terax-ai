@@ -23,6 +23,7 @@ import {
   writeTerminalClipboard,
 } from "./terminalClipboard";
 import { terminalReadlineSequence } from "./keymap";
+import { createCompositionCommitFilter } from "./compositionCommit";
 import { createTerminalLinkHandler, readLinkRow } from "./terminalLinks";
 
 export { POOL_MAX_SIZE } from "./poolPolicy";
@@ -307,6 +308,15 @@ function createSlot(): Slot {
 
   attachWebgl(slot);
 
+  const commitFilter = createCompositionCommitFilter();
+  term.textarea?.addEventListener("compositionend", () =>
+    commitFilter.compositionEnded(),
+  );
+  term.textarea?.addEventListener("input", (event) => {
+    const text = commitFilter.takeInput(event as InputEvent);
+    if (text) term.input(text, true);
+  });
+
   term.attachCustomKeyEventHandler((event) => {
     // During IME composition the browser is assembling a multi-keystroke
     // character (Chinese pinyin → hanzi, Korean jamo → syllable, etc.).
@@ -315,6 +325,13 @@ function createSlot(): Slot {
     // composed string through its own compositionend handler instead.
     // keyCode 229 ("Process") is what Chromium reports for every key
     // pressed inside an active IME session when isComposing is not yet set.
+    const commit = commitFilter.onKey(event);
+    if (commit.kind === "send") {
+      event.preventDefault();
+      term.input(commit.data, true);
+      return false;
+    }
+    if (commit.kind === "swallow") return false;
     if (event.isComposing || event.keyCode === 229) return false;
 
     const leafId = slot.currentLeafId;
