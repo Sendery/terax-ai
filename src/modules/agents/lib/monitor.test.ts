@@ -15,6 +15,7 @@ function notification(
     tabId: 10,
     agent: "pi",
     kind: "attention",
+    tone: "attention",
     read: false,
     tabTitle: "terax",
     tabColor: null,

@@ -94,6 +94,12 @@ export type AgentNotification = {
   read: boolean;
   /** What the agent said, when it said anything. */
   text?: string;
+  /** The state the native notification announced, so the bell shows its mark. */
+  tone: NotificationTone;
+  /** The native notification's body: the question, the agent's words or its summary. */
+  body?: string;
+  /** The native notification's subtitle: tab, running tasks and PR. */
+  subtitle?: string;
   /** Title of the tab it happened in, so a row names where to go. */
   tabTitle: string;
   /** The tab's palette colour, so a row is recognisable at a glance. */

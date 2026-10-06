@@ -65,7 +65,9 @@ type AgentStoreState = {
   pushNotification: (
     n: Omit<AgentNotification, "id" | "at" | "read">,
   ) => void;
+  markRead: (id: string) => void;
   markAllRead: () => void;
+  dismissNotification: (id: string) => void;
   clearNotifications: () => void;
 };
 
@@ -179,10 +181,26 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
       ].slice(0, MAX_NOTIFICATIONS),
     })),
 
+  markRead: (id) =>
+    set((s) => {
+      if (!s.notifications.some((n) => n.id === id && !n.read)) return s;
+      return {
+        notifications: s.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n,
+        ),
+      };
+    }),
+
   markAllRead: () =>
     set((s) => {
       if (!s.notifications.some((n) => !n.read)) return s;
       return { notifications: s.notifications.map((n) => ({ ...n, read: true })) };
+    }),
+
+  dismissNotification: (id) =>
+    set((s) => {
+      if (!s.notifications.some((n) => n.id === id)) return s;
+      return { notifications: s.notifications.filter((n) => n.id !== id) };
     }),
 
   clearNotifications: () => set({ notifications: [] }),
