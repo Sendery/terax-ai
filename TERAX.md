@@ -33,7 +33,7 @@ A change to a core subsystem (terminal/shell spawn, workspace auth, git, fs, IPC
 
 - **Comments**: default to none, the code should explain itself. If genuinely needed, 1-2 lines on *why*, never *what*. No AI-generic filler.
 - **No em-dash** anywhere: code, comments, commits, docs.
-- **No emojis** anywhere. One exception, asked for by the user: agent notification titles lead with emoji marks for the tab colour and the state (`agents/lib/describeEvent.ts`), because macOS cannot colour notification text, and the tab badge repeats the state mark (`agents/lib/marks.ts`). Even there the source writes them as `\u{...}` escapes.
+- **No emojis** anywhere. One exception, asked for by the user: agent notification titles lead with emoji marks for the tab colour and the state (`agents/lib/describeEvent.ts`), because macOS cannot colour notification text, and the tab badge and the bell repeat the state mark (`agents/lib/marks.ts`, `agents/lib/bell.ts`). Even there the source writes them as `\u{...}` escapes.
 - **Imports**: always `@/...` on the frontend, never relative across modules.
 - **pnpm only**, never npm/npx/yarn.
 
