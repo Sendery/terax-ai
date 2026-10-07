@@ -102,18 +102,26 @@ struct DiscoveryFile {
 pub(crate) struct RunningInstance {
     pub port: u16,
     pub token: String,
+    pub pid: u32,
 }
 
 pub(crate) fn read_running_instance() -> Option<RunningInstance> {
-    let bytes = std::fs::read(cache_file_path().ok()?).ok()?;
+    read_instance_at(&cache_file_path().ok()?)
+}
+
+/// Read a discovery file at an explicit path, such as the one a Terax terminal
+/// advertises through `TERAX_PI_DISCOVERY`. A successful request is the
+/// liveness proof; the pid is informational.
+pub(crate) fn read_instance_at(path: &std::path::Path) -> Option<RunningInstance> {
+    let bytes = std::fs::read(path).ok()?;
     let discovery: DiscoveryFile = serde_json::from_slice(&bytes).ok()?;
-    if discovery.version != PROTOCOL_VERSION {
+    if discovery.version != PROTOCOL_VERSION || discovery.token.is_empty() {
         return None;
     }
-    // A successful ping is the liveness proof, so the pid is not needed here.
     Some(RunningInstance {
         port: discovery.port,
         token: discovery.token,
+        pid: discovery.pid,
     })
 }
 

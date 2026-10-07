@@ -39,6 +39,21 @@ describe("detectTeraxHost", () => {
     expect(host.inTerax).toBe(false);
     expect(host.forced).toBe(true);
     expect(host.available).toBe(true);
+    expect(host.surface).toBe("external");
+  });
+
+  it("reports the surface Pi runs on", () => {
+    expect(detectTeraxHost({ TERAX_TERMINAL: "1" }).surface).toBe("terminal");
+    expect(detectTeraxHost({}).surface).toBe("external");
+    const chat = detectTeraxHost({ TERAX_FORCE: "1", TERAX_SURFACE: "chat" });
+    expect(chat.surface).toBe("chat");
+    expect(chat.available).toBe(true);
+    expect(chat.inTerax).toBe(false);
+  });
+
+  it("does not open the tools on TERAX_SURFACE alone", () => {
+    const host = detectTeraxHost({ TERAX_SURFACE: "chat" });
+    expect(host.available).toBe(false);
   });
 });
 

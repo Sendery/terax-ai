@@ -17,6 +17,7 @@ Pick the right domain before acting. The orientation is discoverable at runtime 
 Terax injects `TERAX_TERMINAL=1` and `TERM_PROGRAM=Terax` into every terminal it spawns. The extension detects this at activation:
 
 - Inside a Terax terminal: the full tool set is registered.
+- In the Terax AI chat panel (Pi selected as the chat model): Terax spawns Pi headless with `TERAX_FORCE=1`, `TERAX_SURFACE=chat` and `TERAX_PI_DISCOVERY` pointing at its own bridge, so the full tool set is registered and `terax_status` reports `surface: "chat"`. See [Pi in the chat panel](#pi-in-the-chat-panel).
 - In any other terminal: only `terax_status` is registered (minimal footprint, no context loaded), and a one-time startup notice explains that Pi-Terax is unavailable and how to enable it (open Terax, run Pi from a Terax terminal). Set `TERAX_FORCE=1` to opt in against a reachable Terax from another shell.
 
 ### Bootstrap for development
@@ -64,6 +65,9 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tasks.show`
 - `tasks.hide`
 - `tasks.toggle`
+- `history.show`
+- `history.hide`
+- `history.toggle`
 - `tasks.openEditor`
 - `tasks.list`
 - `tasks.add`
@@ -90,7 +94,7 @@ its type, and the closed value set of each enum. That catalog is generated from
 the same schema table the registry validates against, so it cannot drift from
 what is enforced; this list is a convenience and `app.commands` wins.
 
-The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, and scheduled-task APIs. It does not expose AI diff approval internals.
+The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, scheduled-task, speech, capture, agent-monitor and session-history APIs. It does not expose AI diff approval internals.
 
 `app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. The `tts` section reports which speech engines are installed and running, which models are downloaded, and whether the window is speaking, never the text being read, a sidecar token, or a voice sample path. `tasks.list` returns a prompt only because asking for it is an explicit request.
 
@@ -269,8 +273,9 @@ The discovery file is written atomically. Terax removes stale discovery data on 
 
 ## Pi Package
 
-The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus the development, visual-QA and local-speech skills. The extension registers six tools:
+The package is in `packages/pi-terax` and is named `@crynta/pi-terax`. It declares the Pi host packages as peer dependencies and bundles one extension entry plus the development, visual-QA and local-speech skills. Inside Terax the extension registers seven tools:
 
+- `terax_status`: reports whether Pi-Terax is available, on which surface (`terminal`, `chat` or `external`), and how to enable it when not. It is the only tool registered outside Terax.
 - `terax_get_state`: returns the redacted Terax snapshot.
 - `terax_call`: calls only allowlisted Terax registry commands.
 - `terax_speak`: reads a short text aloud through `tts.speak`.
@@ -293,6 +298,48 @@ pnpm --filter @crynta/pi-terax build
 ```
 
 Then point Pi at the package using Pi's local package workflow or by copying the built package into a Pi package source.
+
+## Pi in the chat panel
+
+Pi is also a model in the Terax AI chat (`cli-pi` provider, model `cli-pi-agent`), next to the other local CLI agents. Picking the Pi provider in the model menu lists the models Pi has credentials for (`pi --list-models`) plus "Pi default", which reads `defaultProvider`/`defaultModel` from Pi's own `settings.json` (Rust `agent_cli_pi_defaults` returns only those three fields). The choice is stored as the `piModel` preference and passed as `--model`.
+
+Each turn runs `pi --mode json --print --session-id <id>` through `agent_cli_spawn` with `bridge: true`, which adds `TERAX_FORCE=1`, `TERAX_SURFACE=chat` and this instance's `TERAX_PI_DISCOVERY` to the child environment, so Pi loads its installed extensions and Pi-Terax controls the window that spawned it. The frontend owns the protocol (`src/modules/ai/cli/pi.ts`, `parsers/pi.ts`):
+
+- The prompt goes over **stdin**, never argv: as an argument, a message starting with `@` is read by Pi as a file to include, and argv is visible to other processes.
+- **Sessions persist.** Each assistant message Pi served carries `metadata.pi = { sessionId, cwd, userTurns }`, attached when Pi's session header arrives. The next turn resumes that session and sends only the new message when the previous message is Pi's answer to exactly the previous user turn from the same cwd (Pi groups sessions by project). An edited, regenerated or model-switched history, or a cwd change, starts a new session (`terax-<chat session>-<nonce>`) seeded with the readable transcript instead.
+- **Permissions are tool lists.** Pi has no headless approval, so the CLI permission preference maps to `--tools read,grep,find,ls,terax_status,terax_get_state,terax_wait,terax_development_guide` (Plan only: an allowlist, because other extensions such as MCP adapters can write), `--exclude-tools bash,powershell` (Auto-edit) or nothing (Full access). Plan mode forces the read-only list. In Auto-edit Pi can still reach `terax_call`, which includes `tasks.*`; scheduled tasks run agents with their own permissions.
+- `--append-system-prompt` tells Pi it runs in the chat panel, how to use the Terax tools, and carries the active agent persona, custom instructions and plan mode.
+- The parser streams `text_delta`/`thinking_delta`, renders `tool_execution_*` as provider-executed tool cards (text output capped at 32 KiB), holds a failed provider turn until Pi stops retrying, and reports startup failures (unknown model, missing credentials) from stderr when Pi exits non-zero.
+
+The built-in Terax agent gets the same registry without Pi: `terax_app_state` and `terax_app_command` (`src/modules/ai/tools/app.ts`) call the window's live registry in process (`callAppCommand`, published by `useExternalCommandBridge`). Navigation and reads run directly; `tasks.*` mutations, `tts.install`/`tts.download`, `notes.remove` and `tab.close` go through the approval card.
+
+## MCP server
+
+The same capabilities reach every MCP-speaking agent (Claude Code, Codex, Cursor, OpenCode) through `terax --mcp`: the Terax binary itself, branching before any Tauri state exists, speaks MCP over stdio (protocol 2025-11-25 back to 2024-11-05, newline-delimited JSON-RPC, tools only) and relays each call over the authenticated Pi bridge to the running instance. It honours `TERAX_PI_DISCOVERY` like the extension, starts in tens of milliseconds and holds no state between calls.
+
+**Tools are grouped, not one per command.** Following the FastMCP guidance (outcomes over operations, flat arguments with closed enums, every description written as agent context, a curated handful of tools, honest annotations, errors returned as results that say how to recover), the 60 registry commands become seven tools that take an `action` plus flat arguments:
+
+| Tool | Actions | Annotations |
+|---|---|---|
+| `terax_inspect` | status, snapshot, list_commands, build_info, list_notes, list_tasks, speech_status, list_voices, search_content, capture, wait | read-only |
+| `terax_open_view` | open_file, open_preview, open_mermaid, update_mermaid, open_git_diff, open_git_history, open_commit_file | |
+| `terax_manage_tabs` | focus_tab, close_tab, rename_tab, reset_tab_title, set_tab_color, move_tab, pin_tab | destructive (close_tab) |
+| `terax_manage_panels` | show/hide/toggle of sidebar, notes, tasks, history and agent monitor, detach/attach notes, open_settings, open_task_editor | |
+| `terax_manage_notes` | add_note, update_note, remove_note | destructive |
+| `terax_schedule_tasks` | add_task, update_task, clone_task, reseed_task, remove_task, run_task, set_task_enabled, pause_all, resume_all, wake | destructive, open world |
+| `terax_speak` | speak, stop_speaking, start_engine, stop_engine, install_engine, download_model | open world |
+
+The listing costs about 4k tokens. An argument an action does not take, an unknown action or a closed Terax comes back as a tool error naming the fix; bridge validation errors point at `list_commands`.
+
+**One source of truth, kept aligned with Pi-Terax.** `src/modules/commands/lib/mcpSurface.ts` places each registry command in a group and generates `src-tauri/src/modules/mcp/surface.json` (`pnpm gen:mcp-surface`), which the Rust server embeds and dispatches from without knowing any command by name. Tests fail when:
+
+- a registry command is not served by exactly one MCP action (so a command added for Pi reaches MCP clients too);
+- the checked-in manifest differs from the generated one;
+- a Pi-Terax tool has no `EXTENSION_TOOL_ALIGNMENT` entry naming the MCP action that covers it, or the reason it stays Pi-only (`terax_development_guide`, `terax_visual_qa`);
+- an MCP-only local action (`status`, `wait`) lacks a Pi tool;
+- a surface command is rejected by the Rust bridge allowlist.
+
+**Registration.** The Pi-Terax button next to the chat's agent picker shows whether `terax --mcp` is registered with each installed CLI: green when every one points at this binary, amber when some do, red when none do, grey when no supported CLI is installed (hover lists each CLI). Clicking registers it where it is missing or points at another binary: Claude Code with `claude mcp add-json terax … -s user`, Codex with `codex mcp add terax -- <exe> --mcp`, Cursor in `~/.cursor/mcp.json` and OpenCode in `~/.config/opencode/opencode.json(c)`. The JSON files are rewritten atomically and never when they do not parse, so a JSONC file with comments is reported instead of reshaped (and its keys come back sorted when it is rewritten). The command registered is the running binary, so a sandbox build registers itself and talks to its own instance.
 
 ## Companion extension channel
 

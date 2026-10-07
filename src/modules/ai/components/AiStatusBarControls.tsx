@@ -31,6 +31,7 @@ import {
   MistralIcon,
   Message01Icon,
   Mic01Icon,
+  PiIcon,
   PlugIcon,
   ServerStack01Icon,
   Search01Icon,
@@ -57,6 +58,7 @@ import {
 import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
+import { PI_MODEL_ID, PiModelSection, usePiModelLabel } from "./PiModelSection";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 
 const PROVIDER_ICON = {
@@ -78,6 +80,7 @@ const PROVIDER_ICON = {
   "cli-codex": ChatGptIcon,
   "cli-cursor": ComputerIcon,
   "cli-opencode": CpuIcon,
+  "cli-pi": PiIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 /**
@@ -202,6 +205,9 @@ function ModelDropdown() {
   const current = isCompatModelId(selected)
     ? getCompatModelInfo(selected, customEndpoints)
     : getModel(selected as ModelId);
+  const piLabel = usePiModelLabel();
+  const triggerLabel =
+    selected === PI_MODEL_ID ? `${current.label} · ${piLabel}` : current.label;
   const [search, setSearch] = useState("");
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("all");
@@ -284,11 +290,11 @@ function ModelDropdown() {
           )}
           title={
             currentProviderHasKey
-              ? `Model: ${current.label}`
+              ? `Model: ${triggerLabel}`
               : `${current.label} — no key configured`
           }
         >
-          <span className="min-w-0 truncate">{current.label}</span>
+          <span className="min-w-0 truncate">{triggerLabel}</span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             size={11}
@@ -399,7 +405,12 @@ function ModelDropdown() {
             !hasKeyFor(activeProvider as ProviderId) ? (
               <ProviderConfigureCTA providerId={activeProvider as ProviderId} />
             ) : null}
-            {filtered.length === 0 ? (
+            {activeProvider === "cli-pi" ? (
+              <PiModelSection
+                selected={selected === PI_MODEL_ID}
+                onPick={() => setSelected(PI_MODEL_ID)}
+              />
+            ) : filtered.length === 0 ? (
               <div className="flex items-center justify-center px-4 py-10 text-xs text-muted-foreground/70">
                 {tab === "favorites"
                   ? "No favorites yet — star a model to pin it here."

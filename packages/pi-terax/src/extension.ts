@@ -234,6 +234,7 @@ function createStatusTool(dependencies: ExtensionDependencies) {
         available: host.available,
         inTerax: host.inTerax,
         forced: host.forced,
+        surface: host.surface,
         host: {
           termProgram: host.termProgram ?? null,
           termProgramVersion: host.termProgramVersion ?? null,
@@ -244,7 +245,9 @@ function createStatusTool(dependencies: ExtensionDependencies) {
           : teraxEnableInstructions(dependencies.platform),
       };
       const text = host.available
-        ? "Pi-Terax is available. Control and development tools are active."
+        ? host.surface === "chat"
+          ? "Pi-Terax is available. This Pi runs headless in the Terax AI chat panel; control and development tools are active."
+          : "Pi-Terax is available. Control and development tools are active."
         : `${details.enable?.reason}\nEnable: ${details.enable?.steps.join(" ")} (command: ${details.enable?.command}). Or set TERAX_FORCE=1 to operate against a reachable Terax from this shell.`;
       return textResult(text, details);
     },

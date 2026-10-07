@@ -28,6 +28,7 @@ const TOOL_META: Record<string, { label: string; icon: typeof FilePlusIcon }> =
     create_directory: { label: "Create directory", icon: FolderAddIcon },
     bash_run: { label: "Run shell command", icon: TerminalIcon },
     bash_background: { label: "Spawn background process", icon: TerminalIcon },
+    terax_app_command: { label: "Run Terax command", icon: ToolsIcon },
   };
 
 function AiToolApprovalImpl({ part, toolName, onRespond }: Props) {

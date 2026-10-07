@@ -7,6 +7,9 @@ export type TeraxHost = {
   forced: boolean;
   /** Whether the Pi-Terax control tools should be exposed. */
   available: boolean;
+  /** Where this Pi runs: a Terax terminal, the Terax AI chat panel (spawned
+   *  headless by the app with TERAX_SURFACE=chat), or anywhere else. */
+  surface: "terminal" | "chat" | "external";
   termProgram?: string;
   termProgramVersion?: string;
 };
@@ -18,10 +21,16 @@ export function detectTeraxHost(env: HostEnv): TeraxHost {
   const termProgram = env.TERM_PROGRAM;
   const inTerax = env.TERAX_TERMINAL === "1" || termProgram === "Terax";
   const forced = env.TERAX_FORCE === "1";
+  const surface = env.TERAX_SURFACE === "chat"
+    ? "chat"
+    : inTerax
+      ? "terminal"
+      : "external";
   return {
     inTerax,
     forced,
     available: inTerax || forced,
+    surface,
     termProgram: termProgram || undefined,
     termProgramVersion: env.TERM_PROGRAM_VERSION || undefined,
   };

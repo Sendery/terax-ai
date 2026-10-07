@@ -11,6 +11,7 @@ import { useComposer } from "../lib/composer";
 import { SLASH_COMMANDS } from "../lib/slashCommands";
 import { useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
+import { PiTeraxMcpButton } from "@/modules/mcp";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { FilePickerContent } from "./FilePicker";
 import { SnippetPickerContent, type PickerItem } from "./SnippetPicker";
@@ -267,6 +268,7 @@ export function AiComposerInput() {
                 "placeholder:text-muted-foreground/60",
               )}
             />
+            <PiTeraxMcpButton />
             <AgentSwitcher />
             {/* Send sits against the text it sends: at the far end of the
                 status bar an upward arrow read as "expand this panel". */}

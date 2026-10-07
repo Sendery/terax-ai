@@ -73,6 +73,7 @@ function makeChat(sessionId: string): Chat<UIMessage> {
       usePreferencesStore.getState().openaiCompatibleContextLimit,
     getOpenrouterModelId: () =>
       usePreferencesStore.getState().openrouterModelId,
+    getPiModel: () => usePreferencesStore.getState().piModel,
     getCustomEndpoints: () => usePreferencesStore.getState().customEndpoints,
     getCustomEndpointKeys: () => useChatStore.getState().customEndpointKeys,
     onStep: (step) => {

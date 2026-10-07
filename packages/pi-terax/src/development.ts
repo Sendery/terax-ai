@@ -177,7 +177,7 @@ const GUIDES: Record<DevelopmentCapability, Omit<DevelopmentGuide, "gotchas">> =
   },
   command: {
     capability: "command",
-    summary: "Add a validated app command and optionally expose it to Pi.",
+    summary: "Add a validated app command and optionally expose it to Pi and to MCP agents.",
     inspect: [
       "src/modules/commands/lib/registry.ts",
       "src/modules/commands/lib/registry.test.ts",
@@ -185,12 +185,16 @@ const GUIDES: Record<DevelopmentCapability, Omit<DevelopmentGuide, "gotchas">> =
       "src/app/App.tsx",
       "src-tauri/src/modules/pi.rs",
       "packages/pi-terax/src/commands.ts",
+      "src/modules/commands/lib/mcpSurface.ts",
+      "src-tauri/src/modules/mcp/surface.json",
     ],
     create: [],
     modify: [
       "Add the typed command ID, payload validation, handler contract, and dispatch case.",
       "Wire the handler to an existing semantic App API.",
       "Update every Pi allowlist only when external execution is intended.",
+      "Place an externally exposed command in one MCP group (action name and summary) in mcpSurface.ts, then regenerate the manifest with pnpm gen:mcp-surface; the Rust MCP server is data-driven from it.",
+      "A new Pi-Terax tool needs an EXTENSION_TOOL_ALIGNMENT entry: the MCP action that covers it, or why it stays Pi-only (and a new MCP local action needs a Pi tool).",
     ],
     tests: [
       "Test invalid payloads and unknown command rejection before handler execution.",

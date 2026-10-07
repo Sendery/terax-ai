@@ -80,6 +80,11 @@ export class ChunkEmitter {
     this.openTools.delete(toolCallId);
   }
 
+  /** Merge fields into the assistant message's metadata. */
+  metadata(messageMetadata: Record<string, unknown>): void {
+    this.writer.write({ type: "message-metadata", messageMetadata });
+  }
+
   error(errorText: string): void {
     this.endText();
     this.endReasoning();
@@ -99,7 +104,12 @@ export type CliParser = {
   onExit?(code: number | null): void;
 };
 
-export type ParserFactory = (emitter: ChunkEmitter) => CliParser;
+export type ParserRun = {
+  /** Metadata the run planned for the assistant message. */
+  metadata?: Record<string, unknown>;
+};
+
+export type ParserFactory = (emitter: ChunkEmitter, run?: ParserRun) => CliParser;
 
 /** Parse a JSONL line, returning null on blank/non-JSON noise. */
 export function parseJsonLine(line: string): Record<string, unknown> | null {

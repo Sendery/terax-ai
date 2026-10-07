@@ -16,6 +16,19 @@ export function detectCliAgents(
   return invoke<Record<string, string | null>>("agent_cli_which", { bins });
 }
 
+export type PiDefaultsResult = {
+  defaultProvider?: string;
+  defaultModel?: string;
+  defaultThinkingLevel?: string;
+};
+
+/** Pi's configured default provider/model, read from its settings file. */
+export function readPiDefaults(): Promise<PiDefaultsResult | null> {
+  return invoke<PiDefaultsResult | null>("agent_cli_pi_defaults").catch(
+    () => null,
+  );
+}
+
 export function killCliAgent(id: number): Promise<void> {
   return invoke<void>("agent_cli_kill", { id }).catch(() => {});
 }
@@ -31,7 +44,13 @@ type RunHandlers = {
  * output. `id` should come from `allocateSpawnId()` so the caller can cancel.
  */
 export function runCliAgent(
-  args: { id: number; argv: string[]; cwd: string | null },
+  args: {
+    id: number;
+    argv: string[];
+    cwd: string | null;
+    stdin?: string;
+    bridge?: boolean;
+  },
   handlers: RunHandlers,
 ): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
@@ -62,6 +81,7 @@ export function runCliAgent(
       argv: args.argv,
       cwd: args.cwd ?? undefined,
       workspace: currentWorkspaceEnv(),
+      options: { stdin: args.stdin, bridge: args.bridge ?? false },
       onEvent: channel,
     }).catch((e) => {
       if (started) return;

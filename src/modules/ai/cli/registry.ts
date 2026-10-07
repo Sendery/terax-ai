@@ -3,7 +3,15 @@ import { createClaudeParser } from "./parsers/claude";
 import { createCodexParser } from "./parsers/codex";
 import { createCursorParser } from "./parsers/cursor";
 import { createOpenCodeParser } from "./parsers/opencode";
-import type { CliAgentId, CliPermissionMode } from "./types";
+import { createPiParser } from "./parsers/pi";
+import { planPiRun } from "./pi";
+import { messagesToPrompt } from "./transcript";
+import type {
+  CliAgentId,
+  CliPermissionMode,
+  CliRunContext,
+  CliRunPlan,
+} from "./types";
 
 export type CliAgentDef = {
   id: CliAgentId;
@@ -12,13 +20,26 @@ export type CliAgentDef = {
   bin: string;
   /** Where to get/authenticate the CLI (shown when not installed). */
   docsUrl: string;
-  /** Build argv (binary first); cwd is passed out-of-band, never in argv. */
-  buildArgv: (
-    prompt: string,
-    opts: { model?: string; permission: CliPermissionMode },
-  ) => string[];
+  /** Plan one turn (binary first in argv); cwd is passed out-of-band. */
+  planRun: (ctx: CliRunContext) => CliRunPlan;
   createParser: ParserFactory;
 };
+
+type BuildArgv = (
+  prompt: string,
+  opts: { model?: string; permission: CliPermissionMode },
+) => string[];
+
+/** CLIs without their own session handling get the flattened transcript as a
+ *  single argument, every turn. */
+function transcriptRun(buildArgv: BuildArgv): CliAgentDef["planRun"] {
+  return (ctx) => ({
+    argv: buildArgv(messagesToPrompt(ctx.messages), {
+      model: ctx.model,
+      permission: ctx.permission,
+    }),
+  });
+}
 
 const CLAUDE_PERMISSION: Record<CliPermissionMode, string> = {
   default: "plan",
@@ -38,7 +59,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "Claude Code",
     bin: "claude",
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
-    buildArgv: (prompt, { model, permission }) => {
+    planRun: transcriptRun((prompt, { model, permission }) => {
       const a = [
         "claude",
         "-p",
@@ -53,7 +74,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
       if (permission === "full") a.push("--dangerously-skip-permissions");
       if (model) a.push("--model", model);
       return a;
-    },
+    }),
     createParser: createClaudeParser,
   },
   codex: {
@@ -61,12 +82,12 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "Codex",
     bin: "codex",
     docsUrl: "https://github.com/openai/codex",
-    buildArgv: (prompt, { model, permission }) => {
+    planRun: transcriptRun((prompt, { model, permission }) => {
       const a = ["codex", "exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[permission]];
       if (model) a.push("-m", model);
       a.push(prompt);
       return a;
-    },
+    }),
     createParser: createCodexParser,
   },
   cursor: {
@@ -74,7 +95,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "Cursor Agent",
     bin: "cursor-agent",
     docsUrl: "https://docs.cursor.com/cli",
-    buildArgv: (prompt, { model, permission }) => {
+    planRun: transcriptRun((prompt, { model, permission }) => {
       const a = [
         "cursor-agent",
         "-p",
@@ -88,7 +109,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
       a.push(permission === "default" ? "--plan" : "-f");
       if (model) a.push("--model", model);
       return a;
-    },
+    }),
     createParser: createCursorParser,
   },
   opencode: {
@@ -96,13 +117,21 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "OpenCode",
     bin: "opencode",
     docsUrl: "https://opencode.ai/docs",
-    buildArgv: (prompt, { model }) => {
+    planRun: transcriptRun((prompt, { model }) => {
       const a = ["opencode", "run", "--format", "json"];
       if (model) a.push("-m", model);
       a.push(prompt);
       return a;
-    },
+    }),
     createParser: createOpenCodeParser,
+  },
+  pi: {
+    id: "pi",
+    label: "Pi",
+    bin: "pi",
+    docsUrl: "https://pi.dev",
+    planRun: planPiRun,
+    createParser: createPiParser,
   },
 };
 

@@ -38,6 +38,7 @@ import { useChatStore } from "../store/chatStore";
 import { getOrCreateChat } from "../store/chatRuntime";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { usePlanStore } from "../store/planStore";
+import { PiTeraxMcpButton } from "@/modules/mcp";
 import { AgentSwitcher } from "./AgentSwitcher";
 import { AiChatView } from "./AiChat";
 import { PlanDiffReview } from "./PlanDiffReview";
@@ -285,6 +286,7 @@ function Header({
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <AgentSwitcher isMiniWindow />
+        <PiTeraxMcpButton compact />
         {messages !== undefined ? (
           <ContextIndicator messages={messages} />
         ) : null}

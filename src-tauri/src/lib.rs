@@ -1,7 +1,8 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, net, notify, oauth, pi,
+    agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, mcp, net, notify,
+    oauth, pi,
     pisessions, profile,
     pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
@@ -178,6 +179,12 @@ pub fn run() {
     // included, resolves one.
     let context = tauri::generate_context!();
     profile::init(&context.config().identifier);
+
+    // `terax --mcp` is an MCP server on stdio for agent CLIs: it relays to the
+    // running instance over the Pi bridge and never builds an app of its own.
+    if mcp::is_mcp_invocation() {
+        std::process::exit(mcp::run_stdio());
+    }
 
     // A waker invocation is meant to be almost free. Ask a live instance to
     // handle it, or read the exported deadline, and exit before building an app
@@ -366,6 +373,9 @@ pub fn run() {
             agent_cli::agent_cli_which,
             agent_cli::agent_cli_spawn,
             agent_cli::agent_cli_kill,
+            agent_cli::agent_cli_pi_defaults,
+            mcp::config::mcp_status,
+            mcp::config::mcp_configure,
             secrets::secrets_get,
             secrets::secrets_set,
             secrets::secrets_delete,
