@@ -1,4 +1,5 @@
 import { buildManagedAgentTools } from "./agent";
+import { buildAppTools } from "./app";
 import { buildEditTools } from "./edit";
 import { buildFsTools } from "./fs";
 import { buildSearchTools } from "./search";
@@ -20,6 +21,9 @@ export { resolvePath, type ToolContext } from "./context";
  *    `run_command`) require explicit user approval — the AI SDK pauses on
  *    tool-call and surfaces a `tool-approval-request` part that the UI
  *    renders as a confirmation card.
+ *  - `terax_app_state` and `terax_app_command` drive the app through the
+ *    same command registry Pi uses; the command tool asks for approval only
+ *    for commands that schedule agents, install software or delete data.
  *  - `edit` / `multi_edit` additionally enforce a read-before-edit invariant
  *    (the model must have called read_file on the path earlier in the
  *    session).
@@ -38,6 +42,7 @@ export function buildTools(ctx: import("./context").ToolContext) {
     ...buildTerminalTools(ctx),
     ...buildTodoTools(ctx),
     ...buildManagedAgentTools(ctx),
+    ...buildAppTools(),
   } as const;
 }
 

@@ -88,3 +88,39 @@ describe("leafOwningPty", () => {
     expect(useAgentStore.getState().digests[3]).toBeUndefined();
   });
 });
+
+describe("notification read state", () => {
+  const push = () =>
+    useAgentStore.getState().pushNotification({
+      source: "terminal",
+      leafId: 1,
+      tabId: 1,
+      agent: "claude",
+      kind: "turn-end",
+      tone: "turn-end",
+      tabTitle: "terax",
+      tabColor: null,
+    });
+
+  beforeEach(() => {
+    useAgentStore.setState({ notifications: [] });
+    push();
+    push();
+  });
+
+  it("marks one notification read and leaves the rest unread", () => {
+    const [first, second] = useAgentStore.getState().notifications;
+    useAgentStore.getState().markRead(first.id);
+    const after = useAgentStore.getState().notifications;
+    expect(after.find((n) => n.id === first.id)?.read).toBe(true);
+    expect(after.find((n) => n.id === second.id)?.read).toBe(false);
+  });
+
+  it("dismisses one notification and clears them all", () => {
+    const [first] = useAgentStore.getState().notifications;
+    useAgentStore.getState().dismissNotification(first.id);
+    expect(useAgentStore.getState().notifications).toHaveLength(1);
+    useAgentStore.getState().clearNotifications();
+    expect(useAgentStore.getState().notifications).toHaveLength(0);
+  });
+});

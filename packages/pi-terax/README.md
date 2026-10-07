@@ -15,20 +15,25 @@ Restart Pi after installation.
 
 ## Host awareness
 
-The extension detects whether Pi runs inside a Terax terminal via the `TERAX_TERMINAL=1` / `TERM_PROGRAM=Terax` environment Terax injects. Inside Terax it registers the full tool set; in any other terminal it registers only `terax_status` (minimal footprint) and posts a one-time startup notice with enable instructions. Set `TERAX_FORCE=1` to operate against a reachable Terax from a non-Terax shell.
+The extension detects whether Pi runs inside a Terax terminal via the `TERAX_TERMINAL=1` / `TERM_PROGRAM=Terax` environment Terax injects. Inside Terax it registers the full tool set; in any other terminal it registers only `terax_status` (minimal footprint) and posts a one-time startup notice with enable instructions. Set `TERAX_FORCE=1` to operate against a reachable Terax from a non-Terax shell. When Pi is the model of the Terax AI chat, Terax spawns it headless with `TERAX_FORCE=1` and `TERAX_SURFACE=chat`, so the full tool set is available there too and `terax_status` reports `surface: "chat"`.
+
+## MCP counterpart
+
+Terax serves the same capabilities to MCP clients (Claude Code, Codex, Cursor, OpenCode) with `terax --mcp`, grouped into seven tools. A test keeps both surfaces aligned: every Pi-Terax tool must be mapped to an MCP action or marked Pi-only in `src/modules/commands/lib/mcpSurface.ts`, and every registry command reachable through `terax_call` is also reachable over MCP. See `docs/pi-terax.md#mcp-server`.
 
 ## Tools
 
 - `terax_status`: reports whether this session is inside a Terax terminal, which capabilities are available, and how to enable them when not.
 - `terax_get_state`: returns a structural, redacted snapshot of tabs and sidebar state.
 - `terax_call`: invokes an allowlisted Terax command with a validated payload.
+- `terax_speak`: reads a short text aloud through Terax's local speech engine (`tts.speak`).
 - `terax_wait`: waits briefly before the next state check.
 - `terax_development_guide`: returns exact contribution points, invariants, tests, and verification commands for features, windows, settings, shortcuts, and commands.
 - `terax_visual_qa`: captures screenshots, records short per-window videos, and compares Terax against approved project baselines.
 
 ## Development skill
 
-The package bundles `terax-development` and `terax-visual-qa`. Pi can load them automatically or invoke them explicitly:
+The package bundles `terax-development`, `terax-visual-qa` and `terax-tts`. Pi can load them automatically or invoke them explicitly:
 
 ```text
 /skill:terax-development
@@ -65,15 +70,21 @@ The visual skill adds a state/action/screenshot-or-video/verdict loop for future
 - `git.commitFile.open`
 - `search.content`
 - `settings.open`
+- `agent-monitor.show`, `agent-monitor.hide`, `agent-monitor.toggle` -- the agent monitor panel
+- `history.show`, `history.hide`, `history.toggle` -- the session history graph
 - `notes.show`, `notes.hide`, `notes.toggle` -- the notes panel
 - `notes.detach`, `notes.attach` -- float the notes panel or dock it back
 - `notes.add`, `notes.remove`, `notes.update`, `notes.list` -- note cards on the active tab
 - `tasks.show`, `tasks.hide`, `tasks.toggle` -- the scheduled tasks panel
 - `tasks.openEditor` -- open the task editor for the user to review or complete
 - `tasks.list`, `tasks.add`, `tasks.update`, `tasks.remove` -- manage scheduled tasks
+- `tasks.clone`, `tasks.reseed` -- duplicate a task, or give it a fresh session
 - `tasks.run`, `tasks.setEnabled` -- run one now, or enable and disable it
 - `tasks.pauseAll`, `tasks.resumeAll` -- the global scheduler pause
 - `tasks.wake` -- re-evaluate the schedule and dispatch anything due
+- `tts.status`, `tts.voices` -- speech engines, models and voice profiles
+- `tts.start`, `tts.stop`, `tts.install`, `tts.download` -- manage the local speech engines
+- `tts.speak`, `tts.stopSpeaking` -- read text aloud, or stop
 
 ### mermaid.open
 

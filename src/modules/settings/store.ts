@@ -14,6 +14,7 @@ import {
   type ModelId,
   type SttProvider,
 } from "@/modules/ai/config";
+import { isPiModelPattern } from "@/modules/ai/cli/pi";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import {
   isTtsDevice,
@@ -142,6 +143,8 @@ export type Preferences = {
   mlxModelId: string;
   ollamaBaseURL: string;
   ollamaModelId: string;
+  /** Pi `--model` pattern (`provider/id`); empty uses Pi's own default. */
+  piModel: string;
   openaiCompatibleBaseURL: string;
   openaiCompatibleModelId: string;
   openaiCompatibleContextLimit: number;
@@ -229,6 +232,7 @@ const KEY_MLX_BASE_URL = "mlxBaseURL";
 const KEY_MLX_MODEL_ID = "mlxModelId";
 const KEY_OLLAMA_BASE_URL = "ollamaBaseURL";
 const KEY_OLLAMA_MODEL_ID = "ollamaModelId";
+const KEY_PI_MODEL = "piModel";
 const KEY_OPENAI_COMPAT_BASE_URL = "openaiCompatibleBaseURL";
 const KEY_OPENAI_COMPAT_MODEL_ID = "openaiCompatibleModelId";
 const KEY_OPENAI_COMPAT_CONTEXT_LIMIT = "openaiCompatibleContextLimit";
@@ -339,6 +343,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   mlxModelId: "",
   ollamaBaseURL: OLLAMA_DEFAULT_BASE_URL,
   ollamaModelId: "",
+  piModel: "",
   openaiCompatibleBaseURL: OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   openaiCompatibleModelId: "",
   openaiCompatibleContextLimit: 128_000,
@@ -459,6 +464,7 @@ export async function loadPreferences(): Promise<Preferences> {
       get<string>(KEY_OLLAMA_BASE_URL) ?? DEFAULT_PREFERENCES.ollamaBaseURL,
     ollamaModelId:
       get<string>(KEY_OLLAMA_MODEL_ID) ?? DEFAULT_PREFERENCES.ollamaModelId,
+    piModel: coercePiModel(get<unknown>(KEY_PI_MODEL)),
     openaiCompatibleBaseURL:
       get<string>(KEY_OPENAI_COMPAT_BASE_URL) ??
       DEFAULT_PREFERENCES.openaiCompatibleBaseURL,
@@ -695,6 +701,14 @@ export async function setOllamaModelId(value: string): Promise<void> {
   await writePref(KEY_OLLAMA_MODEL_ID, value);
 }
 
+function coercePiModel(value: unknown): string {
+  return typeof value === "string" && isPiModelPattern(value) ? value : "";
+}
+
+export async function setPiModel(value: string): Promise<void> {
+  await writePref(KEY_PI_MODEL, coercePiModel(value));
+}
+
 export async function setOpenaiCompatibleBaseURL(value: string): Promise<void> {
   await writePref(KEY_OPENAI_COMPAT_BASE_URL, value);
 }
@@ -897,6 +911,7 @@ export async function onPreferencesChange(
     [KEY_MLX_MODEL_ID]: "mlxModelId",
     [KEY_OLLAMA_BASE_URL]: "ollamaBaseURL",
     [KEY_OLLAMA_MODEL_ID]: "ollamaModelId",
+    [KEY_PI_MODEL]: "piModel",
     [KEY_OPENAI_COMPAT_BASE_URL]: "openaiCompatibleBaseURL",
     [KEY_OPENAI_COMPAT_MODEL_ID]: "openaiCompatibleModelId",
     [KEY_OPENAI_COMPAT_CONTEXT_LIMIT]: "openaiCompatibleContextLimit",

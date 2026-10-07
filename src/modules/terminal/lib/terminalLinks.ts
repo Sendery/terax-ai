@@ -1,4 +1,6 @@
 import { openExternalUrl } from "@/lib/external-link";
+import { IS_MAC } from "@/lib/platform";
+import { isLinkActivation } from "./pointer";
 
 /** The subset of xterm's `IBuffer` needed to read a linkified row. */
 export type LinkRowSource = {
@@ -27,7 +29,8 @@ export function readLinkRow(
 
 export function createTerminalLinkHandler(focus: () => void) {
   return {
-    activate: (_event: MouseEvent, uri: string) =>
-      void openExternalUrl(uri, focus),
+    activate: (event: MouseEvent, uri: string) => {
+      if (isLinkActivation(event, IS_MAC)) void openExternalUrl(uri, focus);
+    },
   };
 }

@@ -30,6 +30,7 @@ export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
   "cli-codex": null,
   "cli-cursor": null,
   "cli-opencode": null,
+  "cli-pi": null,
 };
 
 export async function getKey(provider: ProviderId): Promise<string | null> {

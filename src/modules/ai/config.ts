@@ -18,17 +18,20 @@ export type ProviderId =
   | "cli-claude"
   | "cli-codex"
   | "cli-cursor"
-  | "cli-opencode";
+  | "cli-opencode"
+  | "cli-pi";
 
 /** Providers backed by a locally-installed agent CLI (no API key, runs the
  *  agent's own tool loop). Maps each provider to its CLI agent id. */
-export const CLI_PROVIDERS: Partial<Record<ProviderId, "claude" | "codex" | "cursor" | "opencode">> =
-  {
-    "cli-claude": "claude",
-    "cli-codex": "codex",
-    "cli-cursor": "cursor",
-    "cli-opencode": "opencode",
-  };
+export const CLI_PROVIDERS: Partial<
+  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi">
+> = {
+  "cli-claude": "claude",
+  "cli-codex": "codex",
+  "cli-cursor": "cursor",
+  "cli-opencode": "opencode",
+  "cli-pi": "pi",
+};
 
 export function isCliProvider(id: ProviderId): boolean {
   return id in CLI_PROVIDERS;
@@ -192,6 +195,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://opencode.ai/docs",
+  },
+  {
+    id: "cli-pi",
+    label: "Pi (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://pi.dev",
   },
 ] as const;
 
@@ -748,6 +758,16 @@ export const MODELS = [
     capabilities: { intelligence: 4, speed: 4, cost: 5 },
     tags: ["tools", "coding"],
   },
+  {
+    id: "cli-pi-agent",
+    provider: "cli-pi",
+    label: "Pi",
+    hint: "CLI",
+    description:
+      "Your installed Pi with its own models and extensions; Pi-Terax lets it drive this app.",
+    capabilities: { intelligence: 5, speed: 3, cost: 5 },
+    tags: ["reasoning", "tools", "coding"],
+  },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -935,6 +955,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "cli-codex",
   "cli-cursor",
   "cli-opencode",
+  "cli-pi",
 ] as const;
 
 export function providerNeedsKey(id: ProviderId): boolean {
@@ -1009,6 +1030,7 @@ Every turn carries a short <env> block (prepended to the latest user message): w
 - Background process IO: bash_logs, bash_list, bash_kill
 - Plan / delegation: todo_write, run_subagent
 - Side-channel: suggest_command, open_preview
+- Terax app control: terax_app_state (read the window), terax_app_command (tabs, panels, notes, scheduled tasks, previews, diagrams, git views, settings, speech; call it with app.commands first for the argument catalog)
 
 # Tool budget
 - Don't re-read a file you read earlier this session unless you wrote to it; read_file returns {unchanged: true} and you pay the round-trip for nothing.
@@ -1044,7 +1066,7 @@ Every turn carries a short <env> block (prepended to the latest user message): w
 
 export const SYSTEM_PROMPT_LITE = `You are Terax, an AI agent in a developer terminal. Each turn carries an <env> block (workspace_root, active_terminal_cwd, optional active_file) prepended to the user's message — treat as ground truth.
 
-Tools: read_file, list_directory, grep, glob, get_terminal_output, edit, multi_edit, write_file, create_directory, bash_run, bash_background, bash_logs, bash_list, bash_kill, suggest_command, open_preview.
+Tools: read_file, list_directory, grep, glob, get_terminal_output, edit, multi_edit, write_file, create_directory, bash_run, bash_background, bash_logs, bash_list, bash_kill, suggest_command, open_preview, terax_app_state, terax_app_command (controls the Terax app; app.commands lists its commands).
 
 Rules:
 - Execute, don't echo. When asked to create/fix/edit a file, go straight to the tool call. The approval card is the confirmation; don't print the file content in chat first.

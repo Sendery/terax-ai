@@ -61,7 +61,7 @@ describe("createTerminalLinkHandler", () => {
     focus = vi.fn();
 
     handler.activate(
-      {} as MouseEvent,
+      { button: 0, ctrlKey: false } as MouseEvent,
       "https://chatgpt.com/codex/settings/usage",
     );
 
@@ -70,5 +70,14 @@ describe("createTerminalLinkHandler", () => {
     );
     await vi.waitFor(() => expect(focus).toHaveBeenCalledOnce());
     expect(initialFocus).not.toHaveBeenCalled();
+  });
+
+  it("leaves a right-clicked OSC 8 link to the context menu", () => {
+    const handler = createTerminalLinkHandler(() => {});
+    handler.activate(
+      { button: 2, ctrlKey: false } as MouseEvent,
+      "https://x.dev",
+    );
+    expect(openUrl).not.toHaveBeenCalled();
   });
 });

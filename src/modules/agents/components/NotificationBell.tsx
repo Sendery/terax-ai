@@ -6,18 +6,20 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
+  Cancel01Icon,
   CheckmarkCircle02Icon,
+  Delete02Icon,
   Loading03Icon,
-  Logout03Icon,
   Notification01Icon,
   Notification03Icon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
-import { tabColorStyle } from "@/modules/tabs";
+import { TAB_COLOR_CSS, tabColorStyle } from "@/modules/tabs";
 import { AgentIcon } from "../lib/agentIcon";
-import { notificationLabel } from "../lib/describeEvent";
+import { bellBadgeCount, bellRowView } from "../lib/bell";
 import { claudeHooksFooter } from "../lib/hooksFooter";
 import type { AgentNotification, AgentStatus } from "../lib/types";
 import { useAgentStore } from "../store/agentStore";
@@ -72,93 +74,97 @@ function StatusRow({
   );
 }
 
-function KindMark({ kind }: { kind: AgentNotification["kind"] }) {
-  if (kind === "turn-end") {
-    return (
-      <HugeiconsIcon
-        icon={CheckmarkCircle02Icon}
-        size={15}
-        strokeWidth={1.75}
-        className="text-muted-foreground"
-      />
-    );
-  }
-  if (kind === "exited") {
-    return (
-      <HugeiconsIcon
-        icon={Logout03Icon}
-        size={14}
-        strokeWidth={1.9}
-        className="text-muted-foreground"
-      />
-    );
-  }
-  return (
-    <span
-      className={cn(
-        "size-1.5 rounded-full",
-        kind === "error" ? "bg-destructive" : "bg-primary",
-      )}
-    />
-  );
-}
-
-function NotificationRow({
+export function NotificationRow({
   n,
   onClick,
+  onDismiss,
 }: {
   n: AgentNotification;
   onClick: () => void;
+  onDismiss: () => void;
 }) {
-  const detail = n.text ?? n.tabTitle;
+  const view = bellRowView(n);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent",
-        !n.read && "bg-accent/30",
-      )}
-    >
-      <span className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
-        <KindMark kind={n.kind} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm text-foreground">
-            {n.sessionName ?? n.agent}{" "}
-            <span className="text-muted-foreground">
-              {notificationLabel(n.kind, n.reason)}
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 pr-7 text-left transition-colors hover:bg-accent",
+          !n.read && "bg-accent/40",
+        )}
+      >
+        {/* The agent's logo with the tab's colour, as on the native notification. */}
+        <span className="relative mt-0.5 flex size-4 shrink-0 items-center justify-center">
+          <AgentIcon
+            agent={n.agent}
+            size={16}
+            className="text-muted-foreground"
+          />
+          {n.tabColor ? (
+            <span
+              className="absolute -right-1 -bottom-1 size-2 rounded-full ring-2 ring-popover"
+              style={{ backgroundColor: TAB_COLOR_CSS[n.tabColor] }}
+            />
+          ) : null}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="shrink-0 text-[12px] leading-none">
+              {view.mark}
+            </span>
+            <span
+              className={cn(
+                "truncate text-sm text-foreground",
+                !n.read && "font-medium",
+              )}
+            >
+              {view.name}{" "}
+              <span className="font-normal text-muted-foreground">
+                {view.label}
+              </span>
             </span>
           </span>
+          {view.detail ? (
+            <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+              {view.detail}
+            </span>
+          ) : null}
+          {view.where || n.tabTitle ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+              {n.tabTitle ? (
+                <span
+                  className="inline-flex max-w-[120px] items-center rounded border px-1 text-[9.5px] leading-[14px]"
+                  style={
+                    n.tabColor
+                      ? tabColorStyle(n.tabColor, false)
+                      : { borderColor: "var(--border)" }
+                  }
+                  title={`in ${n.tabTitle}`}
+                >
+                  <span className="truncate">{n.tabTitle}</span>
+                </span>
+              ) : null}
+              {view.where ? (
+                <span className="truncate">{view.where}</span>
+              ) : null}
+            </span>
+          ) : null}
         </span>
-        {/* The agent's own words when it reported any, otherwise the tab it
-            happened in, so a row always says where to go. */}
-        {detail ? (
-          <span className="truncate text-[11px] leading-snug text-muted-foreground">
-            {detail}
-          </span>
-        ) : null}
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
           {relativeTime(n.at)}
         </span>
-        {n.tabTitle ? (
-          <span
-            className="inline-flex max-w-[110px] items-center gap-1 rounded border px-1 text-[9.5px] leading-[14px] text-muted-foreground"
-            style={
-              n.tabColor
-                ? tabColorStyle(n.tabColor, false)
-                : { borderColor: "var(--border)" }
-            }
-            title={`in ${n.tabTitle}`}
-          >
-            <span className="truncate">{n.tabTitle}</span>
-          </span>
-        ) : null}
-      </span>
-    </button>
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        title="Dismiss"
+        aria-label="Dismiss notification"
+        className="absolute top-7 right-1.5 hidden rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground group-hover:block"
+      >
+        <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.75} />
+      </button>
+    </div>
   );
 }
 
@@ -170,19 +176,14 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
   const sessions = useAgentStore((s) => s.sessions);
   const localAgent = useAgentStore((s) => s.localAgent);
   const notifications = useAgentStore((s) => s.notifications);
+  const markRead = useAgentStore((s) => s.markRead);
   const markAllRead = useAgentStore((s) => s.markAllRead);
+  const dismissNotification = useAgentStore((s) => s.dismissNotification);
+  const clearNotifications = useAgentStore((s) => s.clearNotifications);
 
   const active = useMemo(() => Object.values(sessions), [sessions]);
   const activeCount = active.length + (localAgent ? 1 : 0);
-  const waitingCount =
-    active.filter((s) => s.status === "waiting").length +
-    (localAgent?.status === "waiting" ? 1 : 0);
-  // attention maps to an active waiting session, so only completed events add
-  // to the badge to avoid double-counting.
-  const unreadDone = notifications.filter(
-    (n) => !n.read && n.kind !== "attention",
-  ).length;
-  const badge = waitingCount + unreadDone;
+  const badge = bellBadgeCount(notifications);
 
   const refreshHooks = () => {
     invoke<boolean>("agent_claude_hooks_status")
@@ -192,10 +193,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next) {
-      markAllRead();
-      refreshHooks();
-    }
+    if (next) refreshHooks();
   };
 
   const enableClaudeHooks = async () => {
@@ -229,6 +227,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
   };
 
   const activateNotification = (n: AgentNotification) => {
+    markRead(n.id);
     if (n.source === "local") activateLocal();
     else activate(n.tabId, n.leafId);
   };
@@ -266,8 +265,35 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
             Notifications
           </span>
           {activeCount > 0 ? (
-            <span className="ml-auto rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            <span className="ml-2 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
               {activeCount} active
+            </span>
+          ) : null}
+          {notifications.length > 0 ? (
+            <span className="ml-auto flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={markAllRead}
+                disabled={badge === 0}
+                title="Mark all as read"
+                aria-label="Mark all as read"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+              >
+                <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                onClick={clearNotifications}
+                title="Clear notifications"
+                aria-label="Clear notifications"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <HugeiconsIcon
+                  icon={Delete02Icon}
+                  size={14}
+                  strokeWidth={1.75}
+                />
+              </button>
             </span>
           ) : null}
         </div>
@@ -303,6 +329,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
                 key={n.id}
                 n={n}
                 onClick={() => activateNotification(n)}
+                onDismiss={() => dismissNotification(n.id)}
               />
             ))}
           </div>

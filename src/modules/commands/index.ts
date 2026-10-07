@@ -20,3 +20,4 @@ export type {
   SnapshotTts,
   SnapshotTtsInput,
 } from "./lib/snapshot";
+export { callAppCommand } from "./lib/inApp";

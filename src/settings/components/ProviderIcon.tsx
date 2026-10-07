@@ -11,6 +11,7 @@ import {
   DeepseekIcon,
   GlobeIcon,
   MistralIcon,
+  PiIcon,
   PlugIcon,
   ServerStack01Icon,
 } from "@hugeicons/core-free-icons";
@@ -35,6 +36,7 @@ const ICON_BY_PROVIDER = {
   "cli-codex": ChatGptIcon,
   "cli-cursor": ComputerIcon,
   "cli-opencode": CpuIcon,
+  "cli-pi": PiIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 type Props = {

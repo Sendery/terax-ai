@@ -225,6 +225,7 @@ When exposing a command, update and test all applicable layers:
 - structured snapshot if state observation is required;
 - Rust bridge allowlist;
 - Pi package allowlist and schema;
+- MCP surface group in `src/modules/commands/lib/mcpSurface.ts` and the regenerated `src-tauri/src/modules/mcp/surface.json` (`pnpm gen:mcp-surface`); a new Pi tool also needs its MCP alignment entry;
 - extension tests;
 - end-to-end harness;
 - user documentation.
@@ -394,7 +395,7 @@ Completion criterion: no unresolved candidate is silently lost, and the durable 
 - [ ] `AGENTS.md`, `TERAX.md`, and relevant contribution points read
 - [ ] Every behavior began with an observed failing test
 - [ ] Domain, UI, persistence, transformations, and invalid data audited
-- [ ] Every external command layer and allowlist updated together
+- [ ] Every external command layer and allowlist updated together, MCP surface regenerated
 - [ ] Rejected commands proven not to mutate state
 - [ ] Private terminals, secrets, authorization, and approvals preserved
 - [ ] Keyboard and screen-reader behavior verified

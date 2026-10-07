@@ -91,7 +91,10 @@ export function routeAgentNotification({
     leafId,
     tabTitle,
     tabColor,
+    tone,
     ...(text ? { text } : {}),
+    ...(body ? { body } : {}),
+    ...(subtitle ? { subtitle } : {}),
     ...(reason ? { reason } : {}),
     ...(sessionName ? { sessionName } : {}),
   });

@@ -48,6 +48,7 @@ import {
 import { useChatStore } from "@/modules/ai/store/chatStore";
 import { detectCliAgents } from "@/modules/ai/cli/bridge";
 import { CLI_AGENTS } from "@/modules/ai/cli/registry";
+import type { CliAgentId } from "@/modules/ai/cli/types";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
@@ -806,14 +807,16 @@ function CliAgentsBlock({
       <p className="text-[10.5px] leading-relaxed text-muted-foreground">
         Use coding-agent CLIs you already have installed — no API key. They run
         in the active workspace and bring their own tools. Detected on your
-        login PATH.
+        login PATH. Pi also loads its extensions, so with Pi-Terax installed it
+        can drive this window; pick which Pi model answers from the chat's
+        model menu.
       </p>
 
       <div className="flex flex-col gap-2">
         {(
           Object.entries(CLI_PROVIDERS) as [
             ProviderId,
-            "claude" | "codex" | "cursor" | "opencode",
+            CliAgentId,
           ][]
         ).map(([providerId, cliId]) => {
           const def = CLI_AGENTS[cliId];
