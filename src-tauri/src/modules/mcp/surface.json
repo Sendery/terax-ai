@@ -1,0 +1,956 @@
+{
+  "version": 1,
+  "server": {
+    "name": "terax",
+    "title": "Terax",
+    "instructions": "Controls the running Terax terminal app. Start with terax_inspect (action snapshot) to learn tab ids and what is open, then act with the other tools; every tool takes an `action` plus flat arguments listed in its description. Terminal contents and private terminals are never exposed. When a call fails to connect, call terax_inspect with action status: Terax must be running for this server to reach it."
+  },
+  "tools": [
+    {
+      "name": "terax_inspect",
+      "title": "Inspect Terax",
+      "description": "Read the running Terax app without changing it: window layout, tabs, notes, scheduled tasks, speech, the command catalog, file content search and PNG captures of a surface.\n\nActions:\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
+      "annotations": {
+        "title": "Inspect Terax",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "snapshot",
+              "list_commands",
+              "build_info",
+              "list_notes",
+              "list_tasks",
+              "speech_status",
+              "list_voices",
+              "search_content",
+              "capture",
+              "wait"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "query": {
+            "type": "string",
+            "description": "Regular expression in the ripgrep dialect."
+          },
+          "root": {
+            "type": "string",
+            "description": "Directory to search under. Must be an authorized workspace path."
+          },
+          "caseInsensitive": {
+            "type": "boolean",
+            "description": "Match without regard to case."
+          },
+          "maxResults": {
+            "type": "integer",
+            "description": "Maximum hits to return, 1 to 500. Defaults to 50."
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "window",
+              "header",
+              "sidebar",
+              "tabstrip",
+              "statusbar",
+              "active-pane",
+              "pane",
+              "overlay",
+              "agent-monitor"
+            ],
+            "description": "Surface to capture."
+          },
+          "tabId": {
+            "type": "integer",
+            "description": "Tab id, required when target is 'pane'."
+          },
+          "ms": {
+            "type": "integer",
+            "description": "Milliseconds to wait, 0 to 30000."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "status": {
+          "local": "status",
+          "params": []
+        },
+        "snapshot": {
+          "command": "app.snapshot",
+          "params": []
+        },
+        "list_commands": {
+          "command": "app.commands",
+          "params": []
+        },
+        "build_info": {
+          "command": "app.buildInfo",
+          "params": []
+        },
+        "list_notes": {
+          "command": "notes.list",
+          "params": []
+        },
+        "list_tasks": {
+          "command": "tasks.list",
+          "params": []
+        },
+        "speech_status": {
+          "command": "tts.status",
+          "params": []
+        },
+        "list_voices": {
+          "command": "tts.voices",
+          "params": []
+        },
+        "search_content": {
+          "command": "search.content",
+          "params": [
+            "query",
+            "root",
+            "caseInsensitive",
+            "maxResults"
+          ]
+        },
+        "capture": {
+          "command": "app.capture",
+          "params": [
+            "target",
+            "tabId"
+          ]
+        },
+        "wait": {
+          "local": "wait",
+          "params": [
+            "ms"
+          ]
+        }
+      }
+    },
+    {
+      "name": "terax_open_view",
+      "title": "Open views in Terax",
+      "description": "Put something in front of the user in a Terax tab: a file in the editor, a local web preview, a Mermaid diagram, a git diff, the commit graph or a file at a commit. An existing tab for the same target is focused instead of duplicated where the command supports it.\n\nActions:\n- open_file(path, pin?): Open a file in an editor tab.\n- open_preview(url, title?): Open a loopback URL (localhost, 127.0.0.1, [::1]) in a preview tab.\n- open_mermaid(source, title?): Open Mermaid source (48 KiB max) in a new diagram tab.\n- update_mermaid(tabId, source, title?): Replace the source of an existing Mermaid tab.\n- open_git_diff(repoRoot, path, mode, originalPath?, title?): Open the working-tree (+) or staged (-) diff of one file.\n- open_git_history(repoRoot, branch?): Open the commit graph of a repository.\n- open_commit_file(repoRoot, sha, path, originalPath?, subject?): Open one file as changed by one commit.",
+      "annotations": {
+        "title": "Open views in Terax",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "open_file",
+              "open_preview",
+              "open_mermaid",
+              "update_mermaid",
+              "open_git_diff",
+              "open_git_history",
+              "open_commit_file"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "path": {
+            "type": "string",
+            "description": "open_file: absolute or workspace path. Git actions: path relative to repoRoot."
+          },
+          "pin": {
+            "type": "boolean",
+            "description": "Pin the tab instead of opening it as a preview."
+          },
+          "url": {
+            "type": "string",
+            "description": "Loopback URL to load, including scheme (e.g. http://localhost:5173)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional custom tab title (80 characters max for Mermaid tabs)."
+          },
+          "source": {
+            "type": "string",
+            "description": "Mermaid source, with or without a fenced mermaid block."
+          },
+          "tabId": {
+            "type": "integer",
+            "description": "Id of the Mermaid tab returned by mermaid.open or app.snapshot."
+          },
+          "repoRoot": {
+            "type": "string",
+            "description": "Repository root path."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "-",
+              "+"
+            ],
+            "description": "Diff side: '-' for old, '+' for new."
+          },
+          "originalPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Previous path when the file was renamed."
+          },
+          "branch": {
+            "type": "string",
+            "description": "Branch name, used only to title the tab."
+          },
+          "sha": {
+            "type": "string",
+            "description": "Commit sha, 7 to 40 hexadecimal characters. Revision expressions are not accepted."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Commit subject line, shown as context in the tab."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "open_file": {
+          "command": "tab.openFile",
+          "params": [
+            "path",
+            "pin"
+          ]
+        },
+        "open_preview": {
+          "command": "preview.open",
+          "params": [
+            "url",
+            "title"
+          ]
+        },
+        "open_mermaid": {
+          "command": "mermaid.open",
+          "params": [
+            "source",
+            "title"
+          ]
+        },
+        "update_mermaid": {
+          "command": "mermaid.update",
+          "params": [
+            "tabId",
+            "source",
+            "title"
+          ]
+        },
+        "open_git_diff": {
+          "command": "git.diff.open",
+          "params": [
+            "repoRoot",
+            "path",
+            "mode",
+            "originalPath",
+            "title"
+          ]
+        },
+        "open_git_history": {
+          "command": "git.history.open",
+          "params": [
+            "repoRoot",
+            "branch"
+          ]
+        },
+        "open_commit_file": {
+          "command": "git.commitFile.open",
+          "params": [
+            "repoRoot",
+            "sha",
+            "path",
+            "originalPath",
+            "subject"
+          ]
+        }
+      }
+    },
+    {
+      "name": "terax_manage_tabs",
+      "title": "Manage Terax tabs",
+      "description": "Arrange existing tabs: focus, rename, colour, reorder, pin or close them. Read tab ids with terax_inspect snapshot first. close_tab removes a tab; everything else is reversible.\n\nActions:\n- focus_tab(tabId): Make a tab active.\n- close_tab(tabId?): Close a tab, or the active one when tabId is omitted.\n- rename_tab(tabId, title): Set a custom tab title.\n- reset_tab_title(tabId): Drop the custom title so the tab follows its content again.\n- set_tab_color(tabId, color): Set or clear a tab's accent colour.\n- move_tab(tabId, index): Move a tab to an index within its space.\n- pin_tab(tabId, pinned): Pin or unpin an editor tab.",
+      "annotations": {
+        "title": "Manage Terax tabs",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "focus_tab",
+              "close_tab",
+              "rename_tab",
+              "reset_tab_title",
+              "set_tab_color",
+              "move_tab",
+              "pin_tab"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "tabId": {
+            "type": "integer",
+            "description": "Id of the tab, from terax_inspect snapshot. close_tab closes the active tab when omitted; pin_tab needs an editor tab."
+          },
+          "title": {
+            "type": "string",
+            "description": "New custom title."
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "red",
+              "orange",
+              "amber",
+              "green",
+              "teal",
+              "blue",
+              "indigo",
+              "purple",
+              "pink",
+              null
+            ],
+            "description": "Palette color, or null to clear the color."
+          },
+          "index": {
+            "type": "integer",
+            "description": "Zero-based destination index inside the tab's space. Clamped to the strip."
+          },
+          "pinned": {
+            "type": "boolean",
+            "description": "true to pin the tab, false to return it to the preview slot."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "focus_tab": {
+          "command": "tab.focus",
+          "params": [
+            "tabId"
+          ]
+        },
+        "close_tab": {
+          "command": "tab.close",
+          "params": [
+            "tabId"
+          ]
+        },
+        "rename_tab": {
+          "command": "tab.rename",
+          "params": [
+            "tabId",
+            "title"
+          ]
+        },
+        "reset_tab_title": {
+          "command": "tab.resetTitle",
+          "params": [
+            "tabId"
+          ]
+        },
+        "set_tab_color": {
+          "command": "tab.setColor",
+          "params": [
+            "tabId",
+            "color"
+          ]
+        },
+        "move_tab": {
+          "command": "tab.move",
+          "params": [
+            "tabId",
+            "index"
+          ]
+        },
+        "pin_tab": {
+          "command": "tab.setPinned",
+          "params": [
+            "tabId",
+            "pinned"
+          ]
+        }
+      }
+    },
+    {
+      "name": "terax_manage_panels",
+      "title": "Show and hide Terax panels",
+      "description": "Show, hide or toggle the side panels (file sidebar, notes, scheduled tasks, session history, agent monitor), float or dock the notes panel, and open the settings window or the task editor for the user.\n\nActions:\n- show_sidebar(view?): Show the sidebar, optionally on a view.\n- hide_sidebar(): Hide the sidebar.\n- show_notes(): Show the notes panel.\n- hide_notes(): Hide the notes panel.\n- toggle_notes(): Toggle the notes panel.\n- detach_notes(): Float notes in their own window.\n- attach_notes(): Dock floating notes back.\n- show_tasks(): Show the scheduled tasks panel.\n- hide_tasks(): Hide the scheduled tasks panel.\n- toggle_tasks(): Toggle the scheduled tasks panel.\n- show_history(): Show the session history graph.\n- hide_history(): Hide the session history graph.\n- toggle_history(): Toggle the session history graph.\n- show_agent_monitor(): Show the agent monitor.\n- hide_agent_monitor(): Hide the agent monitor.\n- toggle_agent_monitor(): Toggle the agent monitor.\n- open_settings(tab?): Open the settings window.\n- open_task_editor(id?): Open the task editor so the user can review or finish a task.",
+      "annotations": {
+        "title": "Show and hide Terax panels",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "show_sidebar",
+              "hide_sidebar",
+              "show_notes",
+              "hide_notes",
+              "toggle_notes",
+              "detach_notes",
+              "attach_notes",
+              "show_tasks",
+              "hide_tasks",
+              "toggle_tasks",
+              "show_history",
+              "hide_history",
+              "toggle_history",
+              "show_agent_monitor",
+              "hide_agent_monitor",
+              "toggle_agent_monitor",
+              "open_settings",
+              "open_task_editor"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "explorer",
+              "source-control"
+            ],
+            "description": "Sidebar view to reveal."
+          },
+          "tab": {
+            "type": "string",
+            "enum": [
+              "general",
+              "models",
+              "voice",
+              "agents",
+              "themes",
+              "shortcuts",
+              "about"
+            ],
+            "description": "Settings section to deep-link."
+          },
+          "id": {
+            "type": "string",
+            "description": "Task to edit. Omit to start a new one."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "show_sidebar": {
+          "command": "sidebar.show",
+          "params": [
+            "view"
+          ]
+        },
+        "hide_sidebar": {
+          "command": "sidebar.hide",
+          "params": []
+        },
+        "show_notes": {
+          "command": "notes.show",
+          "params": []
+        },
+        "hide_notes": {
+          "command": "notes.hide",
+          "params": []
+        },
+        "toggle_notes": {
+          "command": "notes.toggle",
+          "params": []
+        },
+        "detach_notes": {
+          "command": "notes.detach",
+          "params": []
+        },
+        "attach_notes": {
+          "command": "notes.attach",
+          "params": []
+        },
+        "show_tasks": {
+          "command": "tasks.show",
+          "params": []
+        },
+        "hide_tasks": {
+          "command": "tasks.hide",
+          "params": []
+        },
+        "toggle_tasks": {
+          "command": "tasks.toggle",
+          "params": []
+        },
+        "show_history": {
+          "command": "history.show",
+          "params": []
+        },
+        "hide_history": {
+          "command": "history.hide",
+          "params": []
+        },
+        "toggle_history": {
+          "command": "history.toggle",
+          "params": []
+        },
+        "show_agent_monitor": {
+          "command": "agent-monitor.show",
+          "params": []
+        },
+        "hide_agent_monitor": {
+          "command": "agent-monitor.hide",
+          "params": []
+        },
+        "toggle_agent_monitor": {
+          "command": "agent-monitor.toggle",
+          "params": []
+        },
+        "open_settings": {
+          "command": "settings.open",
+          "params": [
+            "tab"
+          ]
+        },
+        "open_task_editor": {
+          "command": "tasks.openEditor",
+          "params": [
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "name": "terax_manage_notes",
+      "title": "Manage Terax notes",
+      "description": "Add, edit or remove note cards on the active tab. Read them with terax_inspect list_notes. remove_note deletes a note.\n\nActions:\n- add_note(content): Add a note; a URL becomes a link card, other text a plain note.\n- update_note(id, title?, body?, url?, note?): Edit fields of a note.\n- remove_note(id): Delete a note.",
+      "annotations": {
+        "title": "Manage Terax notes",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add_note",
+              "update_note",
+              "remove_note"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "content": {
+            "type": "string",
+            "description": "A URL or free text."
+          },
+          "id": {
+            "type": "string",
+            "description": "Id of the note card, from terax_inspect list_notes."
+          },
+          "title": {
+            "type": "string",
+            "description": "New title (empty string clears it)."
+          },
+          "body": {
+            "type": "string",
+            "description": "New text for a text note (ignored on link cards)."
+          },
+          "url": {
+            "type": "string",
+            "description": "New URL for a link card (ignored on text notes)."
+          },
+          "note": {
+            "type": "string",
+            "description": "New annotation for a link card (empty string clears it)."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "add_note": {
+          "command": "notes.add",
+          "params": [
+            "content"
+          ]
+        },
+        "update_note": {
+          "command": "notes.update",
+          "params": [
+            "id",
+            "title",
+            "body",
+            "url",
+            "note"
+          ]
+        },
+        "remove_note": {
+          "command": "notes.remove",
+          "params": [
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "name": "terax_schedule_tasks",
+      "title": "Schedule Terax agent tasks",
+      "description": "Create and drive scheduled tasks: stored prompts Terax hands to a coding agent (pi, claude or codex) on a schedule or on demand. Running a task starts an agent with its own permissions, so confirm intent with the user first. Read tasks with terax_inspect list_tasks.\n\nActions:\n- add_task(name, prompt, schedule, cwd?, target?, mode?, agent?, missed?, overlap?, sessionId?, model?, provider?, thinking?, maxRuns?, tabId?): Create a task.\n- update_task(id, name?, prompt?, schedule?, enabled?, cwd?, target?, mode?, agent?, missed?, overlap?, sessionId?, model?, provider?, thinking?, maxRuns?, tabId?): Edit a task.\n- clone_task(id): Duplicate a task; the copy starts disabled.\n- reseed_task(id): Give a task a fresh agent session so its context starts clean.\n- remove_task(id): Delete a task.\n- run_task(id): Run a task now.\n- set_task_enabled(id, enabled): Enable or disable a task.\n- pause_all(): Pause the whole scheduler.\n- resume_all(): Resume the scheduler.\n- wake(): Re-evaluate the schedule now and dispatch anything due.",
+      "annotations": {
+        "title": "Schedule Terax agent tasks",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add_task",
+              "update_task",
+              "clone_task",
+              "reseed_task",
+              "remove_task",
+              "run_task",
+              "set_task_enabled",
+              "pause_all",
+              "resume_all",
+              "wake"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "name": {
+            "type": "string",
+            "description": "Short label shown on the task card."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Prompt the agent receives. Multiple lines are allowed."
+          },
+          "schedule": {
+            "type": "string",
+            "description": "Schedule spec: manual, every:30m, every:2h, every:1d, daily:09:00, weekly:mon,wed@07:30, weekly:weekdays@08:00, weekly:weekend@10:00, days:3@06:00:2026-08-01, dates:2026-08-04,2026-08-09@12:00, once:2026-08-04T09:15."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory for the run. Defaults to the active tab's directory."
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "headless",
+              "tab"
+            ],
+            "description": "Where the run happens: a terminal tab (reused or created) or headless."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "task",
+              "routine"
+            ],
+            "description": "task keeps one session so context accumulates; routine starts a fresh session each run."
+          },
+          "agent": {
+            "type": "string",
+            "enum": [
+              "pi",
+              "claude",
+              "codex"
+            ],
+            "description": "Agent CLI the run drives. pi and claude can be pinned to a session; codex mints its own ids and can only resume its most recent session in the directory."
+          },
+          "missed": {
+            "type": "string",
+            "enum": [
+              "skip",
+              "runOnce",
+              "runAll",
+              "askOnResume"
+            ],
+            "description": "What to do with occurrences missed while Terax was closed."
+          },
+          "overlap": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "skip",
+              "parallel"
+            ],
+            "description": "What to do when the previous run is still going."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Existing Pi session to wake. Omit to let Terax own a session for the task."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model for the run, passed verbatim to the agent CLI. Omit to inherit its default."
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider for the run. Pi only. Omit to inherit its default."
+          },
+          "thinking": {
+            "type": "string",
+            "description": "Thinking level for the run. Pi only. Omit to inherit its default."
+          },
+          "maxRuns": {
+            "type": "integer",
+            "description": "Stop after this many runs. Omit for unlimited."
+          },
+          "tabId": {
+            "type": "integer",
+            "description": "Terminal tab this task belongs to, for tab runs."
+          },
+          "id": {
+            "type": "string",
+            "description": "Id of the task, from terax_inspect list_tasks."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "True to schedule the task, false to stop it."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "add_task": {
+          "command": "tasks.add",
+          "params": [
+            "name",
+            "prompt",
+            "schedule",
+            "cwd",
+            "target",
+            "mode",
+            "agent",
+            "missed",
+            "overlap",
+            "sessionId",
+            "model",
+            "provider",
+            "thinking",
+            "maxRuns",
+            "tabId"
+          ]
+        },
+        "update_task": {
+          "command": "tasks.update",
+          "params": [
+            "id",
+            "name",
+            "prompt",
+            "schedule",
+            "enabled",
+            "cwd",
+            "target",
+            "mode",
+            "agent",
+            "missed",
+            "overlap",
+            "sessionId",
+            "model",
+            "provider",
+            "thinking",
+            "maxRuns",
+            "tabId"
+          ]
+        },
+        "clone_task": {
+          "command": "tasks.clone",
+          "params": [
+            "id"
+          ]
+        },
+        "reseed_task": {
+          "command": "tasks.reseed",
+          "params": [
+            "id"
+          ]
+        },
+        "remove_task": {
+          "command": "tasks.remove",
+          "params": [
+            "id"
+          ]
+        },
+        "run_task": {
+          "command": "tasks.run",
+          "params": [
+            "id"
+          ]
+        },
+        "set_task_enabled": {
+          "command": "tasks.setEnabled",
+          "params": [
+            "id",
+            "enabled"
+          ]
+        },
+        "pause_all": {
+          "command": "tasks.pauseAll",
+          "params": []
+        },
+        "resume_all": {
+          "command": "tasks.resumeAll",
+          "params": []
+        },
+        "wake": {
+          "command": "tasks.wake",
+          "params": []
+        }
+      }
+    },
+    {
+      "name": "terax_speak",
+      "title": "Speak through Terax",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, and manage those engines. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.",
+      "annotations": {
+        "title": "Speak through Terax",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "speak",
+              "stop_speaking",
+              "start_engine",
+              "stop_engine",
+              "install_engine",
+              "download_model"
+            ],
+            "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally."
+          },
+          "voiceId": {
+            "type": "string",
+            "description": "Voice profile id from tts.voices. Wins over language when both are given."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "es-ES",
+              "en-US"
+            ],
+            "description": "Language whose default voice profile should speak. Omit to use the preferred language."
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "kokoro",
+              "chatterbox"
+            ],
+            "description": "Speech engine. stop_engine stops every running engine when omitted."
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "kokoro-82m",
+              "chatterbox-multilingual",
+              "chatterbox-turbo",
+              "chatterbox-nano"
+            ],
+            "description": "Model to download."
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "actions": {
+        "speak": {
+          "command": "tts.speak",
+          "params": [
+            "text",
+            "voiceId",
+            "language"
+          ]
+        },
+        "stop_speaking": {
+          "command": "tts.stopSpeaking",
+          "params": []
+        },
+        "start_engine": {
+          "command": "tts.start",
+          "params": [
+            "engine"
+          ]
+        },
+        "stop_engine": {
+          "command": "tts.stop",
+          "params": [
+            "engine"
+          ]
+        },
+        "install_engine": {
+          "command": "tts.install",
+          "params": [
+            "engine"
+          ]
+        },
+        "download_model": {
+          "command": "tts.download",
+          "params": [
+            "model"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import {
   createExternalCommandDispatcher,
   type ExternalCommandEvent,
 } from "./externalCommandDispatcher";
+import { setInAppCommandRegistry } from "./lib/inApp";
 import {
   createCommandRegistry,
   type CommandHandlers,
@@ -45,4 +46,10 @@ export function useExternalCommandBridge(handlers: CommandHandlers): void {
       void unsub.then((fn) => fn());
     };
   }, []);
+
+  // The built-in AI agent calls the same registry in-process.
+  useEffect(() => {
+    setInAppCommandRegistry(registry);
+    return () => setInAppCommandRegistry(null);
+  }, [registry]);
 }

@@ -73,6 +73,8 @@ function createOAuthFetch(
 const TOOL_LABELS: Record<string, (input: Record<string, unknown>) => string> =
   {
     read_file: (i) => `Reading ${shortPath(i.path)}`,
+    terax_app_state: () => "Reading Terax state",
+    terax_app_command: (i) => `Terax ${String(i.command ?? "command")}`,
     list_directory: (i) => `Listing ${shortPath(i.path)}`,
     grep: (i) => `Grepping ${ellipsize(String(i.pattern ?? ""), 40)}`,
     glob: (i) => `Globbing ${ellipsize(String(i.pattern ?? ""), 40)}`,
@@ -294,6 +296,7 @@ export async function buildLanguageModel(
     case "cli-codex":
     case "cli-cursor":
     case "cli-opencode":
+    case "cli-pi":
       throw new Error(
         "CLI agent providers do not build a LanguageModel; they stream via runCliAgentStream.",
       );
@@ -448,6 +451,8 @@ export type RunAgentOptions = {
   openaiCompatibleModelId?: string;
   openaiCompatibleContextLimit?: number;
   openrouterModelId?: string;
+  /** `--model` pattern for the Pi CLI; empty uses Pi's own default. */
+  piModel?: string;
   customEndpoints?: readonly CustomEndpoint[];
   customEndpointKeys?: CustomEndpointKeys;
   planMode?: boolean;
@@ -472,6 +477,11 @@ export async function runAgentStream(opts: RunAgentOptions) {
       cliId,
       uiMessages: opts.uiMessages,
       cwd: opts.toolContext.getCwd(),
+      model: cliId === "pi" ? opts.piModel : undefined,
+      chatSessionId: opts.toolContext.getSessionId(),
+      persona: opts.agentPersona ?? null,
+      customInstructions: opts.customInstructions,
+      planMode: opts.planMode,
       abortSignal: opts.abortSignal,
       onStep: opts.onStep,
     });

@@ -23,6 +23,7 @@
     "dev:sandbox": "node scripts/sandbox.mjs dev",
     "build:sandbox": "node scripts/sandbox.mjs build",
     "test": "vitest run",
+    "gen:mcp-surface": "vitest run src/modules/commands/lib/mcpSurface.test.ts -u",
     "test:watch": "vitest",
     "version:set": "node scripts/set-version.mjs",
     "check-types": "tsc --noEmit",

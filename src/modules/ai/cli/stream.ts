@@ -11,6 +11,10 @@ export type RunCliAgentOptions = {
   cwd: string | null;
   model?: string;
   permission?: CliPermissionMode;
+  chatSessionId?: string | null;
+  persona?: { name: string; instructions: string } | null;
+  customInstructions?: string;
+  planMode?: boolean;
   abortSignal?: AbortSignal;
   onStep?: (step: string | null) => void;
 };
@@ -23,35 +27,55 @@ export type RunCliAgentOptions = {
  */
 export function runCliAgentStream(opts: RunCliAgentOptions) {
   const def = CLI_AGENTS[opts.cliId];
-  const prompt = messagesToPrompt(opts.uiMessages);
 
   return {
     toUIMessageStream: (_o?: { originalMessages?: UIMessage[] }) =>
       createUIMessageStream({
         execute: async ({ writer }) => {
           const emitter = new ChunkEmitter(writer);
-          const parser = def.createParser(emitter);
+          const plan = def.planRun({
+            messages: opts.uiMessages,
+            cwd: opts.cwd,
+            model: opts.model,
+            permission:
+              opts.permission ??
+              usePreferencesStore.getState().cliAgentPermission,
+            chatSessionId: opts.chatSessionId ?? null,
+            persona: opts.persona ?? null,
+            customInstructions: opts.customInstructions,
+            planMode: opts.planMode,
+            nonce: Date.now().toString(36),
+          });
+          if (plan.stdin !== undefined && plan.stdin.trim() === "") {
+            emitter.error(`${def.label} needs a text message to work on.`);
+            emitter.finish();
+            return;
+          }
+          const parser = def.createParser(emitter, { metadata: plan.metadata });
           const id = allocateSpawnId();
           const onAbort = () => void killCliAgent(id);
           opts.abortSignal?.addEventListener("abort", onAbort, { once: true });
           opts.onStep?.(`Running ${def.label}`);
+          let code: number | null = null;
           try {
-            const permission =
-              opts.permission ??
-              usePreferencesStore.getState().cliAgentPermission;
-            const argv = def.buildArgv(prompt, { model: opts.model, permission });
-            await runCliAgent(
-              { id, argv, cwd: opts.cwd },
+            ({ code } = await runCliAgent(
+              {
+                id,
+                argv: plan.argv,
+                cwd: opts.cwd,
+                stdin: plan.stdin,
+                bridge: plan.bridge,
+              },
               {
                 onStdout: (line) => parser.onLine(line),
                 onStderr: (line) => parser.onStderr?.(line),
               },
-            );
+            ));
           } catch (e) {
             emitter.error(e instanceof Error ? e.message : String(e));
           } finally {
             opts.abortSignal?.removeEventListener("abort", onAbort);
-            parser.onExit?.(null);
+            parser.onExit?.(opts.abortSignal?.aborted ? null : code);
             emitter.finish();
             opts.onStep?.(null);
           }
@@ -59,29 +83,4 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
         onError: (e) => (e instanceof Error ? e.message : String(e)),
       }),
   };
-}
-
-/** Flatten the chat history into a single prompt. CLIs take one prompt per
- *  run and manage their own context, so we hand them a readable transcript. */
-function messagesToPrompt(messages: UIMessage[]): string {
-  const turns = messages
-    .map((m) => ({
-      role: m.role,
-      text: (m.parts ?? [])
-        .filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("")
-        .trim(),
-    }))
-    .filter((t) => t.text);
-
-  if (turns.length === 0) return "";
-  if (turns.length === 1) return turns[0].text;
-
-  const last = turns[turns.length - 1];
-  const history = turns
-    .slice(0, -1)
-    .map((t) => `${t.role === "user" ? "User" : "Assistant"}: ${t.text}`)
-    .join("\n\n");
-  return `Conversation so far:\n${history}\n\nCurrent request:\n${last.text}`;
 }
