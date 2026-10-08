@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { RELEASE_PRODUCT_NAME, developmentConfigOverride } from "./dev-release-config.mjs";
+import {
+  LOCAL_SIGNING_IDENTITY,
+  RELEASE_PRODUCT_NAME,
+  developmentConfigOverride,
+  macSigningIdentity,
+  tauriSignArgs,
+} from "./dev-release-config.mjs";
 
 describe("development release config override", () => {
   it("rebrands the product name and disables updater artifacts", () => {
@@ -38,5 +44,44 @@ describe("development release config override", () => {
 
     expect(override.app).toBeUndefined();
     expect(override.productName).toBe("Pi-Terax");
+  });
+
+  it("signs with a stable identity when one is given and leaves it unset otherwise", () => {
+    const signed = developmentConfigOverride({}, { signingIdentity: LOCAL_SIGNING_IDENTITY });
+    expect(signed.bundle.macOS).toEqual({ signingIdentity: LOCAL_SIGNING_IDENTITY });
+    expect(signed.bundle.createUpdaterArtifacts).toBe(false);
+
+    expect(developmentConfigOverride({}).bundle.macOS).toBeUndefined();
+  });
+
+  it("only skips tauri signing when there is no identity", () => {
+    expect(tauriSignArgs(LOCAL_SIGNING_IDENTITY)).toEqual([]);
+    expect(tauriSignArgs(null)).toEqual(["--no-sign"]);
+  });
+});
+
+describe("macOS signing identity", () => {
+  const keychain = `  1) 4B6D9A9C16DECCE72AF96B44A95B640229909057 "${LOCAL_SIGNING_IDENTITY}" (CSSMERR_TP_NOT_TRUSTED)\n`;
+
+  it("uses the local identity when the keychain has it, even untrusted", () => {
+    expect(macSigningIdentity({ platform: "darwin", env: {}, listIdentities: () => keychain })).toBe(LOCAL_SIGNING_IDENTITY);
+  });
+
+  it("falls back to ad hoc when the identity is missing", () => {
+    expect(macSigningIdentity({ platform: "darwin", env: {}, listIdentities: () => "" })).toBeNull();
+  });
+
+  it("honours an override and the ad hoc escape hatch", () => {
+    const sha = "4B6D9A9C16DECCE72AF96B44A95B640229909057";
+    expect(
+      macSigningIdentity({ platform: "darwin", env: { TERAX_MACOS_SIGNING_IDENTITY: sha }, listIdentities: () => keychain }),
+    ).toBe(sha);
+    expect(
+      macSigningIdentity({ platform: "darwin", env: { TERAX_MACOS_SIGNING_IDENTITY: "-" }, listIdentities: () => keychain }),
+    ).toBeNull();
+  });
+
+  it("never signs off macOS", () => {
+    expect(macSigningIdentity({ platform: "linux", env: {}, listIdentities: () => keychain })).toBeNull();
   });
 });

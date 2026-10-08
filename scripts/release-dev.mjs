@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Build the native installers for one development release and upload them to
- * its existing GitHub release. Development artifacts are deliberately not
- * signed and never generate updater manifests.
+ * its existing GitHub release. Development artifacts never generate updater
+ * manifests; on macOS they are signed with the local identity when the keychain
+ * has it (see `macSigningIdentity`), so permission grants survive updates.
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -17,7 +18,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { developmentConfigOverride } from "./dev-release-config.mjs";
+import { developmentConfigOverride, macSigningIdentity, tauriSignArgs } from "./dev-release-config.mjs";
 
 const DEFAULT_REPOSITORY = "Sendery/terax-ai";
 const SEMVER = /^v?(\d+\.\d+\.\d+-[0-9A-Za-z.-]+)$/;
@@ -136,11 +137,13 @@ function main() {
     run("git", ["reset", "--hard", release.targetCommitish], { cwd: cacheRoot });
     run("git", ["clean", "-ffd"], { cwd: cacheRoot });
     const baseConfig = JSON.parse(readFileSync(join(cacheRoot, "src-tauri", "tauri.conf.json"), "utf8"));
-    writeFileSync(configPath, JSON.stringify(developmentConfigOverride(baseConfig)));
+    const signingIdentity = macSigningIdentity();
+    trace("macOS signing", { identity: signingIdentity ?? "ad hoc" });
+    writeFileSync(configPath, JSON.stringify(developmentConfigOverride(baseConfig, { signingIdentity })));
     run("pnpm", ["install", "--frozen-lockfile"], { cwd: cacheRoot });
     rmSync(join(cacheRoot, plan.root), { recursive: true, force: true });
     for (const rustTarget of plan.rustTargets ?? []) run("rustup", ["target", "add", rustTarget], { capture: true });
-    const buildArgs = ["scripts/build-version.mjs", options.version, "--", "--bundles", plan.bundles, "--no-sign", "--config", configPath];
+    const buildArgs = ["scripts/build-version.mjs", options.version, "--", "--bundles", plan.bundles, ...tauriSignArgs(signingIdentity), "--config", configPath];
     if (plan.target) buildArgs.push("--target", plan.target);
     run("node", buildArgs, { cwd: cacheRoot });
     const built = developmentArtifacts(join(cacheRoot, plan.root));

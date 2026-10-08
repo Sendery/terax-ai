@@ -23,7 +23,7 @@ describe("macOS development release script", () => {
     expect(script).toContain("rustup target add x86_64-apple-darwin");
     expect(script).toContain("--target universal-apple-darwin");
     expect(script).toContain("scripts/dev-release-config.mjs");
-    expect(script).toContain("--no-sign");
+    expect(script).toContain("dev-release-config.mjs --sign-args");
     expect(script).toContain("gh release upload");
     expect(script).toContain("target_commitish");
   });
