@@ -66,6 +66,9 @@ trap cleanup EXIT
 # The override is derived from the checked-out config so window settings other
 # than the title are preserved verbatim.
 node scripts/dev-release-config.mjs src-tauri/tauri.conf.json >"$CONFIG_FILE"
+# Signed with the local identity when the keychain has it, so macOS permission
+# grants survive updates; otherwise --no-sign leaves the ad hoc signature.
+SIGN_ARGS="$(node scripts/dev-release-config.mjs --sign-args)"
 
 BUNDLE_ROOT=src-tauri/target/universal-apple-darwin/release/bundle
 
@@ -76,7 +79,7 @@ rm -rf "$BUNDLE_ROOT"
 node scripts/build-version.mjs "$APP_VERSION" -- \
   --target universal-apple-darwin \
   --bundles app,dmg \
-  --no-sign \
+  ${SIGN_ARGS:+$SIGN_ARGS} \
   --config "$CONFIG_FILE"
 
 shopt -s nullglob
