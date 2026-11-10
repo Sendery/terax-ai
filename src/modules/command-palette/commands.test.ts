@@ -52,6 +52,18 @@ function context(
 }
 
 describe("createCommandItems", () => {
+  it("offers the Terminal Lab only when the engine is available", () => {
+    const without = createCommandItems(context()).map((item) => item.id);
+    expect(without).not.toContain("terminalLab.open");
+    const openTerminalLab = vi.fn();
+    const lab = createCommandItems(context({ openTerminalLab })).find(
+      (item) => item.id === "terminalLab.open",
+    );
+    expect(lab?.title).toBe("Open Terminal Lab");
+    lab?.run();
+    expect(openTerminalLab).toHaveBeenCalledOnce();
+  });
+
   it("offers every side panel toggle, so no surface is reachable only by mouse", () => {
     const ids = createCommandItems(context()).map((item) => item.id);
 

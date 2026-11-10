@@ -79,6 +79,8 @@ export type CommandPaletteActionContext = {
   openSpacesOverview: () => void;
   newSpace: () => void;
   switchSpace: (id: string) => void;
+  /** Present only in builds with the terminal engine. */
+  openTerminalLab?: () => void;
 };
 
 const noop = () => {};
@@ -398,6 +400,18 @@ export function createCommandItems(
       shortcutId: "tts.stop",
       run: ctx.stopReading,
     },
+    ...(ctx.openTerminalLab
+      ? [
+          {
+            id: "terminalLab.open",
+            title: "Open Terminal Lab",
+            group: "View" as const,
+            keywords: ["terminal", "engine", "ghostty", "webgl", "bench"],
+            icon: TerminalIcon,
+            run: ctx.openTerminalLab,
+          },
+        ]
+      : []),
     {
       id: "tts.settings",
       title: "Open voice settings",

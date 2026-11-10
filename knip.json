@@ -3,6 +3,7 @@
   "entry": [
     "src/main.tsx",
     "src/settings/main.tsx",
+    "src/terminal-lab/main.tsx",
     "scripts/*.mjs",
     "vite.config.ts",
     "src/styles/globals.css"

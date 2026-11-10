@@ -72,6 +72,7 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
         main: path.resolve(__dirname, "index.html"),
         settings: path.resolve(__dirname, "settings.html"),
         notes: path.resolve(__dirname, "notes.html"),
+        "terminal-lab": path.resolve(__dirname, "terminal-lab.html"),
       },
       // Oxc drops `debugger` by default. These calls return undefined, so
       // marking them pure lets DCE strip them from production builds.

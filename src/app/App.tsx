@@ -147,6 +147,10 @@ import {
   writeToSession,
 } from "@/modules/terminal";
 import {
+  openTerminalLab,
+  useTerminalLabAvailable,
+} from "@/modules/terminal/lib/terminalLab";
+import {
   SpaceSwitcher,
   useSpaces,
   useSpacePersistence,
@@ -469,6 +473,7 @@ export default function App() {
 
   const [newEditorOpen, setNewEditorOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const terminalLabAvailable = useTerminalLabAvailable(commandPaletteOpen);
   const [paletteInitialMode, setPaletteInitialMode] = useState<
     "commands" | "content"
   >("commands");
@@ -1589,6 +1594,7 @@ export default function App() {
             openSpacesOverview: () => setSwitcherOpen(true),
             newSpace: () => void handleNewSpace(),
             switchSpace: (id) => useSpaces.getState().setActive(id),
+            openTerminalLab: terminalLabAvailable ? openTerminalLab : undefined,
           })
         : [],
     [
@@ -1618,6 +1624,7 @@ export default function App() {
       stopReading,
       activeSpaceId,
       handleNewSpace,
+      terminalLabAvailable,
     ],
   );
 
