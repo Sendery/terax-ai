@@ -56,6 +56,8 @@ The WebGL2 renderer spends 0.6 ms of main-thread time per display frame to updat
 
 **Build finding:** Zig 0.15.2 cannot link natively on macOS 26 or 27 (it cannot read the new SDK's `libSystem.tbd`). The spike builds through a stand-in SDK made of Zig's bundled files; the README documents it. The app build needs a supported route (Phase 0).
 
+**Status:** the integration and the Phase 1 measurements were handed off before the first sandbox run. `2026-11-10-terminal-ghostty-vt-webgl2-handoff.md` describes why, the state of the branch and the remaining tasks.
+
 ## Acceptance criteria
 
 - A terminal pane can run on the new engine end to end: shell spawn, input, resize, scrollback, selection and copy, search, links, OSC 7, OSC 133 blocks, OSC 52, agent signals.
