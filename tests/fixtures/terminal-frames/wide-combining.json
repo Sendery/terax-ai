@@ -1,0 +1,86 @@
+{
+  "seq": 1,
+  "cols": 12,
+  "viewportRows": 4,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 2,
+    "y": 3,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "中文ab",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "ex 🚀!",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 2,
+      "wrapped": true,
+      "prompt": "none",
+      "text": "0123456789A",
+      "runs": [
+        {
+          "start": 0,
+          "len": 11,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 3,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "中",
+      "runs": [
+        {
+          "start": 0,
+          "len": 2,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    }
+  ]
+}

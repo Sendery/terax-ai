@@ -18,6 +18,31 @@ cargo nextest run --locked        # CI uses nextest
 
 If you do not have `cargo-nextest` installed, `cargo test --locked` is the local fallback. Install nextest with `cargo install cargo-nextest`.
 
+### Terminal engine
+
+The frame codec (`src-tauri/src/modules/pty/engine/frame.rs`) and the pump bookkeeping are tested by the commands above. Everything that touches libghostty sits behind the `ghostty-engine` feature and needs Zig, which `scripts/with-zig.mjs` provides:
+
+```bash
+cd src-tauri
+node ../scripts/with-zig.mjs -- cargo clippy --all-targets --locked --features ghostty-engine -- -D warnings
+node ../scripts/with-zig.mjs -- cargo test --locked --features ghostty-engine
+```
+
+The shared frame fixtures in `tests/fixtures/terminal-frames/` are produced by the Rust side from real libghostty output and decoded by the webview's test. After an intended change to the format or the snapshot, regenerate them and review the diff:
+
+```bash
+UPDATE_FIXTURES=1 node ../scripts/with-zig.mjs -- cargo test --locked --features ghostty-engine fixtures
+```
+
+The snapshot plus encode time of a full 200x60 frame is an ignored test; read it from an optimized build of the crate:
+
+```bash
+node ../scripts/with-zig.mjs -- cargo test --locked --features ghostty-engine --lib \
+  --config 'profile.dev.package.terax.opt-level=3' \
+  --config 'profile.dev.package.libghostty-vt.opt-level=3' \
+  full_frame_encode_time -- --ignored --nocapture
+```
+
 ## What must have a test
 
 `CONTRIBUTING.md` requires a test for any change that touches behavior in these load-bearing paths:

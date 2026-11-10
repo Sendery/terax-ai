@@ -1,5 +1,8 @@
 mod agent_detect;
 mod da_filter;
+#[cfg(any(test, feature = "ghostty-engine"))]
+pub mod engine;
+pub mod gterm;
 mod session;
 pub(crate) mod shell_init;
 
@@ -20,6 +23,10 @@ pub struct PtyState {
     // Starts at 1 so freshly-handed-out ids are never 0, which the frontend
     // sometimes treats as "unset". Increments monotonically; never reused.
     next_id: AtomicU32,
+    // Engine sessions with no PTY. They share the id space so every `pty_*`
+    // and `gterm_*` id names exactly one thing.
+    #[cfg(feature = "ghostty-engine")]
+    bench: std::sync::Mutex<HashMap<u32, gterm::BenchSession>>,
 }
 
 impl Default for PtyState {
@@ -27,6 +34,8 @@ impl Default for PtyState {
         Self {
             sessions: RwLock::new(HashMap::new()),
             next_id: AtomicU32::new(1),
+            #[cfg(feature = "ghostty-engine")]
+            bench: std::sync::Mutex::new(HashMap::new()),
         }
     }
 }
@@ -34,6 +43,37 @@ impl Default for PtyState {
 impl PtyState {
     pub(super) fn take(&self, id: u32) -> Option<Arc<Session>> {
         self.sessions.write().unwrap().remove(&id)
+    }
+
+    #[cfg(feature = "ghostty-engine")]
+    fn get(&self, id: u32) -> Option<Arc<Session>> {
+        self.sessions.read().unwrap().get(&id).cloned()
+    }
+
+    fn allocate_id(&self) -> u32 {
+        self.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    // The shell can exit before this insert (instant failure, `exit` in an rc
+    // file); the waiter's reap then ran with the id absent. Re-check and reap
+    // so the pseudoconsole isn't stranded.
+    fn register(&self, id: u32, session: Arc<Session>) {
+        self.sessions.write().unwrap().insert(id, session);
+        let exited = self
+            .sessions
+            .read()
+            .unwrap()
+            .get(&id)
+            .map(|s| s.exited.load(Ordering::Acquire))
+            .unwrap_or(false);
+        if exited {
+            if let Some(s) = self.take(id) {
+                thread::Builder::new()
+                    .name(format!("terax-pty-drop-{id}"))
+                    .spawn(move || session::drop_session(s))
+                    .expect("spawn pty drop thread");
+            }
+        }
     }
 }
 
@@ -54,10 +94,10 @@ pub async fn pty_open(
     let workspace = WorkspaceEnv::from_option(workspace);
     let blocks = blocks.unwrap_or(false);
     let cwd = user_spawn_cwd_or_home(&registry, cwd.as_deref(), &workspace);
-    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+    let id = state.allocate_id();
+    let sink = session::OutputSink::Raw(on_data);
     let session = tauri::async_runtime::spawn_blocking(move || {
-        session::spawn(id, app, cols, rows, cwd, workspace, blocks, on_data, on_exit)
-            .map(|(s, _)| s)
+        session::spawn(id, app, cols, rows, cwd, workspace, blocks, sink, on_exit).map(|(s, _)| s)
     })
     .await
     .map_err(|e| {
@@ -68,25 +108,7 @@ pub async fn pty_open(
         log::error!("pty_open failed: {e}");
         e
     })?;
-    state.sessions.write().unwrap().insert(id, session);
-    // The shell can exit before this insert (instant failure, `exit` in an rc
-    // file); the waiter's reap then ran with the id absent. Re-check and reap
-    // so the pseudoconsole isn't stranded.
-    let exited = state
-        .sessions
-        .read()
-        .unwrap()
-        .get(&id)
-        .map(|s| s.exited.load(Ordering::Acquire))
-        .unwrap_or(false);
-    if exited {
-        if let Some(s) = state.take(id) {
-            thread::Builder::new()
-                .name(format!("terax-pty-drop-{id}"))
-                .spawn(move || session::drop_session(s))
-                .expect("spawn pty drop thread");
-        }
-    }
+    state.register(id, session);
     log::info!("pty opened id={id} cols={cols} rows={rows}");
     Ok(id)
 }
@@ -149,6 +171,12 @@ pub fn pty_resize(
             log::warn!("pty_resize: unknown id={id}");
             "no session".to_string()
         })?;
+    // The PTY and the engine must never disagree on the size, so an engine
+    // session refuses one the engine would.
+    #[cfg(feature = "ghostty-engine")]
+    if session.engine.is_some() {
+        engine::validate_size(cols, rows)?;
+    }
     let result = session
         .master
         .lock()
@@ -163,6 +191,10 @@ pub fn pty_resize(
             log::warn!("pty_resize id={id} failed: {e}");
             e.to_string()
         });
+    #[cfg(feature = "ghostty-engine")]
+    if let (Ok(()), Some(engine)) = (&result, &session.engine) {
+        engine.resize(cols, rows);
+    }
     result
 }
 
@@ -189,7 +221,7 @@ pub fn pty_close(state: tauri::State<PtyState>, id: u32) -> Result<(), String> {
                 );
             })
             .expect("spawn pty drop thread");
-    } else {
+    } else if !gterm::close_bench(&state, id) {
         log::debug!("pty_close: unknown id={id}");
     }
     Ok(())
@@ -294,6 +326,7 @@ pub fn pty_close_all(state: tauri::State<PtyState>) -> Result<usize, String> {
             .spawn(move || session::drop_session(s))
             .expect("spawn pty drop thread");
     }
+    let count = count + gterm::close_all_bench(&state);
     if count > 0 {
         log::info!("pty_close_all: reaped {count} orphaned session(s)");
     }

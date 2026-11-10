@@ -15,6 +15,11 @@ edition = "2021"
 name = "terax_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Ghostty's terminal core plus the frame pump behind the Terminal Lab. Needs Zig
+# 0.15.2 at build time: run cargo through `node ../scripts/with-zig.mjs --`.
+ghostty-engine = ["dep:libghostty-vt"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -51,6 +56,7 @@ notify = "8.2.0"
 sha2 = "0.10"
 getrandom = "0.3"
 which = "8.0.4"
+libghostty-vt = { version = "=0.2.2", default-features = false, optional = true }
 
 [dev-dependencies]
 proptest = "1"

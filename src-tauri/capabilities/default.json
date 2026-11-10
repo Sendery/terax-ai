@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "settings",
-    "notes"
+    "notes",
+    "terminal-lab"
   ],
   "permissions": [
     "core:default",

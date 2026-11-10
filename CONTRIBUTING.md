@@ -22,6 +22,20 @@ pnpm tauri dev
 
 Prereqs: Rust (stable), Node 20+, pnpm, plus your platform's [Tauri prerequisites](https://tauri.app/start/prerequisites/).
 
+### Experimental terminal engine (optional)
+
+The `ghostty-engine` cargo feature (off by default, see [docs/architecture/terminal-engine.md](docs/architecture/terminal-engine.md)) builds Ghostty's terminal core, which needs **Zig 0.15.2** at build time. You do not install it yourself: run cargo or pnpm through `scripts/with-zig.mjs`, which downloads that Zig once (checksum pinned) into `src-tauri/target/toolchains/`, works around the macOS 26+ SDK that Zig 0.15.2 cannot link against, and builds the terminal core optimized even in debug builds. The first build also clones the pinned Ghostty commit, so it needs network access.
+
+```bash
+cd src-tauri
+node ../scripts/with-zig.mjs -- cargo clippy --all-targets --locked --features ghostty-engine -- -D warnings
+node ../scripts/with-zig.mjs -- cargo test --locked --features ghostty-engine
+cd ..
+node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine
+```
+
+The default build never needs Zig.
+
 For the architecture and how to contribute safely, see [TERAX.md](TERAX.md) and the [docs/ index](docs/README.md).
 
 ## Where to discuss

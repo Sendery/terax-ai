@@ -160,6 +160,33 @@ async fn open_notes_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Developer window for the terminal engine (`docs/architecture/terminal-engine.md`).
+/// Singleton by its label; a second open just brings it forward.
+fn show_terminal_lab_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("terminal-lab") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(
+        app,
+        "terminal-lab",
+        WebviewUrl::App("terminal-lab.html".into()),
+    )
+    .title("Terminal Lab")
+    .inner_size(1500.0, 950.0)
+    .min_inner_size(640.0, 400.0)
+    .resizable(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_terminal_lab_window(app: tauri::AppHandle) -> Result<(), String> {
+    show_terminal_lab_window(&app)
+}
+
 /// Close the floating notes window if it exists (used when docking back from the
 /// main window). No-op when the window is already closed.
 #[tauri::command]
@@ -252,6 +279,11 @@ pub fn run() {
             if let Err(err) = pi::start_bridge(_app.handle().clone()) {
                 log::warn!("pi bridge failed to start: {err}");
             }
+            if pty::gterm::lab_autorun_requested() {
+                if let Err(err) = show_terminal_lab_window(_app.handle()) {
+                    log::warn!("terminal lab autorun could not open its window: {err}");
+                }
+            }
             // Launched by the OS waker rather than by the user, so come up out of
             // the way. The app stays resident and the internal clock takes over.
             if wake_mode {
@@ -290,6 +322,15 @@ pub fn run() {
             pty::pty_has_foreground_process,
             pty::pty_has_foreground_job,
             pty::pty_shell_name,
+            pty::gterm::gterm_available,
+            pty::gterm::gterm_open,
+            pty::gterm::gterm_credit,
+            pty::gterm::gterm_scroll,
+            pty::gterm::gterm_request_full,
+            pty::gterm::gterm_bench_open,
+            pty::gterm::gterm_bench_stats,
+            pty::gterm::gterm_lab_autorun,
+            pty::gterm::gterm_lab_report,
             fs::tree::list_subdirs,
             fs::tree::fs_read_dir,
             fs::file::fs_read_file,
@@ -367,6 +408,7 @@ pub fn run() {
             open_settings_window,
             open_notes_window,
             close_notes_window,
+            open_terminal_lab_window,
             pi::external_command_respond,
             agent::agent_enable_claude_hooks,
             agent::agent_claude_hooks_status,

@@ -1,0 +1,75 @@
+{
+  "seq": 2,
+  "cols": 20,
+  "viewportRows": 5,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 6,
+    "y": 2,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": " top bar",
+      "runs": [
+        {
+          "start": 0,
+          "len": 9,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "inverse"
+          ],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    },
+    {
+      "y": 2,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "  body",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 3,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    },
+    {
+      "y": 4,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    }
+  ]
+}

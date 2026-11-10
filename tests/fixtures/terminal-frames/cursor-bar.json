@@ -1,0 +1,42 @@
+{
+  "seq": 1,
+  "cols": 10,
+  "viewportRows": 2,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 2,
+    "y": 0,
+    "style": "bar",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": ">",
+      "runs": [
+        {
+          "start": 0,
+          "len": 2,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    }
+  ]
+}

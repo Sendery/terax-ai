@@ -1,0 +1,87 @@
+{
+  "seq": 1,
+  "cols": 16,
+  "viewportRows": 3,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 4,
+    "y": 2,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "orange navy",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": "#ff8000",
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 6,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 7,
+          "len": 4,
+          "fg": null,
+          "bg": "#004080",
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "ulrgb",
+      "runs": [
+        {
+          "start": 0,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": "#0a141e",
+          "attrs": [],
+          "underline": "single"
+        }
+      ]
+    },
+    {
+      "y": 2,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "fill",
+      "runs": [
+        {
+          "start": 0,
+          "len": 16,
+          "fg": null,
+          "bg": "#282828",
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    }
+  ]
+}

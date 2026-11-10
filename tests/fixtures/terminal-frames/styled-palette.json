@@ -1,0 +1,325 @@
+{
+  "seq": 1,
+  "cols": 40,
+  "viewportRows": 6,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 19,
+    "y": 5,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "red bold green",
+      "runs": [
+        {
+          "start": 0,
+          "len": 3,
+          "fg": "#cc6666",
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 3,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 4,
+          "len": 10,
+          "fg": "#b5bd68",
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "bold"
+          ],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "fg208 bg21",
+      "runs": [
+        {
+          "start": 0,
+          "len": 5,
+          "fg": "#ff8700",
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 5,
+          "len": 5,
+          "fg": "#ff8700",
+          "bg": "#0000ff",
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 2,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "italic faint inverse",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "italic"
+          ],
+          "underline": "none"
+        },
+        {
+          "start": 6,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 7,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "faint"
+          ],
+          "underline": "none"
+        },
+        {
+          "start": 12,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 13,
+          "len": 7,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "inverse"
+          ],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 3,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "strike over blink hid",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "strikethrough"
+          ],
+          "underline": "none"
+        },
+        {
+          "start": 6,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 7,
+          "len": 4,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "overline"
+          ],
+          "underline": "none"
+        },
+        {
+          "start": 11,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 12,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "blink"
+          ],
+          "underline": "none"
+        },
+        {
+          "start": 17,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 18,
+          "len": 3,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [
+            "invisible"
+          ],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 4,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "single double curly",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "single"
+        },
+        {
+          "start": 6,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 7,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "double"
+        },
+        {
+          "start": 13,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 14,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "curly"
+        }
+      ]
+    },
+    {
+      "y": 5,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "dotted dashed ul196",
+      "runs": [
+        {
+          "start": 0,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "dotted"
+        },
+        {
+          "start": 6,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 7,
+          "len": 6,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "dashed"
+        },
+        {
+          "start": 13,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        },
+        {
+          "start": 14,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": "#ff0000",
+          "attrs": [],
+          "underline": "single"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "seq": 1,
+  "cols": 10,
+  "viewportRows": 4,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 5,
+    "y": 1,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": true,
+      "prompt": "prompt",
+      "text": "$ 01234567",
+      "runs": [
+        {
+          "start": 0,
+          "len": 10,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "continuation",
+      "text": "89abc",
+      "runs": [
+        {
+          "start": 0,
+          "len": 5,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 2,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    },
+    {
+      "y": 3,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    }
+  ]
+}
