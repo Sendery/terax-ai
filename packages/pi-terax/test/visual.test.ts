@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
   MAX_CAPTURE_HEIGHT,
@@ -18,6 +20,67 @@ import {
   type VisualBackend,
   type WindowDescriptor,
 } from "../src/visual.js";
+
+// Each capture applies real Windows ACLs through two PowerShell processes.
+// Two real captures already took 4.97 s under parallel Windows CI.
+const nativeEvidenceTimeout = process.platform === "win32" ? 30_000 : 5_000;
+
+async function expectPrivateWindowsEvidence(mediaPath: string, reportPath: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  const directory = dirname(mediaPath);
+  const paths = [dirname(directory), directory, mediaPath, reportPath];
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$paths = ConvertFrom-Json $env:TERAX_ACL_TEST_PATHS
+$entries = @($paths | ForEach-Object {
+  $acl = Get-Acl -LiteralPath $_
+  $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
+    @{
+      sid = $_.IdentityReference.Value
+      type = $_.AccessControlType.ToString()
+      rights = $_.FileSystemRights.ToString()
+      inherited = $_.IsInherited
+    }
+  })
+  @{
+    path = $_
+    owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+    currentUser = $identity
+    protected = $acl.AreAccessRulesProtected
+    rules = $rules
+  }
+})
+ConvertTo-Json -InputObject $entries -Depth 4 -Compress
+`;
+  const { stdout } = await promisify(execFile)(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    {
+      env: { ...process.env, TERAX_ACL_TEST_PATHS: JSON.stringify(paths) },
+      windowsHide: true,
+      timeout: 10_000,
+      maxBuffer: 64 * 1024,
+      encoding: "utf8",
+    },
+  );
+  const entries = JSON.parse(stdout);
+  expect(entries).toHaveLength(paths.length);
+  for (const [index, entry] of entries.entries()) {
+    expect(entry.path).toBe(paths[index]);
+    if (index < 2) {
+      expect(entry.owner).toBe(entry.currentUser);
+      expect(entry.protected).toBe(true);
+    }
+    expect(entry.rules).toEqual([{
+      sid: entry.currentUser,
+      type: "Allow",
+      rights: "FullControl",
+      inherited: index >= 2,
+    }]);
+  }
+}
 
 const windowDescriptor: WindowDescriptor = {
   handle: "0x102A",
@@ -194,14 +257,23 @@ describe("Terax visual QA", () => {
       guard: async () => undefined,
       now: new Date("2026-07-11T12:34:56.000Z"),
     };
+    const startedAt = performance.now();
     const first = await runVisualQa(
       { action: "screenshot", surface: "main", name: "same" },
       options,
     );
+    const firstFinishedAt = performance.now();
     const second = await runVisualQa(
       { action: "screenshot", surface: "main", name: "same" },
       options,
     );
+    if (process.platform === "win32") {
+      console.info("Windows evidence setup and capture timings (two ACL processes each):", {
+        firstMs: Math.round(firstFinishedAt - startedAt),
+        secondMs: Math.round(performance.now() - firstFinishedAt),
+      });
+    }
+    await expectPrivateWindowsEvidence(first.mediaPath, first.reportPath);
 
     expect(first.mediaPath).not.toBe(second.mediaPath);
     expect(first.mediaPath.split(sep).join("/")).toMatch(
@@ -212,7 +284,7 @@ describe("Terax visual QA", () => {
     expect((await readdir(dirname(first.reportPath))).some(
       (entry) => entry.includes(".tmp"),
     )).toBe(false);
-  });
+  }, nativeEvidenceTimeout);
 
   it("removes the entire evidence directory on capture failure", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-terax-cleanup-"));
@@ -227,7 +299,7 @@ describe("Terax visual QA", () => {
       ),
     ).rejects.toThrow("capture failed");
     expect(await readdir(join(root, ".terax", "visual-qa"))).toEqual([]);
-  });
+  }, nativeEvidenceTimeout);
 
   it("guards before, throughout, and after video and aborts without partial evidence", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-terax-guard-"));
@@ -281,7 +353,7 @@ describe("Terax visual QA", () => {
     ).rejects.toThrow("private terminal");
     expect(guard).toHaveBeenCalledTimes(2);
     expect(await readdir(join(root, ".terax", "visual-qa"))).toEqual([]);
-  });
+  }, nativeEvidenceTimeout);
 
   it("compares only after canonical baseline validation", async () => {
     // realpath so the expected baseline matches the canonical path the code
@@ -310,8 +382,8 @@ describe("Terax visual QA", () => {
     );
     expect(result).toMatchObject({ baselinePassed: true, score: 0.993 });
     expect(result.baselinePath).toBe(baseline);
-    await expectMissing(join(result.reportPath.replace(/\/result\.json$/, ""), ".baseline-snapshot"));
-  });
+    await expectMissing(join(dirname(result.reportPath), ".baseline-snapshot"));
+  }, nativeEvidenceTimeout);
 
   it("rejects a baseline swapped after validation and before descriptor open", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-terax-baseline-swap-"));
@@ -334,7 +406,7 @@ describe("Terax visual QA", () => {
       },
     )).rejects.toThrow("Baseline changed before");
     expect(backend.capture).not.toHaveBeenCalled();
-  });
+  }, nativeEvidenceTimeout);
 
   it("revalidates evidence ancestors and keeps POSIX artifacts private", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-terax-evidence-swap-"));
@@ -356,9 +428,9 @@ describe("Terax visual QA", () => {
       { projectRoot: safeRoot, pid: 123, backend: backendWithCapture(), guard: async () => undefined },
     );
     if (process.platform !== "win32") {
-      expect((await stat(result.reportPath.replace(/\/result\.json$/, ""))).mode & 0o777).toBe(0o700);
+      expect((await stat(dirname(result.reportPath))).mode & 0o777).toBe(0o700);
       expect((await stat(result.mediaPath)).mode & 0o777).toBe(0o600);
       expect((await stat(result.reportPath)).mode & 0o777).toBe(0o600);
     }
-  });
+  }, nativeEvidenceTimeout);
 });
