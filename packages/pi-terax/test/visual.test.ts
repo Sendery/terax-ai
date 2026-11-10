@@ -35,7 +35,11 @@ $ErrorActionPreference = 'Stop'
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $paths = ConvertFrom-Json $env:TERAX_ACL_TEST_PATHS
 $entries = @($paths | ForEach-Object {
-  $acl = Get-Acl -LiteralPath $_
+  $acl = if ([System.IO.Directory]::Exists($_)) {
+    [System.IO.Directory]::GetAccessControl($_)
+  } else {
+    [System.IO.File]::GetAccessControl($_)
+  }
   $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
     @{
       sid = $_.IdentityReference.Value
