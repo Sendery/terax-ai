@@ -66,6 +66,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     encodeMicros: 0,
     creditWaitMicros: 0,
     credits: 0,
+    scrollbackRows: 0 as number | null,
   };
   for (const s of stats) {
     if (!s) continue;
@@ -75,6 +76,10 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     total.encodeMicros += s.encodeMicros;
     total.creditWaitMicros += s.creditWaitMicros;
     total.credits += s.credits;
+    total.scrollbackRows =
+      total.scrollbackRows === null || s.scrollbackRows === null
+        ? null
+        : total.scrollbackRows + s.scrollbackRows;
   }
   return {
     ...total,

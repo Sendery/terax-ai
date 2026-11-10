@@ -2,7 +2,8 @@ import type { RendererFont } from "@/modules/terminal/gl/gridRenderer";
 import { openPty, type PtySession } from "@/modules/terminal/lib/pty-bridge";
 import { useTheme } from "@/modules/theme";
 import { buildTerminalTheme } from "@/styles/terminalTheme";
-import { cellMatches, type EchoTarget } from "@/terminal-lab/lib/echo";
+import { cellMatches } from "@/terminal-lab/lib/echo";
+import { captureCanvas, type LabTarget } from "@/terminal-lab/lib/autorun";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
@@ -10,7 +11,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   font: RendererFont;
-  onTarget: (target: EchoTarget | null) => void;
+  autorun: boolean;
+  onTarget: (target: LabTarget | null) => void;
 };
 
 type Watch = {
@@ -23,17 +25,17 @@ type Watch = {
 };
 
 /** The existing path, xterm.js on `pty_open`, for side by side comparison. */
-export function XtermPane({ font, onTarget }: Props) {
+export function XtermPane({ font, autorun, onTarget }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const initial = useRef({ font, onTarget });
+  const initial = useRef({ font, autorun, onTarget });
   const [status, setStatus] = useState("starting");
   const { activeTheme, resolvedMode } = useTheme();
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const { font, onTarget } = initial.current;
+    const { font, autorun, onTarget } = initial.current;
     const term = new Terminal({
       fontFamily: font.family,
       fontWeight: font.weight as Terminal["options"]["fontWeight"],
@@ -47,8 +49,10 @@ export function XtermPane({ font, onTarget }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    let webgl = false;
     try {
       term.loadAddon(new WebglAddon());
+      webgl = true;
     } catch (error) {
       console.error("terminal lab xterm webgl:", error);
     }
@@ -56,6 +60,7 @@ export function XtermPane({ font, onTarget }: Props) {
     termRef.current = term;
 
     const watches = new Set<Watch>();
+    let capture: (() => void) | null = null;
     const finish = (watch: Watch, at: number | null) => {
       if (!watches.delete(watch)) return;
       clearTimeout(watch.timer);
@@ -83,6 +88,9 @@ export function XtermPane({ font, onTarget }: Props) {
     const rendered = term.onRender(() => {
       const at = performance.now();
       for (const watch of watches) if (watch.seen) finish(watch, at);
+      const pending = capture;
+      capture = null;
+      pending?.();
     });
 
     let pty: PtySession | null = null;
@@ -113,6 +121,28 @@ export function XtermPane({ font, onTarget }: Props) {
             y: term.buffer.active.cursorY,
           }),
           write: (text) => opened.write(text),
+          capture: () =>
+            new Promise((resolve, reject) => {
+              if (!autorun || !webgl || capture)
+                return reject(new Error("WebGL capture unavailable"));
+              const timer = setTimeout(() => {
+                capture = null;
+                reject(new Error("xterm capture draw timed out"));
+              }, 5000);
+              capture = () => {
+                clearTimeout(timer);
+                try {
+                  const canvas = [
+                    ...host.querySelectorAll(".xterm-screen canvas"),
+                  ].find((c) => (c as HTMLCanvasElement).getContext("webgl2"));
+                  if (!canvas) throw new Error("xterm WebGL canvas missing");
+                  resolve(captureCanvas(canvas as HTMLCanvasElement));
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              term.refresh(0, term.rows - 1);
+            }),
           waitForCell: (x, y, codepoint, timeoutMs) =>
             new Promise((resolve) => {
               const watch: Watch = {

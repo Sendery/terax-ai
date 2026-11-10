@@ -4,13 +4,22 @@ import {
   type BenchKind,
   engineAvailable,
   labAutorunPath,
+  labConfig,
+  labStatus,
+  saveLabCapture,
   submitLabReport,
 } from "@/modules/terminal/gl/engineSession";
 import type { RendererFont } from "@/modules/terminal/gl/gridRenderer";
 import { BenchPanel } from "@/terminal-lab/BenchPanel";
 import { EnginePane } from "@/terminal-lab/EnginePane";
 import { DEFAULT_MEGABYTES } from "@/terminal-lab/lib/bench";
-import type { EchoTarget } from "@/terminal-lab/lib/echo";
+import {
+  type AutorunConfig,
+  gpuMetadata,
+  type LabTarget,
+  scriptedSession,
+} from "@/terminal-lab/lib/autorun";
+import { runIdle } from "@/terminal-lab/lib/idle";
 import {
   echoOf,
   emptyReport,
@@ -29,7 +38,7 @@ const ENABLE_HINT =
   "node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine";
 const READY_TIMEOUT_MS = 20_000;
 const SHELL_SETTLE_MS = 1500;
-const AUTORUN_WATCHDOG_MS = 15 * 60_000;
+const AUTORUN_WATCHDOG_MS = 40 * 60_000;
 
 function waitFor(check: () => boolean, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -57,6 +66,7 @@ const LAB_CSS =
 export function TerminalLabApp() {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [autorun, setAutorun] = useState<string | null>(null);
+  const [config, setConfig] = useState<AutorunConfig | null>(null);
   const [report, setReport] = useState<LabReport | null>(null);
   const [stepLabel, setStepLabel] = useState<string | null>(null);
   const step = useRef("start");
@@ -67,10 +77,11 @@ export function TerminalLabApp() {
     font,
     colors,
   });
-  const engineTarget = useRef<EchoTarget | null>(null);
-  const xtermTarget = useRef<EchoTarget | null>(null);
+  const engineTarget = useRef<LabTarget | null>(null);
+  const xtermTarget = useRef<LabTarget | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const liveReport = useRef<LabReport | null>(null);
+  const isAutorun = useRef(false);
 
   useEffect(() => {
     latest.current = { font, colors };
@@ -81,13 +92,22 @@ export function TerminalLabApp() {
     step.current = label;
     setReport({ ...current });
     setStepLabel(label);
+    if (isAutorun.current)
+      void labStatus({
+        status: "running",
+        step: label,
+        at: new Date().toISOString(),
+      }).catch((error) => console.error("lab status failed", error));
   }, []);
 
   const runEverything = useCallback(
-    async (megabytes: Record<BenchKind, [number, number]>) => {
+    async (
+      megabytes: Record<BenchKind, [number, number]>,
+      initialReport?: LabReport,
+    ) => {
       const stage = stageRef.current;
       if (!stage) return emptyReport(true, latest.current.font);
-      const report = emptyReport(true, latest.current.font);
+      const report = initialReport ?? emptyReport(true, latest.current.font);
       setRunning(true);
       try {
         return await runAll(
@@ -99,6 +119,7 @@ export function TerminalLabApp() {
             engine: engineTarget.current,
             xterm: xtermTarget.current,
             onProgress: progress,
+            autorun: initialReport !== undefined,
           },
           report,
         );
@@ -146,9 +167,12 @@ export function TerminalLabApp() {
         READY_TIMEOUT_MS,
       );
       if (cancelled) return;
-      setAvailable(ok);
-      if (!path) return;
+      if (!path) {
+        setAvailable(ok);
+        return;
+      }
       setAutorun(path);
+      isAutorun.current = true;
       const partial = emptyReport(ok, latest.current.font);
       const watchdog = setTimeout(() => {
         const current = liveReport.current ?? partial;
@@ -157,18 +181,53 @@ export function TerminalLabApp() {
       }, AUTORUN_WATCHDOG_MS);
       let result = partial;
       try {
+        const config = await labConfig();
+        await labStatus({
+          status: "starting",
+          mode: config.mode,
+          at: new Date().toISOString(),
+        });
+        setConfig(config);
+        setAvailable(ok);
         if (ok) {
           const ready = await waitFor(
             () =>
-              engineTarget.current !== null &&
-              xtermTarget.current !== null &&
+              (config.mode !== "bench" ||
+                (engineTarget.current !== null &&
+                  xtermTarget.current !== null)) &&
               stageRef.current !== null,
             READY_TIMEOUT_MS,
           );
-          if (!ready) partial.errors.push("panes not ready before the run");
+          if (!ready) throw new Error("panes not ready before the run");
           await sleep(SHELL_SETTLE_MS);
-          result = await runEverything(DEFAULT_MEGABYTES);
-          result.errors.unshift(...partial.errors);
+          if (config.mode !== "bench") {
+            const stage = stageRef.current;
+            if (!stage) throw new Error("idle stage missing");
+            progress(partial, config.mode);
+            partial.idle = await runIdle(
+              stage,
+              latest.current.font,
+              latest.current.colors,
+              config,
+            );
+          } else {
+            for (const [pane, target] of [
+              ["engine", engineTarget.current],
+              ["xterm", xtermTarget.current],
+            ] as const) {
+              progress(partial, `capture ${pane}`);
+              try {
+                if (!target) throw new Error("pane not ready");
+                await saveLabCapture(pane, await scriptedSession(target));
+                partial.captures[pane] = true;
+              } catch (error) {
+                partial.errors.push(`capture ${pane}: ${String(error)}`);
+              }
+            }
+            const canvas = document.querySelector("canvas");
+            if (canvas) partial.runtime.gpu = gpuMetadata(canvas);
+            result = await runEverything(DEFAULT_MEGABYTES, partial);
+          }
         } else {
           partial.errors.push("engine unavailable in this build");
         }
@@ -187,12 +246,12 @@ export function TerminalLabApp() {
     return () => {
       cancelled = true;
     };
-  }, [runEverything]);
+  }, [runEverything, progress]);
 
-  const setEngineTarget = useCallback((target: EchoTarget | null) => {
+  const setEngineTarget = useCallback((target: LabTarget | null) => {
     engineTarget.current = target;
   }, []);
-  const setXtermTarget = useCallback((target: EchoTarget | null) => {
+  const setXtermTarget = useCallback((target: LabTarget | null) => {
     xtermTarget.current = target;
   }, []);
 
@@ -214,17 +273,24 @@ export function TerminalLabApp() {
         </p>
       ) : (
         <main className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3">
-          <div
-            className="flex shrink-0 gap-3"
-            style={{ height: "40%", minHeight: 192 }}
-          >
-            <EnginePane
-              font={font}
-              colors={colors}
-              onTarget={setEngineTarget}
-            />
-            <XtermPane font={font} onTarget={setXtermTarget} />
-          </div>
+          {(!config || config.mode === "bench") && (
+            <div
+              className="flex shrink-0 gap-3"
+              style={{ height: "40%", minHeight: 192 }}
+            >
+              <EnginePane
+                font={font}
+                colors={colors}
+                autorun={autorun !== null}
+                onTarget={setEngineTarget}
+              />
+              <XtermPane
+                font={font}
+                autorun={autorun !== null}
+                onTarget={setXtermTarget}
+              />
+            </div>
+          )}
           <BenchPanel
             report={report}
             step={stepLabel}

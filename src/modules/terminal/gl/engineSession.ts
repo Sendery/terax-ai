@@ -14,6 +14,7 @@ import {
 } from "@/modules/terminal/gl/keyInput";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
 
 export type BenchKind = "ascii" | "sgr" | "tui";
 
@@ -31,6 +32,7 @@ export type BenchStats = {
   encodeMicros: number;
   creditWaitMicros: number;
   credits: number;
+  scrollbackRows: number | null;
 };
 
 export type FrameEvent = {
@@ -68,6 +70,34 @@ export function labAutorunPath(): Promise<string | null> {
 /** Writes the run's report and exits the app (autorun only). */
 export function submitLabReport(json: string): Promise<void> {
   return invoke("gterm_lab_report", { json });
+}
+
+export function labConfig(): Promise<AutorunConfig> {
+  return invoke("gterm_lab_config");
+}
+
+export function labStatus(status: unknown): Promise<void> {
+  return invoke("gterm_lab_status", { json: JSON.stringify(status, null, 2) });
+}
+
+export function labFixture(
+  kind: BenchKind,
+  megabytes: number,
+  rows: number,
+): Promise<{ path: string; bytes: number }> {
+  return invoke("gterm_lab_fixture", { kind, megabytes, rows });
+}
+
+export function saveLabCapture(
+  pane: "engine" | "xterm",
+  uri: string,
+): Promise<void> {
+  const bytes = Uint8Array.from(atob(uri.slice(uri.indexOf(",") + 1)), (c) =>
+    c.charCodeAt(0),
+  );
+  return invoke("gterm_lab_capture", bytes, {
+    headers: { "x-lab-pane": pane },
+  });
 }
 
 const textEncoder = new TextEncoder();

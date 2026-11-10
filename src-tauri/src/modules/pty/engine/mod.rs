@@ -24,6 +24,9 @@ pub const QUEUE_DEPTH: usize = 8;
 pub const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(4);
 pub const MAX_COLS: u16 = 1000;
 pub const MAX_ROWS: u16 = 500;
+// Pinned Ghostty interprets max_scrollback as bytes, despite its C/Rust docs.
+// Pages grow lazily; this bounds history, not a dimension-independent row count.
+pub const SCROLLBACK_BYTES: usize = 16 * 1024 * 1024;
 
 pub fn validate_size(cols: u16, rows: u16) -> Result<(), String> {
     if cols == 0 || rows == 0 || cols > MAX_COLS || rows > MAX_ROWS {
@@ -167,9 +170,7 @@ mod runtime {
 
     use super::super::colors::Colors;
     use super::snapshot::Snapshotter;
-    use super::{validate_size, Decision, Pump, QUEUE_DEPTH};
-
-    const SCROLLBACK_LINES: usize = 10_000;
+    use super::{validate_size, Decision, Pump, QUEUE_DEPTH, SCROLLBACK_BYTES};
 
     // The same answers the xterm.js path gives today (`da_filter.rs`), so a
     // program sees one terminal identity whichever engine runs the pane.
@@ -213,6 +214,7 @@ mod runtime {
         encode_micros: AtomicU64,
         credit_wait_micros: AtomicU64,
         credits: AtomicU64,
+        scrollback_rows: AtomicU64,
     }
 
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -224,6 +226,7 @@ mod runtime {
         pub encode_micros: u64,
         pub credit_wait_micros: u64,
         pub credits: u64,
+        pub scrollback_rows: Option<u64>,
     }
 
     /// The webview side of a session: credits, size, scroll. Never blocks.
@@ -257,6 +260,7 @@ mod runtime {
 
         pub fn stats(&self) -> EngineStats {
             let s = &self.stats;
+            let scrollback_rows = s.scrollback_rows.load(Ordering::Acquire);
             EngineStats {
                 bytes_fed: s.bytes_fed.load(Ordering::Relaxed),
                 frames: s.frames.load(Ordering::Relaxed),
@@ -264,6 +268,7 @@ mod runtime {
                 encode_micros: s.encode_micros.load(Ordering::Relaxed),
                 credit_wait_micros: s.credit_wait_micros.load(Ordering::Relaxed),
                 credits: s.credits.load(Ordering::Relaxed),
+                scrollback_rows: (scrollback_rows != u64::MAX).then_some(scrollback_rows),
             }
         }
 
@@ -381,11 +386,24 @@ mod runtime {
     impl Session<'_> {
         fn feed(&mut self, bytes: &[u8]) {
             self.term.vt_write(bytes);
+            self.update_scrollback_rows();
             self.flush_replies();
             self.stats
                 .bytes_fed
                 .fetch_add(bytes.len() as u64, Ordering::Relaxed);
             self.pump.output();
+        }
+
+        fn update_scrollback_rows(&self) {
+            let rows = self
+                .term
+                .scrollback_rows()
+                .map(|rows| rows as u64)
+                .unwrap_or_else(|e| {
+                    log::warn!("terminal engine scrollback query failed: {e}");
+                    u64::MAX
+                });
+            self.stats.scrollback_rows.store(rows, Ordering::Release);
         }
 
         fn flush_replies(&mut self) {
@@ -404,6 +422,7 @@ mod runtime {
                     match self.term.resize(cols, rows, 0, 0) {
                         Ok(()) => {
                             self.size = (cols, rows);
+                            self.update_scrollback_rows();
                             self.pump.request_full();
                             self.flush_replies();
                         }
@@ -519,7 +538,7 @@ mod runtime {
             let mut term = Terminal::new(TerminalOptions {
                 cols,
                 rows,
-                max_scrollback: SCROLLBACK_LINES,
+                max_scrollback: SCROLLBACK_BYTES,
             })?;
             if let Some(colors) = &colors {
                 colors.apply(&mut term)?;
@@ -535,8 +554,6 @@ mod runtime {
                 return;
             }
         };
-        let _ = ready.send(Ok(()));
-
         let mut session = Session {
             term,
             snapshot,
@@ -549,6 +566,8 @@ mod runtime {
             control,
             stats,
         };
+        session.update_scrollback_rows();
+        let _ = ready.send(Ok(()));
         loop {
             let message = match session.tick() {
                 None => match rx.recv() {
@@ -812,6 +831,7 @@ mod engine_tests {
         assert!(f.full());
         assert_eq!((f.cols, f.rows), (20, 5));
         assert_eq!(f.row_records.len(), 5);
+        assert_eq!(h.handle.stats().scrollback_rows, Some(0));
         h.assert_no_frame();
     }
 
@@ -982,6 +1002,77 @@ mod engine_tests {
         h.handle.credit(3);
         let f = h.frame();
         assert_eq!(f.flags & FLAG_VIEWPORT_SCROLLED, 0);
+    }
+
+    fn feed_history(h: &Harness, lines: usize) {
+        let mut bytes = Vec::with_capacity(16 * 1024);
+        for i in 0..lines {
+            bytes.extend_from_slice(format!("idle scrollback line {i:05}\r\n").as_bytes());
+            if bytes.len() >= 16 * 1024 - 64 {
+                h.feed(&bytes);
+                bytes.clear();
+            }
+        }
+        if !bytes.is_empty() {
+            h.feed(&bytes);
+        }
+    }
+
+    #[test]
+    fn idle_lab_retains_exactly_ten_thousand_measured_history_rows() {
+        let h = harness(100, 30);
+        h.frame();
+        feed_history(&h, 70);
+        h.feed(b"\x1b[3J\x1b[2J\x1b[H");
+        feed_history(&h, 10_000 + 30 - 1);
+        h.feed(b"\x1b[2J\x1b[HTERAX_IDLE_READY");
+        let handle = h.handle.clone();
+        let frames = h.shutdown();
+        let frame = decode(&frames.recv_timeout(WAIT).expect("idle final frame"));
+        assert_eq!(frame.row(0).unwrap().text(), "TERAX_IDLE_READY");
+        assert_eq!(handle.stats().scrollback_rows, Some(10_000));
+        assert_eq!(SCROLLBACK_BYTES, 16 * 1024 * 1024);
+        assert_eq!(
+            serde_json::to_value(handle.stats()).unwrap()["scrollbackRows"],
+            10_000
+        );
+    }
+
+    #[test]
+    fn scrollback_budget_prunes_old_rows_instead_of_growing_without_bound() {
+        let h = harness(100, 30);
+        h.frame();
+        feed_history(&h, 50_000 + 30 - 1);
+        let handle = h.handle.clone();
+        h.shutdown();
+        let retained = handle.stats().scrollback_rows.expect("history rows");
+        assert!(
+            retained >= 10_000,
+            "budget is large enough for the lab: {retained}"
+        );
+        assert!(retained < 30_000, "byte budget prunes old rows: {retained}");
+    }
+
+    #[test]
+    fn scrollback_rows_are_a_gauge_that_changes_after_resize_and_clear() {
+        let h = harness(100, 30);
+        h.frame();
+        feed_history(&h, 100);
+        h.feed(b"\x1b[6n");
+        h.replies_until(b"\x1b[30;1R");
+        assert_eq!(h.handle.stats().scrollback_rows, Some(71));
+
+        h.handle.resize(100, 20);
+        h.handle.request_full();
+        h.handle.credit(1);
+        let frame = h.frame();
+        assert_eq!(frame.rows, 20);
+        assert_eq!(h.handle.stats().scrollback_rows, Some(81));
+
+        h.feed(b"\x1b[3J");
+        let handle = h.handle.clone();
+        h.shutdown();
+        assert_eq!(handle.stats().scrollback_rows, Some(0));
     }
 
     #[test]

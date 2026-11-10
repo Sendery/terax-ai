@@ -1,0 +1,94 @@
+name: Terminal Lab sandbox
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/terminal-ghostty-vt-webgl2]
+    paths: [.github/workflows/terminal-lab.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: terminal-lab-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  measure:
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    env:
+      CARGO_PROFILE_DEV_OPT_LEVEL: "3"
+      CARGO_PROFILE_DEV_DEBUG: "false"
+      CARGO_PROFILE_DEV_DEBUG_ASSERTIONS: "false"
+      CARGO_PROFILE_DEV_INCREMENTAL: "false"
+      TERAX_TERMINAL_LAB_CORE_SOURCE: "https://github.com/Sendery/terax-ai/actions/runs/42835004064 (libghostty-x86_64-macos; native smoke passed; release publication pending)"
+      TERAX_TERMINAL_LAB_CORE_SHA256: "9a045b43db4a32733316b075a5b38a681fc34591656c7a4eeb923b1d9e6fed01"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check required system tooling
+        run: command -v pkg-config && command -v python3 && xcrun --sdk macosx --show-sdk-version
+      - run: pnpm install --frozen-lockfile
+      - run: node --test scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
+      - name: Fetch native Intel core from the verified producer run
+        uses: actions/download-artifact@v4
+        with:
+          name: libghostty-x86_64-macos
+          run-id: 42835004064
+          github-token: ${{ github.token }}
+          path: lab-core-artifact
+      - name: Verify immutable bytes and configure job-local prebuilt cache
+        run: |
+          node --input-type=module <<'JS'
+          import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+          import { archiveName, hostTriple, verifyChecksum } from "./scripts/libghostty/core.mjs";
+          const source = JSON.parse(readFileSync("scripts/libghostty/source.json", "utf8"));
+          const pins = JSON.parse(readFileSync("scripts/libghostty/pin.json", "utf8"));
+          const triple = hostTriple();
+          if (triple !== "x86_64-macos") throw new Error("This fixture is native Intel macOS only");
+          const name = archiveName(source, triple);
+          const archive = `lab-core-artifact/${name}`;
+          verifyChecksum(readFileSync(archive), process.env.TERAX_TERMINAL_LAB_CORE_SHA256);
+          pins.targets[triple].sha256 = process.env.TERAX_TERMINAL_LAB_CORE_SHA256;
+          pins.targets[triple].publication = "pending; CI artifact bootstrap only";
+          pins.targets[triple].validation = process.env.TERAX_TERMINAL_LAB_CORE_SOURCE;
+          writeFileSync("scripts/libghostty/pin.json", JSON.stringify(pins, null, 2));
+          mkdirSync("src-tauri/target/toolchains", { recursive: true });
+          copyFileSync(archive, `src-tauri/target/toolchains/${name}`);
+          JS
+      - name: Configure isolated lab-only sandbox
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { sandboxConfigOverride } from "./scripts/sandbox.mjs";
+          const config = sandboxConfigOverride(JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")));
+          config.app = { windows: [] };
+          writeFileSync("src-tauri/tauri.lab-ci.json", JSON.stringify(config));
+          JS
+      - name: Build optimized Rust and production frontend without Zig
+        run: node scripts/with-zig.mjs -- pnpm exec tauri build --debug --no-bundle --features ghostty-engine --config "$PWD/src-tauri/tauri.lab-ci.json"
+      - name: Run native WKWebView lab twice and measure external RSS
+        run: node scripts/terminal-lab.mjs src-tauri/target/debug/terax "$RUNNER_TEMP/terminal-lab-results"
+      - name: Upload measurements, captures and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-lab-macos-intel-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/terminal-lab-results/hardware.json
+            ${{ runner.temp }}/terminal-lab-results/summary.json
+            ${{ runner.temp }}/terminal-lab-results/*/report*.json
+            ${{ runner.temp }}/terminal-lab-results/*/runner.json
+            ${{ runner.temp }}/terminal-lab-results/*/baseline-processes.json
+            ${{ runner.temp }}/terminal-lab-results/*/report.engine.png
+            ${{ runner.temp }}/terminal-lab-results/*/report.xterm.png
+            ${{ runner.temp }}/terminal-lab-results/*/app.log
+          retention-days: 14

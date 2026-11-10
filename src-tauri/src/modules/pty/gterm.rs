@@ -14,6 +14,19 @@ pub const ENGINE_UNAVAILABLE: &str = "engine-unavailable";
 pub const NOT_AUTORUN: &str = "not-autorun";
 pub const AUTORUN_ENV: &str = "TERAX_TERMINAL_LAB_AUTORUN";
 
+#[cfg(any(test, feature = "ghostty-engine"))]
+#[path = "lab.rs"]
+mod automation;
+
+#[cfg(feature = "ghostty-engine")]
+fn autorun_for(window: &tauri::WebviewWindow) -> Result<std::path::PathBuf, String> {
+    automation::authorize(
+        window.label(),
+        crate::modules::profile::is_sandbox(),
+        lab::autorun_path(std::env::var_os(AUTORUN_ENV)),
+    )
+}
+
 #[cfg(feature = "ghostty-engine")]
 type Stats = super::engine::EngineStats;
 #[cfg(not(feature = "ghostty-engine"))]
@@ -152,14 +165,17 @@ pub fn gterm_bench_stats(state: State<'_, PtyState>, id: u32) -> Result<Stats, S
 }
 
 #[tauri::command]
-pub fn gterm_lab_autorun() -> Result<Option<String>, String> {
+pub fn gterm_lab_autorun(window: tauri::WebviewWindow) -> Result<Option<String>, String> {
     #[cfg(feature = "ghostty-engine")]
     {
-        Ok(lab::autorun_path(std::env::var_os(AUTORUN_ENV))
-            .map(|p| p.to_string_lossy().into_owned()))
+        if std::env::var_os(AUTORUN_ENV).is_none() {
+            return Ok(None);
+        }
+        autorun_for(&window).map(|p| Some(p.to_string_lossy().into_owned()))
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
+        let _ = window;
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -167,19 +183,105 @@ pub fn gterm_lab_autorun() -> Result<Option<String>, String> {
 /// Writes the lab's result to the autorun path and exits. The path only ever
 /// comes from the environment of the process, never from the webview.
 #[tauri::command]
-pub fn gterm_lab_report(app: AppHandle, json: String) -> Result<(), String> {
+pub fn gterm_lab_report(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, PtyState>,
+    json: String,
+) -> Result<(), String> {
     #[cfg(feature = "ghostty-engine")]
     {
-        let path = lab::autorun_path(std::env::var_os(AUTORUN_ENV))
-            .ok_or_else(|| NOT_AUTORUN.to_string())?;
+        let path = autorun_for(&window)?;
         lab::write_report(&path, &json)?;
+        super::pty_close_all(state)?;
         log::info!("terminal lab report written to {}; exiting", path.display());
         app.exit(0);
         Ok(())
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
-        let _ = (app, json);
+        let _ = (app, window, state, json);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_lab_config(window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        autorun_for(&window)?;
+        let config = automation::config(
+            &std::env::var("TERAX_TERMINAL_LAB_MODE").unwrap_or_else(|_| "bench".into()),
+            &std::env::var("TERAX_TERMINAL_LAB_IDLE_COUNT").unwrap_or_else(|_| "12".into()),
+            &std::env::var("TERAX_TERMINAL_LAB_HOLD_SECONDS").unwrap_or_else(|_| "60".into()),
+        )?;
+        serde_json::to_value(config).map_err(|e| e.to_string())
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = window;
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_lab_status(window: tauri::WebviewWindow, json: String) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        lab::write_report(&autorun_for(&window)?.with_extension("status.json"), &json)
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (window, json);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_lab_capture(
+    window: tauri::WebviewWindow,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let report = autorun_for(&window)?;
+        let pane = request
+            .headers()
+            .get("x-lab-pane")
+            .and_then(|h| h.to_str().ok())
+            .ok_or("missing pane")?;
+        let path = automation::capture_path(&report, pane)?;
+        let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+            return Err("capture requires raw PNG bytes".into());
+        };
+        automation::write_capture(&path, bytes)
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (window, request);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub async fn gterm_lab_fixture(
+    window: tauri::WebviewWindow,
+    kind: String,
+    megabytes: u32,
+    rows: u16,
+) -> Result<serde_json::Value, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let report = autorun_for(&window)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            automation::write_fixture(&report, &kind, megabytes, rows)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (window, kind, megabytes, rows);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -193,7 +295,7 @@ pub fn lab_autorun_requested() -> bool {
         if path.is_none() && value.is_some() {
             log::warn!("{AUTORUN_ENV} must be an absolute file path; ignoring it");
         }
-        path.is_some()
+        path.is_some() && crate::modules::profile::is_sandbox()
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
@@ -404,6 +506,8 @@ mod lab {
         if json.len() > MAX_REPORT_BYTES {
             return Err(format!("report exceeds {MAX_REPORT_BYTES} bytes"));
         }
+        serde_json::from_str::<serde_json::Value>(json)
+            .map_err(|e| format!("invalid report JSON: {e}"))?;
         let dir = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -454,6 +558,14 @@ mod lab {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("missing").join("result.json");
             assert!(write_report(&path, "{}").is_err());
+        }
+
+        #[test]
+        fn malformed_json_is_refused_without_writing() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("result.json");
+            assert!(write_report(&path, "not JSON").is_err());
+            assert!(!path.exists());
         }
     }
 }

@@ -7,7 +7,8 @@ import {
   type RendererFont,
 } from "@/modules/terminal/gl/gridRenderer";
 import { gridFor } from "@/modules/terminal/gl/keyInput";
-import { type EchoTarget, FrameWatchers } from "@/terminal-lab/lib/echo";
+import { FrameWatchers } from "@/terminal-lab/lib/echo";
+import { captureCanvas, type LabTarget } from "@/terminal-lab/lib/autorun";
 import type { LabColors } from "@/terminal-lab/lib/useLabAppearance";
 import { useEffect, useRef, useState } from "react";
 
@@ -16,14 +17,15 @@ const PADDING = 6;
 type Props = {
   font: RendererFont;
   colors: LabColors;
-  onTarget: (target: EchoTarget | null) => void;
+  autorun: boolean;
+  onTarget: (target: LabTarget | null) => void;
 };
 
 /** A real shell on the Rust engine, drawn by the WebGL2 renderer. */
-export function EnginePane({ font, colors, onTarget }: Props) {
+export function EnginePane({ font, colors, autorun, onTarget }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<GridRenderer | null>(null);
-  const initial = useRef({ font, colors, onTarget });
+  const initial = useRef({ font, colors, autorun, onTarget });
   const latestColors = useRef(colors);
   latestColors.current = colors;
   const sessionRef = useRef<EngineSession | null>(null);
@@ -32,7 +34,7 @@ export function EnginePane({ font, colors, onTarget }: Props) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const { font, colors, onTarget } = initial.current;
+    const { font, colors, autorun, onTarget } = initial.current;
     const canvas = document.createElement("canvas");
     canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
     host.appendChild(canvas);
@@ -55,6 +57,7 @@ export function EnginePane({ font, colors, onTarget }: Props) {
     let input: { dispose: () => void; focus: () => void } | null = null;
     let disposed = false;
     let layoutFrame = 0;
+    let capture: (() => void) | null = null;
 
     const box = () => {
       const rect = host.getBoundingClientRect();
@@ -94,7 +97,12 @@ export function EnginePane({ font, colors, onTarget }: Props) {
       colors: colors.engine,
       observer: {
         onFrame: watchers.observer.onFrame,
-        onDrawn: watchers.observer.onDrawn,
+        onDrawn: (at) => {
+          watchers.observer.onDrawn?.(at);
+          const pending = capture;
+          capture = null;
+          pending?.();
+        },
         onExit: (code) => setStatus(`exited with ${code}`),
         onError: (error) => console.error("terminal lab engine:", error),
       },
@@ -118,6 +126,24 @@ export function EnginePane({ font, colors, onTarget }: Props) {
           write: (text) => opened.write(text),
           waitForCell: (x, y, cp, timeout) =>
             watchers.waitForCell(x, y, cp, timeout),
+          capture: () =>
+            new Promise((resolve, reject) => {
+              if (!autorun || capture)
+                return reject(new Error("capture unavailable"));
+              const timer = setTimeout(() => {
+                capture = null;
+                reject(new Error("capture draw timed out"));
+              }, 5000);
+              capture = () => {
+                clearTimeout(timer);
+                try {
+                  resolve(captureCanvas(canvas));
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              renderer.markUndrawn(opened.pane);
+            }),
         });
       },
       (error) => {
