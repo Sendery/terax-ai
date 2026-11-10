@@ -13,10 +13,12 @@ Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-
 
 ## Build
 
-- Cargo feature `ghostty-engine` in `src-tauri/Cargo.toml`, off by default. It enables the optional dependency `libghostty-vt = { version = "=0.2.2", default-features = false }`.
-- The crate builds `libghostty-vt.a` from a pinned Ghostty commit with Zig 0.15.2. `scripts/with-zig.mjs -- <command...>` provisions that Zig under `src-tauri/target/toolchains/` (ignored by git, survives across builds), applies the macOS SDK workaround when the host needs it (see `spikes/terminal-ghostty-vt/README.md`), sets `LIBGHOSTTY_VT_SYS_OPTIMIZE=ReleaseFast` unless already set, and runs the command with that Zig first on `PATH`. A debug build of the app must still link an optimized terminal core.
-- Sandbox with the engine: `node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine`.
-- Commands are always registered (Tauri's handler macro cannot be feature gated per entry). Without the feature, `gterm_available` returns `false` and every other `gterm_*` command returns the error string `engine-unavailable`.
+- Cargo feature `ghostty-engine` is off by default. It enables `libghostty-vt = "=0.2.2"` without its default features and the optional `libghostty-vt-sys = "=0.2.2"` dependency with `pkg-config`. The safe crate does not forward that feature.
+- `node scripts/with-zig.mjs -- <command...>` defaults to a checksum-pinned static archive. Pins and availability are in `scripts/libghostty/pin.json`. An unavailable target, download failure, checksum mismatch or missing pkg-config is an error, never permission to build from source. Native GNU Linux x86_64, MSVC Windows x86_64 and both macOS architectures are the planned targets; cross-target consumption is rejected.
+- The wrapper verifies the archive, extracts the static library and headers under `src-tauri/target/toolchains/`, relocates `libghostty-vt-static.pc`, and preflights pkg-config. A deny-only Zig executable blocks the crate's implicit source fallback. It never provisions Zig in prebuilt mode. Static Windows linkage uses `ghostty-vt-static.lib`, never the DLL import library `ghostty-vt.lib`.
+- Explicit source build: `node scripts/with-zig.mjs --source -- <command...>`. This provisions checksum-verified Zig 0.15.2 and builds pinned Ghostty `a887df42c56f6de86c0fe6da9c4eeca37931e083`, with `ReleaseFast` unless overridden. The initial source build needs network access. Source mode uses the host's real SDK; no SDK substitute or xcrun shim is provided. Use a compatible SDK or prebuilt archive if native compilation fails. Do not run source mode on the protected original development Mac.
+- Sandbox with the engine: `node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine`. Archives that still have a null checksum are unavailable, not verified releases.
+- Commands are always registered. Without the feature, `gterm_available` returns `false` and every other `gterm_*` command returns `engine-unavailable`.
 
 ## Rust layout
 
@@ -36,7 +38,7 @@ src-tauri/src/modules/pty/
 ### Threads per engine session
 
 - **reader** (existing): reads the PTY, runs `AgentDetector` on the raw bytes exactly as today, then sends the chunk to the engine through a bounded `sync_channel`. It does not run `DaFilter`: device attribute and status queries are answered by the terminal through `on_pty_write`, which writes to the PTY writer.
-- **engine** (new, `terax-pty-engine`): owns the terminal. Blocks on its queue, which carries only what must stay ordered: `Bytes(Vec<u8>)` and `Shutdown`, both from the producer side. Commands from the webview (credit, resize, scroll, request full) never enter that queue: they are merged into a mutex-guarded control record and followed by a non-blocking wake, because they arrive on Tauri's command threads and a blocking send behind a flood would freeze the UI. The engine reads the control record after every message.
+- **engine** (new, `terax-pty-engine`): owns the terminal. Blocks on its queue, which carries only what must stay ordered: `Bytes(Vec<u8>)` and `Shutdown`, both from the producer side. Commands from the webview (credit, resize, colors, scroll, request full) never enter that queue: they are merged into a mutex-guarded control record and followed by a non-blocking wake, because they arrive on Tauri's command threads and a blocking send behind a flood would freeze the UI. The engine reads the control record after every message.
 - **waiter** (existing): unchanged, except that it signals `Shutdown` after the reader reaches EOF so the last frame is sent before `on_exit`.
 
 There is no flusher thread on this path.
@@ -56,18 +58,27 @@ Engine sessions are ordinary `Session`s in `PtyState`, so `pty_write`, `pty_clos
 | Command | Arguments | Returns |
 |---|---|---|
 | `gterm_available` | none | `bool` |
-| `gterm_open` | `cols`, `rows`, `cwd?`, `workspace?`, `onFrame: Channel<ArrayBuffer>`, `onExit: Channel<number>` | session id (`u32`), usable with every `pty_*` command |
+| `gterm_open` | `cols`, `rows`, `cwd?`, `workspace?`, `colors?`, `onFrame: Channel<ArrayBuffer>`, `onExit: Channel<number>` | session id (`u32`), usable with every `pty_*` command |
 | `gterm_credit` | `id`, `seq` | nothing. Grants one credit; `seq` is the frame being acknowledged |
+| `gterm_set_colors` | `id`, `colors` | nothing. Applies validated theme colors on the engine thread and requests a full frame |
 | `gterm_scroll` | `id`, `delta` (rows, negative is up, into history) | nothing |
 | `gterm_request_full` | `id` | nothing. The next frame is a full frame |
-| `gterm_bench_open` | `kind` (`ascii`, `sgr`, `tui`), `megabytes`, `cols`, `rows`, `onFrame`, `onExit` | session id. No PTY: the engine is fed a generated payload as fast as it accepts it, then exits with code 0. Credits and frames behave exactly as in a real session |
-| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, creditWaitMicros }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
+| `gterm_bench_open` | `kind` (`ascii`, `sgr`, `tui`), `megabytes`, `cols`, `rows`, `colors?`, `onFrame`, `onExit` | session id. No PTY: the engine is fed a generated payload as fast as it accepts it, then exits with code 0. Credits and frames behave exactly as in a real session |
+| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, creditWaitMicros, credits }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
 | `open_terminal_lab_window` | none | nothing. Singleton window, label `terminal-lab`, page `terminal-lab.html` |
 
 | `gterm_lab_autorun` | none | `string \| null`: the value of the `TERAX_TERMINAL_LAB_AUTORUN` environment variable (a result file path). When it is set, the app opens the Terminal Lab window at startup |
 | `gterm_lab_report` | `json` (string) | nothing. Writes the string to the autorun path and exits the app. Fails with `not-autorun` when the variable is not set, so the command cannot be used to write arbitrary files |
 
 `gterm_open` goes through the same workspace authorization as `pty_open` (`user_spawn_cwd_or_home`). Unknown ids return `no session`, like `pty_*`.
+
+### Theme colors and statistics
+
+`colors` is `{ foreground, background, cursor?, palette }`. Foreground, background, the optional cursor and every palette entry must be ASCII `#rrggbb` strings; the palette must contain exactly 16 entries. Rust rejects malformed colors before starting a session or queuing an update. The engine applies its initial colors before its first frame. Live changes are coalesced in the control record and produce a full frame after the outstanding credit returns. Palette entries 16 through 255 retain the terminal core's existing defaults. Omitting colors preserves the core defaults; omitting cursor resets the default cursor color.
+
+The lab resolves the same theme tokens as its xterm.js pane, including CSS color formats, into explicit RGB values before crossing IPC. A theme change while an open is pending is replayed after the session id arrives. Normal engine sessions similarly replay a changed size after opening; benchmark sessions do not invoke the PTY resize command.
+
+All benchmark counters are cumulative. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
 
 ## Frame format v1
 

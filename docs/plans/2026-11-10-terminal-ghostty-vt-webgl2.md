@@ -58,6 +58,32 @@ The WebGL2 renderer spends 0.6 ms of main-thread time per display frame to updat
 
 **Status:** the integration and the Phase 1 measurements were handed off before the first sandbox run. `2026-11-10-terminal-ghostty-vt-webgl2-handoff.md` describes why, the state of the branch and the remaining tasks.
 
+## Phase 1 results (sandbox)
+
+Development and static-core verification ran on Linux x86_64, Debian 13, Rust 1.99.1, Node 24.22.1 and pnpm 11.25.0. The frontend production bundle builds. Rust clippy and tests pass with and without the engine feature; the feature uses a checksum-verified static core built with Zig 0.15.2, ReleaseFast and baseline CPU. The Rust application tests themselves use the normal unoptimized development profile, so their durations are not terminal-performance measurements.
+
+The graphical run is blocked: Xvfb cannot create its local display sockets in this execution environment, including with the supported execution approval. No graphical sandbox, shell-pane capture, IPC benchmark, echo measurement or resident-memory measurement has been reported as completed. No security setting was changed to get around this restriction. No build or link test ran on the original Mac.
+
+| Required measurement | Linux WebKitGTK | macOS WKWebView |
+|---|---|---|
+| Channel FPS and bytes/s, 1 and 12 panes, ascii/sgr/tui | Not measured | Pending |
+| rAF intervals p50/p95/max | Not measured | Pending |
+| Credit round trip p50/p95 | Not measured | Pending |
+| Engine and xterm key echo p50/p95 | Not measured | Pending |
+| 12 idle terminal RSS, named processes | Not measured | Pending |
+| xterm flood comparison and repeated-run spread | Not measured | Pending |
+
+**Phase 1 exit criterion: not verified.** There is no evidence yet to answer yes to 60 fps with 12 continuously repainting panes over the real Channel. Successful native parsing/linking and unit tests do not establish this. The macOS measurement gate remains open; no later phase is approved by these results.
+
+For meaningful follow-up measurements, use the production frontend and optimized Rust without changing default development settings:
+
+```sh
+CARGO_PROFILE_DEV_OPT_LEVEL=3 CARGO_PROFILE_DEV_DEBUG=false CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=false node scripts/with-zig.mjs -- pnpm build:sandbox --debug --no-bundle --features ghostty-engine
+TERAX_TERMINAL_LAB_AUTORUN=/absolute/path/report.json <sandbox executable>
+```
+
+The default wrapper must first have published, reviewed checksum pins for the host. Do not choose `--source` on the protected original Mac. Record the actual app/core build metadata with every run. Two runs, captures, xterm flood and idle-memory modes still need to be completed before closing Tasks C/D.
+
 ## Acceptance criteria
 
 - A terminal pane can run on the new engine end to end: shell spawn, input, resize, scrollback, selection and copy, search, links, OSC 7, OSC 133 blocks, OSC 52, agent signals.
@@ -134,3 +160,31 @@ The spike sends 12 bytes per cell for every dirty row. v1 keeps the dirty-row mo
 - **Text quality.** Glyphs are rasterized by the browser into the atlas, so quality matches xterm.js, not Ghostty. Subpixel positioning, fallback fonts and colour emoji need care.
 - **Scope.** Selection, IME, accessibility (screen reader output, which xterm.js provides through a DOM mirror) and search are owned by Terax after this change.
 - **Threading.** One terminal per thread and no cross-thread access. Commands reach the terminal through a queue drained by its thread.
+
+
+## Prebuilt core build and upgrade
+
+The native build pins Ghostty `a887df42c56f6de86c0fe6da9c4eeca37931e083`, crate and sys version 0.2.2, and Zig 0.15.2. `scripts/libghostty/source.json` records the source and build identity. The separate `scripts/libghostty/pin.json` records target availability and archive checksums. A null checksum is an unavailable artifact, not a placeholder that the wrapper accepts.
+
+`.github/workflows/libghostty-vt.yml` builds four native targets with baseline CPU and ReleaseFast, using a native macOS 15 SDK on Apple runners. The producer packages the final combined static archive, headers, relocatable static pkg-config metadata, license and build metadata. It excludes shared libraries and import libraries. Publishing requires all producers to succeed and never overwrites an existing release.
+
+Upgrade procedure:
+
+1. Review and bump both Rust crate pins and the Ghostty commit, Zig version if required, and dedicated release tag in `source.json`. Checksum-only updates to `pin.json` do not retrigger production. Clear old target checksums. Update Cargo.lock.
+2. Dispatch the producer workflow. Inspect build provenance, static linkage and all target smoke tests before publishing or accepting assets.
+3. Review the release SHA256SUMS and pin actual archive hashes in the repository. Never infer hashes from a filename or use a downloaded manifest as the consumer trust root.
+4. Run clean Linux x86_64 and macOS arm64 feature gates through the default wrapper with no Zig installed. Verify there is no Ghostty shared-library dependency. Windows linkage remains a separate target gate.
+
+Default command: `node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine`.
+Explicit source command: add `--source` before `--`. Source builds need network for Ghostty and Zig packages, use the real SDK only, and must not run on the protected original host. No SDK shim or security-agent workaround is included.
+
+Publication, target checksums and clean consumer acceptance are pending until real artifacts and logs are available. CI intentionally fails feature gates when required artifacts are not yet pinned; baseline gates still run independently.
+
+
+### Local prebuilt verification on dot
+
+Native Linux and experimental cross-built macOS arm64 and Intel archives were produced on Linux with official Zig 0.15.2, the pinned source and baseline CPU. Cross builds use upstream's bundled Darwin support, not an SDK shim, and no command ran on a Mac. Both Apple archives contain 11 Mach-O objects of the expected architecture with minimum macOS 13.0.0. Neither has been linked or executed on macOS.
+
+The Linux archive passes a fresh standalone Rust safe/sys 0.2.2 create/feed/render smoke through the default wrapper. The binary depends on libc/libgcc, with no Ghostty shared dependency. A repeated invocation with the stable verified cache completes without recompilation. Invoking `zig version` inside prebuilt mode fails through the deny-only guard with status 97. Node wrapper unit tests pass (6 tests).
+
+Local archive hashes are recorded in `pin.json` with publication pending. These are experimental, not canonical release assets; they lack the complete bundled dependency notices added to the native CI producer. Do not upload them to the immutable canonical release. Native CI must produce and validate release-ready archives, and its real checksums must replace local pins after publication. Windows and full native macOS consumer acceptance remain pending.

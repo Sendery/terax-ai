@@ -55,6 +55,10 @@ A change to a core subsystem (terminal/shell spawn, workspace auth, git, fs, IPC
 - `open_settings_window`: separate webview window for Settings (optional `tab` arg deep-links a section).
 - `pi::*`: authenticated loopback TCP bridge for the first-party Pi Terax extension. Rust binds `127.0.0.1` on an ephemeral port, writes an atomic discovery file under the user cache dir, enforces protocol version 1, a per-launch random token, frame caps, timeouts, and the Terax command allowlist, then relays requests to React through Tauri events and `external_command_respond`. This is not HTTP and not MCP.
 
+### Terminal engine
+
+The experimental `libghostty-vt` engine and shared WebGL2 renderer are behind the `ghostty-engine` feature, off by default and reachable only from Terminal Lab. The production xterm.js terminal path is unchanged. See [the terminal engine contract](docs/architecture/terminal-engine.md) for IPC, frame format, prebuilt-core setup and measurement rules. Validate only through the sandbox identity.
+
 ### PTY shell integration
 
 PTY shells are bootstrapped via injected init scripts in `src-tauri/src/modules/pty/scripts/`:

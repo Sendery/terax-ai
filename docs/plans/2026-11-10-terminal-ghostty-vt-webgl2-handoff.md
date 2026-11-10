@@ -122,3 +122,56 @@ Write the results into the plan as a section "Phase 1 results (sandbox)" after "
 ## Report back
 
 A final section appended to this file, "Handoff result", with: what changed (review fixes separated from bugs found by running), the exact build and launch commands, gate output tails, the measurement tables with the spread and the explicit answer to the exit criterion, what the screenshots show, and what is still unverified.
+
+
+## Handoff result
+
+### Review fixes
+
+- Added validated initial and live theme colors on the Rust engine thread, keeping extended palette entries 16 through 255. The lab supplies the same resolved theme colors as xterm.js, including changes while a session opens.
+- Replayed a pending normal-session resize after the session id arrives. Benchmark sessions do not send PTY resize commands.
+- Added accepted-credit counts and cumulative-wait regression tests. Inspection found that `creditWaitMicros` was already cumulative; no double-counting change was made.
+- Documented optimized sandbox measurement commands without changing the default app profile or adding default warnings.
+- Added the pkg-config prebuilt route, checksum validation, stable verified cache, explicit source opt-in, native four-target producer and cross-platform CI. Missing artifacts fail closed. The SDK shim was removed.
+
+### Integration findings and limits
+
+The full Linux feature build found one Rust closure-inference error in the new RGB adapter; an explicit byte-array type fixes it. Feature clippy and tests pass after the fix. No bug is attributed to a real webview run because no such run completed.
+
+Xvfb cannot establish display sockets in this environment. Task C's scripted shell comparison and captures are therefore not complete. There are no new screenshots to inspect or claim. Task D remains open as recorded in the plan's "Phase 1 results (sandbox)" section. No sandbox or X server is left running.
+
+### Exact validation commands and output tails
+
+Linux development dependencies were installed in a workspace-local sysroot from signed Debian repositories. `with-linux-deps` below sets local pkg-config, library and WebKit paths; it does not change the project or the original Mac. Rust tools are on PATH.
+
+```sh
+pnpm lint
+# Checked 728 files; exit 0. Existing 109 warnings and 2 infos remain.
+pnpm check-types
+# tsc --noEmit; exit 0.
+pnpm test
+# Test Files 223 passed. Tests 2207 passed, 1 skipped.
+pnpm build
+# Production frontend bundle built successfully.
+node --test scripts/libghostty/core.node-test.mjs
+# 6 tests passed.
+with-linux-deps cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+# Finished dev profile; exit 0.
+with-linux-deps cargo test --manifest-path src-tauri/Cargo.toml --locked
+# Unit: 571 passed, 1 ignored. Integration: 25 + 26 + 7 passed.
+with-linux-deps node scripts/with-zig.mjs -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked --features ghostty-engine -- -D warnings
+# Finished dev profile; exit 0.
+with-linux-deps node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
+# Unit: 602 passed, 2 ignored. Integration: 25 + 26 + 7 passed.
+CARGO_TARGET_DIR=src-tauri/target/prebuilt-smoke node scripts/with-zig.mjs -- cargo run --manifest-path scripts/libghostty/smoke/Cargo.toml
+# prebuilt terminal create/feed/render succeeded
+# Repeated invocation reuses the compiled consumer.
+```
+
+The required handoff gates pass on Linux. A separate whole-repository `cargo fmt --check` reports extensive pre-existing formatting differences outside this task; unrelated modules and the production xterm path were not reformatted. New/changed terminal engine modules were formatted and `git diff --check` passes.
+
+### Publication and remaining acceptance
+
+Local experimental archives exist for Linux x86_64 and macOS arm64/Intel; the Apple archives have the expected Mach-O architecture but no native link/runtime validation. Local hashes marked publication pending are not canonical release artifacts. The native producer must build release-ready archives including dependency notices, run its platform smoke checks, publish the immutable release and supply the real checksums for a follow-up pin update. Windows is unbuilt locally.
+
+Work remains on `feat/terminal-ghostty-vt-webgl2`. No merge into `qa` or another branch is authorized or performed. No further build ran on the original Mac and its interrupted build directory was not removed.
