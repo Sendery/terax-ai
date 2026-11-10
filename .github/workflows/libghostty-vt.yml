@@ -1,0 +1,112 @@
+name: Build libghostty-vt
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/libghostty/source.json
+      - scripts/libghostty/build.mjs
+      - .github/workflows/libghostty-vt.yml
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-linux
+          - os: macos-15
+            target: aarch64-macos
+          - os: macos-15-intel
+            target: x86_64-macos
+          - os: windows-2022
+            target: x86_64-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Select compatible native Apple SDK
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcrun --sdk macosx --show-sdk-version
+          test "$(xcrun --sdk macosx --show-sdk-version | cut -d. -f1)" = 15
+      - name: Checkout pinned upstream source
+        shell: bash
+        run: |
+          commit=$(node -p "JSON.parse(require('fs').readFileSync('scripts/libghostty/source.json')).commit")
+          git clone --filter=blob:none --no-checkout https://github.com/ghostty-org/ghostty.git ghostty-source
+          git -C ghostty-source checkout "$commit"
+      - name: Build native static archive
+        run: node scripts/libghostty/build.mjs ghostty-source prebuilt-output
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install pkg-config on Windows
+        if: runner.os == 'Windows'
+        run: choco install pkgconfiglite --yes --no-progress
+      - name: Install pkg-config on macOS
+        if: runner.os == 'macOS'
+        run: command -v pkg-config || brew install pkgconf
+      - name: Pin locally built bytes for consumer smoke test
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
+          import { hostTriple, archiveName } from "./scripts/libghostty/core.mjs";
+          const path = "scripts/libghostty/pin.json";
+          const pins = JSON.parse(readFileSync(path));
+          const pin = { ...JSON.parse(readFileSync("scripts/libghostty/source.json")), ...pins };
+          const triple = hostTriple();
+          const name = archiveName(pin, triple);
+          pin.targets[triple].sha256 = readFileSync(`prebuilt-output/${name}.sha256`, "utf8").split(" ")[0];
+          writeFileSync(path, JSON.stringify(pins, null, 2));
+          mkdirSync("src-tauri/target/toolchains", { recursive: true });
+          copyFileSync(`prebuilt-output/${name}`, `src-tauri/target/toolchains/${name}`);
+          JS
+      - name: Link and execute static consumer
+        env:
+          CARGO_TARGET_DIR: target/ghostty-smoke
+        run: node scripts/with-zig.mjs -- cargo run --manifest-path scripts/libghostty/smoke/Cargo.toml
+      - name: Check Unix runtime dependencies
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = macOS ]; then
+            deps=$(otool -L target/ghostty-smoke/debug/ghostty-prebuilt-smoke)
+          else
+            deps=$(ldd target/ghostty-smoke/debug/ghostty-prebuilt-smoke)
+          fi
+          echo "$deps"
+          if echo "$deps" | grep -Ei 'libghostty.*\.(so|dylib)'; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libghostty-${{ matrix.target }}
+          path: |
+            prebuilt-output/*.tar.gz
+            prebuilt-output/*.sha256
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Publish immutable dedicated release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag=$(node -p "JSON.parse(require('fs').readFileSync('scripts/libghostty/source.json')).releaseTag")
+          cat assets/*.sha256 > assets/SHA256SUMS
+          (cd assets && sha256sum -c SHA256SUMS)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists. Never overwrite pinned artifacts." >&2
+            exit 1
+          fi
+          gh release create "$tag" assets/*.tar.gz assets/SHA256SUMS --target "$GITHUB_SHA" --title "$tag" --notes "Static terminal core. Consumer checksums must be reviewed and pinned separately." --prerelease

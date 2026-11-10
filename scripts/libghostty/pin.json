@@ -1,0 +1,25 @@
+{
+  "targets": {
+    "aarch64-macos": {
+      "rustTarget": "aarch64-apple-darwin",
+      "sha256": "a77938c94441038a1d9b477408131c06dbf8b38375548c8a66fbed658ac7ab47",
+      "publication": "pending",
+      "validation": "cross-built on Linux; Mach-O arm64 members verified; native Rust link and runtime pending"
+    },
+    "x86_64-macos": {
+      "rustTarget": "x86_64-apple-darwin",
+      "sha256": "3838a95d0afcbebdd4535ad2121a5a590a3d9272c4f470b64c2c5ea025ecd5e2",
+      "publication": "pending",
+      "validation": "cross-built on Linux; Mach-O x86_64 members verified; native Rust link and runtime pending"
+    },
+    "x86_64-linux": {
+      "rustTarget": "x86_64-unknown-linux-gnu",
+      "sha256": "97d75188f1f8ebfb8cf254d2dcd80c36cda7d0f9f6a14dbaa8120611b07f3bb6",
+      "publication": "pending"
+    },
+    "x86_64-windows": {
+      "rustTarget": "x86_64-pc-windows-msvc",
+      "sha256": null
+    }
+  }
+}

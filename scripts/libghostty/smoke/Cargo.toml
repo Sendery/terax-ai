@@ -1,0 +1,9 @@
+[package]
+name = "ghostty-prebuilt-smoke"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[workspace]
+[dependencies]
+libghostty-vt = { version = "=0.2.2", default-features = false }
+libghostty-vt-sys = { version = "=0.2.2", features = ["pkg-config"] }
