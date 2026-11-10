@@ -1,17 +1,21 @@
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const scriptPath = new URL("./release-dev-macos.sh", import.meta.url);
+const scriptPath = fileURLToPath(new URL("./release-dev-macos.sh", import.meta.url));
 
 describe("macOS development release script", () => {
   it("refuses to run on non-macOS hosts before making changes", () => {
-    const result = spawnSync("bash", [scriptPath.pathname], {
+    const result = spawnSync("bash", [basename(scriptPath)], {
+      cwd: dirname(scriptPath),
       encoding: "utf8",
       env: { ...process.env, TERAX_HOST_OS: "Linux" },
     });
 
-    expect(result.status).not.toBe(0);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain("requires macOS");
   });
 

@@ -10,6 +10,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 export const RELEASE_PRODUCT_NAME = "Pi-Terax";
 
@@ -96,4 +97,4 @@ function main() {
   process.stdout.write(JSON.stringify(developmentConfigOverride(baseConfig, { signingIdentity })));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

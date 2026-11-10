@@ -57,15 +57,25 @@ describe("set-version version lockstep", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("bumps the pi-terax package version in lockstep with the app", () => {
+  it.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+  ])("bumps every version in lockstep and preserves %s endings", (_label, eol) => {
+    for (const file of VERSION_FILES) {
+      const path = join(root, file);
+      writeFileSync(path, readFileSync(path, "utf8").replace(/\r?\n/g, eol));
+    }
     const result = runSetVersion(root, ["1.2.3"]);
     expect(result.status).toBe(0);
     expect(readJson(root, "package.json").version).toBe("1.2.3");
     expect(readJson(root, "packages/pi-terax/package.json").version).toBe("1.2.3");
     expect(readJson(root, "src-tauri/tauri.conf.json").version).toBe("1.2.3");
-    expect(readFileSync(join(root, "src-tauri", "Cargo.toml"), "utf8")).toContain(
-      'version = "1.2.3"',
-    );
+    for (const file of VERSION_FILES) {
+      const content = readFileSync(join(root, file), "utf8");
+      expect(content).toContain('"1.2.3"');
+      expect(content).not.toContain('"0.0.1"');
+      expect(content).toBe(content.replace(/\r?\n/g, eol));
+    }
   });
 
   it("restores every versioned file after a versioned build", () => {

@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export const SANDBOX_SUFFIX = ".sandbox";
 export const SANDBOX_PRODUCT_NAME = "Pi-Terax Sandbox";
@@ -60,4 +61,4 @@ function main() {
   process.exit(result.status ?? 1);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildUpdaterFragment,
@@ -148,7 +149,7 @@ describe("local release platform plans", () => {
       const plan = platformBuildPlan({ platform, arch, target });
       expect(plan.updaterTarget).toBe(updaterTarget);
       expect(plan.bundles).toEqual(bundles);
-      expect(plan.bundleRoot).toContain("src-tauri/target");
+      expect(plan.bundleRoot).toContain(join("src-tauri", "target"));
     },
   );
 
@@ -156,7 +157,7 @@ describe("local release platform plans", () => {
     const plan = platformBuildPlan({ platform: "darwin", arch: "arm64" });
     expect(plan.rustTarget).toBe("universal-apple-darwin");
     expect(plan.bundleRoot).toBe(
-      "src-tauri/target/universal-apple-darwin/release/bundle",
+      join("src-tauri", "target", "universal-apple-darwin", "release", "bundle"),
     );
     // The Tauri updater resolves `darwin-<compile-time arch>` with no universal
     // fallback, so a universal build must still answer both client keys.

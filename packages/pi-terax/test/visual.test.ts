@@ -1,6 +1,6 @@
 import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   MAX_CAPTURE_HEIGHT,
@@ -204,12 +204,12 @@ describe("Terax visual QA", () => {
     );
 
     expect(first.mediaPath).not.toBe(second.mediaPath);
-    expect(first.mediaPath).toMatch(
+    expect(first.mediaPath.split(sep).join("/")).toMatch(
       /\.terax\/visual-qa\/20260711T123456Z-same-[A-Za-z0-9_-]+\/screenshot\.png$/,
     );
     const report = JSON.parse(await readFile(first.reportPath, "utf8"));
     expect(report.window.pid).toBe(123);
-    expect((await readdir(first.reportPath.replace(/\/result\.json$/, ""))).some(
+    expect((await readdir(dirname(first.reportPath))).some(
       (entry) => entry.includes(".tmp"),
     )).toBe(false);
   });

@@ -129,13 +129,14 @@ describe("discoveryFilePath", () => {
   });
 
   it("ignores an advertised path that is not an absolute discovery file", () => {
+    const cacheDir = join(tmpdir(), "terax-cache");
     for (const value of ["relative/pi-bridge.json", "/etc/passwd", ""]) {
       expect(
         discoveryFilePath({
-          env: { TERAX_PI_DISCOVERY: value, XDG_CACHE_HOME: "/c" },
+          env: { TERAX_PI_DISCOVERY: value, XDG_CACHE_HOME: cacheDir },
           platform: "linux",
         }),
-      ).toBe("/c/terax-ai/pi-bridge.json");
+      ).toBe(join(cacheDir, "terax-ai", "pi-bridge.json"));
     }
   });
 });

@@ -1,0 +1,3 @@
+# Keep shebangs compatible with Unix shells and Vite SSR on every checkout.
+*.mjs text eol=lf
+*.sh text eol=lf

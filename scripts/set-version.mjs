@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 /**
  * Every file that carries the visible release version. `build-version.mjs`
@@ -63,7 +64,7 @@ export function versionUpdates(version) {
     "src-tauri/Cargo.lock",
     updateText("src-tauri/Cargo.lock", (text) =>
       text.replace(
-        /(\[\[package\]\]\nname = "terax"\nversion = )"[^"]+"/,
+        /(\[\[package\]\]\r?\nname = "terax"\r?\nversion = )"[^"]+"/,
         `$1"${version}"`,
       ),
     ),
@@ -94,4 +95,4 @@ function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
