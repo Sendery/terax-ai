@@ -64,7 +64,7 @@ pub struct Sidecar {
     /// end when Terax goes away without running any handler.
     stdin: Mutex<Option<ChildStdin>>,
     #[cfg(windows)]
-    _job: Option<crate::modules::pty::job::PtyJob>,
+    _job: Option<crate::modules::proc::job::ProcessJob>,
 }
 
 impl Sidecar {
@@ -192,7 +192,7 @@ pub fn spawn(
     };
 
     #[cfg(windows)]
-    let job = crate::modules::pty::job::PtyJob::create_for(pid).ok();
+    let job = crate::modules::proc::job::ProcessJob::create_for(pid).ok();
 
     let sink = match LogSink::open(&layout.server_log(engine)) {
         Ok(sink) => Arc::new(Mutex::new(sink)),

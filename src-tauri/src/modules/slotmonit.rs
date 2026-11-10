@@ -7,18 +7,26 @@
 //! When the helper is absent the feature is reported unavailable and the UI
 //! hides itself.
 
-use std::io::Read;
-use std::process::{Command, Stdio};
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+#[cfg(unix)]
+use std::{
+    io::Read,
+    process::{Command, Stdio},
+    sync::Arc,
+    time::Duration,
+};
 
 use serde::Serialize;
+#[cfg(unix)]
 use shared_child::SharedChild;
 
+#[cfg(unix)]
 const TIMEOUT_SECS: u64 = 8;
+#[cfg(unix)]
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 /// Non-standard exit code the probe uses to signal "command not found".
+#[cfg(any(unix, test))]
 const MISSING_CODE: i32 = 66;
 
 #[cfg(unix)]
@@ -31,6 +39,7 @@ pub struct SlotMonitResult {
     pub raw: String,
 }
 
+#[cfg(any(unix, test))]
 fn interpret(timed_out: bool, exit_code: Option<i32>, stdout: String) -> SlotMonitResult {
     if timed_out {
         return SlotMonitResult {
@@ -157,6 +166,14 @@ pub async fn slot_monit_query() -> Result<SlotMonitResult, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(unix))]
+    #[test]
+    fn probe_is_unavailable_off_unix() {
+        let result = run_probe();
+        assert!(!result.available);
+        assert!(result.raw.is_empty());
+    }
 
     #[test]
     fn interpret_missing_code_reports_unavailable() {
