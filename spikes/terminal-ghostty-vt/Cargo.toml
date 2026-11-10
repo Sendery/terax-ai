@@ -1,0 +1,14 @@
+[package]
+name = "terax-ghostty-vt-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+libghostty-vt = { version = "=0.2.2", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

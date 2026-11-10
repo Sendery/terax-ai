@@ -1,0 +1,117 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+  "dpr": 2,
+  "tests": {
+    "ghostty_sync_1x200x60_ascii": {
+      "frames": 256,
+      "total_ms": 256,
+      "ms_per_frame": 1,
+      "atlas_glyphs": 95,
+      "atlas_uploads": 1
+    },
+    "xterm_1x200x60_ascii": {
+      "terminals": 1,
+      "bytes": 8388738,
+      "total_ms": 154,
+      "mb_s_per_terminal": 51.9,
+      "contexts_lost": 0,
+      "frames": 4,
+      "fps": 29,
+      "p50_ms": 33,
+      "p95_ms": 72,
+      "max_ms": 72
+    },
+    "ghostty_sync_1x200x60_sgr": {
+      "frames": 256,
+      "total_ms": 212,
+      "ms_per_frame": 0.828,
+      "atlas_glyphs": 155,
+      "atlas_uploads": 1
+    },
+    "xterm_1x200x60_sgr": {
+      "terminals": 1,
+      "bytes": 8388690,
+      "total_ms": 449,
+      "mb_s_per_terminal": 17.8,
+      "contexts_lost": 0,
+      "frames": 4,
+      "fps": 9.4,
+      "p50_ms": 110,
+      "p95_ms": 138,
+      "max_ms": 138
+    },
+    "ghostty_sync_1x200x60_tui": {
+      "frames": 256,
+      "total_ms": 195,
+      "ms_per_frame": 0.762,
+      "atlas_glyphs": 96,
+      "atlas_uploads": 1
+    },
+    "xterm_1x200x60_tui": {
+      "terminals": 1,
+      "bytes": 8389675,
+      "total_ms": 98,
+      "mb_s_per_terminal": 81.6,
+      "contexts_lost": 0,
+      "frames": 4,
+      "fps": 54.8,
+      "p50_ms": 24,
+      "p95_ms": 24,
+      "max_ms": 24
+    },
+    "ghostty_12x100x30_tui": {
+      "panes": 12,
+      "work_ms_per_frame": 0.56,
+      "frames": 255,
+      "fps": 59.6,
+      "p50_ms": 17,
+      "p95_ms": 17,
+      "max_ms": 45
+    },
+    "ghostty_12x100x30_sgr": {
+      "panes": 12,
+      "work_ms_per_frame": 0.65,
+      "frames": 255,
+      "fps": 59.9,
+      "p50_ms": 17,
+      "p95_ms": 18,
+      "max_ms": 25
+    },
+    "xterm_5x100x30_tui": {
+      "terminals": 5,
+      "bytes": 8389675,
+      "total_ms": 357,
+      "mb_s_per_terminal": 22.4,
+      "contexts_lost": 0,
+      "frames": 6,
+      "fps": 17.2,
+      "p50_ms": 60,
+      "p95_ms": 77,
+      "max_ms": 77
+    },
+    "xterm_5x100x30_sgr": {
+      "terminals": 5,
+      "bytes": 8388690,
+      "total_ms": 1332,
+      "mb_s_per_terminal": 6,
+      "contexts_lost": 0,
+      "frames": 8,
+      "fps": 6.5,
+      "p50_ms": 185,
+      "p95_ms": 210,
+      "max_ms": 210
+    },
+    "xterm_12x100x30_tui": {
+      "terminals": 12,
+      "bytes": 8389675,
+      "total_ms": 825,
+      "mb_s_per_terminal": 9.7,
+      "contexts_lost": 0,
+      "frames": 6,
+      "fps": 7.4,
+      "p50_ms": 145,
+      "p95_ms": 174,
+      "max_ms": 174
+    }
+  }
+}
