@@ -51,3 +51,10 @@ export function prebuiltEnv(base, target, pkgdir, pkgconfig) {
   env[`PKG_CONFIG_PATH_${target}`] = search;
   return env;
 }
+
+export function assertVendoredPkgConfig(pc) {
+  for (const line of pc.split(/\r?\n/)) {
+    const field = /^[ \t]*(?:Libs|Requires)\.private[ \t]*:[ \t]*(.*)$/.exec(line);
+    if (field?.[1].trim()) throw new Error("unexpected non-vendored private dependency");
+  }
+}

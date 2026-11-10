@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { hostTriple, parseArgs, selectedTarget, verifyChecksum, prebuiltEnv } from "./core.mjs";
+import { hostTriple, parseArgs, selectedTarget, verifyChecksum, prebuiltEnv, assertVendoredPkgConfig } from "./core.mjs";
 const pin = { targets: { "x86_64-linux": { rustTarget: "x86_64-unknown-linux-gnu", sha256: "a".repeat(64) } } };
 test("host names and unsupported architectures", () => {
   assert.equal(hostTriple("darwin", "arm64"), "aarch64-macos");
@@ -45,3 +45,19 @@ test("manifest pins match the Cargo crate versions", () => {
   }
   assert.match(source.commit, /^[a-f0-9]{40}$/);
 });
+
+for (const [label, newline] of [["LF", "\n"], ["CRLF", "\r\n"]]) {
+  test(`empty private dependency fields stay on their own lines (${label})`, () => {
+    for (const lines of [
+      ["Libs.private: ", "Requires.private: ", "Cflags: -I${includedir}"],
+      ["Libs.private:\t ", "", "Requires.private:\t", "", "Version: 1.0"],
+      ["Libs.private:", "Name: libghostty-vt-static", "Requires.private:"],
+    ]) assert.doesNotThrow(() => assertVendoredPkgConfig(lines.join(newline)));
+  });
+  test(`actual private dependencies are rejected (${label})`, () => {
+    for (const field of ["Libs.private: -lc++", "Requires.private:\tsimdutf", "Requires.private: simdutf >= 1.0", "Libs.private: \\"]) {
+      const pc = ["Libs: ${libdir}/libghostty-vt.a", "", field, "", "Cflags: -I${includedir}"].join(newline);
+      assert.throws(() => assertVendoredPkgConfig(pc), /unexpected non-vendored private dependency/);
+    }
+  });
+}

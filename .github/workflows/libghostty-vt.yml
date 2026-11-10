@@ -5,6 +5,8 @@ on:
     paths:
       - scripts/libghostty/source.json
       - scripts/libghostty/build.mjs
+      - scripts/libghostty/core.mjs
+      - scripts/libghostty/core.node-test.mjs
       - .github/workflows/libghostty-vt.yml
 permissions:
   contents: read
@@ -28,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+      - name: Test prebuilt helpers
+        run: node --test scripts/libghostty/core.node-test.mjs
       - name: Select compatible native Apple SDK
         if: runner.os == 'macOS'
         run: |

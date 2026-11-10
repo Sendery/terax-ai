@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { ensureZig } from "./source.mjs";
-import { archiveName, hostTriple } from "./core.mjs";
+import { archiveName, hostTriple, assertVendoredPkgConfig } from "./core.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const pin = { ...JSON.parse(readFileSync(join(root, "scripts/libghostty/source.json"), "utf8")), ...JSON.parse(readFileSync(join(root, "scripts/libghostty/pin.json"), "utf8")) };
 const triple = hostTriple();
@@ -48,7 +48,7 @@ function copyNotices(directory, relative = "") {
 copyNotices(join(output, "zig-global-cache", "p"));
 
 const pc = readFileSync(join(prefix, "share/pkgconfig/libghostty-vt-static.pc"), "utf8");
-if (/^(?:Libs|Requires)\.private:\s*\S/m.test(pc)) throw new Error("unexpected non-vendored private dependency");
+assertVendoredPkgConfig(pc);
 writeFileSync(join(stage, "share/pkgconfig/libghostty-vt-static.pc"), pc.replace(/^prefix=.*$/m, "prefix=${pcfiledir}/../.."));
 writeFileSync(join(stage, "build.json"), JSON.stringify({ commit: pin.commit, zigVersion: pin.zigVersion, target: pin.targets[triple].rustTarget, optimize: "ReleaseFast", cpu: "baseline" }, null, 2));
 const name = archiveName(pin, triple);
