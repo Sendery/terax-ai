@@ -1,4 +1,6 @@
 mod agent_detect;
+#[path = "engine/colors.rs"]
+pub mod colors;
 mod da_filter;
 #[cfg(any(test, feature = "ghostty-engine"))]
 pub mod engine;

@@ -17,12 +17,20 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 
 export type BenchKind = "ascii" | "sgr" | "tui";
 
+export type EngineColors = {
+  foreground: string;
+  background: string;
+  cursor?: string;
+  palette: string[];
+};
+
 export type BenchStats = {
   bytesFed: number;
   frames: number;
   frameBytes: number;
   encodeMicros: number;
   creditWaitMicros: number;
+  credits: number;
 };
 
 export type FrameEvent = {
@@ -85,6 +93,7 @@ export class EngineSession {
   private fullRequested = false;
   private closed = false;
   private size: { cols: number; rows: number };
+  private pendingColors: EngineColors | null = null;
 
   private constructor(
     renderer: GridRenderer,
@@ -114,6 +123,7 @@ export class EngineSession {
       rows: number;
       cwd?: string;
       observer?: SessionObserver;
+      colors?: EngineColors;
     },
   ): Promise<EngineSession> {
     const session = new EngineSession(
@@ -127,6 +137,7 @@ export class EngineSession {
       rows: options.rows,
       cwd: options.cwd ?? null,
       workspace: currentWorkspaceEnv(),
+      colors: options.colors ?? null,
     });
   }
 
@@ -138,6 +149,7 @@ export class EngineSession {
       cols: number;
       rows: number;
       observer?: SessionObserver;
+      colors?: EngineColors;
     },
   ): Promise<EngineSession> {
     const session = new EngineSession(
@@ -149,6 +161,7 @@ export class EngineSession {
     return session.start("gterm_bench_open", {
       kind: options.kind,
       megabytes: options.megabytes,
+      colors: options.colors ?? null,
       cols: options.cols,
       rows: options.rows,
     });
@@ -172,6 +185,15 @@ export class EngineSession {
       void this.closeById(this.id).catch(() => {});
       throw new Error("session closed while opening");
     }
+    if (
+      !this.isBench &&
+      (this.size.cols !== args.cols || this.size.rows !== args.rows)
+    ) {
+      invoke("pty_resize", { id: this.id, ...this.size }).catch(
+        this.reportError,
+      );
+    }
+    if (this.pendingColors) this.setColors(this.pendingColors);
     this.flushCredits();
     return this;
   }
@@ -259,8 +281,21 @@ export class EngineSession {
     });
   }
 
+  setColors(colors: EngineColors): void {
+    if (this.closed) return;
+    this.pendingColors = colors;
+    if (this.id === null) return;
+    this.pendingColors = null;
+    invoke("gterm_set_colors", { id: this.id, colors }).catch(this.reportError);
+  }
+
   resize(cols: number, rows: number): void {
-    if (cols === this.size.cols && rows === this.size.rows) return;
+    if (
+      this.isBench ||
+      this.closed ||
+      (cols === this.size.cols && rows === this.size.rows)
+    )
+      return;
     this.size = { cols, rows };
     const id = this.id;
     if (id === null || this.closed) return;

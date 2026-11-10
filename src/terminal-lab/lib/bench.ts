@@ -3,6 +3,7 @@ import {
   type BenchStats,
   EngineSession,
 } from "@/modules/terminal/gl/engineSession";
+import type { LabColors } from "@/terminal-lab/lib/useLabAppearance";
 import {
   GridRenderer,
   type RendererFont,
@@ -64,6 +65,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     frameBytes: 0,
     encodeMicros: 0,
     creditWaitMicros: 0,
+    credits: 0,
   };
   for (const s of stats) {
     if (!s) continue;
@@ -72,6 +74,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     total.frameBytes += s.frameBytes;
     total.encodeMicros += s.encodeMicros;
     total.creditWaitMicros += s.creditWaitMicros;
+    total.credits += s.credits;
   }
   return {
     ...total,
@@ -90,7 +93,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
 export async function runBench(
   stage: HTMLElement,
   font: RendererFont,
-  colors: { background: number; cursor: number },
+  colors: LabColors,
   kind: BenchKind,
   sessions: number,
   megabytes: number,
@@ -133,6 +136,7 @@ export async function runBench(
       return EngineSession.openBench(renderer, {
         kind,
         megabytes,
+        colors: colors.engine,
         cols,
         rows,
         observer: {

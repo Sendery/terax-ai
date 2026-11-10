@@ -52,6 +52,7 @@ pub struct Pump {
     last_frame_at: Option<Instant>,
     waiting_since: Option<Instant>,
     credit_wait: Duration,
+    credits: u64,
 }
 
 impl Default for Pump {
@@ -71,6 +72,7 @@ impl Pump {
             last_frame_at: None,
             waiting_since: None,
             credit_wait: Duration::ZERO,
+            credits: 0,
         }
     }
 
@@ -94,6 +96,10 @@ impl Pump {
         self.credit_wait
     }
 
+    pub fn credits(&self) -> u64 {
+        self.credits
+    }
+
     pub fn next_seq(&self) -> u32 {
         self.last_seq.wrapping_add(1).max(1)
     }
@@ -105,6 +111,7 @@ impl Pump {
             return false;
         }
         self.has_credit = true;
+        self.credits += 1;
         if let Some(since) = self.waiting_since.take() {
             self.credit_wait += now.saturating_duration_since(since);
         }
@@ -158,6 +165,7 @@ mod runtime {
     use libghostty_vt::{Terminal, TerminalOptions};
     use serde::Serialize;
 
+    use super::super::colors::Colors;
     use super::snapshot::Snapshotter;
     use super::{validate_size, Decision, Pump, QUEUE_DEPTH};
 
@@ -192,6 +200,7 @@ mod runtime {
     struct Control {
         ack: Option<u32>,
         resize: Option<(u16, u16)>,
+        colors: Option<Colors>,
         scroll: i64,
         full: bool,
     }
@@ -203,6 +212,7 @@ mod runtime {
         frame_bytes: AtomicU64,
         encode_micros: AtomicU64,
         credit_wait_micros: AtomicU64,
+        credits: AtomicU64,
     }
 
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -213,6 +223,7 @@ mod runtime {
         pub frame_bytes: u64,
         pub encode_micros: u64,
         pub credit_wait_micros: u64,
+        pub credits: u64,
     }
 
     /// The webview side of a session: credits, size, scroll. Never blocks.
@@ -226,6 +237,10 @@ mod runtime {
     impl EngineHandle {
         pub fn credit(&self, seq: u32) {
             self.update(|c| c.ack = Some(seq));
+        }
+
+        pub fn set_colors(&self, colors: Colors) {
+            self.update(|c| c.colors = Some(colors));
         }
 
         pub fn resize(&self, cols: u16, rows: u16) {
@@ -248,6 +263,7 @@ mod runtime {
                 frame_bytes: s.frame_bytes.load(Ordering::Relaxed),
                 encode_micros: s.encode_micros.load(Ordering::Relaxed),
                 credit_wait_micros: s.credit_wait_micros.load(Ordering::Relaxed),
+                credits: s.credits.load(Ordering::Relaxed),
             }
         }
 
@@ -293,9 +309,20 @@ mod runtime {
         pub thread: EngineThread,
     }
 
+    #[cfg(test)]
     pub fn start(
         cols: u16,
         rows: u16,
+        frames: FrameSink,
+        replies: ReplySink,
+    ) -> Result<Engine, String> {
+        start_with_colors(cols, rows, None, frames, replies)
+    }
+
+    pub fn start_with_colors(
+        cols: u16,
+        rows: u16,
+        colors: Option<Colors>,
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
@@ -309,7 +336,11 @@ mod runtime {
             let stats = stats.clone();
             thread::Builder::new()
                 .name("terax-pty-engine".into())
-                .spawn(move || run(cols, rows, rx, control, stats, frames, replies, ready_tx))
+                .spawn(move || {
+                    run(
+                        cols, rows, colors, rx, control, stats, frames, replies, ready_tx,
+                    )
+                })
                 .map_err(|e| format!("spawn engine thread: {e}"))?
         };
         match ready_rx.recv() {
@@ -380,6 +411,12 @@ mod runtime {
                     }
                 }
             }
+            if let Some(colors) = c.colors {
+                match colors.apply(&mut self.term) {
+                    Ok(()) => self.pump.request_full(),
+                    Err(e) => log::warn!("terminal engine colors failed: {e}"),
+                }
+            }
             if c.scroll != 0 {
                 let delta = isize::try_from(c.scroll).unwrap_or(if c.scroll < 0 {
                     isize::MIN
@@ -394,6 +431,9 @@ mod runtime {
             }
             if let Some(seq) = c.ack {
                 if self.pump.credit(seq, Instant::now()) {
+                    self.stats
+                        .credits
+                        .store(self.pump.credits(), Ordering::Relaxed);
                     let micros = self.pump.credit_wait().as_micros() as u64;
                     self.stats
                         .credit_wait_micros
@@ -466,6 +506,7 @@ mod runtime {
     fn run(
         cols: u16,
         rows: u16,
+        colors: Option<Colors>,
         rx: Receiver<Input>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
@@ -480,6 +521,9 @@ mod runtime {
                 rows,
                 max_scrollback: SCROLLBACK_LINES,
             })?;
+            if let Some(colors) = &colors {
+                colors.apply(&mut term)?;
+            }
             term.on_pty_write(|_, data| replies.borrow_mut().extend_from_slice(data))?
                 .on_device_attributes(|_| Some(DEVICE_ATTRIBUTES))?;
             Ok((term, Snapshotter::new()?))
@@ -532,6 +576,28 @@ mod runtime {
 #[cfg(test)]
 mod pump_tests {
     use super::*;
+
+    #[test]
+    fn credit_stats_accumulate_only_accepted_acknowledgements() {
+        let now = Instant::now();
+        let mut pump = Pump::new();
+        pump.sent(now);
+        pump.output();
+        pump.decide(now);
+        assert!(pump.credit(1, now + Duration::from_millis(3)));
+        assert!(!pump.credit(1, now + Duration::from_millis(9)));
+        pump.sent(now + Duration::from_millis(10));
+        pump.output();
+        pump.decide(now + Duration::from_millis(12));
+        assert!(!pump.credit(1, now + Duration::from_millis(14)));
+        assert!(pump.credit(2, now + Duration::from_millis(17)));
+        assert_eq!(pump.credit_wait(), Duration::from_millis(8));
+        assert_eq!(pump.credits(), 2);
+        pump.sent(now + Duration::from_millis(20));
+        assert!(pump.credit(3, now + Duration::from_millis(21)));
+        assert_eq!(pump.credit_wait(), Duration::from_millis(8));
+        assert_eq!(pump.credits(), 3);
+    }
 
     #[test]
     fn a_new_session_owes_a_full_frame_and_holds_a_credit() {
@@ -824,6 +890,51 @@ mod engine_tests {
         assert_eq!((f.cols, f.rows), (30, 8));
         assert_eq!(f.row_records.len(), 8);
         assert_eq!(f.row(0).unwrap().text(), "keep me");
+    }
+
+    #[test]
+    fn live_colors_wait_for_credit_then_send_a_full_frame() {
+        let h = harness(20, 5);
+        h.frame();
+        h.handle.set_colors(super::super::colors::Colors {
+            foreground: [1, 2, 3],
+            background: [4, 5, 6],
+            cursor: Some([7, 8, 9]),
+            palette: [[10, 11, 12]; 16],
+        });
+        h.assert_no_frame();
+        h.handle.credit(1);
+        let frame = h.frame();
+        assert!(frame.full());
+        assert_eq!(frame.default_fg, super::frame::rgb(1, 2, 3));
+        assert_eq!(frame.default_bg, super::frame::rgb(4, 5, 6));
+        assert_eq!(frame.cursor_color, super::frame::rgb(7, 8, 9));
+        assert_eq!(frame.row_records.len(), 5);
+        assert_eq!(h.handle.stats().credits, 1);
+    }
+
+    #[test]
+    fn initial_colors_are_applied_before_the_first_frame() {
+        let (tx, rx) = mpsc::channel();
+        let engine = start_with_colors(
+            20,
+            5,
+            Some(super::super::colors::Colors {
+                foreground: [1, 2, 3],
+                background: [4, 5, 6],
+                cursor: None,
+                palette: [[10, 11, 12]; 16],
+            }),
+            Box::new(move |frame| tx.send(frame).is_ok()),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        let frame = decode(&rx.recv_timeout(WAIT).unwrap());
+        assert_eq!(frame.default_fg, super::frame::rgb(1, 2, 3));
+        assert_eq!(frame.default_bg, super::frame::rgb(4, 5, 6));
+        assert_eq!(engine.handle.stats().credits, 0);
+        engine.input.shutdown();
+        engine.thread.join();
     }
 
     #[test]

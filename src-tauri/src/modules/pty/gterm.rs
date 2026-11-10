@@ -6,6 +6,7 @@
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, State};
 
+use super::colors::TerminalColors;
 use super::PtyState;
 use crate::modules::workspace::{WorkspaceEnv, WorkspaceRegistry};
 
@@ -33,21 +34,40 @@ pub async fn gterm_open(
     rows: u16,
     cwd: Option<String>,
     workspace: Option<WorkspaceEnv>,
+    colors: Option<TerminalColors>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
     #[cfg(feature = "ghostty-engine")]
     {
         imp::open(
-            app, &state, &registry, cols, rows, cwd, workspace, on_frame, on_exit,
+            app, &state, &registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
         )
         .await
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (
-            app, state, registry, cols, rows, cwd, workspace, on_frame, on_exit,
+            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
         );
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_set_colors(
+    state: State<'_, PtyState>,
+    id: u32,
+    colors: TerminalColors,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let colors = super::colors::Colors::try_from(colors)?;
+        imp::engine(&state, id).map(|e| e.set_colors(colors))
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, colors);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -92,22 +112,28 @@ pub fn gterm_request_full(state: State<'_, PtyState>, id: u32) -> Result<(), Str
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn gterm_bench_open(
     state: State<'_, PtyState>,
     kind: String,
     megabytes: u32,
     cols: u16,
     rows: u16,
+    colors: Option<TerminalColors>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
 ) -> Result<u32, String> {
     #[cfg(feature = "ghostty-engine")]
     {
-        imp::bench_open(&state, &kind, megabytes, cols, rows, on_frame, on_exit)
+        imp::bench_open(
+            &state, &kind, megabytes, cols, rows, colors, on_frame, on_exit,
+        )
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
-        let _ = (state, kind, megabytes, cols, rows, on_frame, on_exit);
+        let _ = (
+            state, kind, megabytes, cols, rows, colors, on_frame, on_exit,
+        );
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -216,6 +242,7 @@ mod imp {
     use super::super::engine::{self, bench, EngineHandle};
     use super::super::session::{self, OutputSink};
     use super::super::PtyState;
+    use super::TerminalColors;
     use crate::modules::workspace::{user_spawn_cwd_or_home, WorkspaceEnv, WorkspaceRegistry};
 
     pub struct BenchSession {
@@ -248,6 +275,7 @@ mod imp {
         rows: u16,
         cwd: Option<String>,
         workspace: Option<WorkspaceEnv>,
+        colors: Option<TerminalColors>,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
     ) -> Result<u32, String> {
@@ -255,7 +283,10 @@ mod imp {
         let workspace = WorkspaceEnv::from_option(workspace);
         let cwd = user_spawn_cwd_or_home(registry, cwd.as_deref(), &workspace);
         let id = state.allocate_id();
-        let sink = OutputSink::Engine(on_frame);
+        let colors = colors
+            .map(super::super::colors::Colors::try_from)
+            .transpose()?;
+        let sink = OutputSink::Engine(on_frame, colors);
         let session = tauri::async_runtime::spawn_blocking(move || {
             session::spawn(id, app, cols, rows, cwd, workspace, false, sink, on_exit)
                 .map(|(s, _)| s)
@@ -274,21 +305,27 @@ mod imp {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn bench_open(
         state: &PtyState,
         kind: &str,
         megabytes: u32,
         cols: u16,
         rows: u16,
+        colors: Option<TerminalColors>,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
     ) -> Result<u32, String> {
         let kind = bench::PayloadKind::parse(kind)
             .ok_or_else(|| format!("unknown bench kind {kind:?}"))?;
         bench::validate_megabytes(megabytes)?;
-        let engine = engine::start(
+        let colors = colors
+            .map(super::super::colors::Colors::try_from)
+            .transpose()?;
+        let engine = engine::start_with_colors(
             cols,
             rows,
+            colors,
             Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok()),
             Box::new(|_| {}),
         )?;

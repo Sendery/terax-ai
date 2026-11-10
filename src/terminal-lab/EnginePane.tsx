@@ -24,6 +24,9 @@ export function EnginePane({ font, colors, onTarget }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<GridRenderer | null>(null);
   const initial = useRef({ font, colors, onTarget });
+  const latestColors = useRef(colors);
+  latestColors.current = colors;
+  const sessionRef = useRef<EngineSession | null>(null);
   const [status, setStatus] = useState("starting");
 
   useEffect(() => {
@@ -88,6 +91,7 @@ export function EnginePane({ font, colors, onTarget }: Props) {
     EngineSession.open(renderer, {
       cols: grid.cols,
       rows: grid.rows,
+      colors: colors.engine,
       observer: {
         onFrame: watchers.observer.onFrame,
         onDrawn: watchers.observer.onDrawn,
@@ -101,6 +105,9 @@ export function EnginePane({ font, colors, onTarget }: Props) {
           return;
         }
         session = opened;
+        sessionRef.current = opened;
+        if (latestColors.current !== colors)
+          opened.setColors(latestColors.current.engine);
         // The box may have changed while the session was opening.
         scheduleLayout();
         input = attachInput(opened, renderer, host);
@@ -120,6 +127,7 @@ export function EnginePane({ font, colors, onTarget }: Props) {
 
     return () => {
       disposed = true;
+      sessionRef.current = null;
       onTarget(null);
       observer.disconnect();
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
@@ -137,6 +145,7 @@ export function EnginePane({ font, colors, onTarget }: Props) {
 
   useEffect(() => {
     rendererRef.current?.setBackground(colors.background, colors.cursor);
+    sessionRef.current?.setColors(colors.engine);
   }, [colors]);
 
   return (

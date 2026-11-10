@@ -3,12 +3,25 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { RendererFont } from "@/modules/terminal/gl/gridRenderer";
 import { resolveTerminalFont, useTheme } from "@/modules/theme";
 import { readTerminalTokens } from "@/styles/tokens";
-import { readCssColor } from "@/terminal-lab/lib/colors";
+import type { EngineColors } from "@/modules/terminal/gl/engineSession";
+import {
+  cssColorToBgr,
+  engineColorsFromTokens,
+  FALLBACK_ENGINE_COLORS,
+} from "@/terminal-lab/lib/colors";
 import { useEffect, useMemo, useState } from "react";
 
-export type LabColors = { background: number; cursor: number };
+export type LabColors = {
+  background: number;
+  cursor: number;
+  engine: EngineColors;
+};
 
-const FALLBACK: LabColors = { background: 0x141414, cursor: 0xd0d0d0 };
+const FALLBACK: LabColors = {
+  background: 0x141414,
+  cursor: 0xd0d0d0,
+  engine: FALLBACK_ENGINE_COLORS,
+};
 
 /** The terminal font exactly as an xterm.js tab would resolve it. */
 export function useLabFont(): RendererFont {
@@ -53,10 +66,11 @@ export function useLabColors(): LabColors {
     // The provider writes the theme's variables in its own effect, which runs
     // after this one; read them a frame later.
     const id = requestAnimationFrame(() => {
-      const tokens = readTerminalTokens();
+      const engine = engineColorsFromTokens(readTerminalTokens());
       setColors({
-        background: readCssColor(tokens.background, FALLBACK.background),
-        cursor: readCssColor(tokens.cursor, FALLBACK.cursor),
+        background: cssColorToBgr(engine.background, FALLBACK.background),
+        cursor: cssColorToBgr(engine.cursor ?? "", FALLBACK.cursor),
+        engine,
       });
     });
     return () => cancelAnimationFrame(id);

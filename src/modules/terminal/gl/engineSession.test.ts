@@ -283,3 +283,118 @@ describe("EngineSession commands", () => {
     await expect(engineAvailable()).resolves.toBe(true);
   });
 });
+
+const testColors = {
+  foreground: "#112233",
+  background: "#445566",
+  cursor: "#778899",
+  palette: Array.from({ length: 16 }, (_, i) => `#${i.toString(16).repeat(6)}`),
+};
+
+type OpeningSession = Awaited<ReturnType<typeof EngineSession.open>>;
+
+function deferredSession(isBench = false) {
+  const renderer = new FakeRenderer();
+  const session = Reflect.construct(EngineSession, [
+    renderer,
+    {},
+    { cols: 4, rows: 2 },
+    isBench,
+  ]) as OpeningSession;
+  const start = Reflect.get(session, "start") as (
+    command: string,
+    args: Record<string, unknown>,
+  ) => Promise<Awaited<ReturnType<typeof EngineSession.open>>>;
+  const pending = start.call(
+    session,
+    isBench ? "gterm_bench_open" : "gterm_open",
+    { cols: 4, rows: 2 },
+  );
+  return { session, pending };
+}
+
+describe("EngineSession opening synchronization", () => {
+  it("sends only the latest resize when opening completes", async () => {
+    const { session, pending } = deferredSession();
+    session.resize(80, 24);
+    session.resize(100, 30);
+    expect(commands("pty_resize")).toEqual([]);
+    ipc.open?.resolve(12);
+    await pending;
+    expect(commands("pty_resize")).toEqual([
+      { command: "pty_resize", args: { id: 12, cols: 100, rows: 30 } },
+    ]);
+  });
+
+  it("skips a resize when the latest size matches the opening size", async () => {
+    const { session, pending } = deferredSession();
+    session.resize(80, 24);
+    session.resize(4, 2);
+    ipc.open?.resolve(12);
+    await pending;
+    expect(commands("pty_resize")).toEqual([]);
+  });
+
+  it("does not resize synthetic bench sessions", async () => {
+    const { session, pending } = deferredSession(true);
+    session.resize(80, 24);
+    ipc.open?.resolve(12);
+    await pending;
+    session.resize(100, 30);
+    expect(commands("pty_resize")).toEqual([]);
+    expect(session.grid).toEqual({ cols: 4, rows: 2 });
+  });
+
+  it("does not send pending resize or colors after closing", async () => {
+    const { session, pending } = deferredSession();
+    session.resize(80, 24);
+    session.setColors(testColors);
+    await session.close();
+    ipc.open?.resolve(12);
+    await expect(pending).rejects.toThrow("session closed while opening");
+    expect(commands("pty_resize")).toEqual([]);
+    expect(commands("gterm_set_colors")).toEqual([]);
+    expect(commands("pty_close")).toHaveLength(1);
+  });
+
+  it("coalesces theme changes before open and sends later changes", async () => {
+    const { session, pending } = deferredSession();
+    session.setColors({ ...testColors, foreground: "#ffffff" });
+    session.setColors(testColors);
+    expect(commands("gterm_set_colors")).toEqual([]);
+    ipc.open?.resolve(12);
+    await pending;
+    expect(commands("gterm_set_colors")).toEqual([
+      { command: "gterm_set_colors", args: { id: 12, colors: testColors } },
+    ]);
+    session.setColors({ ...testColors, background: "#000000" });
+    expect(commands("gterm_set_colors")).toHaveLength(2);
+  });
+
+  it("passes initial colors to both kinds of session", async () => {
+    const renderer = new FakeRenderer();
+    const normal = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      colors: testColors,
+    });
+    ipc.open?.resolve(12);
+    await normal;
+    const bench = EngineSession.openBench(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      colors: testColors,
+      kind: "ascii",
+      megabytes: 1,
+    });
+    ipc.open?.resolve(13);
+    await bench;
+    expect(commands("gterm_open")[0].args).toMatchObject({
+      colors: testColors,
+    });
+    expect(commands("gterm_bench_open")[0].args).toMatchObject({
+      colors: testColors,
+    });
+    expect(commands("gterm_set_colors")).toEqual([]);
+  });
+});

@@ -107,7 +107,7 @@ impl Drop for ChildKillGuard {
 pub enum OutputSink {
     Raw(Channel<Response>),
     #[cfg(feature = "ghostty-engine")]
-    Engine(Channel<Response>),
+    Engine(Channel<Response>, Option<super::colors::Colors>),
 }
 
 enum Pipeline {
@@ -155,8 +155,8 @@ pub fn spawn(
     let pipeline = match sink {
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
-        OutputSink::Engine(on_frame) => {
-            Pipeline::Engine(start_engine(cols, rows, on_frame, writer.clone())?)
+        OutputSink::Engine(on_frame, colors) => {
+            Pipeline::Engine(start_engine(cols, rows, colors, on_frame, writer.clone())?)
         }
     };
     guard.disarm();
@@ -369,12 +369,13 @@ fn spawn_raw_threads(
 fn start_engine(
     cols: u16,
     rows: u16,
+    colors: Option<super::colors::Colors>,
     on_frame: Channel<Response>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
 ) -> Result<engine::Engine, String> {
     let frames: engine::FrameSink =
         Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok());
-    engine::start(cols, rows, frames, reply_sink(writer))
+    engine::start_with_colors(cols, rows, colors, frames, reply_sink(writer))
 }
 
 // Terminal replies (device attributes, cursor reports) go back to the child.
