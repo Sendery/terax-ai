@@ -64,11 +64,17 @@ Engine sessions are ordinary `Session`s in `PtyState`, so `pty_write`, `pty_clos
 | `gterm_scroll` | `id`, `delta` (rows, negative is up, into history) | nothing |
 | `gterm_request_full` | `id` | nothing. The next frame is a full frame |
 | `gterm_bench_open` | `kind` (`ascii`, `sgr`, `tui`), `megabytes`, `cols`, `rows`, `colors?`, `onFrame`, `onExit` | session id. No PTY: the engine is fed a generated payload as fast as it accepts it, then exits with code 0. Credits and frames behave exactly as in a real session |
-| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, creditWaitMicros, credits }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
+| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, creditWaitMicros, credits, scrollbackRows }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
 | `open_terminal_lab_window` | none | nothing. Singleton window, label `terminal-lab`, page `terminal-lab.html` |
 
 | `gterm_lab_autorun` | none | `string \| null`: the value of the `TERAX_TERMINAL_LAB_AUTORUN` environment variable (a result file path). When it is set, the app opens the Terminal Lab window at startup |
-| `gterm_lab_report` | `json` (string) | nothing. Writes the string to the autorun path and exits the app. Fails with `not-autorun` when the variable is not set, so the command cannot be used to write arbitrary files |
+| `gterm_lab_report` | `json` (string) | nothing. Validates JSON, writes it to the autorun path, closes PTYs and exits |
+| `gterm_lab_config` | none | `{ mode, count, holdMs }` from the lab environment: `bench`, `idle-engine` or `idle-xterm`, 1 through 12 terminals, 5 through 120 seconds |
+| `gterm_lab_status` | `json` (string) | nothing. Writes validated JSON beside the report with the fixed `.status.json` suffix |
+| `gterm_lab_capture` | raw PNG bytes, `x-lab-pane: engine` or `xterm` header | nothing. Writes a fixed adjacent `.engine.png` or `.xterm.png`; rejects invalid PNG, dimensions above 4096 and files of 400000 bytes or more |
+| `gterm_lab_fixture` | `kind`, `megabytes`, `rows` | fixed payload path and byte length. Uses the same bounded Rust block generator as the engine bench |
+
+Autorun reporting, status, capture and fixture commands require all three: the sandbox identifier, a calling window labeled `terminal-lab`, and an absolute `TERAX_TERMINAL_LAB_AUTORUN` path. They provide no webview-selected output path. Every command remains unavailable without the feature. `TERAX_TERMINAL_LAB_MODE`, `TERAX_TERMINAL_LAB_IDLE_COUNT` and `TERAX_TERMINAL_LAB_HOLD_SECONDS` choose the unattended mode. Manual lab use does not enable these writes.
 
 `gterm_open` goes through the same workspace authorization as `pty_open` (`user_spawn_cwd_or_home`). Unknown ids return `no session`, like `pty_*`.
 
@@ -78,7 +84,7 @@ Engine sessions are ordinary `Session`s in `PtyState`, so `pty_write`, `pty_clos
 
 The lab resolves the same theme tokens as its xterm.js pane, including CSS color formats, into explicit RGB values before crossing IPC. A theme change while an open is pending is replayed after the session id arrives. Normal engine sessions similarly replay a changed size after opening; benchmark sessions do not invoke the PTY resize command.
 
-All benchmark counters are cumulative. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
+The byte, frame, encoding, wait and accepted-credit counters are cumulative. `scrollbackRows` is an instantaneous history-row gauge sampled on the engine thread at startup and after feeds and resizes, not a cumulative counter. A failed native query returns `null`, never an assumed or stale count. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
 
 ## Frame format v1
 
@@ -171,3 +177,10 @@ Recorded in the plan under the spike results, from the sandbox build on the engi
 - time from `gterm_credit` to the next frame arriving (credit round trip);
 - keystroke echo: from sending one byte with `pty_write` to the frame that shows it being drawn, on the engine and on an xterm.js pane in the same window;
 - resident memory of the app with 12 idle engine terminals with 10 000 lines of scrollback each, against 12 xterm.js terminals.
+
+
+### Scrollback budget and idle-memory validation
+
+The pinned Ghostty implementation interprets `TerminalOptions.max_scrollback` as a byte budget, despite the safe wrapper's line-oriented documentation. Normal engine sessions use an explicit 16 MiB page budget. Pages are allocated lazily; this is neither a 16 MiB initial allocation nor a guarantee of a fixed number of rows at arbitrary widths or content. Production xterm settings are unchanged.
+
+The lab clears initial history, fills its 100 by 30 terminal deterministically and verifies `scrollbackRows == 10000` before reporting `idle-ready`. xterm verifies its actual history count independently. A failed count prevents the memory comparison from passing. The external runner records the summed process names and states that RSS can double-count shared pages; it does not claim PSS.

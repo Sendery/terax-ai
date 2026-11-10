@@ -146,23 +146,25 @@ Linux development dependencies were installed in a workspace-local sysroot from 
 
 ```sh
 pnpm lint
-# Checked 728 files; exit 0. Existing 109 warnings and 2 infos remain.
+# Checked 740 files; exit 0. Existing 109 warnings and 2 infos remain.
 pnpm check-types
 # tsc --noEmit; exit 0.
 pnpm test
-# Test Files 223 passed. Tests 2207 passed, 1 skipped.
+# Test Files 228 passed. Tests 2224 passed, 1 skipped.
 pnpm build
 # Production frontend bundle built successfully.
 node --test scripts/libghostty/core.node-test.mjs
-# 6 tests passed.
+# 10 tests passed.
+node --test scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
+# 8 tests passed.
 with-linux-deps cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 # Finished dev profile; exit 0.
 with-linux-deps cargo test --manifest-path src-tauri/Cargo.toml --locked
-# Unit: 571 passed, 1 ignored. Integration: 25 + 26 + 7 passed.
+# Unit: 576 passed, 1 ignored. Integration: 25 + 26 + 7 passed.
 with-linux-deps node scripts/with-zig.mjs -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked --features ghostty-engine -- -D warnings
 # Finished dev profile; exit 0.
 with-linux-deps node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
-# Unit: 602 passed, 2 ignored. Integration: 25 + 26 + 7 passed.
+# Unit: 611 passed, 2 ignored. Integration: 25 + 26 + 7 passed.
 CARGO_TARGET_DIR=src-tauri/target/prebuilt-smoke node scripts/with-zig.mjs -- cargo run --manifest-path scripts/libghostty/smoke/Cargo.toml
 # prebuilt terminal create/feed/render succeeded
 # Repeated invocation reuses the compiled consumer.
@@ -175,3 +177,21 @@ The required handoff gates pass on Linux. A separate whole-repository `cargo fmt
 Local experimental archives exist for Linux x86_64 and macOS arm64/Intel; the Apple archives have the expected Mach-O architecture but no native link/runtime validation. Local hashes marked publication pending are not canonical release artifacts. The native producer must build release-ready archives including dependency notices, run its platform smoke checks, publish the immutable release and supply the real checksums for a follow-up pin update. Windows is unbuilt locally.
 
 Work remains on `feat/terminal-ghostty-vt-webgl2`. No merge into `qa` or another branch is authorized or performed. No further build ran on the original Mac and its interrupted build directory was not removed.
+
+
+### Hosted laboratory preparation
+
+Task C/D automation now includes actual after-draw engine and xterm PNG capture, the scripted color/wide-character/emoji/directory session, a byte-identical Rust payload fixture for xterm flooding, and idle modes for external memory sampling. The new writes are restricted to an autorun sandbox Lab window, fixed adjacent output names, bounded PNGs and validated JSON. Successful reports close PTYs before exit. The hosted runner records sanitized hardware and named-process RSS, repeats each mode twice, and treats incomplete or failed measurements as failures.
+
+The hosted Intel workflow uses an explicitly checksum-verified native CI artifact while arm64 release publication is waiting for GitHub capacity. This is separate from the default release consumer route. No hosted graphical result has yet been accepted: the existing measurement table and 60 fps criterion remain pending until the reports and actual PNG pixels are reviewed. The original Mac is still not used for compilation or execution.
+
+Cross-platform CI exposed pre-existing Windows test portability issues: CRLF shebang transforms, file URL entrypoint comparisons, platform path separators and PowerShell startup costs for real ACL integration. The fixes preserve the production checks, add CLI and LF/CRLF regressions, and keep native ACL assertions. Windows CI must be checked on the final commit before claiming all platforms pass.
+
+
+Review of the measurement harness found that the core's scrollback option is a byte budget, not a line count. The engine now names a bounded 16 MiB byte policy, reports actual history rows, and the idle benchmark must verify exactly 10000 rows on both engines. This corrects a potential false memory comparison; no previous RSS result is claimed. Regression coverage also checks late PTY data after exit, renderer completion, complete echo samples and bounded cleanup of independently grouped PTY descendants.
+
+
+After the harness and scrollback fixes, full Linux clippy and tests passed both with and without the feature (634 baseline tests and 669 feature tests, including integration suites). Frontend lint, typecheck, 2224 tests and the production bundle passed. The independent harness review's four findings were fixed and rechecked. Native Windows frontend gates passed after the portability fixes; its next CI stage exposed pre-existing Rust platform-cfg issues, which remain subject to the final Windows run.
+
+
+The Windows Rust base failure was traced to stale TTS references after the existing process-job refactor and Unix-only slot monitor imports. The patch reuses `proc::job::ProcessJob`, scopes Unix helpers, and tests the unsupported-platform response without modifying PTY behavior or suppressing warnings. Linux strict clippy and all nine affected module tests pass; native Windows confirmation remains with CI.

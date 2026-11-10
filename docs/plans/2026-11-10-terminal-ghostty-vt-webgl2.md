@@ -82,6 +82,8 @@ CARGO_PROFILE_DEV_OPT_LEVEL=3 CARGO_PROFILE_DEV_DEBUG=false CARGO_PROFILE_DEV_DE
 TERAX_TERMINAL_LAB_AUTORUN=/absolute/path/report.json <sandbox executable>
 ```
 
+A hosted macOS Intel lab workflow is prepared to run the bench, idle-engine and idle-xterm modes twice with an optimized Rust development profile and production frontend. It creates only the isolated Lab window, records named-process RSS externally, and retains raw reports, bounded PNG captures and failure logs. It has not yet supplied measurements to this table. The workflow explicitly bootstraps the verified native Intel artifact from producer run `42835004064`, SHA-256 `9a045b43db4a32733316b075a5b38a681fc34591656c7a4eeb923b1d9e6fed01`, while release publication waits for arm64 runner capacity. The checksum override exists only inside that job and is recorded in its hardware report; it is not a source-build fallback.
+
 The default wrapper must first have published, reviewed checksum pins for the host. Do not choose `--source` on the protected original Mac. Record the actual app/core build metadata with every run. Two runs, captures, xterm flood and idle-memory modes still need to be completed before closing Tasks C/D.
 
 ## Acceptance criteria
@@ -185,6 +187,13 @@ Publication, target checksums and clean consumer acceptance are pending until re
 
 Native Linux and experimental cross-built macOS arm64 and Intel archives were produced on Linux with official Zig 0.15.2, the pinned source and baseline CPU. Cross builds use upstream's bundled Darwin support, not an SDK shim, and no command ran on a Mac. Both Apple archives contain 11 Mach-O objects of the expected architecture with minimum macOS 13.0.0. Neither has been linked or executed on macOS.
 
-The Linux archive passes a fresh standalone Rust safe/sys 0.2.2 create/feed/render smoke through the default wrapper. The binary depends on libc/libgcc, with no Ghostty shared dependency. A repeated invocation with the stable verified cache completes without recompilation. Invoking `zig version` inside prebuilt mode fails through the deny-only guard with status 97. Node wrapper unit tests pass (6 tests).
+The Linux archive passes a fresh standalone Rust safe/sys 0.2.2 create/feed/render smoke through the default wrapper. The binary depends on libc/libgcc, with no Ghostty shared dependency. A repeated invocation with the stable verified cache completes without recompilation. Invoking `zig version` inside prebuilt mode fails through the deny-only guard with status 97. Node wrapper unit tests pass (10 tests), including LF/CRLF private-dependency metadata regressions.
 
 Local archive hashes are recorded in `pin.json` with publication pending. These are experimental, not canonical release assets; they lack the complete bundled dependency notices added to the native CI producer. Do not upload them to the immutable canonical release. Native CI must produce and validate release-ready archives, and its real checksums must replace local pins after publication. Windows and full native macOS consumer acceptance remain pending.
+
+
+### Native producer verification
+
+Producer run [42835004064](https://github.com/Sendery/terax-ai/actions/runs/42835004064) built static archives and linked/executed the safe-crate consumer without Zig in the consumer path on Linux x86_64, Windows x86_64 and macOS Intel. Native Intel objects were independently inspected: all 11 Mach-O objects declare x86_64 and minimum macOS 13.0. This does not establish execution on macOS 13 itself.
+
+The arm64 job did not execute any step on its first attempt. GitHub reported hosted-runner capacity constraints and cancelled the queued job; the dependent publication was skipped. A single failed-job retry was also cancelled for the same capacity reason, without executing the arm64 build. The immutable release and final checksum manifest are not yet published. Default consumer acceptance on a clean arm64 checkout therefore remains open.
