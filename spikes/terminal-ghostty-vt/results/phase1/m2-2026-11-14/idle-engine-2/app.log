@@ -1,0 +1,49 @@
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=1 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=2 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=3 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=4 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=5 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=6 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=7 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=8 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=9 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=10 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=11 cols=100 rows=30
+[2026-11-14][13:01:20][terax_lib::modules::pty::shell_init][INFO] pty cwd: /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/home/shell-session
+[2026-11-14][13:01:20][terax_lib::modules::pty::gterm::imp][INFO] gterm opened id=12 cols=100 rows=30
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=1
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=1 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=2
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=2 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=3
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=4
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=5
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=3 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=4 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=5 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=6
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=7
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=6 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=8
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=9
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=10
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=11
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty closed id=12
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=7 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=8 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=9 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=10 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=11 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty][INFO] pty session id=12 dropped in 0ms
+[2026-11-14][13:01:52][terax_lib::modules::pty::gterm][INFO] terminal lab report written to /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/idle-4e8694a/idle-engine-2/report.json; exiting

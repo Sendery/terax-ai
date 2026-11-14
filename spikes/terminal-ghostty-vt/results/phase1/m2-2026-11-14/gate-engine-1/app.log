@@ -1,0 +1,73 @@
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=1 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=2 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=3 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=4 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=5 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=6 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=7 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=8 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=9 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=10 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=11 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:37][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=12 kind=Ascii megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=1
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=2
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=3
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=4
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=5
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=6
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=7
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=8
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=9
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=10
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=11
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=12
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=13 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=14 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=15 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=16 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=17 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=18 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=19 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=20 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=21 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=22 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=23 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:56:46][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=24 kind=Sgr megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=13
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=14
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=15
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=16
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=17
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=18
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=19
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=20
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=21
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=22
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=23
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=24
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=25 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=26 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=27 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=28 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=29 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=30 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=31 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=32 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=33 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=34 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=35 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:22][terax_lib::modules::pty::gterm::imp][INFO] gterm bench opened id=36 kind=Tui megabytes=1024 cols=100 rows=30
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=25
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=26
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=27
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=28
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=29
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=30
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=31
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=32
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=33
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=34
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=35
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm::imp][INFO] gterm bench closed id=36
+[2026-11-14][12:57:50][terax_lib::modules::pty::gterm][INFO] terminal lab report written to /Users/andres.rojo/Workspaces/terax-ai/.terax/pi-development/m2/lab/gate-4e8694a/gate-engine-1/report.json; exiting
