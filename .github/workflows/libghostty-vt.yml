@@ -7,6 +7,9 @@ on:
       - scripts/libghostty/build.mjs
       - scripts/libghostty/core.mjs
       - scripts/libghostty/core.node-test.mjs
+      - scripts/libghostty/licenses.mjs
+      - scripts/libghostty/licenses.node-test.mjs
+      - scripts/libghostty/licenses/**
       - .github/workflows/libghostty-vt.yml
 permissions:
   contents: read
@@ -31,7 +34,7 @@ jobs:
         with:
           node-version: 24
       - name: Test prebuilt helpers
-        run: node --test scripts/libghostty/core.node-test.mjs
+        run: node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs
       - name: Select compatible native Apple SDK
         if: runner.os == 'macOS'
         run: |
@@ -42,7 +45,7 @@ jobs:
         shell: bash
         run: |
           commit=$(node -p "JSON.parse(require('fs').readFileSync('scripts/libghostty/source.json')).commit")
-          git clone --filter=blob:none --no-checkout https://github.com/ghostty-org/ghostty.git ghostty-source
+          git clone --config core.autocrlf=false --filter=blob:none --no-checkout https://github.com/ghostty-org/ghostty.git ghostty-source
           git -C ghostty-source checkout "$commit"
       - name: Build native static archive
         run: node scripts/libghostty/build.mjs ghostty-source prebuilt-output

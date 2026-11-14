@@ -33,7 +33,7 @@ Verified at `369b0e1`, macOS arm64 only:
 - Encoder: full 200x60 frame 20 to 29 KB, 191 to 257 microseconds optimized, 1.2 to 2.0 ms in a plain debug build.
 - Backpressure test: the reader stalls at `QUEUE_DEPTH` 8 and no byte is lost.
 
-Never verified anywhere:
+Not yet verified at `369b0e1` (see Handoff result for later validation):
 
 - The Rust half and the webview half running together. The sandbox app has never been launched with the feature.
 - Anything in a real webview: shader compilation, `Channel<ArrayBuffer>` delivery, capabilities of the `terminal-lab` window, the credit loop.
@@ -54,8 +54,8 @@ Known gaps and risks carried over from review:
 
 ## Environment
 
-- Rust stable, Node 22, pnpm, network access for the first feature build (the crate clones Ghostty at `a887df42c56f6de86c0fe6da9c4eeca37931e083`; Zig 0.15.2 is downloaded and checksum verified by `scripts/with-zig.mjs`).
-- Every command that compiles the feature goes through `node scripts/with-zig.mjs -- <command>`. On Linux and on macOS 15 or earlier the probe finds that Zig links natively and no SDK stand-in is used.
+- Rust stable, Node 22 or newer and pnpm. The default feature build needs the published checksum-pinned archive for its host, not Zig. The explicit source route needs network for pinned Ghostty and checksum-verified Zig 0.15.2.
+- Every command that compiles the feature goes through `node scripts/with-zig.mjs -- <command>`. Missing or invalid prebuilt artifacts fail closed. There is no SDK stand-in; do not use `--source` on the protected original Mac.
 - Run the app only through the sandbox identity: `pnpm dev:sandbox` and `pnpm build:sandbox` (`scripts/sandbox.mjs`, identifier `app.crynta.terax.sandbox`). It has its own stores and cache root. Read the "Persisted stores are single-instance" gotcha in `TERAX.md` and `src-tauri/src/modules/profile.rs` before the first launch.
 - The measurements that decide the exit criterion are about WKWebView, so they need macOS. On Linux, do Tasks A and B and bring the lab up under WebKitGTK (`xvfb-run`) to shake out integration bugs; record any numbers taken there as Linux numbers and leave the macOS tables empty and marked as pending rather than extrapolating.
 
@@ -150,21 +150,21 @@ pnpm lint
 pnpm check-types
 # tsc --noEmit; exit 0.
 pnpm test
-# Test Files 228 passed. Tests 2224 passed, 1 skipped.
+# Test Files 228 passed. Tests 2241 passed, 1 skipped.
 pnpm build
 # Production frontend bundle built successfully.
-node --test scripts/libghostty/core.node-test.mjs
-# 10 tests passed.
+node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs
+# 19 tests passed.
 node --test scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
 # 8 tests passed.
 with-linux-deps cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 # Finished dev profile; exit 0.
 with-linux-deps cargo test --manifest-path src-tauri/Cargo.toml --locked
-# Unit: 576 passed, 1 ignored. Integration: 25 + 26 + 7 passed.
+# Unit: 586 passed, 1 ignored. Integration: 25 + 26 + 7 passed.
 with-linux-deps node scripts/with-zig.mjs -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked --features ghostty-engine -- -D warnings
 # Finished dev profile; exit 0.
 with-linux-deps node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
-# Unit: 611 passed, 2 ignored. Integration: 25 + 26 + 7 passed.
+# Unit: 621 passed, 2 ignored. Integration: 25 + 26 + 7 passed.
 CARGO_TARGET_DIR=src-tauri/target/prebuilt-smoke node scripts/with-zig.mjs -- cargo run --manifest-path scripts/libghostty/smoke/Cargo.toml
 # prebuilt terminal create/feed/render succeeded
 # Repeated invocation reuses the compiled consumer.
@@ -195,3 +195,23 @@ After the harness and scrollback fixes, full Linux clippy and tests passed both 
 
 
 The Windows Rust base failure was traced to stale TTS references after the existing process-job refactor and Unix-only slot monitor imports. The patch reuses `proc::job::ProcessJob`, scopes Unix helpers, and tests the unsupported-platform response without modifying PTY behavior or suppressing warnings. Linux strict clippy and all nine affected module tests pass; native Windows confirmation remains with CI.
+
+
+### Hosted run and follow-up status
+
+The Intel laboratory run [42842787247](https://github.com/Sendery/terax-ai/actions/runs/42842787247) built the sandbox successfully at `ad27cf6149464fecd4ee848419a71b1c6be41121`, then failed in the native execution stage. Its diagnostic artifact is `terminal-lab-macos-intel-ad27cf6149464fecd4ee848419a71b1c6be41121` (artifact id `13778865488`, 18791 bytes). The artifact and logs have not yet been read; the public failure annotation contains only exit code 1. Do not infer a renderer, IPC, permission or cleanup cause from that annotation. No screenshot pixels or successful measurement report have been reviewed, and the Phase 1 exit criterion is still not verified.
+
+The hosted build and launch commands were:
+
+```sh
+CARGO_PROFILE_DEV_OPT_LEVEL=3 CARGO_PROFILE_DEV_DEBUG=false CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=false node scripts/with-zig.mjs -- pnpm exec tauri build --debug --no-bundle --features ghostty-engine --config "$PWD/src-tauri/tauri.lab-ci.json"
+node scripts/terminal-lab.mjs src-tauri/target/debug/terax "$RUNNER_TEMP/terminal-lab-results"
+```
+
+Follow-up fixes prepared after that commit address native CI findings: Unix-only waker writes are cfg-gated, UTF-16 decoding preserves prior lossy/trailing-byte behavior while using aligned byte chunks, and shared CLI entrypoint detection resolves symlinks on both paths. The latter prevents macOS `/var` versus `/private/var` aliases from silently skipping CLI execution. Regressions cover escaped paths, aliases/junctions, preserved entrypoint symlinks and import-only execution. They do not prove the cause of the separate laboratory failure.
+
+The prebuilt packager now carries an offline, SHA-256-verified bundle of 24 dependency notices with five source-file checks. This recovers notices omitted by upstream package archives and checks the actual vendored SIMDUTF version. Pin changes require a new license review before a build starts. The producer preserves source bytes across Windows checkout settings. Do not publish or retry the old producer as a release candidate: its already-built archives do not contain the corrected bundle. A new four-target producer run is required after these changes are published.
+
+Full Linux validation after these follow-ups passes: strict clippy in both modes; 644 baseline and 679 feature Rust tests including integration suites; 2241 frontend tests and one skip; types, lint, production frontend build; and 27 Node wrapper, license and laboratory-runner tests. The native Windows and macOS gates must still run against the final published revision. These follow-ups are pending publication, not part of the recorded `ad27cf6` run.
+
+A separate ARM64 archive was prepared on Linux as a provisional transfer artifact, with complete notices, provenance and per-file checksums. Its archive SHA-256 is `fd8ca44691ced7b1fa368666fb5546ba8bf4318b717b356ea0a36a2aada49fe0`; size is 841375 bytes. All 11 objects are Mach-O ARM64 with minimum macOS 13.0. Debug information was removed from a copy, and the external symbol set was checked unchanged. This is not a native ARM link/runtime result, a canonical release or an accepted consumer input. It does not change repository pins. Do not invoke Cargo directly, opt into source mode or bypass the wrapper guard to consume it.

@@ -1,0 +1,171 @@
+round.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/roundf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/round.c
+
+rem_pio2.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__rem_pio2.c
+
+sin.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/sinf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/sin.c
+
+ceil.zig
+//! Ported from musl, which is MIT licensed.
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/ceilf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/ceil.c
+
+tan.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/tanf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/tan.c
+//! https://golang.org/src/math/tan.go
+
+floor.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/floorf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/floor.c
+
+exp2.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/exp2f.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/exp2.c
+
+rem_pio2f.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__rem_pio2f.c
+
+log.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/lnf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/ln.c
+
+fma.zig
+//! Ported from musl, which is MIT licensed:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/fmal.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/fmaf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/fma.c
+
+trig.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__cos.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__cosdf.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__sin.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__sindf.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__tand.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__tandf.c
+
+/// kernel cos function on [-pi/4, pi/4], pi/4 ~ 0.785398164
+/// Input x is assumed to be bounded by ~pi/4 in magnitude.
+/// Input y is the tail of x.
+///
+/// Algorithm
+///      1. Since cos(-x) = cos(x), we need only to consider positive x.
+///      2. if x < 2^-27 (hx<0x3e400000 0), return 1 with inexact if x!=0.
+///      3. cos(x) is approximated by a polynomial of degree 14 on
+///         [0,pi/4]
+///                                       4            14
+///              cos(x) ~ 1 - x*x/2 + C1*x + ... + C6*x
+///         where the remez error is
+///
+///      |              2     4     6     8     10    12     14 |     -58
+///      |cos(x)-(1-.5*x +C1*x +C2*x +C3*x +C4*x +C5*x  +C6*x  )| <= 2
+///      |                                                      |
+///
+///                     4     6     8     10    12     14
+///      4. let r = C1*x +C2*x +C3*x +C4*x +C5*x  +C6*x  , then
+///             cos(x) ~ 1 - x*x/2 + r
+///         since cos(x+y) ~ cos(x) - sin(x)*y
+///                        ~ cos(x) - x*y,
+///         a correction term is necessary in cos(x) and hence
+///              cos(x+y) = 1 - (x*x/2 - (r - x*y))
+///         For better accuracy, rearrange to
+///              cos(x+y) ~ w + (tmp + (r-x*y))
+///         where w = 1 - x*x/2 and tmp is a tiny correction term
+///         (1 - x*x/2 == w + tmp exactly in infinite precision).
+///         The exactness of w + tmp in infinite precision depends on w
+///         and tmp having the same precision as x.  If they have extra
+///         precision due to compiler bugs, then the extra precision is
+///         only good provided it is retained in all terms of the final
+///         expression for cos().  Retention happens in all cases tested
+///         under FreeBSD, so don't pessimize things by forcibly clipping
+///         any extra precision in w.
+
+divdf3.zig
+//! Ported from:
+//!
+//! https://github.com/llvm/llvm-project/commit/d674d96bc56c0f377879d01c9d8dfdaaa7859cdb/compiler-rt/lib/builtins/divdf3.c
+
+exp.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/expf.c
+// https://git.musl-libc.org/cgit/musl/tree/src/math/exp.c
+
+trunc.zig
+//! Ported from musl, which is MIT licensed.
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/truncf.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/trunc.c
+
+rem_pio2_large.zig
+// Ported from musl, which is licensed under the MIT license:
+// https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//
+// https://git.musl-libc.org/cgit/musl/tree/src/math/__rem_pio2_large.c
+
+log10.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/log10f.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/log10.c
+
+modti3.zig
+//! Ported from:
+//!
+//! https://github.com/llvm/llvm-project/blob/2ffb1b0413efa9a24eb3c49e710e36f92e2cb50b/compiler-rt/lib/builtins/modti3.c
+
+powiXf2.zig
+//! a raised to integer power of b
+//! ported from https://github.com/llvm-mirror/compiler-rt/blob/release_80/lib/builtins/powisf2.c
+//! Multiplication order (left-to-right or right-to-left) does not matter for
+//! error propagation and this method is optimized for performance, not accuracy.
+
+log2.zig
+//! Ported from musl, which is licensed under the MIT license:
+//! https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT
+//!
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/log2f.c
+//! https://git.musl-libc.org/cgit/musl/tree/src/math/log2.c
+
+divsf3.zig
+//! Ported from:
+//!
+//! https://github.com/llvm/llvm-project/commit/d674d96bc56c0f377879d01c9d8dfdaaa7859cdb/compiler-rt/lib/builtins/divsf3.c

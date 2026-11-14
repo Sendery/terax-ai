@@ -224,6 +224,7 @@ fn program_path() -> Result<String, String> {
     Ok(exe.to_string_lossy().to_string())
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn write_unit(path: &PathBuf, contents: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -559,6 +560,17 @@ pub fn should_boot_for_wake() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn write_unit_creates_parent_directories_and_replaces_the_contents() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("units").join("waker.unit");
+        write_unit(&path, "first\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "first\n");
+        write_unit(&path, "replacement\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "replacement\n");
+    }
 
     #[test]
     fn clamps_the_cadence_to_a_usable_band() {

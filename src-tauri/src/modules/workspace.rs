@@ -427,7 +427,7 @@ pub fn wsl_path_to_host(distro: &str, path: &str) -> PathBuf {
     wsl_drvfs_to_windows(path).unwrap_or_else(|| wsl_path_to_unc(distro, path))
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 pub fn decode_command_output(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xff, 0xfe]) || looks_utf16le(bytes) {
         let start = if bytes.starts_with(&[0xff, 0xfe]) {
@@ -435,17 +435,15 @@ pub fn decode_command_output(bytes: &[u8]) -> String {
         } else {
             0
         };
-        let units: Vec<u16> = bytes[start..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
+        let (pairs, _) = bytes[start..].as_chunks::<2>();
+        let units: Vec<u16> = pairs.iter().map(|pair| u16::from_le_bytes(*pair)).collect();
         String::from_utf16_lossy(&units)
     } else {
         String::from_utf8_lossy(bytes).into_owned()
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 fn looks_utf16le(bytes: &[u8]) -> bool {
     if bytes.len() < 4 || !bytes.len().is_multiple_of(2) {
         return false;
@@ -618,9 +616,9 @@ printf %s "$shell""#;
     Ok(normalize_wsl_value(out, "/bin/sh"))
 }
 
-#[cfg(all(test, windows))]
-mod tests {
-    use super::*;
+#[cfg(test)]
+mod decode_tests {
+    use super::decode_command_output;
 
     #[test]
     fn decode_command_output_reads_plain_utf8() {
@@ -646,6 +644,44 @@ mod tests {
     fn decode_command_output_keeps_ascii_without_nuls_as_utf8() {
         assert_eq!(decode_command_output(b"C:\\Users"), "C:\\Users");
     }
+
+    #[test]
+    fn decode_command_output_accepts_empty_output_and_a_bom_without_units() {
+        assert_eq!(decode_command_output(&[]), "");
+        assert_eq!(decode_command_output(&[0xff, 0xfe]), "");
+    }
+
+    #[test]
+    fn decode_command_output_discards_an_incomplete_utf16le_unit_after_a_bom() {
+        assert_eq!(decode_command_output(&[0xff, 0xfe, 0x41]), "");
+        assert_eq!(decode_command_output(&[0xff, 0xfe, 0x41, 0x00, 0x42]), "A");
+    }
+
+    #[test]
+    fn decode_command_output_keeps_odd_bomless_bytes_on_the_utf8_path() {
+        assert_eq!(decode_command_output(b"a\0b"), "a\0b");
+    }
+
+    #[test]
+    fn decode_command_output_preserves_unicode_and_surrogate_pairs() {
+        let expected = "A\u{00e9}\u{1d11e}";
+        let mut bytes = vec![0xff, 0xfe];
+        for unit in expected.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        assert_eq!(decode_command_output(&bytes), expected);
+    }
+
+    #[test]
+    fn decode_command_output_replaces_unpaired_utf16_surrogates() {
+        let bytes = [0xff, 0xfe, 0x00, 0xd8, 0x62, 0x00, 0x00, 0xdc];
+        assert_eq!(decode_command_output(&bytes), "\u{fffd}b\u{fffd}");
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
 
     #[test]
     fn distro_validator_accepts_real_names() {

@@ -10,7 +10,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./cli-entrypoint.mjs";
 
 export const RELEASE_PRODUCT_NAME = "Pi-Terax";
 
@@ -97,4 +97,4 @@ function main() {
   process.stdout.write(JSON.stringify(developmentConfigOverride(baseConfig, { signingIdentity })));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (isMainModule(import.meta.url)) main();

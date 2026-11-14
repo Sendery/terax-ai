@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./cli-entrypoint.mjs";
 
 /**
  * Every file that carries the visible release version. `build-version.mjs`
@@ -95,4 +95,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (isMainModule(import.meta.url)) main();

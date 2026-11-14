@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { loadLicenseBundle, writeLicenseBundle } from "./licenses.mjs";
 import { ensureZig } from "./source.mjs";
 import { archiveName, hostTriple, assertVendoredPkgConfig } from "./core.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -19,6 +20,7 @@ function run(command, args, options = {}) {
 }
 const rev = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" });
 if (rev.stdout.trim() !== pin.commit) throw new Error("Ghostty source commit does not match pin");
+const licenseBundle = loadLicenseBundle(pin, source);
 const zig = await ensureZig(triple);
 const zigVersion = spawnSync(zig, ["version"], { encoding: "utf8" });
 if (zigVersion.status !== 0 || zigVersion.stdout.trim() !== pin.zigVersion) throw new Error("provisioned Zig version does not match source pin");
@@ -31,21 +33,7 @@ const lib = triple.endsWith("windows") ? "ghostty-vt-static.lib" : "libghostty-v
 cpSync(join(prefix, "lib", lib), join(stage, "lib", lib));
 cpSync(join(prefix, "include"), join(stage, "include"), { recursive: true });
 cpSync(join(source, "LICENSE"), join(stage, "LICENSE"));
-const licenses = join(stage, "licenses");
-mkdirSync(licenses, { recursive: true });
-cpSync(join(dirname(zig), "LICENSE"), join(licenses, "Zig-LICENSE"));
-function copyNotices(directory, relative = "") {
-  for (const entry of readdirSync(join(directory, relative), { withFileTypes: true })) {
-    const child = join(relative, entry.name);
-    if (entry.isDirectory()) copyNotices(directory, child);
-    else if (entry.isFile() && /(?:^|[\\/])(?:licenses?|copying|notice|copyright)(?:[.\\/-]|$)/i.test(child)) {
-      const destination = join(licenses, "dependencies", child);
-      mkdirSync(dirname(destination), { recursive: true });
-      cpSync(join(directory, child), destination);
-    }
-  }
-}
-copyNotices(join(output, "zig-global-cache", "p"));
+writeLicenseBundle(licenseBundle, join(stage, "licenses"));
 
 const pc = readFileSync(join(prefix, "share/pkgconfig/libghostty-vt-static.pc"), "utf8");
 assertVendoredPkgConfig(pc);

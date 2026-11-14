@@ -2,7 +2,8 @@ import { spawn, execFileSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, platform, release, totalmem } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { isMainModule } from "./cli-entrypoint.mjs";
 import { cleanupOwned, observeDescendants } from "./terminal-lab-cleanup.mjs";
 
 export function parseProcesses(text) {
@@ -157,4 +158,4 @@ export function successfulRun(run) {
   return report.bench?.length === 6 && report.xtermBench?.length === 6 && report.captures?.engine === true && report.captures?.xterm === true && [report.echo?.engine, report.echo?.xterm].every((echo) => echo?.count === 50 && echo.samples?.length === 50 && echo.timeouts === 0 && !echo.error);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (isMainModule(import.meta.url)) await main();

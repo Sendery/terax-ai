@@ -18,7 +18,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./cli-entrypoint.mjs";
 import { developmentConfigOverride, macSigningIdentity, tauriSignArgs } from "./dev-release-config.mjs";
 
 const DEFAULT_REPOSITORY = "Sendery/terax-ai";
@@ -161,4 +161,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (isMainModule(import.meta.url)) main();
