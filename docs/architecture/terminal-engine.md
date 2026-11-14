@@ -323,3 +323,12 @@ whole envelope is validated. Keep this wait separate from decode/apply CPU
 durations and from the subsequent ready-to-draw interval. This preparation
 has no graphical or performance result. The execution order and decision
 limit are in the registered window-frame experiment plan.
+
+
+### Current migration priority
+
+The user's [2026-11-14 priority update](../plans/2026-11-14-terminal-migration-priority.md)
+makes 60 FPS optional. Existing negative measurements remain evidence, but
+no longer gate normal-pane integration. The window transport experiment is
+deferred. Continue functional migration and the full parity inventory; do not
+substitute laboratory or benchmark work for a usable new-engine terminal.

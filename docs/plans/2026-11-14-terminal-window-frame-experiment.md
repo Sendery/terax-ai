@@ -1,5 +1,7 @@
 # Terminal Lab: one bounded window-frame transport experiment
 
+**Deferred by the explicit [user priority update](2026-11-14-terminal-migration-priority.md). No further transport implementation or measurement is planned now. The text below preserves the earlier experiment registration.**
+
 Registered before implementation and graphical measurement, after the negative
 credit-batch confirmation in `143c139`. This stays in Phase 1. The exit answer
 remains no until new valid measurements establish otherwise; phases 2 to 5 and

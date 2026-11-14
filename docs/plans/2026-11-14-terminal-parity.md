@@ -5,6 +5,14 @@ and preserves or improves the current project's capabilities. A working lab,
 compiled core, passing fixtures or faster benchmark is not that version.
 The phase 0 through 5 handoff remains in scope, including its rollout and soak.
 
+## Current user priority
+
+The [2026-11-14 priority update](2026-11-14-terminal-migration-priority.md)
+supersedes the earlier mandatory 60 FPS exit gate. FPS is an optimization
+objective, not a blocker to functional migration. Stop further laboratory
+experiments and prioritize ordinary tabs/panes and all existing consumers.
+Keep negative measurements as evidence; do not call them passing or parity.
+
 ## Baseline and evidence rules
 
 This source audit uses the normal terminal at `0c573d8` on the M2 feature
@@ -62,8 +70,8 @@ to close a row; an alternative must deliver the same or better user behavior.
 | ID | Requirement | Evidence required before completion |
 |---|---|---|
 | D01 | Phase 0: prebuilt core, reproducible builds and licenses | Native no-source-fallback tests through the wrapper, correct archive/ABI/notices, clean checkout evidence and supported target validation. M2 provisional success is not canonical publication or Windows acceptance. Never execute Actions for this task or build on the protected original Mac. |
-| D02 | Phase 1: 60 fps in twelve repainted panes | The accepted Channel result remains **no**, roughly 35 to 53 minimum pane updates/s. Repeat the registered workload and input/echo/flood comparisons with real WKWebView, native/runner provenance and clean teardown; retain two repetitions and dispersion. GUI unlock is still required. |
-| D03 | Profile and batching experiment | Follow `2026-11-14-terminal-credit-batch-experiment.md`: diagnose the historical profile first, same-source instrumented A/B, then confirmation without optional stage profiling if useful. Preparation and unit tests are not a performance result. |
+| D02 | Informational performance target: 60 fps in twelve repainted panes | The accepted Channel result remains **no**, roughly 35 to 53 minimum pane updates/s. Repeat the registered workload and input/echo/flood comparisons with real WKWebView, native/runner provenance and clean teardown; retain two repetitions and dispersion. The user made 60 FPS optional; these results no longer block functional migration. |
+| D03 | Recorded diagnostics and deferred optimization | The credit experiment is measured and closed in `143c139`: valid confirmation remains below 60 FPS. Window-frame optimization is deferred by the user priority update. Do not substitute diagnostics for functional delivery. |
 | D04 | Requested new capabilities | Preserve the earlier plan's Kitty keyboard/graphics, grapheme clustering/mode 2027, OSC notifications 9/99 and progress 9;4 with tests and real app exercise, without FPS regression. Ligatures retain the plan's conditional feasibility decision; they are not an existing loaded addon in this baseline. |
 | D05 | Dev default, release and cleanup | After normal-pane parity, switch dev first and validate real workloads with more than ten split tabs and many agent panes for days. Release/default switch and removal of xterm, rendererPool, DormantRing and da_filter follow the phase gates and branch review. Do not remove the old implementation before its replacement covers consumers. |
 
