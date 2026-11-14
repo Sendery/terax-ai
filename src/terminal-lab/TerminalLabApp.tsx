@@ -239,7 +239,9 @@ export function TerminalLabApp() {
           await sleep(SHELL_SETTLE_MS);
           if (
             config.mode === "gate-engine" ||
-            config.mode === "gate-engine-profile"
+            config.mode === "gate-engine-profile" ||
+            config.mode === "gate-engine-batched" ||
+            config.mode === "gate-engine-profile-batched"
           ) {
             const stage = stageRef.current;
             if (!stage) throw new Error("gate stage missing");
@@ -251,9 +253,13 @@ export function TerminalLabApp() {
                 onProgress: progress,
               },
               partial,
-              config.mode === "gate-engine-profile"
-                ? { profile: true }
-                : undefined,
+              config.mode === "gate-engine-profile-batched"
+                ? { profile: true, batchCredits: true }
+                : config.mode === "gate-engine-batched"
+                  ? { profile: false, batchCredits: true }
+                  : config.mode === "gate-engine-profile"
+                    ? { profile: true }
+                    : undefined,
             );
           } else if (config.mode !== "bench") {
             const stage = stageRef.current;

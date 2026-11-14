@@ -4,6 +4,8 @@ export type LabMode =
   | "bench"
   | "gate-engine"
   | "gate-engine-profile"
+  | "gate-engine-batched"
+  | "gate-engine-profile-batched"
   | "idle-engine"
   | "idle-xterm";
 export type AutorunConfig = { mode: LabMode; count: number; holdMs: number };

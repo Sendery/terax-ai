@@ -70,3 +70,16 @@ it("profiles the same three payloads without changing their fixed workload", asy
     ["tui", 12, 1024, { profile: true }],
   ]);
 });
+
+it("keeps batching a separate candidate with identical profiled and unprofiled workloads", async () => {
+  runBench.mockResolvedValue({ rust: Array(12).fill({}), timedOut: false, decodeErrors: 0 });
+  for (const profile of [false, true]) {
+    runBench.mockClear();
+    await runEngineGate(plan(), report(), { profile, batchCredits: true });
+    expect(runBench.mock.calls.map((args) => args.slice(3))).toEqual([
+      ["ascii", 12, 1024, { profile, batchCredits: true }],
+      ["sgr", 12, 1024, { profile, batchCredits: true }],
+      ["tui", 12, 1024, { profile, batchCredits: true }],
+    ]);
+  }
+});

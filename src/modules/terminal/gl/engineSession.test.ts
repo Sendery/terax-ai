@@ -495,3 +495,42 @@ it("profiles decode/apply locally and credit response only after drawing", async
     clock.mockRestore();
   }
 });
+
+it("uses the lab credit sender only after draw and after a delayed bench id arrives", async () => {
+  const renderer = new FakeRenderer();
+  const sendCredit = vi.fn(async (_id: number, _seq: number, _at: number, _dispatch: (at: number) => void) => {});
+  const onDrawn = vi.fn();
+  const pending = EngineSession.openBench(renderer as unknown as GridRenderer, {
+    kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onDrawn },
+  });
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  channelOf(0).onmessage(frameBuffer(2));
+  renderer.drawFrame();
+  expect(sendCredit).not.toHaveBeenCalled();
+  ipc.open?.resolve(71);
+  const session = await pending;
+  expect(sendCredit.mock.calls).toEqual([[71, 1, onDrawn.mock.calls[0][0], expect.any(Function)], [71, 2, onDrawn.mock.calls[1][0], expect.any(Function)]]);
+  expect(credits()).toEqual([]);
+  await session.close();
+  channelOf(0).onmessage(frameBuffer(3));
+  renderer.drawFrame();
+  expect(sendCredit).toHaveBeenCalledTimes(2);
+});
+
+it("a queued lab acknowledgement is not reported as sent before its actual dispatch callback", async () => {
+  const renderer = new FakeRenderer();
+  const onCredit = vi.fn();
+  const sendCredit = vi.fn(async (_id: number, _seq: number, _at: number, _dispatch: (at: number) => void) => {});
+  const opening = EngineSession.openBench(renderer as unknown as GridRenderer, {
+    kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onCredit },
+  });
+  ipc.open?.resolve(72);
+  const session = await opening;
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  expect(onCredit).not.toHaveBeenCalled();
+  sendCredit.mock.calls[0][3](123);
+  expect(onCredit).toHaveBeenCalledExactlyOnceWith(1, 123);
+  await session.close();
+});

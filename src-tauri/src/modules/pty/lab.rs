@@ -91,8 +91,8 @@ pub struct Config {
 }
 
 pub fn config(mode: &str, count: &str, hold_seconds: &str) -> Result<Config, String> {
-    if !matches!(mode, "bench" | "gate-engine" | "gate-engine-profile" | "idle-engine" | "idle-xterm") {
-        return Err("lab mode must be bench, gate-engine, gate-engine-profile, idle-engine or idle-xterm".into());
+    if !matches!(mode, "bench" | "gate-engine" | "gate-engine-profile" | "gate-engine-batched" | "gate-engine-profile-batched" | "idle-engine" | "idle-xterm") {
+        return Err("lab mode must be bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched, idle-engine or idle-xterm".into());
     }
     let count: u16 = count.parse().map_err(|_| "invalid idle count")?;
     let seconds: u64 = hold_seconds.parse().map_err(|_| "invalid idle duration")?;
@@ -177,6 +177,8 @@ mod tests {
     #[test]
     fn sustained_engine_gate_is_a_closed_autorun_mode() {
         assert_eq!(config("gate-engine", "12", "30").unwrap().mode, "gate-engine");
+        assert_eq!(config("gate-engine-batched", "12", "30").unwrap().mode, "gate-engine-batched");
+        assert_eq!(config("gate-engine-profile-batched", "12", "30").unwrap().mode, "gate-engine-profile-batched");
         assert!(config("gate-engine:32", "12", "30").is_err());
         assert_eq!(config("gate-engine-profile", "12", "30").unwrap().mode, "gate-engine-profile");
     }

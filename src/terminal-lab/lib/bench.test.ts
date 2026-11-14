@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   observers: [] as SessionObserver[],
+  senders: [] as ((id: number, seq: number, drawnAt: number) => Promise<void>)[],
+  invoke: vi.fn(async (_credits: { id: number; seq: number }[]) => {}),
   close: vi.fn(async () => {}),
   dispose: vi.fn(),
   benchStats: vi.fn<() => Promise<BenchStats>>(),
@@ -23,10 +25,12 @@ const mock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/modules/terminal/gl/engineSession", () => ({
+  registerLabCredits: (credits: { id: number; seq: number }[]) => mock.invoke(credits),
   EngineSession: {
     openBench: vi.fn(
-      async (_renderer, options: { observer: SessionObserver }) => {
+      async (_renderer, options: { observer: SessionObserver; sendCredit?: (id: number, seq: number, drawnAt: number) => Promise<void> }) => {
         mock.observers.push(options.observer);
+        if (options.sendCredit) mock.senders.push(options.sendCredit);
         return { pane: {}, close: mock.close, benchStats: mock.benchStats };
       },
     ),
@@ -82,6 +86,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   vi.clearAllMocks();
   mock.observers.length = 0;
+  mock.senders.length = 0;
+  mock.invoke.mockResolvedValue(undefined);
   mock.atlasError = false;
   mock.drawObserver = undefined;
   mock.rendererStats = null;
@@ -289,5 +295,40 @@ it("fails a profile with missing replies after the bounded out-of-band drain", a
   expect(run.error).toContain("incomplete stage profile");
   expect(run.profileDrainMs).toBeGreaterThanOrEqual(5000);
   expect(run.wallMs).toBeLessThan(5000);
+  expectClosed();
+});
+
+
+it("waits for batched registration after the final draw and retains bounded dispatch metrics", async () => {
+  const pending = runBench(stage, font, colors, "ascii", 1, 1, { profile: false, batchCredits: true });
+  await vi.advanceTimersByTimeAsync(0);
+  received(1);
+  drawn(1);
+  const first = mock.senders[0](71, 1, performance.now());
+  received(2);
+  drawn(2);
+  const second = mock.senders[0](71, 2, performance.now());
+  mock.observers[0].onExit?.(0);
+  await vi.advanceTimersByTimeAsync(16);
+  await Promise.all([first, second]);
+  const result = await pending;
+  expect(result.error).toBeUndefined();
+  expect(result.profile).toBeUndefined();
+  expect(result.creditBatch).toMatchObject({ complete: true, queued: 2, registered: 2, pending: 0, invocations: 2, drawToDispatchMs: { count: 2 } });
+  expectClosed();
+});
+
+it("a failed batch cannot pass despite complete frames and unchanged native counters", async () => {
+  mock.invoke.mockRejectedValue(new Error("batch command rejected"));
+  const pending = runBench(stage, font, colors, "ascii", 1, 1, { profile: false, batchCredits: true });
+  await vi.advanceTimersByTimeAsync(0);
+  received(1); drawn(1); received(2); drawn(2);
+  const sent = Promise.allSettled([mock.senders[0](71, 1, performance.now()), mock.senders[0](71, 2, performance.now())]);
+  mock.observers[0].onExit?.(0);
+  await vi.advanceTimersByTimeAsync(16);
+  expect((await sent).every((item) => item.status === "rejected")).toBe(true);
+  const result = await pending;
+  expect(result.error).toContain("incomplete credit batch registration");
+  expect(result.creditBatch).toMatchObject({ complete: false, failed: 2, pending: 0 });
   expectClosed();
 });

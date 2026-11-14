@@ -17,6 +17,12 @@ import { currentWorkspaceEnv } from "@/modules/workspace";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
 
+export type BenchCreditSender = (id: number, seq: number, drawnAt: number, onDispatch: (at: number) => void) => Promise<void>;
+
+export function registerLabCredits(credits: { id: number; seq: number }[]): Promise<void> {
+  return invoke("gterm_lab_credits", { credits });
+}
+
 export type BenchKind = "ascii" | "sgr" | "tui";
 
 export type EngineColors = {
@@ -132,7 +138,7 @@ export class EngineSession {
   private awaitingDraw: number[] = [];
   private latestAppliedSeq: number | null = null;
   private lastDrawnSeq: number | null = null;
-  private drawnUnsent: number[] = [];
+  private drawnUnsent: { seq: number; drawnAt: number }[] = [];
   private fullRequested = false;
   private closed = false;
   private size: { cols: number; rows: number };
@@ -143,6 +149,7 @@ export class EngineSession {
     observer: SessionObserver,
     size: { cols: number; rows: number },
     isBench: boolean,
+    private readonly sendCredit?: BenchCreditSender,
   ) {
     this.renderer = renderer;
     this.observer = observer;
@@ -193,6 +200,7 @@ export class EngineSession {
       rows: number;
       observer?: SessionObserver;
       colors?: EngineColors;
+      sendCredit?: BenchCreditSender;
     },
   ): Promise<EngineSession> {
     const session = new EngineSession(
@@ -200,6 +208,7 @@ export class EngineSession {
       options.observer ?? {},
       { cols: options.cols, rows: options.rows },
       true,
+      options.sendCredit,
     );
     return session.start("gterm_bench_open", {
       kind: options.kind,
@@ -300,7 +309,7 @@ export class EngineSession {
   private handleDrawn(rendered = true): void {
     const at = performance.now();
     if (this.awaitingDraw.length > 0) {
-      for (const seq of this.awaitingDraw) this.drawnUnsent.push(seq);
+      for (const seq of this.awaitingDraw) this.drawnUnsent.push({ seq, drawnAt: at });
       this.awaitingDraw = [];
     }
     const seq =
@@ -317,9 +326,16 @@ export class EngineSession {
     if (id === null || this.closed || this.drawnUnsent.length === 0) return;
     const seqs = this.drawnUnsent;
     this.drawnUnsent = [];
-    for (const seq of seqs) {
-      this.observer.onCredit?.(seq, performance.now());
-      const sent = invoke("gterm_credit", { id, seq });
+    for (const { seq, drawnAt } of seqs) {
+      let sent: Promise<unknown>;
+      if (this.sendCredit) {
+        sent = this.sendCredit(id, seq, drawnAt, (at) => {
+          this.observer.onCredit?.(seq, at);
+        });
+      } else {
+        this.observer.onCredit?.(seq, performance.now());
+        sent = invoke("gterm_credit", { id, seq });
+      }
       if (this.observer.onCreditReply) {
         sent.then(
           () => {

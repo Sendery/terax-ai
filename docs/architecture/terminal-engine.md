@@ -213,3 +213,31 @@ fail explicitly. The normal gate does not allocate these tuples or enable
 JavaScript timing callbacks. The new native send-call counter is collected
 for both variants. Profile overhead must be reported and held constant in any
 subsequent credit-batching comparison.
+
+
+### Lab-only credit batch comparison
+
+`gterm_lab_credits(credits)` is an autorun-only sandbox command accepting 1 to
+12 distinct `{ id, seq }` pairs, positive u32 values, with unknown fields
+rejected. Every id must resolve to a bench session before any control is
+registered. It never accepts a real PTY id. The existing engine credit method
+and Pump acceptance rules remain unchanged. Replies confirm control
+registration, not accepted-credit counts.
+
+`gate-engine-batched` and `gate-engine-profile-batched` opt into one window-local
+sender. It dispatches from a microtask after the shared renderer's draw task,
+without another rAF. Drawn credits waiting for an id retain their draw time.
+Duplicate outstanding pairs fail explicitly; different sequences of one id
+remain in separate ordered invocations. The combined queued/in-flight bound
+is 48 acknowledgements. Overflow, rejection, incomplete registration or
+cleanup failure cannot count as success. Normal modes keep their existing
+individual command path and allocate no batcher.
+
+Profile credit timestamps mark dispatch, not enqueue. The candidate reports
+actual invocation counts, batch-size frequencies, command registrations and
+bounded count/sum/min/max draw-to-dispatch and queue-to-dispatch aggregates.
+These are not inferred percentiles or Pump acceptance. The same final-frame
+barrier and bounded out-of-interval reply drain apply. The workload and
+measurement order are registered in
+[the credit batching experiment](../plans/2026-11-14-terminal-credit-batch-experiment.md).
+No graphical result has been collected for this candidate.

@@ -10,6 +10,9 @@ use super::colors::TerminalColors;
 use super::PtyState;
 use crate::modules::workspace::{WorkspaceEnv, WorkspaceRegistry};
 
+#[path = "credit_batch.rs"]
+pub mod credit_batch;
+
 pub const ENGINE_UNAVAILABLE: &str = "engine-unavailable";
 pub const NOT_AUTORUN: &str = "not-autorun";
 pub const AUTORUN_ENV: &str = "TERAX_TERMINAL_LAB_AUTORUN";
@@ -98,6 +101,24 @@ pub fn gterm_credit(state: State<'_, PtyState>, id: u32, seq: u32) -> Result<(),
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, seq);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_lab_credits(
+    window: tauri::WebviewWindow,
+    state: State<'_, PtyState>,
+    credits: credit_batch::CreditBatch,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        autorun_for(&window)?;
+        imp::bench_credits(&state, &credits)
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (window, state, credits);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -394,6 +415,15 @@ mod imp {
             return Ok(bench.handle.clone());
         }
         Err("no session".into())
+    }
+
+    pub fn bench_credits(state: &PtyState, credits: &super::credit_batch::CreditBatch) -> Result<(), String> {
+        let benches = state.bench.lock().unwrap_or_else(PoisonError::into_inner);
+        super::credit_batch::register(
+            credits,
+            |id| benches.get(&id).map(|session| session.handle.clone()),
+            |handle, seq| handle.credit(seq),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]

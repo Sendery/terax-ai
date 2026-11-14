@@ -117,3 +117,15 @@ test("macOS session parser exports no account names, UUIDs or ambiguous OS times
  const outObject=execFileSync("python3",[fileURLToPath(new URL("./terminal-lab-session.py",import.meta.url))],{input:objectRoot,encoding:"utf8"});
  assert.deepEqual(JSON.parse(outObject),JSON.parse(out));
 });
+
+test("batched gate modes are explicit and require complete bounded credit registration", async () => {
+ const {selectedModes}=await import("./terminal-lab.mjs");
+ assert.deepEqual(selectedModes("gate-engine-batched,gate-engine-profile-batched"),["gate-engine-batched","gate-engine-profile-batched"]);
+ const b=(kind)=>({kind,sessions:12,megabytesPerSession:1024,rust:Array(12).fill({}),frames:2,concurrent:{evaluable:true},completeness:Array(12).fill({complete:true}),contextLosses:0,profile:{complete:true,frames:[[0,1],[0,2]],draws:[[1,0,12]]},creditBatch:{mode:"window-microtask",complete:true,queued:2,registered:2,failed:0,rejected:0,pending:0,invocations:1}});
+ for(const mode of ["gate-engine-batched","gate-engine-profile-batched"]){
+ const run={mode,reportExists:true,outcome:{code:0},cleanup:{},report:{errors:[],bench:[b("ascii"),b("sgr"),b("tui")]}};
+ assert.equal(successfulRun(run),true);
+ for(const change of [{creditBatch:undefined},{creditBatch:{...b("ascii").creditBatch,registered:1}},{creditBatch:{...b("ascii").creditBatch,pending:1}},{creditBatch:{...b("ascii").creditBatch,failed:1}}])
+ assert.equal(successfulRun({...run,report:{...run.report,bench:[{...b("ascii"),...change},b("sgr"),b("tui")]}}),false);
+ }
+});

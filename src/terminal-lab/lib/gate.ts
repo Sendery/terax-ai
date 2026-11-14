@@ -1,4 +1,4 @@
-import { runBench } from "@/terminal-lab/lib/bench";
+import { runBench, type BenchOptions } from "@/terminal-lab/lib/bench";
 import type { RunPlan, LabReport } from "@/terminal-lab/lib/report";
 
 export const GATE_MEGABYTES_PER_SESSION = 1024;
@@ -7,7 +7,7 @@ export const GATE_MEGABYTES_PER_SESSION = 1024;
 export async function runEngineGate(
   plan: Pick<RunPlan, "stage" | "font" | "colors" | "onProgress">,
   report: LabReport,
-  options?: { profile: boolean },
+  options?: BenchOptions,
 ): Promise<LabReport> {
   for (const kind of ["ascii", "sgr", "tui"] as const) {
     const label = `gate ${kind} x12`;
@@ -21,7 +21,7 @@ export async function runEngineGate(
         12,
         GATE_MEGABYTES_PER_SESSION,
       ] as const;
-      const run = options?.profile
+      const run = options && (options.profile || options.batchCredits)
         ? await runBench(...args, options)
         : await runBench(...args);
       report.bench.push(run);

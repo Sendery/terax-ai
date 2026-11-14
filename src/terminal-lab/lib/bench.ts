@@ -1,3 +1,4 @@
+import { LabCreditBatcher } from "@/terminal-lab/lib/creditBatch";
 import { StageProfile } from "@/terminal-lab/lib/stageProfile";
 import { benchGeometry } from "@/terminal-lab/lib/benchGeometry";
 import {
@@ -11,6 +12,7 @@ import {
   type BenchKind,
   type BenchStats,
   EngineSession,
+  registerLabCredits,
 } from "@/modules/terminal/gl/engineSession";
 import type { LabColors } from "@/terminal-lab/lib/useLabAppearance";
 import {
@@ -40,6 +42,8 @@ export const DEFAULT_MEGABYTES: Record<
 
 const RUN_TIMEOUT_MS = 180_000;
 
+export type BenchOptions = { profile: boolean; batchCredits?: boolean };
+
 export type BenchRun = {
   kind: BenchKind;
   sessions: number;
@@ -68,6 +72,7 @@ export type BenchRun = {
   atlasResets?: number;
   profile?: ReturnType<StageProfile["toJSON"]>;
   profileDrainMs?: number;
+  creditBatch?: ReturnType<LabCreditBatcher["snapshot"]>;
   error?: string;
 };
 
@@ -117,9 +122,10 @@ export async function runBench(
   kind: BenchKind,
   sessions: number,
   megabytes: number,
-  options?: { profile: boolean },
+  options?: BenchOptions,
 ): Promise<BenchRun> {
   const profile = options?.profile ? new StageProfile() : null;
+  const creditBatch = options?.batchCredits ? new LabCreditBatcher(registerLabCredits) : null;
   const cols = sessions === 1 ? 200 : 100;
   const rows = sessions === 1 ? 60 : 30;
   const canvas = document.createElement("canvas");
@@ -187,6 +193,7 @@ export async function runBench(
         return EngineSession.openBench(active, {
           kind,
           megabytes,
+          sendCredit: creditBatch?.send,
           colors: colors.engine,
           cols,
           rows,
@@ -268,12 +275,15 @@ export async function runBench(
     const stamps = sampler.stop();
     const rendererDraws = renderer?.stats.draws ?? 0;
     profile?.stop(finishedAt);
-    if (profile) {
+    if (profile || creditBatch) {
       const deadline = finishedAt + 5000;
-      while (profile.pendingReplies > 0 && performance.now() < deadline)
+      while (((profile?.pendingReplies ?? 0) > 0 || (creditBatch?.pendingCount ?? 0) > 0) && performance.now() < deadline)
         await new Promise((resolve) => setTimeout(resolve, 16));
     }
-    const profileDrainMs = profile ? performance.now() - finishedAt : undefined;
+    const profileDrainMs = profile || creditBatch ? performance.now() - finishedAt : undefined;
+    const batchStats = creditBatch?.snapshot();
+    if (batchStats && (!batchStats.complete || batchStats.queued !== frames))
+      errors.push("incomplete credit batch registration");
     const stageProfile = profile?.toJSON();
     if (stageProfile && !stageProfile.complete)
       errors.push("incomplete stage profile", ...stageProfile.errors);
@@ -313,10 +323,12 @@ export async function runBench(
       atlasResets: renderer?.stats.atlasResets ?? 0,
       profile: stageProfile,
       profileDrainMs,
+      creditBatch: batchStats,
       error: errors.length ? errors.join("; ") : undefined,
     };
     return result;
   } finally {
+    creditBatch?.close();
     sampler.stop();
     await Promise.all(
       opened.map((session) => session?.close().catch(() => {})),

@@ -632,3 +632,20 @@ clearing retained output before a new case. Reproduction source, independent
 Cargo locks and the verifier are under `spikes/terminal-ghostty-vt/wasm/`.
 Phase 1's 60 fps answer remains no; later phases remain gated. Graphical
 profiling still waits for a verified unlocked M2 console session.
+
+
+### Credit batch comparison prepared, not measured
+
+An isolated lab candidate now registers credits through `gterm_lab_credits`
+after the shared draw task's microtask boundary, without adding a rAF. It is
+bounded, validates all bench ids before control mutation, retains every pair
+and rejects errors or missing replies. It cannot access real PTY sessions.
+The normal gate and native Pump are unchanged. Profile timestamps distinguish
+dispatch from enqueue, including credits drawn before their open id arrives.
+
+[The preregistered experiment](2026-11-14-terminal-credit-batch-experiment.md)
+fixes limits, metrics, the unchanged workload and execution order: first repeat
+the historical profile after actual GUI unlock; diagnose a repeated stall
+before candidate collection; then compare equally instrumented modes from one
+new binary, twice each, and confirm any improvement without optional stage
+profiling. No FPS result or phase exit is claimed by preparation or unit tests.

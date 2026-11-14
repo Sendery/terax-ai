@@ -219,8 +219,8 @@ export async function run(binary, output, mode, repetition, timeoutMs) {
 export function selectedModes(value) {
   if (value === undefined) return ["bench", "idle-engine", "idle-xterm"];
   const modes = value.split(",");
-  if (new Set(modes).size !== modes.length || modes.some((mode) => !["bench", "gate-engine", "gate-engine-profile", "idle-engine", "idle-xterm"].includes(mode)))
-    throw new Error("Invalid lab modes: use bench, gate-engine, gate-engine-profile, idle-engine or idle-xterm without duplicates");
+  if (new Set(modes).size !== modes.length || modes.some((mode) => !["bench", "gate-engine", "gate-engine-profile", "gate-engine-batched", "gate-engine-profile-batched", "idle-engine", "idle-xterm"].includes(mode)))
+    throw new Error("Invalid lab modes: use bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched, idle-engine or idle-xterm without duplicates");
   return modes;
 }
 
@@ -236,7 +236,7 @@ async function main() {
   const runs = [];
   repetitions: for (const repetition of [1, 2]) {
     for (const mode of modes) {
-      const result = await run(binary, output, mode, repetition, mode === "bench" || mode === "gate-engine" || mode === "gate-engine-profile" ? 42 * 60_000 : 3 * 60_000);
+      const result = await run(binary, output, mode, repetition, mode === "bench" || mode === "gate-engine" || mode === "gate-engine-profile" || mode === "gate-engine-batched" || mode === "gate-engine-profile-batched" ? 42 * 60_000 : 3 * 60_000);
       runs.push(result);
       if (result.failure || result.failureReason || result.cleanup.errors.length || result.cleanup.survivors.length) break repetitions;
     }
@@ -248,10 +248,10 @@ async function main() {
 export function successfulRun(run) {
   const report = run.report;
   if (run.preflightFailed || run.guiSession?.available === false || run.samples?.some((sample) => sample.guiSession?.available === false) || run.failure || run.failureReason || run.timedOut || !run.reportExists || run.outcome?.code !== 0 || run.cleanup?.errors?.length || run.cleanup?.survivors?.length || !Array.isArray(report?.errors) || report.errors.length) return false;
-  if (run.mode === "gate-engine" || run.mode === "gate-engine-profile") {
+  if (["gate-engine", "gate-engine-profile", "gate-engine-batched", "gate-engine-profile-batched"].includes(run.mode)) {
     const bench = report.bench;
     return bench?.length === 3 && ["ascii", "sgr", "tui"].every((kind) => bench.filter((b) => b.kind === kind).length === 1) && bench.every((b) =>
-      (run.mode !== "gate-engine-profile" || (b.profile?.complete === true && b.profile.frames?.length === b.frames && b.profile.draws?.length > 0)) && b.sessions === 12 && b.megabytesPerSession === 1024 && !b.error && !b.timedOut && b.contextLosses === 0 && b.concurrent?.evaluable === true && b.completeness?.length === 12 && b.completeness.every((c) => c.complete === true) && b.rust?.length === 12 && b.rust.every((stats) => stats !== null));
+      (!["gate-engine-profile", "gate-engine-profile-batched"].includes(run.mode) || (b.profile?.complete === true && b.profile.frames?.length === b.frames && b.profile.draws?.length > 0)) && (!["gate-engine-batched", "gate-engine-profile-batched"].includes(run.mode) || (b.creditBatch?.mode === "window-microtask" && b.creditBatch.complete === true && b.creditBatch.queued === b.frames && b.creditBatch.registered === b.frames && b.creditBatch.failed === 0 && b.creditBatch.rejected === 0 && b.creditBatch.pending === 0 && b.creditBatch.invocations > 0 && b.creditBatch.invocations <= b.frames)) && b.sessions === 12 && b.megabytesPerSession === 1024 && !b.error && !b.timedOut && b.contextLosses === 0 && b.concurrent?.evaluable === true && b.completeness?.length === 12 && b.completeness.every((c) => c.complete === true) && b.rust?.length === 12 && b.rust.every((stats) => stats !== null));
   }
   if (run.mode !== "bench") return run.idleSamples >= 10 && report.idle?.scrollbackVerified === true && report.idle.measuredScrollbackRows?.length === 12 && report.idle.measuredScrollbackRows.every((rows) => rows === 10_000);
   return report.bench?.length === 6 && report.xtermBench?.length === 6 && report.captures?.engine === true && report.captures?.xterm === true && [report.echo?.engine, report.echo?.xterm].every((echo) => echo?.count === 50 && echo.samples?.length === 50 && echo.timeouts === 0 && !echo.error);

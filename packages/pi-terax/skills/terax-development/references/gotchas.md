@@ -606,3 +606,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure:** correct compile-time layout assertions reject pointer-sized structs; disabling them hides an ABI mismatch.
 - **Prevention:** regenerate a separate target-specific binding file from the exact pinned headers and original generator, keep native assertions intact and route only the isolated target to the new file. Use an explicit target pkg-config directory and a consistent allocator for terminal and helper objects.
 - **Verification:** first observe native ABI assertions reject wasm32. Compare the regenerated size/alignment assertions with the compiled core metadata, then execute create/feed/snapshot/drop and byte-for-byte shared golden checks. Stable smoke-test memory does not establish general leak freedom or Worker performance.
+
+
+### Batched command profiles must distinguish enqueue from dispatch
+
+- **Trigger:** replacing immediate IPC calls with a microtask or another queue while retaining a command round-trip profile.
+- **Failure:** an old pre-call timestamp now marks enqueue, so command percentiles include queue delay and cease to describe the same stage as the control variant.
+- **Prevention:** preserve the real draw time, notify each sequence from the actual dispatch path and record queue and draw delay separately. A successful command reply means registration, not native acceptance.
+- **Verification:** assert no sent event at enqueue, a per-sequence sent event before the actual invocation, and unchanged callback semantics on the direct path. Cover delayed open ids, rejection, bounded pending work and cleanup without dropping pairs.
