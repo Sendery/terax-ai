@@ -1,0 +1,55 @@
+{
+  "platform": "darwin",
+  "osRelease": "24.6.0",
+  "architecture": "x64",
+  "cpus": [
+    {
+      "model": "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz",
+      "mhz": 3190
+    },
+    {
+      "model": "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz",
+      "mhz": 3190
+    },
+    {
+      "model": "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz",
+      "mhz": 3190
+    },
+    {
+      "model": "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz",
+      "mhz": 3190
+    }
+  ],
+  "totalMemoryBytes": 15032385536,
+  "apple": {
+    "model": "Macmini6,2",
+    "modelName": "Mac mini",
+    "memory": "14 GB",
+    "graphics": [
+      {
+        "name": "Apple Paravirtualized Graphics Device",
+        "chipset": "Apple Paravirtualized Graphics Device",
+        "vendor": "sppci_vendor_Apple",
+        "displays": [
+          {
+            "name": "Unknown Display",
+            "resolution": "1920 x 1080 @ 30.00Hz"
+          }
+        ]
+      }
+    ]
+  },
+  "runner": "GitHub Actions 1000000119",
+  "runnerImage": "macos15",
+  "runnerImageVersion": "20260824.0482.1",
+  "commit": "ad27cf6149464fecd4ee848419a71b1c6be41121",
+  "build": {
+    "frontend": "pnpm build (Vite production)",
+    "rust": "dev profile, opt-level=3, debug=false, debug-assertions=false",
+    "terminalCore": "checksum-pinned prebuilt ReleaseFast, no source fallback",
+    "terminalCoreSource": "https://github.com/Sendery/terax-ai/actions/runs/42835004064 (libghostty-x86_64-macos; native smoke passed; release publication pending)",
+    "terminalCoreSha256": "9a045b43db4a32733316b075a5b38a681fc34591656c7a4eeb923b1d9e6fed01",
+    "sandboxIdentifier": "app.crynta.terax.sandbox",
+    "mainWindowCreated": false
+  }
+}

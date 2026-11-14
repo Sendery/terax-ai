@@ -66,3 +66,20 @@ test("native failure retains partial measurements and can never pass as a final 
     assert.deepEqual(readRunArtifacts(dir).report.errors, ["WebContent restarted"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("explicit lab mode selection is closed and cannot reduce a gate workload", async () => {
+  const { selectedModes } = await import("./terminal-lab.mjs");
+  assert.deepEqual(selectedModes(), ["bench", "idle-engine", "idle-xterm"]);
+  assert.deepEqual(selectedModes("gate-engine"), ["gate-engine"]);
+  assert.deepEqual(selectedModes("idle-engine,idle-xterm"), ["idle-engine", "idle-xterm"]);
+  for (const value of ["", "other", "bench,bench", "gate-engine,", "gate-engine:1"])
+    assert.throws(() => selectedModes(value));
+});
+test("gate collection requires three clean sustained twelve-pane runs, not a target FPS", () => {
+  const b = (kind) => ({ kind, sessions: 12, megabytesPerSession: 1024, rust: Array(12).fill({}), concurrent: { evaluable: true, minFramesPerSecond: 30 }, completeness: Array(12).fill({ complete: true }), contextLosses: 0 });
+  const run = { mode: "gate-engine", reportExists: true, outcome: { code: 0 }, cleanup: {}, report: { errors: [], bench: [b("ascii"), b("sgr"), b("tui")] } };
+  assert.equal(successfulRun(run), true);
+  for (const change of [{ timedOut: true }, { error: "bad draw" }, { contextLosses: 1 }, { concurrent: { evaluable: false } }, { completeness: [] }, { sessions: 1 }, { megabytesPerSession: 32 }]) {
+    assert.equal(successfulRun({ ...run, report: { ...run.report, bench: [{ ...b("ascii"), ...change }, b("sgr"), b("tui")] } }), false);
+  }
+});

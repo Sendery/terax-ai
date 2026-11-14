@@ -411,3 +411,42 @@ Independent Astra review found no remaining blocker for the next native run.
 also requires twelve clean per-pane timelines, the common five-second window,
 complete final-frame checks, no timeout and no context loss. Draw events mark
 WebGL command submission, not physical display presentation.
+
+### Corrected captures and sustained workload registration
+
+The `f60b1ee` sandbox's corrected scripted session was inspected on M2.
+[Engine](assets/terminal-lab-m2-engine.png) and
+[xterm](assets/terminal-lab-m2-xterm.png) PNGs show the disposable directory
+listing, red/green/blue text, bold and underlined text, CJK and the rocket
+fixture. The engine block cursor is visible. The xterm cursor was captured in
+its blink-off state. These are canvas captures of lab-owned fixtures only;
+font spacing and pane padding differ. Both images are below 400000 bytes.
+
+The first fixed-payload engine runs completed without decode or draw-barrier
+errors, but their common intervals were shorter than five seconds. They cannot
+answer the exit criterion. A separate `gate-engine` mode is therefore fixed
+before collecting its results: all three existing generators, twelve 100x30
+sessions, 1024 MiB per session, the same full native backbuffer, the same
+180-second per-run timeout, and two repetitions. It does not run xterm or echo
+in the same process. It changes neither the original six-payload comparison
+nor the production terminal. No FPS threshold, payload, geometry or timing
+rule may be changed in response to its outcome. A short or timed-out result
+stays inconclusive or failed. Runner success means complete sustained
+collection, including final-frame checks; it does not mean 60 fps passed.
+
+The existing Intel artifact was retrieved read-only with Sendery on
+2026-11-14, without launching Actions. Both benchmark attempts report
+`panes not ready before the run`, idle-engine reports `shader allocation
+failed`, and idle-xterm reports `value must not be falsy`. No performance
+measurement or capture completed. The exact graphics cause is not established
+by these messages. Selected raw reports and hardware metadata are retained in
+`spikes/terminal-ghostty-vt/results/phase1/hosted-intel-ad27cf6/` with the source
+artifact id and ZIP checksum. This closes the unread-diagnostic task, not
+Intel runtime acceptance.
+
+The sustained-mode change passed `pnpm lint`, `pnpm check-types`,
+`pnpm test` (2269 passed, one existing skip), `pnpm build`, Pi tests and
+all Node script tests (36 passed). Strict all-target clippy and locked Rust
+tests passed with and without the feature. Its new mode/runner tests were
+observed failing before implementation. Astra independently reviewed the
+final mode and found no blocker to collecting its registered measurements.

@@ -19,6 +19,7 @@ import {
   type LabTarget,
   scriptedSession,
 } from "@/terminal-lab/lib/autorun";
+import { runEngineGate } from "@/terminal-lab/lib/gate";
 import { runIdle } from "@/terminal-lab/lib/idle";
 import {
   echoOf,
@@ -211,7 +212,19 @@ export function TerminalLabApp() {
           );
           if (!ready) throw new Error("panes not ready before the run");
           await sleep(SHELL_SETTLE_MS);
-          if (config.mode !== "bench") {
+          if (config.mode === "gate-engine") {
+            const stage = stageRef.current;
+            if (!stage) throw new Error("gate stage missing");
+            result = await runEngineGate(
+              {
+                stage,
+                font: latest.current.font,
+                colors: latest.current.colors,
+                onProgress: progress,
+              },
+              partial,
+            );
+          } else if (config.mode !== "bench") {
             const stage = stageRef.current;
             if (!stage) throw new Error("idle stage missing");
             progress(partial, config.mode);
