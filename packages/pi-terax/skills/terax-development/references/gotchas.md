@@ -629,3 +629,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure:** holding health/exit/registry locks during callbacks can deadlock reentry; synchronously dropping ConPTY on the engine can wait for a reader blocked on that same engine.
 - **Prevention:** resolve subscription atomically, invoke outside locks, latch unusable state first and consume the exit callback once. Remove the session, notify failure, then schedule normal teardown away from the engine; cleanup scheduling must not hide the notification. Keep the receiver owned outside the unwind boundary until failure is recorded.
 - **Verification:** cover subscription/failure races, late subscription, callback reentry/exception, failure before another PTY byte, rejected deferred credits and pending-open cleanup. Native ConPTY and OS resource-exhaustion cleanup require their own evidence.
+
+### An unlocked macOS console can omit its per-session lock key
+
+- **Trigger:** treating missing `CGSSessionScreenIsLocked` as the only possible source of lock state.
+- **Failure:** a valid unlocked console is rejected as unknown, even while the root explicitly reports `IOConsoleLocked=false`.
+- **Prevention:** use the root's typed lock boolean for a valid active console when per-session evidence is absent. A true signal wins; absence alone or malformed evidence must never imply unlocked. Preserve UID/login/ambiguity checks.
+- **Verification:** cover actual missing-session-key/root-false output, root/session true conflicts, missing or malformed evidence and another user's console. Do not store account names, UUIDs or OS lock timestamps.

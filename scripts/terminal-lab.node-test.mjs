@@ -129,3 +129,20 @@ test("batched gate modes are explicit and require complete bounded credit regist
  assert.equal(successfulRun({...run,report:{...run.report,bench:[{...b("ascii"),...change},b("sgr"),b("tui")]}}),false);
  }
 });
+
+test("macOS unlocked session may omit its lock key but must have explicit root lock evidence", {skip:process.platform!=="darwin"}, async () => {
+ const {execFileSync}=await import("node:child_process");
+ const {fileURLToPath}=await import("node:url");
+ const {assessGuiSession}=await import("./terminal-lab.mjs");
+ const base='<?xml version="1.0"?><plist version="1.0"><dict>ROOT<key>IOConsoleUsers</key><array><dict><key>kCGSSessionUserIDKey</key><integer>501</integer><key>kCGSSessionOnConsoleKey</key><true/><key>kCGSessionLoginDoneKey</key><true/>SESSION</dict></array></dict></plist>';
+ const parse=(root,session='')=>JSON.parse(execFileSync("python3",[fileURLToPath(new URL("./terminal-lab-session.py",import.meta.url))],{input:base.replace('ROOT',root).replace('SESSION',session),encoding:'utf8'}));
+ const global=(value)=>`<key>IOConsoleLocked</key>${value}`;
+ const local=(value)=>`<key>CGSSessionScreenIsLocked</key>${value}`;
+ assert.deepEqual(parse(global('<false/>')),[{userId:501,onConsole:true,loginDone:true,locked:false}]);
+ assert.equal(assessGuiSession(parse(global('<false/>')),501).available,true);
+ for(const [root,session] of [[global('<true/>'),''],[global('<true/>'),local('<false/>')],[global('<false/>'),local('<true/>')]])
+  assert.equal(assessGuiSession(parse(root,session),501).available,false);
+ for(const [root,session] of [['',''],[global('<string>false</string>'),''],[global('<false/>'),local('<string>false</string>')]])
+  assert.equal(assessGuiSession(parse(root,session),501).available,false);
+ assert.equal(assessGuiSession(parse(global('<false/>')),502).available,false);
+});

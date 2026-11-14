@@ -685,3 +685,21 @@ This guard is not Windows runtime validation or a complete ConPTY solution.
 The parity inventory keeps that platform requirement open. Historical binaries
 remain diagnostic artifacts; new acceptance runs must use the reviewed source
 with the explicit failure semantics, and still require an unlocked M2 GUI.
+
+### Actual unlocked M2 registry format
+
+After the user unlocked the M2, the same completed console login omitted
+`CGSSessionScreenIsLocked` but the registry root explicitly reported
+`IOConsoleLocked=false`. The original guard incorrectly returned unknown.
+The parser now uses that explicit root boolean for the valid active console
+when the per-session key is absent. Absence alone still proves nothing.
+Any true lock signal wins; malformed or missing evidence stays unavailable.
+UID, completed login and single-console checks remain unchanged.
+
+The key location and boolean type are confirmed in Apple's
+[IOKit key definitions](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/IOKit/IOKitKeysPrivate.h).
+The unlocked, locked, conflicting, malformed, missing and mismatched-user
+regressions were observed failing for the missing fallback, then passed.
+This repairs readiness detection; it does not change the benchmark or assert
+any FPS result. The user configured the M2 to keep its screen unlocked; no
+security setting was changed by this guard.
