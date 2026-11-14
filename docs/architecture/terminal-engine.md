@@ -442,3 +442,25 @@ production build, Clippy and locked Rust tests bare (588 unit, 58 integration,
 one ignored) and with the verified prebuilt feature (641 unit, 58 integration,
 two ignored), and git diff --check. Astra reviewed concurrency and lifecycle
 without a residual blocker. No benchmark, Actions, merge or push ran.
+
+### Native process exit and pane lifetime
+
+Native PTY cores are reserved before process startup and owned separately from
+OS sessions. Closing a pane invalidates that reservation before removing the
+PTY, so a late open cannot publish a new session into a closed pane. A healthy
+process exit drains accepted input, awaits the final frame submission, releases
+the reply writer, and reaps the OS session while retaining terminal history and
+presentation until pane close. This does not mean the frontend has drawn that
+last frame; display credits still follow the existing contract.
+
+`gterm_resize` updates the live PTY and core together; after confirmed process
+exit it updates retained presentation only. Scroll, colors, redraw and bounded
+text queries remain usable after ordinary exit, while input is stopped.
+`gterm_open` supplies a separate `onFailure` channel so a subsequent core failure
+is observable without replacing or duplicating the process exit. Failed or
+closed cores reject queries. Actor-side failure observers use weak ownership
+and nonblocking stop requests; pane close joins the actor outside locks. OS
+session disposal remains asynchronous, especially for ConPTY, and its completion
+is not established by the core join alone. Windows runtime validation remains
+pending. These foundations do not yet connect the native renderer to ordinary
+terminal panes or establish full terminal parity.

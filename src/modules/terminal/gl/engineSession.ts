@@ -144,6 +144,7 @@ export class EngineSession {
   private readonly observer: SessionObserver;
   private readonly frames = new Channel<ArrayBuffer>();
   private readonly exits = new Channel<number>();
+  private readonly failures = new Channel<string>();
   private readonly isBench: boolean;
   private awaitingDraw: number[] = [];
   private latestAppliedSeq: number | null = null;
@@ -171,19 +172,11 @@ export class EngineSession {
       onDrawn: (rendered) => this.handleDrawn(rendered),
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
+    this.failures.onmessage = (message) => this.failCore(message);
     this.exits.onmessage = (code) => {
       if (this.exitCode !== null) return;
       this.exitCode = code;
-      if (code === ENGINE_FAILED_EXIT) {
-        this.failed = true;
-        this.awaitingDraw = [];
-        this.drawnUnsent = [];
-        try {
-          this.observer.onError?.(new Error("terminal engine failed"));
-        } catch {
-          console.error("terminal engine error observer failed");
-        }
-      }
+      if (code === ENGINE_FAILED_EXIT) this.failCore("terminal engine failed");
       try {
         this.observer.onExit?.(code);
       } catch {
@@ -254,6 +247,7 @@ export class EngineSession {
         ...args,
         onFrame: this.frames,
         onExit: this.exits,
+        onFailure: this.failures,
       });
     } catch (error) {
       this.release();
@@ -271,7 +265,7 @@ export class EngineSession {
       !this.isBench &&
       (this.size.cols !== args.cols || this.size.rows !== args.rows)
     ) {
-      invoke("pty_resize", { id: this.id, ...this.size }).catch(
+      invoke("gterm_resize", { id: this.id, ...this.size }).catch(
         this.reportError,
       );
     }
@@ -392,6 +386,18 @@ export class EngineSession {
     }
   }
 
+  private failCore(message: string): void {
+    if (this.closed || this.failed) return;
+    this.failed = true;
+    this.awaitingDraw = [];
+    this.drawnUnsent = [];
+    try {
+      this.observer.onError?.(new Error(message));
+    } catch {
+      console.error("terminal engine error observer failed");
+    }
+  }
+
   private readonly reportError = (error: unknown): void => {
     if (!this.closed) this.observer.onError?.(error);
   };
@@ -406,7 +412,12 @@ export class EngineSession {
   write(text: string): Promise<void> {
     if (this.failed) return Promise.reject(new Error("terminal engine failed"));
     const id = this.id;
-    if (id === null || this.closed || text.length === 0) {
+    if (
+      id === null ||
+      this.closed ||
+      this.exitCode !== null ||
+      text.length === 0
+    ) {
       return Promise.resolve();
     }
     return invoke("pty_write", textEncoder.encode(text), {
@@ -447,7 +458,7 @@ export class EngineSession {
     if (cols === this.size.cols && rows === this.size.rows)
       return Promise.resolve();
     this.size = { cols, rows };
-    return invoke("pty_resize", { id, cols, rows });
+    return invoke("gterm_resize", { id, cols, rows });
   }
 
   scroll(delta: number): void {
@@ -498,6 +509,7 @@ export class EngineSession {
     this.closed = true;
     this.frames.onmessage = noop;
     this.exits.onmessage = noop;
+    this.failures.onmessage = noop;
     this.awaitingDraw = [];
     this.drawnUnsent = [];
     this.renderer.removePane(this.pane);

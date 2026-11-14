@@ -6,6 +6,8 @@ mod da_filter;
 pub mod engine;
 pub mod gterm;
 mod session;
+#[cfg(feature = "ghostty-engine")]
+mod retained;
 pub(crate) mod shell_init;
 
 use std::collections::HashMap;
@@ -22,6 +24,8 @@ use session::Session;
 
 pub struct PtyState {
     sessions: RwLock<HashMap<u32, Arc<Session>>>,
+    #[cfg(feature = "ghostty-engine")]
+    cores: RwLock<HashMap<u32, Arc<retained::CoreSlot>>>,
     // Starts at 1 so freshly-handed-out ids are never 0, which the frontend
     // sometimes treats as "unset". Increments monotonically; never reused.
     next_id: AtomicU32,
@@ -35,6 +39,8 @@ impl Default for PtyState {
     fn default() -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
+            #[cfg(feature = "ghostty-engine")]
+            cores: RwLock::new(HashMap::new()),
             next_id: AtomicU32::new(1),
             #[cfg(feature = "ghostty-engine")]
             bench: std::sync::Mutex::new(HashMap::new()),
@@ -48,8 +54,21 @@ impl PtyState {
     }
 
     #[cfg(feature = "ghostty-engine")]
-    fn get(&self, id: u32) -> Option<Arc<Session>> {
-        self.sessions.read().unwrap().get(&id).cloned()
+    fn core(&self, id: u32) -> Option<Arc<retained::CoreSlot>> {
+        self.cores.read().unwrap().get(&id).cloned()
+    }
+
+    #[cfg(feature = "ghostty-engine")]
+    fn reserve_core(&self, id: u32) -> Arc<retained::CoreSlot> {
+        let slot = retained::CoreSlot::new();
+        self.cores.write().unwrap().insert(id, slot.clone());
+        slot
+    }
+
+    #[cfg(feature = "ghostty-engine")]
+    fn close_core(&self, id: u32) -> Option<retained::CoreOwner> {
+        let slot = self.cores.write().unwrap().remove(&id);
+        slot.and_then(|slot| slot.close())
     }
 
     fn allocate_id(&self) -> u32 {
@@ -201,7 +220,9 @@ pub fn pty_resize(
 }
 
 #[tauri::command]
-pub fn pty_close(state: tauri::State<PtyState>, id: u32) -> Result<(), String> {
+pub async fn pty_close(state: tauri::State<'_, PtyState>, id: u32) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    let owner = state.close_core(id);
     let session = state.sessions.write().unwrap().remove(&id);
     if let Some(s) = session {
         if let Err(e) = s.killer.lock().unwrap().kill() {
@@ -225,6 +246,14 @@ pub fn pty_close(state: tauri::State<PtyState>, id: u32) -> Result<(), String> {
             .expect("spawn pty drop thread");
     } else if !gterm::close_bench(&state, id) {
         log::debug!("pty_close: unknown id={id}");
+    }
+    #[cfg(feature = "ghostty-engine")]
+    if let Some(owner) = owner {
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(error) = owner.join() {
+                log::debug!("terminal core id={id} retired after {error:?}");
+            }
+        }).await.map_err(|error| format!("terminal core retirement failed: {error}"))?;
     }
     Ok(())
 }
@@ -314,11 +343,21 @@ fn shell_has_children(shell_pid: u32) -> bool {
 // running process; reap them on boot before any new tab spawns.
 #[tauri::command]
 pub fn pty_close_all(state: tauri::State<PtyState>) -> Result<usize, String> {
+    #[cfg(feature = "ghostty-engine")]
+    let mut cores = state.cores.write().unwrap();
+    #[cfg(feature = "ghostty-engine")]
+    let native_ids: std::collections::HashSet<u32> = cores.keys().copied().collect();
+    #[cfg(feature = "ghostty-engine")]
+    let owners: Vec<_> = cores.drain().filter_map(|(_, slot)| slot.close()).collect();
     let drained: Vec<(u32, Arc<Session>)> = {
         let mut sessions = state.sessions.write().unwrap();
         sessions.drain().collect()
     };
+    #[cfg(feature = "ghostty-engine")]
+    drop(cores);
     let count = drained.len();
+    #[cfg(feature = "ghostty-engine")]
+    let count = count + native_ids.iter().filter(|id| !drained.iter().any(|(live, _)| live == *id)).count();
     for (id, s) in drained {
         if let Err(e) = s.killer.lock().unwrap().kill() {
             log::debug!("pty_close_all: kill id={id} returned {e}");
@@ -327,6 +366,14 @@ pub fn pty_close_all(state: tauri::State<PtyState>) -> Result<usize, String> {
             .name(format!("terax-pty-drop-{id}"))
             .spawn(move || session::drop_session(s))
             .expect("spawn pty drop thread");
+    }
+    #[cfg(feature = "ghostty-engine")]
+    for owner in owners {
+        thread::Builder::new().name("terax-core-drop".into()).spawn(move || {
+            if let Err(error) = owner.join() {
+                log::debug!("terminal core retired after {error:?}");
+            }
+        }).expect("spawn terminal core drop thread");
     }
     let count = count + gterm::close_all_bench(&state);
     if count > 0 {

@@ -57,18 +57,20 @@ pub async fn gterm_open(
     colors: Option<TerminalColors>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
+    on_failure: Channel<String>,
 ) -> Result<u32, String> {
     #[cfg(feature = "ghostty-engine")]
     {
         imp::open(
             app, &state, &registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
+            on_failure,
         )
         .await
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (
-            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
+            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit, on_failure,
         );
         Err(ENGINE_UNAVAILABLE.into())
     }
@@ -88,6 +90,51 @@ pub fn gterm_set_colors(
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, colors);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_resize(
+    state: State<'_, PtyState>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        use std::sync::atomic::Ordering;
+        super::engine::validate_size(cols, rows)?;
+        let slot = state.core(id).ok_or("no terminal core")?;
+        let engine = slot.handle()?;
+        let session = state.sessions.read().unwrap().get(&id).cloned();
+        if let Some(session) = session {
+            if !session.exited.load(Ordering::Acquire) {
+                let result = session
+                    .master
+                    .lock()
+                    .unwrap()
+                    .resize(portable_pty::PtySize {
+                        rows,
+                        cols,
+                        pixel_width: 0,
+                        pixel_height: 0,
+                    });
+                if let Err(error) = result {
+                    if !session.exited.load(Ordering::Acquire) {
+                        return Err(error.to_string());
+                    }
+                }
+            }
+        }
+        // Revalidate after the kernel operation; close must not revive a core.
+        slot.handle()?;
+        engine.resize(cols, rows);
+        Ok(())
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, cols, rows);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -426,11 +473,10 @@ mod imp {
     }
 
     pub fn engine(state: &PtyState, id: u32) -> Result<EngineHandle, String> {
-        if let Some(session) = state.get(id) {
-            if let Some(engine) = &session.engine {
-                return Ok(engine.clone());
-            }
-        } else if let Some(bench) = state
+        if let Some(slot) = state.core(id) {
+            return slot.handle();
+        }
+        if let Some(bench) = state
             .bench
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -465,6 +511,7 @@ mod imp {
         colors: Option<TerminalColors>,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
+        on_failure: Channel<String>,
     ) -> Result<u32, String> {
         engine::validate_size(cols, rows)?;
         let workspace = WorkspaceEnv::from_option(workspace);
@@ -473,21 +520,32 @@ mod imp {
         let colors = colors
             .map(super::super::colors::Colors::try_from)
             .transpose()?;
-        let sink = OutputSink::Engine(on_frame, colors);
-        let session = tauri::async_runtime::spawn_blocking(move || {
+        let slot = state.reserve_core(id);
+        let sink = OutputSink::Engine {
+            on_frame,
+            colors,
+            slot: slot.clone(),
+            on_failure,
+        };
+        let spawned = tauri::async_runtime::spawn_blocking(move || {
             session::spawn(id, app, cols, rows, cwd, workspace, false, sink, on_exit)
                 .map(|(s, _)| s)
         })
         .await
-        .map_err(|e| {
-            log::error!("gterm_open join failed: {e}");
-            e.to_string()
-        })?
-        .map_err(|e| {
-            log::error!("gterm_open failed: {e}");
-            e
-        })?;
-        state.register(id, session);
+        .map_err(|error| format!("gterm_open join failed: {error}"))
+        .and_then(|result| result);
+        let session = match spawned {
+            Ok(session) => session,
+            Err(error) => {
+                drop(state.close_core(id));
+                return Err(error);
+            }
+        };
+        if !slot.publish(|| state.register(id, session.clone())) {
+            drop(state.close_core(id));
+            std::thread::spawn(move || session::drop_session(session));
+            return Err("terminal closed or failed while opening".into());
+        }
         log::info!("gterm opened id={id} cols={cols} rows={rows}");
         Ok(id)
     }

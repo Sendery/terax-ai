@@ -12,6 +12,7 @@ pub fn final_exit_code(child: i32, reader_drained: bool, engine_healthy: bool) -
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EngineFailure {
+    Cancelled,
     FrameChannelClosed,
     SnapshotFailed,
     Panicked,

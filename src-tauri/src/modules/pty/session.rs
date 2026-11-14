@@ -12,6 +12,8 @@ use super::agent_detect::AgentDetector;
 use super::da_filter::DaFilter;
 #[cfg(feature = "ghostty-engine")]
 use super::engine;
+#[cfg(feature = "ghostty-engine")]
+use super::retained::{CoreSlot, ProcessCore};
 use super::shell_init;
 use crate::modules::workspace::WorkspaceEnv;
 
@@ -107,13 +109,18 @@ impl Drop for ChildKillGuard {
 pub enum OutputSink {
     Raw(Channel<Response>),
     #[cfg(feature = "ghostty-engine")]
-    Engine(Channel<Response>, Option<super::colors::Colors>),
+    Engine {
+        on_frame: Channel<Response>,
+        colors: Option<super::colors::Colors>,
+        slot: Arc<CoreSlot>,
+        on_failure: Channel<String>,
+    },
 }
 
 enum Pipeline {
     Raw(Channel<Response>),
     #[cfg(feature = "ghostty-engine")]
-    Engine(engine::Engine),
+    Engine(EnginePipeline),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -155,8 +162,13 @@ pub fn spawn(
     let pipeline = match sink {
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
-        OutputSink::Engine(on_frame, colors) => {
-            Pipeline::Engine(start_engine(cols, rows, colors, on_frame, writer.clone())?)
+        OutputSink::Engine { on_frame, colors, slot, on_failure } => {
+            let engine = start_engine(cols, rows, colors, on_frame, writer.clone())?;
+            Pipeline::Engine(EnginePipeline {
+                core: slot.install(engine)?,
+                slot,
+                on_failure: Arc::new(move |message| { let _ = on_failure.send(message); }),
+            })
         }
     };
     guard.disarm();
@@ -187,7 +199,7 @@ pub fn spawn(
         exited: exited.clone(),
         #[cfg(feature = "ghostty-engine")]
         engine: match &pipeline {
-            Pipeline::Engine(e) => Some(e.handle.clone()),
+            Pipeline::Engine(e) => Some(e.core.handle.clone()),
             Pipeline::Raw(_) => None,
         },
     });
@@ -393,7 +405,7 @@ fn spawn_engine_threads(
     id: u32,
     app: AppHandle,
     reader: Box<dyn Read + Send>,
-    engine: engine::Engine,
+    engine: EnginePipeline,
     on_exit: Channel<i32>,
     child: Box<dyn Child + Send + Sync>,
     exited: Arc<AtomicBool>,
@@ -426,6 +438,23 @@ fn spawn_engine_threads(
 }
 
 #[cfg(feature = "ghostty-engine")]
+type EngineFailureObserver = Arc<dyn Fn(String) + Send + Sync>;
+
+#[cfg(feature = "ghostty-engine")]
+fn notify_engine_failure(observer: &EngineFailureObserver, message: String) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| observer(message))).is_err() {
+        log::error!("terminal engine failure observer panicked");
+    }
+}
+
+#[cfg(feature = "ghostty-engine")]
+struct EnginePipeline {
+    core: ProcessCore,
+    slot: Arc<CoreSlot>,
+    on_failure: EngineFailureObserver,
+}
+
+#[cfg(feature = "ghostty-engine")]
 type EngineExitCallback = Box<dyn FnOnce(i32) + Send>;
 
 #[cfg(feature = "ghostty-engine")]
@@ -454,21 +483,27 @@ impl EngineExit {
 fn run_engine_pipeline(
     id: u32,
     mut reader: Box<dyn Read + Send>,
-    engine: engine::Engine,
+    engine: EnginePipeline,
     mut child: Box<dyn Child + Send + Sync>,
     exited: Arc<AtomicBool>,
     mut signal: impl FnMut(super::agent_detect::Transition) + Send + 'static,
     on_exit: impl FnOnce(i32) + Send + 'static,
 ) -> thread::JoinHandle<()> {
-    let engine::Engine {
-        input,
-        thread: engine_thread,
-        handle,
-    } = engine;
+    let EnginePipeline { core, slot, on_failure } = engine;
+    let ProcessCore { input, handle } = &core;
     let exit = Arc::new(EngineExit { exited: exited.clone(), callback: Mutex::new(Some(Box::new(on_exit))) });
     let failure_exit = exit.clone();
+    let failure_slot = Arc::downgrade(&slot);
+    let failure_observer = on_failure.clone();
     handle.on_failure(move |failure| {
         log::warn!("pty id={id}: terminal engine failed: {failure:?}");
+        if let Some(slot) = failure_slot.upgrade() {
+            let action = slot.record_failure();
+            if action.notify { notify_engine_failure(&failure_observer, format!("terminal engine failed: {failure:?}")); }
+            // This callback may run on the actor. Drop only requests stop;
+            // joining here would wait for the current thread itself.
+            if action.retire { drop(slot.close()); }
+        }
         failure_exit.report(engine::ENGINE_FAILED_EXIT);
     });
     let reader_exit = exit.clone();
@@ -539,8 +574,14 @@ fn run_engine_pipeline(
                     false
                 }
             };
-            input.shutdown();
-            let code = engine::final_exit_code(code, reader_drained, engine_thread.join().is_ok());
+            let finished = core.finish().is_ok() && core.handle.failure().is_none();
+            let healthy = reader_drained && finished;
+            let action = slot.finish_process(healthy);
+            if action.notify { notify_engine_failure(&on_failure, "terminal engine input finalization failed".into()); }
+            if action.retire {
+                if let Some(owner) = slot.close() { let _ = owner.join(); }
+            }
+            let code = engine::final_exit_code(code, reader_drained, finished);
             exit.report(code);
         })
         .expect("spawn pty waiter thread")
@@ -651,6 +692,11 @@ mod engine_pipeline_tests {
         Exit(i32),
     }
 
+    fn pipeline(engine: engine::Engine) -> EnginePipeline {
+        let slot = CoreSlot::new();
+        EnginePipeline { core: slot.install(engine).unwrap(), slot, on_failure: Arc::new(|_| {}) }
+    }
+
     // A real shell on a real PTY: its output reaches the terminal, the
     // terminal's answer to a device query reaches the shell through the PTY
     // writer, and the last frame arrives before the exit code.
@@ -687,6 +733,8 @@ mod engine_pipeline_tests {
             reply_sink(writer.clone()),
         )
         .expect("engine");
+        let engine = pipeline(engine);
+        let retained = engine.slot.clone();
         let waiter = run_engine_pipeline(
             1,
             reader,
@@ -700,6 +748,12 @@ mod engine_pipeline_tests {
         );
         waiter.join().expect("waiter");
         drop(pair.master);
+        let handle = retained.handle().expect("grid survives the process");
+        let text = handle.read_text(5).unwrap().recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+        assert!(text.contains("reply:[?1;2c"), "{text:?}");
+        handle.resize(60, 6);
+        assert!(handle.read_text(6).unwrap().recv_timeout(Duration::from_secs(2)).unwrap().is_ok());
+        retained.close().unwrap().join().unwrap();
 
         let events: Vec<Event> = rx.try_iter().collect();
         let exit_at = events
@@ -718,6 +772,62 @@ mod engine_pipeline_tests {
     }
 
     #[test]
+    fn a_retained_core_reports_failure_after_the_process_exit_without_a_second_exit() {
+        let pair = native_pty_system().openpty(PtySize { rows: 3, cols: 20, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c"); cmd.arg("printf retained; exit 0");
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let fail = Arc::new(AtomicBool::new(false));
+        let should_fail = fail.clone();
+        let (frames_tx, frames_rx) = mpsc::channel();
+        let actor = engine::start(20, 3, Box::new(move |frame| {
+            frames_tx.send(frame).unwrap();
+            !should_fail.load(Ordering::Acquire)
+        }), Box::new(|_| {})).unwrap();
+        let mut pipeline = pipeline(actor);
+        let slot = pipeline.slot.clone();
+        let (failure_tx, failure_rx) = mpsc::channel();
+        pipeline.on_failure = Arc::new(move |message| { failure_tx.send(message).unwrap(); });
+        let (exit_tx, exit_rx) = mpsc::channel();
+        run_engine_pipeline(1, reader, pipeline, child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| {
+            exit_tx.send(code).unwrap();
+        }).join().unwrap();
+        assert_eq!(exit_rx.recv_timeout(Duration::from_secs(2)).unwrap(), 0);
+        assert!(failure_rx.try_recv().is_err());
+        let last = frames_rx.try_iter().last().unwrap();
+        let handle = slot.handle().unwrap();
+        fail.store(true, Ordering::Release);
+        handle.credit(decode(&last).seq);
+        handle.request_full();
+        assert!(failure_rx.recv_timeout(Duration::from_secs(2)).unwrap().contains("failed"));
+        assert!(slot.handle().is_err());
+        assert!(exit_rx.try_recv().is_err(), "process exit is never rewritten");
+        assert!(failure_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn dropping_a_finished_pipeline_slot_stops_its_subscribed_actor() {
+        let pair = native_pty_system().openpty(PtySize { rows: 3, cols: 20, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c"); cmd.arg("exit 0");
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let pipeline = pipeline(engine::start(20, 3, Box::new(|_| true), Box::new(|_| {})).unwrap());
+        let slot = pipeline.slot.clone();
+        let weak = Arc::downgrade(&slot);
+        let handle = slot.handle().unwrap();
+        run_engine_pipeline(1, reader, pipeline, child, Arc::new(AtomicBool::new(false)), |_| {}, |_| {}).join().unwrap();
+        drop(slot);
+        assert!(weak.upgrade().is_none(), "failure subscription cannot own its slot");
+        if let Ok(reply) = handle.read_text(3) {
+            assert!(reply.recv_timeout(Duration::from_secs(2)).map(|result| result.is_err()).unwrap_or(true));
+        }
+    }
+
+    #[test]
     fn a_rejected_final_frame_invalidates_even_a_zero_exit_shell() {
         use std::sync::atomic::AtomicUsize;
         let pair = native_pty_system().openpty(PtySize { rows: 5, cols: 40, pixel_width: 0, pixel_height: 0 }).expect("openpty");
@@ -731,7 +841,7 @@ mod engine_pipeline_tests {
         let sink_calls = calls.clone();
         let engine = engine::start(40, 5, Box::new(move |_| sink_calls.fetch_add(1, Ordering::SeqCst) == 0), Box::new(|_| {})).expect("engine");
         let (tx, rx) = mpsc::channel();
-        let waiter = run_engine_pipeline(1, reader, engine, child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| { tx.send(code).unwrap(); });
+        let waiter = run_engine_pipeline(1, reader, pipeline(engine), child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| { tx.send(code).unwrap(); });
         waiter.join().expect("waiter");
         let code = rx.recv_timeout(Duration::from_secs(2)).expect("session exit");
         assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -757,7 +867,7 @@ mod engine_pipeline_tests {
         let (tx, rx) = mpsc::channel();
         let kill_on_exit = cleanup.clone();
         let exited = Arc::new(AtomicBool::new(false));
-        let waiter = run_engine_pipeline(1, reader, engine, child, exited.clone(), |_| {}, move |code| {
+        let waiter = run_engine_pipeline(1, reader, pipeline(engine), child, exited.clone(), |_| {}, move |code| {
             if let Some(mut killer) = kill_on_exit.lock().unwrap().take() { let _ = killer.kill(); }
             tx.send(code).unwrap();
         });
@@ -770,6 +880,50 @@ mod engine_pipeline_tests {
         assert_eq!(code.unwrap(), engine::ENGINE_FAILED_EXIT);
         assert!(exited.load(Ordering::Acquire));
         assert!(rx.try_recv().is_err(), "exit is reported only once");
+    }
+
+    #[test]
+    fn a_panicking_failure_observer_cannot_prevent_killing_a_live_child() {
+        let pair = native_pty_system().openpty(PtySize { rows: 3, cols: 20, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh"); cmd.arg("-c"); cmd.arg("read value; exit 0");
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let cleanup = Arc::new(Mutex::new(Some(child.clone_killer())));
+        let actor = engine::start(20, 3, Box::new(|_| false), Box::new(|_| {})).unwrap();
+        let mut pipeline = pipeline(actor);
+        pipeline.on_failure = Arc::new(|_| panic!("injected observer panic"));
+        let (tx, rx) = mpsc::channel();
+        let kill = cleanup.clone();
+        let waiter = run_engine_pipeline(1, reader, pipeline, child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| {
+            if let Some(mut killer) = kill.lock().unwrap().take() { let _ = killer.kill(); }
+            tx.send(code).unwrap();
+        });
+        let result = rx.recv_timeout(Duration::from_secs(2));
+        if let Some(mut killer) = cleanup.lock().unwrap().take() { let _ = killer.kill(); }
+        waiter.join().unwrap();
+        assert_eq!(result.unwrap(), engine::ENGINE_FAILED_EXIT);
+    }
+
+    #[test]
+    fn a_panicking_finalization_observer_cannot_abandon_the_owner_or_exit() {
+        struct PanickingReader;
+        impl Read for PanickingReader {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> { panic!("injected reader panic"); }
+        }
+        let pair = native_pty_system().openpty(PtySize { rows: 3, cols: 20, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh"); cmd.arg("-c"); cmd.arg("exit 0");
+        let child = pair.slave.spawn_command(cmd).unwrap(); drop(pair.slave);
+        let mut pipeline = pipeline(engine::start(20, 3, Box::new(|_| true), Box::new(|_| {})).unwrap());
+        let slot = pipeline.slot.clone();
+        pipeline.on_failure = Arc::new(|_| panic!("injected finalization observer panic"));
+        let (tx, rx) = mpsc::channel();
+        run_engine_pipeline(1, Box::new(PanickingReader), pipeline, child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| {
+            tx.send(code).unwrap();
+        }).join().expect("observer must not panic the waiter");
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), engine::ENGINE_FAILED_EXIT);
+        assert!(slot.handle().is_err());
+        assert!(slot.close().is_none(), "failed owner must already be retired");
     }
 
     #[test]

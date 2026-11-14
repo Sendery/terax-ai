@@ -36,7 +36,7 @@ vi.mock("@tauri-apps/api/core", () => {
           ipc.open = { resolve, reject };
         });
       }
-      if (command === "pty_resize" && ipc.resize) return ipc.resize;
+      if (command === "gterm_resize" && ipc.resize) return ipc.resize;
       if (command === "gterm_read_text")
         return ipc.text ?? Promise.resolve("native text");
       if (command === "gterm_available") return Promise.resolve(true);
@@ -298,8 +298,8 @@ describe("EngineSession commands", () => {
     session.scroll(-3);
     session.scroll(0);
     await session.write("ls\r");
-    expect(commands("pty_resize")).toEqual([
-      { command: "pty_resize", args: { id: 9, cols: 80, rows: 24 } },
+    expect(commands("gterm_resize")).toEqual([
+      { command: "gterm_resize", args: { id: 9, cols: 80, rows: 24 } },
     ]);
     expect(commands("gterm_scroll")).toEqual([
       { command: "gterm_scroll", args: { id: 9, delta: -3 } },
@@ -363,11 +363,11 @@ describe("EngineSession opening synchronization", () => {
     const { session, pending } = deferredSession();
     session.resize(80, 24);
     session.resize(100, 30);
-    expect(commands("pty_resize")).toEqual([]);
+    expect(commands("gterm_resize")).toEqual([]);
     ipc.open?.resolve(12);
     await pending;
-    expect(commands("pty_resize")).toEqual([
-      { command: "pty_resize", args: { id: 12, cols: 100, rows: 30 } },
+    expect(commands("gterm_resize")).toEqual([
+      { command: "gterm_resize", args: { id: 12, cols: 100, rows: 30 } },
     ]);
   });
 
@@ -377,7 +377,7 @@ describe("EngineSession opening synchronization", () => {
     session.resize(4, 2);
     ipc.open?.resolve(12);
     await pending;
-    expect(commands("pty_resize")).toEqual([]);
+    expect(commands("gterm_resize")).toEqual([]);
   });
 
   it("does not resize synthetic bench sessions", async () => {
@@ -386,7 +386,7 @@ describe("EngineSession opening synchronization", () => {
     ipc.open?.resolve(12);
     await pending;
     session.resize(100, 30);
-    expect(commands("pty_resize")).toEqual([]);
+    expect(commands("gterm_resize")).toEqual([]);
     expect(session.grid).toEqual({ cols: 4, rows: 2 });
   });
 
@@ -397,7 +397,7 @@ describe("EngineSession opening synchronization", () => {
     await session.close();
     ipc.open?.resolve(12);
     await expect(pending).rejects.toThrow("session closed while opening");
-    expect(commands("pty_resize")).toEqual([]);
+    expect(commands("gterm_resize")).toEqual([]);
     expect(commands("gterm_set_colors")).toEqual([]);
     expect(commands("pty_close")).toHaveLength(1);
   });
@@ -698,13 +698,13 @@ it("the real ghostty adapter awaits native resize completion", async () => {
   });
   await Promise.resolve();
   expect(completed).toBe(false);
-  expect(commands("pty_resize")).toHaveLength(1);
+  expect(commands("gterm_resize")).toHaveLength(1);
   owner.resize(100, 30);
   await Promise.resolve();
-  expect(commands("pty_resize")).toHaveLength(1);
+  expect(commands("gterm_resize")).toHaveLength(1);
   finish();
   await settled;
-  expect(commands("pty_resize").map((c) => c.args)).toEqual([
+  expect(commands("gterm_resize").map((c) => c.args)).toEqual([
     { id: 9, cols: 80, rows: 24 },
     { id: 9, cols: 100, rows: 30 },
   ]);
@@ -741,4 +741,43 @@ it("rejects text returned after its session closed and rejects malformed native 
   finish("stale private content");
   const result = (await settled)[0];
   expect(result.status).toBe("rejected");
+});
+
+it("reports a retained core failure after a successful process exit", async () => {
+  const renderer = new FakeRenderer();
+  const onError = vi.fn();
+  const onExit = vi.fn();
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+    observer: { onError, onExit },
+  });
+  ipc.open!.resolve(9);
+  const session = await opening;
+  channelOf(1).onmessage(0);
+  const args = commands("gterm_open")[0].args as {
+    onFailure: { onmessage: (message: string) => void };
+  };
+  args.onFailure.onmessage("frame delivery failed");
+  args.onFailure.onmessage("duplicate failure");
+  expect(onError).toHaveBeenCalledTimes(1);
+  expect(onExit).toHaveBeenCalledExactlyOnceWith(0);
+  expect(session.exitCode).toBe(0);
+  await expect(session.readText()).rejects.toThrow("unavailable");
+  await expect(session.write("late")).rejects.toThrow("failed");
+  await session.close();
+});
+
+it("keeps retained presentation and text available after exit without writing to the dead PTY", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  channelOf(1).onmessage(0);
+  await session.write("late");
+  expect(commands("pty_write")).toEqual([]);
+  await session.resizeAndWait(80, 24);
+  expect(commands("gterm_resize")).toEqual([
+    { command: "gterm_resize", args: { id: 9, cols: 80, rows: 24 } },
+  ]);
+  await expect(session.readText()).resolves.toBe("native text");
+  await session.close();
 });

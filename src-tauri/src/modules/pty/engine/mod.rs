@@ -232,6 +232,7 @@ mod runtime {
         colors: Option<Colors>,
         scroll: i64,
         full: bool,
+        stop: bool,
         text_requests: Vec<TextRequest>,
         text_pending: usize,
         text_closed: bool,
@@ -314,6 +315,14 @@ mod runtime {
                 return Err("terminal engine closed".into());
             }
             Ok(receiver)
+        }
+
+        pub fn failure(&self) -> Option<EngineFailure> {
+            self.health.failure()
+        }
+
+        pub fn request_stop(&self) {
+            self.update(|control| control.stop = true);
         }
 
         pub fn on_failure(&self, listener: impl FnOnce(EngineFailure) + Send + 'static) {
@@ -514,6 +523,7 @@ mod runtime {
         replies: &'cb RefCell<Vec<u8>>,
         reply_sink: Option<ReplySink>,
         input_finished: bool,
+        stop_requested: bool,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -557,6 +567,16 @@ mod runtime {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .take();
+            if c.stop {
+                self.stop_requested = true;
+                for request in c.text_requests {
+                    let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                }
+                reject_text_requests(&self.control);
+                self.reply_sink.take();
+                *self.replies.borrow_mut() = Vec::new();
+                return;
+            }
             if let Some((cols, rows)) = c.resize {
                 if (cols, rows) != self.size && validate_size(cols, rows).is_ok() {
                     match self.term.resize(cols, rows, 0, 0) {
@@ -656,7 +676,7 @@ mod runtime {
         /// Returns how long the engine may block before it must look again.
         fn tick(&mut self) -> Option<std::time::Duration> {
             self.apply_control();
-            if !self.sink_open {
+            if self.stop_requested || !self.sink_open {
                 return None;
             }
             match self.pump.decide(Instant::now()) {
@@ -673,7 +693,7 @@ mod runtime {
         // presentation updates still wait for the next returned credit.
         fn finish(&mut self) {
             self.apply_control();
-            if self.sink_open && self.pump.has_pending() {
+            if !self.stop_requested && self.sink_open && self.pump.has_pending() {
                 self.emit();
             }
         }
@@ -684,6 +704,9 @@ mod runtime {
                 self.input_finished = true;
                 self.reply_sink.take();
                 *self.replies.borrow_mut() = Vec::new();
+            }
+            if self.stop_requested {
+                return Err(EngineFailure::Cancelled);
             }
             self.health.failure().map_or(Ok(()), Err)
         }
@@ -734,13 +757,18 @@ mod runtime {
             replies: &replies,
             reply_sink: Some(reply_sink),
             input_finished: false,
+            stop_requested: false,
             control,
             stats,
         };
         session.update_scrollback_rows();
         let _ = ready.send(Ok(()));
         loop {
-            let message = match session.tick() {
+            let waiting = session.tick();
+            if session.stop_requested {
+                return;
+            }
+            let message = match waiting {
                 None => match rx.recv() {
                     Ok(m) => m,
                     Err(_) => return,

@@ -128,7 +128,7 @@ export class TerminalSessionController {
   }
 
   resize(cols: number, rows: number): void {
-    if (this.closed || this.firstFailure || this.firstExit !== null) return;
+    if (this.closed || this.firstFailure) return;
     if (cols === this.size.cols && rows === this.size.rows) return;
     this.size = { cols, rows };
     this.synchronizeSize();
@@ -142,7 +142,6 @@ export class TerminalSessionController {
     return (
       !this.closed &&
       !this.firstFailure &&
-      this.firstExit === null &&
       this.engine !== null &&
       (this.appliedSize.cols !== this.size.cols ||
         this.appliedSize.rows !== this.size.rows)

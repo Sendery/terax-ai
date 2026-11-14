@@ -241,3 +241,51 @@ it("makes a failed late teardown observable through close and its observer", asy
   expect(t.onError).toHaveBeenCalledExactlyOnceWith(error);
   expect(engine.close).toHaveBeenCalledTimes(1);
 });
+
+it("keeps presentation resizing after process exit while rejecting input", async () => {
+  const engine = driver();
+  let exit!: (code: number) => void;
+  const session = new TerminalSessionController(
+    async (_size, observer) => {
+      exit = observer.onExit;
+      return engine;
+    },
+    { cols: 80, rows: 24 },
+  );
+  await session.opened;
+  exit(0);
+  session.resize(100, 30);
+  await session.layoutSettled();
+  expect(engine.resize).toHaveBeenCalledExactlyOnceWith(100, 30);
+  expect(session.write("late")).toBe(false);
+  expect(engine.close).not.toHaveBeenCalled();
+  await session.close();
+});
+
+it("discards queued input when the process exits during an earlier write", async () => {
+  const engine = driver();
+  let finish!: () => void;
+  vi.mocked(engine.write).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let exit!: (code: number) => void;
+  const session = new TerminalSessionController(
+    async (_size, observer) => {
+      exit = observer.onExit;
+      return engine;
+    },
+    { cols: 80, rows: 24 },
+  );
+  await session.opened;
+  session.write("A");
+  session.write("B");
+  await Promise.resolve();
+  exit(0);
+  finish();
+  await session.settled();
+  expect(engine.write).toHaveBeenCalledExactlyOnceWith("A");
+  await session.close();
+});

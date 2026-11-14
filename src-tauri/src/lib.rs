@@ -330,6 +330,7 @@ pub fn run() {
             pty::gterm::gterm_scroll,
             pty::gterm::gterm_request_full,
             pty::gterm::gterm_set_colors,
+            pty::gterm::gterm_resize,
             pty::gterm::gterm_bench_open,
             pty::gterm::gterm_bench_stats,
             pty::gterm::gterm_lab_autorun,
