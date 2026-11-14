@@ -1,0 +1,83 @@
+{
+  "binaryCommit": "014b72d",
+  "acceptedPerformanceData": false,
+  "runs": [
+    {
+      "mode": "gate-engine-profile",
+      "repetition": 1,
+      "pid": 29600,
+      "elapsedMs": 304579,
+      "timedOut": true,
+      "timeoutReason": "Lab step made no progress for five minutes",
+      "outcome": {
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "reportSource": "checkpoint",
+      "cleanup": {
+        "initial": [
+          {
+            "pid": 29600,
+            "ppid": 29540,
+            "rssKiB": 88032,
+            "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+            "pgid": 29600,
+            "birth": "1794663218:393599"
+          }
+        ],
+        "sent": [
+          {
+            "pid": 29600,
+            "birth": "1794663218:393599",
+            "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+            "signal": "SIGTERM"
+          }
+        ],
+        "errors": [],
+        "survivors": []
+      }
+    },
+    {
+      "mode": "gate-engine-profile",
+      "repetition": 2,
+      "pid": 63180,
+      "elapsedMs": 304551,
+      "timedOut": true,
+      "timeoutReason": "Lab step made no progress for five minutes",
+      "outcome": {
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "reportSource": "checkpoint",
+      "cleanup": {
+        "initial": [
+          {
+            "pid": 63180,
+            "ppid": 29540,
+            "rssKiB": 107296,
+            "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+            "pgid": 63180,
+            "birth": "1794663523:21736"
+          }
+        ],
+        "sent": [
+          {
+            "pid": 63180,
+            "birth": "1794663523:21736",
+            "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+            "signal": "SIGTERM"
+          }
+        ],
+        "errors": [],
+        "survivors": []
+      }
+    }
+  ],
+  "observedGraphicalState": {
+    "observedAt": "2026-11-14T13:58:19.649021+00:00",
+    "screenLocked": true,
+    "oneConsoleSession": true,
+    "loginDone": true
+  },
+  "assessment": "Both attempts stalled at the first payload and ended by the runner five-minute inactivity guard. A locked graphical session was observed afterwards. Causality is not yet established; repeat the same binary after a verified unlock. No FPS result is accepted."
+}

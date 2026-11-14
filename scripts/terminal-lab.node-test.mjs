@@ -29,6 +29,8 @@ test("successful runs require both complete echo measurements and successful cle
   const echo = { count: 50, samples: Array(50).fill(1), timeouts: 0 };
   const run = { mode: "bench", timedOut: false, reportExists: true, outcome: { code: 0 }, cleanup: { errors: [], survivors: [] }, report: { errors: [], bench: Array(6).fill({}), xtermBench: Array(6).fill({}), captures: { engine: true, xterm: true }, echo: { engine: echo, xterm: echo } } };
   assert.equal(successfulRun(run), true);
+  assert.equal(successfulRun({ ...run, guiSession: { available: false, locked: true } }), false);
+  assert.equal(successfulRun({ ...run, samples: [{guiSession: {available: false}}] }), false);
   assert.equal(successfulRun({ ...run, report: { ...run.report, echo: { engine: { count: 0, samples: [], timeouts: 50 }, xterm: echo } } }), false);
   assert.equal(successfulRun({ ...run, report: {} }), false);
   assert.equal(successfulRun({ ...run, cleanup: { errors: [], survivors: [{ pid: 1 }] } }), false);
@@ -90,4 +92,28 @@ test("profile gate mode remains closed and needs complete profiles for all fixed
  const run={mode:"gate-engine-profile",reportExists:true,outcome:{code:0},cleanup:{},report:{errors:[],bench:[b("ascii"),b("sgr"),b("tui")]}};
  assert.equal(successfulRun(run),true);
  assert.equal(successfulRun({...run,report:{...run.report,bench:[{...b("ascii"),profile:{complete:false,frames:[]}},b("sgr"),b("tui")]}}),false);
+});
+
+test("GUI readiness requires one unlocked console session owned by the runner",async()=>{
+ const {assessGuiSession}=await import("./terminal-lab.mjs");
+ const session={userId:501,onConsole:true,loginDone:true,locked:false};
+ assert.equal(assessGuiSession([session],501).available,true);
+ assert.equal(assessGuiSession([{...session,locked:true}],501).available,false);
+ assert.equal(assessGuiSession([{...session,locked:null}],501).available,false);
+ assert.equal(assessGuiSession([{...session,loginDone:false}],501).available,false);
+ assert.equal(assessGuiSession([session],502).available,false);
+ assert.equal(assessGuiSession([],501).available,false);
+ assert.equal(assessGuiSession([session,session],501).available,false);
+ assert.equal(assessGuiSession({locked:false},501).available,false);
+});
+test("macOS session parser exports no account names, UUIDs or ambiguous OS timestamps", {skip:process.platform!=="darwin"},async()=>{
+ const {execFileSync}=await import("node:child_process");
+ const {fileURLToPath}=await import("node:url");
+ const xml='<?xml version="1.0"?><plist version="1.0"><array><dict><key>IOConsoleUsers</key><array><dict><key>kCGSSessionUserIDKey</key><integer>501</integer><key>kCGSSessionOnConsoleKey</key><true/><key>kCGSessionLoginDoneKey</key><true/><key>CGSSessionScreenIsLocked</key><false/><key>kCGSSessionUserNameKey</key><string>private-name</string><key>CGSSessionScreenLockedTime</key><integer>999</integer></dict></array></dict></array></plist>';
+ const out=execFileSync("python3",[fileURLToPath(new URL("./terminal-lab-session.py",import.meta.url))],{input:xml,encoding:"utf8"});
+ assert.deepEqual(JSON.parse(out),[{userId:501,onConsole:true,loginDone:true,locked:false}]);
+ assert.equal(out.includes("private-name"),false);assert.equal(out.includes("999"),false);
+ const objectRoot=xml.replace("<plist version=\"1.0\"><array><dict>","<plist version=\"1.0\"><dict>").replace("</dict></array></plist>","</dict></plist>");
+ const outObject=execFileSync("python3",[fileURLToPath(new URL("./terminal-lab-session.py",import.meta.url))],{input:objectRoot,encoding:"utf8"});
+ assert.deepEqual(JSON.parse(outObject),JSON.parse(out));
 });

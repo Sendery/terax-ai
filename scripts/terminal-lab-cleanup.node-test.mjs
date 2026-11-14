@@ -48,3 +48,21 @@ test("bounded cleanup reports surviving identities and signal errors", async () 
   assert.equal(result.errors.length, 2);
   assert.equal(result.survivors[0].birth, shell.birth);
 });
+
+test("app cleanup failure does not skip awake-assertion cleanup",async()=>{
+ const {cleanupLabResources}=await import("./terminal-lab-cleanup.mjs");const steps=[];
+ const r=await cleanupLabResources([
+  {name:"app",run:async()=>{steps.push("app");throw new Error("snapshot failed");}},
+  {name:"power lookup",run:async()=>{steps.push("lookup");}},
+  {name:"power",run:async()=>{steps.push("power");return{initial:[root],sent:[{pid:10}],errors:[],survivors:[]};}},
+ ]);
+ assert.deepEqual(steps,["app","lookup","power"]);assert.equal(r.errors.length,1);assert.match(r.errors[0].error,/app.*snapshot failed/);assert.equal(r.sent.length,1);
+});
+test("independent cleanup failures are all retained and cannot prevent later steps",async()=>{
+ const {cleanupLabResources}=await import("./terminal-lab-cleanup.mjs");let last=false;
+ const r=await cleanupLabResources([
+  {name:"app",run:async()=>{throw new Error("app failure");}},
+  {name:"power lookup",run:async()=>{throw new Error("lookup failure");}},
+  {name:"power",run:async()=>{last=true;throw new Error("power failure");}},
+ ]);assert.equal(last,true);assert.equal(r.errors.length,3);assert.equal(r.survivors.length,0);
+});

@@ -591,3 +591,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - Failure: reading draw counts after the drain includes later cursor redraws outside the measured interval.
 - Prevention: freeze interval-based counters with the wall timer and rAF sampler, report drain duration separately, and retain pending/failed reply counts.
 - Verification: a regression injects redraws during the drain and checks that they do not increase the benchmark counter; missing replies fail after a bounded wait.
+
+### A locked macOS console can invalidate an unattended webview run
+
+- Trigger: SSH remains usable while the graphical console is locked or unavailable.
+- Failure: a native app and its workers can start without establishing valid visible-webview animation/timer evidence. A process-alive check is insufficient.
+- Prevention: validate matching console user, completed login and explicit unlock before and during collection. Fail on ambiguous state. Keep any awake assertion process-scoped and bounded; it does not unlock the session. Clean its resources in independent steps so an app-cleanup failure cannot skip assertion cleanup.
+- Verification: exercise normalized locked/unlocked/unknown fixtures, parse real IORegistry plist shapes without retaining private fields, and repeat the same binary after an actual unlock. An observed lock alone does not prove the cause of an earlier stall.

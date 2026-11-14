@@ -561,9 +561,50 @@ boundary. Missing/failed credits or replies make the profile incomplete.
 Complete compact histories still respect the unchanged 16 MiB report bound.
 
 Stage-profile gates passed: frontend lint, types,2283tests(one existing skip),
-production bundle,37Node script tests and101Pi tests; strict all-target
+production bundle,37Node script tests and101 Pi tests; strict all-target
 clippy and locked Rust tests passed both without the feature(582unit+58
 integration,one ignored) and with it(618unit+58integration,two ignored).
 Astra independently reviewed the final diff and found no residual blocker.
 The new regressions were observed failing before implementation; a test-double
 bookkeeping correction retained its original draw/credit assertions.
+
+### Graphical-session readiness diagnostic
+
+The first two `014b72d` profile attempts stalled at the initial ASCII step and
+ended through the runner's five-minute inactivity guard. Both owned process
+trees were cleaned with no errors or survivors. No profile/FPS measurement is
+accepted. A subsequent OS inspection reported the matching console session
+locked. This is a confirmed environment condition, not yet proof that it
+caused those stalls; the same binary must be repeated after a verified unlock.
+Selected diagnostics are under
+`spikes/terminal-ghostty-vt/results/phase1/m2-2026-11-14-profile-014b72d-diagnostic/`.
+
+The macOS runner now checks the actual console session before launch, every
+five seconds and at completion. It requires a completed login, matching UID
+and explicit unlocked state. Unknown/ambiguous state fails closed. A lost
+session invalidates collection and triggers normal identity-verified cleanup.
+Only normalized booleans and observation time are stored, not account names,
+UUIDs or the ambiguous OS lock timestamp. Real macOS 27 plist output has an
+object root; extraction also supports the array form and tests both.
+
+A temporary `caffeinate -d -i` assertion is scoped to each app PID with `-w`
+and a hard `-t` duration. It prevents idle display/system sleep while that app
+runs, does not unlock the session or change security policy, and is tracked
+and cleaned by kernel birth identity. Readiness, power-assertion details and
+runner/source commits are recorded. Graphical measurement still requires the
+user to unlock the M2; sudo is not a substitute for an active GUI session.
+
+Guard regression checks reject unavailable GUI state even if another failure
+flag is lost. Resource cleanup executes app, power-identity lookup and awake
+assertion cleanup as independent steps; a failure in one cannot skip later
+steps and all errors are retained. Those cleanup regressions failed before
+the fix, then passed. A real locked-session smoke returned before spawning
+any app. A separate one-second child/awake-assertion smoke exited 0 for both
+processes, verifying normal PID-scoped termination without a GUI benchmark.
+
+GUI/energy guard final gates passed: `pnpm lint`, `pnpm check-types`,
+`pnpm test` (2283 passed, one existing skip), `pnpm build`, 41 Node script tests,
+101 Pi tests and strict locked Rust clippy/tests with and without the feature.
+Astra reviewed the corrected independent cleanup paths with no residual
+blocker. These checks validate the guard; they do not replace the pending
+unlocked native profile run.

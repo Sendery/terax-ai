@@ -43,3 +43,17 @@ export async function cleanupOwned(owned, { snapshot, signal, sleep, now = Date.
   }
   return { initial, sent, errors, survivors: observeDescendants(snapshot(), owned) };
 }
+
+
+export async function cleanupLabResources(steps) {
+  const result = { initial: [], sent: [], errors: [], survivors: [] };
+  for (const step of steps) {
+    try {
+      const part = await step.run();
+      if (part) for (const key of ["initial", "sent", "errors", "survivors"]) result[key].push(...part[key]);
+    } catch (error) {
+      result.errors.push({ error: `${step.name} cleanup failed: ${String(error)}` });
+    }
+  }
+  return result;
+}
