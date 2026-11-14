@@ -37,7 +37,7 @@ export type HandoffIo = {
   /** True once a full-screen TUI has the terminal in raw mode. */
   isReady: () => boolean;
   /** Visible terminal text, or null when this leaf has no live buffer. */
-  readBuffer: () => string | null;
+  readBuffer: () => string | null | Promise<string | null>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
 };
@@ -61,7 +61,10 @@ const BUSY_WORDS = /working|thinking|esc to interrupt/i;
  * change plus a busy marker is the pair that distinguishes a submitted prompt
  * from one that only grew a line in the composer.
  */
-export function turnStarted(baseline: string | null, current: string | null): boolean {
+export function turnStarted(
+  baseline: string | null,
+  current: string | null,
+): boolean {
   if (baseline === null || current === null) return false;
   if (current === baseline) return false;
   return SPINNER.test(current) || BUSY_WORDS.test(current);
@@ -76,13 +79,21 @@ async function waitForReady(io: HandoffIo): Promise<boolean> {
   return io.isReady();
 }
 
+async function readBuffer(io: HandoffIo): Promise<string | null> {
+  try {
+    return await io.readBuffer();
+  } catch {
+    return null;
+  }
+}
+
 async function pressEnterAndWatch(io: HandoffIo): Promise<boolean> {
-  const baseline = io.readBuffer();
+  const baseline = await readBuffer(io);
   io.write(SUBMIT_KEY);
   const deadline = io.now() + HANDOFF_TIMING.verifyWindowMs;
   while (io.now() < deadline) {
     await io.sleep(HANDOFF_TIMING.verifyPollMs);
-    if (turnStarted(baseline, io.readBuffer())) return true;
+    if (turnStarted(baseline, await readBuffer(io))) return true;
   }
   return false;
 }

@@ -3,29 +3,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { useManagedAgentsStore } from "@/modules/agents/store/managedAgentsStore";
 import {
   findLeafCwd,
+  hasLeaf,
   type TerminalPaneHandle,
   whenSessionReady,
   writeToSession,
 } from "@/modules/terminal";
 import type { Tab } from "@/modules/tabs";
 import type { Live } from "../store/chatStore";
-import { redactSensitive } from "./redact";
-
-type TuiWaitResult = "ready" | "gone" | "timeout";
-
-async function waitForClaudeTuiReady(
-  readBuf: () => string | null,
-  timeoutMs = 8000,
-): Promise<TuiWaitResult> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const buf = readBuf();
-    if (buf === null) return "gone";
-    if (buf.includes("shortcuts") || buf.includes("? for")) return "ready";
-    await new Promise((r) => setTimeout(r, 120));
-  }
-  return "timeout";
-}
+import { waitForClaudeTuiReady } from "@/modules/ai/lib/claudeReadiness";
+import {
+  readTerminalContext,
+  type TerminalTextTarget,
+} from "@/modules/ai/lib/terminalContext";
 
 type Params = {
   setLive: (live: Live) => void;
@@ -76,16 +65,24 @@ export function useAiLiveBridge(params: Params) {
       return explorerRoot ?? launchCwd ?? home ?? null;
     };
 
+    const leafTarget = (leafId: number): TerminalTextTarget | null => {
+      const tab = ref.current.tabs.find(
+        (item) => item.kind === "terminal" && hasLeaf(item.paneTree, leafId),
+      );
+      const handle = terminalRefs.current.get(leafId);
+      return tab?.kind === "terminal" && handle
+        ? { tabId: tab.id, leafId, private: tab.private === true, handle }
+        : null;
+    };
+    const activeTarget = (): TerminalTextTarget | null => {
+      const { activeId, tabs } = ref.current;
+      const tab = tabs.find((item) => item.id === activeId);
+      return tab?.kind === "terminal" ? leafTarget(tab.activeLeafId) : null;
+    };
+
     setLive({
       getCwd: findCwd,
-      getTerminalContext: () => {
-        const { activeId, tabs } = ref.current;
-        const t = tabs.find((x) => x.id === activeId);
-        if (t?.kind !== "terminal") return null;
-        if (t.private) return null;
-        const buf = terminalRefs.current.get(t.activeLeafId)?.getBuffer(300);
-        return buf ? redactSensitive(buf) : null;
-      },
+      getTerminalContext: () => readTerminalContext(activeTarget, 300),
       isActiveTerminalPrivate: () => {
         const { activeId, tabs } = ref.current;
         const t = tabs.find((x) => x.id === activeId);
@@ -135,10 +132,8 @@ export function useAiLiveBridge(params: Params) {
             useManagedAgentsStore.getState().remove(leafId);
             return;
           }
-          const readBuf = () => {
-            const term = terminalRefs.current.get(leafId);
-            return term ? term.getBuffer(120) : null;
-          };
+          const readBuf = () =>
+            readTerminalContext(() => leafTarget(leafId), 120);
           const result = await waitForClaudeTuiReady(readBuf);
           if (result !== "ready") {
             if (result === "timeout") {
@@ -158,10 +153,8 @@ export function useAiLiveBridge(params: Params) {
         })();
         return { tabId, leafId };
       },
-      readLeafBuffer: (leafId: number) => {
-        const buf = terminalRefs.current.get(leafId)?.getBuffer(300);
-        return buf ? redactSensitive(buf) : null;
-      },
+      readLeafBuffer: (leafId: number) =>
+        readTerminalContext(() => leafTarget(leafId), 300),
     });
   }, [setLive, terminalRefs]);
 }

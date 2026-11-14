@@ -19,7 +19,7 @@ const toolOptions: ToolExecutionOptions = {
 
 type Ctx = {
   isActiveTerminalPrivate?: () => boolean;
-  getTerminalContext?: () => string | null;
+  getTerminalContext?: () => string | null | Promise<string | null>;
   openPreview?: (url: string) => boolean;
 };
 
@@ -173,5 +173,36 @@ describe("open_preview", () => {
       },
     );
     expect(r.error).toContain("unavailable");
+  });
+});
+
+it("awaits native terminal output before slicing the tail", async () => {
+  const result = await run(
+    "get_terminal_output",
+    makeContext({ getTerminalContext: async () => "one\ntwo\nthree" }),
+    { lines: 2 },
+  );
+  expect(result.output).toBe("two\nthree");
+  expect(result.lines_returned).toBe(2);
+});
+
+it("withholds a pending terminal query if privacy changes before it completes", async () => {
+  let privateTerminal = false;
+  let finish!: (text: string) => void;
+  const pending = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  const result = run(
+    "get_terminal_output",
+    makeContext({
+      getTerminalContext: () => pending,
+      isActiveTerminalPrivate: () => privateTerminal,
+    }),
+    {},
+  );
+  privateTerminal = true;
+  finish("private output");
+  expect(await result).toMatchObject({
+    error: expect.stringContaining("Privacy"),
   });
 });

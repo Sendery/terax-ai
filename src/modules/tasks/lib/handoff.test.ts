@@ -180,3 +180,27 @@ describe("handoffMessage", () => {
     ).toContain("did not visibly start a turn");
   });
 });
+
+it("awaits the native baseline and current buffers before confirming a turn", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  const read = terminal.io.readBuffer;
+  terminal.io.readBuffer = async () => await read();
+  const result = await handOffPrompt(terminal.io, () => "run the tests");
+  expect(result).toEqual({ ready: true, attempts: 1, confirmed: true });
+});
+
+it("does not treat missing asynchronous buffers as submission evidence", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  terminal.io.readBuffer = async () => null;
+  const result = await handOffPrompt(terminal.io, () => "run the tests");
+  expect(result.confirmed).toBe(false);
+});
+
+it("does not confirm a turn from a rejected native query", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  terminal.io.readBuffer = async () => {
+    throw new Error("core closed");
+  };
+  const result = await handOffPrompt(terminal.io, () => "run the tests");
+  expect(result.confirmed).toBe(false);
+});

@@ -89,7 +89,11 @@ export function buildManagedAgentTools(ctx: ToolContext) {
         }
         setTimeout(() => writeToSession(managed.leafId, "\r"), SUBMIT_DELAY_MS);
         store.bumpRound(managed.leafId);
-        return { ok: true, sent: oneLine, round: store.get(managed.leafId)?.rounds };
+        return {
+          ok: true,
+          sent: oneLine,
+          round: store.get(managed.leafId)?.rounds,
+        };
       },
     }),
 
@@ -103,7 +107,9 @@ export function buildManagedAgentTools(ctx: ToolContext) {
           .min(1)
           .max(400)
           .optional()
-          .describe("Trailing lines of the agent terminal to return. Default 120."),
+          .describe(
+            "Trailing lines of the agent terminal to return. Default 120.",
+          ),
       }),
       execute: async ({ lines }) => {
         const sessionId = ctx.getSessionId();
@@ -111,12 +117,22 @@ export function buildManagedAgentTools(ctx: ToolContext) {
           ? useManagedAgentsStore.getState().getBySessionId(sessionId)
           : undefined;
         if (!managed) return { active: false };
-        const raw = ctx.readAgentOutput(managed.leafId);
+        const raw = await ctx.readAgentOutput(managed.leafId);
+        const current =
+          sessionId && sessionId === ctx.getSessionId()
+            ? useManagedAgentsStore.getState().getBySessionId(sessionId)
+            : undefined;
+        if (
+          !current ||
+          current.leafId !== managed.leafId ||
+          current.tabId !== managed.tabId
+        )
+          return { active: false };
         return {
           active: true,
-          phase: managed.phase,
-          rounds: managed.rounds,
-          max_rounds: managed.maxRounds,
+          phase: current.phase,
+          rounds: current.rounds,
+          max_rounds: current.maxRounds,
           output: raw ? tailLines(raw, lines ?? 120) : "",
         };
       },

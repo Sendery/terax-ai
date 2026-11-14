@@ -44,7 +44,7 @@ export type DispatcherDeps = {
   /** True once an agent TUI in this leaf has the terminal in raw mode. */
   isLeafTuiReady: (leafId: number) => boolean;
   /** Visible terminal text of this leaf, or null when it has no live buffer. */
-  readLeafBuffer: (leafId: number) => string | null;
+  readLeafBuffer: (leafId: number) => string | null | Promise<string | null>;
   /** Opens a throwaway terminal on a command line, for the recover action. */
   openTerminalWith: (cwd: string, commandLine: string) => void;
 };

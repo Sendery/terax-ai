@@ -4,7 +4,7 @@ export type ToolContext = {
   /** Workspace root (explorer root). Used by tools that operate over the project. */
   getWorkspaceRoot: () => string | null;
   /** Last N lines of the active terminal buffer (or null if not a terminal tab). */
-  getTerminalContext: () => string | null;
+  getTerminalContext: () => string | null | Promise<string | null>;
   isActiveTerminalPrivate: () => boolean;
   /**
    * Type a string into the active terminal at the prompt — without executing.
@@ -16,7 +16,7 @@ export type ToolContext = {
   /** Spawn a Claude Code agent in a new terminal tab, bound to this session. */
   spawnAgent: (prompt: string) => { tabId: number; leafId: number } | null;
   /** Read the terminal scrollback tail of a managed agent's leaf. */
-  readAgentOutput: (leafId: number) => string | null;
+  readAgentOutput: (leafId: number) => string | null | Promise<string | null>;
   readCache: Map<string, { size: number; hash: number }>;
   /** Active chat session id — used by tools that persist per-session state (todos). */
   getSessionId: () => string | null;

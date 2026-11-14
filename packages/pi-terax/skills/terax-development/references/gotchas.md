@@ -667,3 +667,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** storing its owner in the live PTY session destroys history at process exit. A health listener holding its slot strongly forms an ownership cycle; a throwing observer can also skip kill, retirement or exit publication. Blocking shutdown or join from an actor callback can deadlock the actor itself.
 - **Prevention:** reserve core ownership separately before spawn; serialize publication against pane close; finish accepted input and release OS writers before retaining a healthy grid. Use weak ownership in health listeners, nonblocking actor stop, off-actor join outside locks, and exception isolation around notification alone. Keep process exit and post-exit core failure separate. Allow retained presentation changes while continuing to reject both new and already queued input after process exit.
 - **Verification:** real-PTY final-output/reply and retained-text tests; post-exit fault with one unchanged process exit; slot drop with the real subscription; throwing observers during live failure and finalization; queued-write and post-exit resize regressions. A successful actor join alone does not prove asynchronous OS pseudoconsole disposal.
+
+## Deferred terminal text and agent readiness
+
+- **Trigger:** switching a terminal reader from immediate JS state to a native query.
+- **Failure mode:** a Promise is sliced or compared as text; a pending result crosses a pane/privacy change; or a valid empty screen becomes unavailable and prematurely aborts agent startup.
+- **Prevention:** await at every consumer, capture and revalidate pane/handle/privacy and managed-agent ownership after await, then redact accepted AI text. Preserve empty text separately from unavailable. Submission confirmation needs both real baseline and current buffers.
+- **Verification:** async AI tail slicing, identity/privacy changes during a query, managed-agent reassociation, failed-query handoff, empty-screen-to-banner readiness and unavailable/timeout regressions.

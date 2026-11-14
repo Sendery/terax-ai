@@ -28,7 +28,7 @@ export type TerminalPaneHandle = {
   /** Newline encoding the foreground program negotiated, for synthesized
    *  multiline input that must not submit early. */
   shiftEnter: () => string;
-  getBuffer: (maxLines?: number) => string | null;
+  getBuffer: (maxLines?: number) => string | null | Promise<string | null>;
   getSelection: () => string | null;
 };
 

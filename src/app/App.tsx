@@ -873,7 +873,12 @@ export default function App() {
   // Enough of the screen to see an agent start a turn, without paying for the
   // whole scrollback on every poll.
   const readTaskLeafBuffer = useCallback(
-    (leafId: number) => terminalRefs.current.get(leafId)?.getBuffer(60) ?? null,
+    async (leafId: number) => {
+      const handle = terminalRefs.current.get(leafId);
+      if (!handle) return null;
+      const text = await handle.getBuffer(60);
+      return terminalRefs.current.get(leafId) === handle ? text : null;
+    },
     [],
   );
 

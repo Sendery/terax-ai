@@ -464,3 +464,18 @@ session disposal remains asynchronous, especially for ConPTY, and its completion
 is not established by the core join alone. Windows runtime validation remains
 pending. These foundations do not yet connect the native renderer to ordinary
 terminal panes or establish full terminal parity.
+
+### Asynchronous terminal text consumers
+
+`TerminalPaneHandle.getBuffer`, live AI context, managed-agent output and task
+handoff accept both synchronous legacy text and asynchronous native text. Every
+consumer awaits the result before slicing or comparing it. AI reads capture
+and recheck the owning tab, leaf, handle and privacy after awaiting, then apply
+the existing secret redaction. A failed query or changed target yields no text;
+a valid empty screen remains empty, so a booting agent is not mistaken for a
+closed pane. Managed-agent output additionally revalidates the chat/agent
+association and returns its current status. Task confirmation awaits both the
+baseline and subsequent buffers; missing or rejected text is never evidence
+that a turn started. App task readers reject a response from a replaced handle.
+The native ordinary-pane renderer is still pending; these consumer contracts
+prepare its real bounded query without using viewport projection as history.

@@ -27,7 +27,7 @@ import { pushRecentModel } from "../lib/modelPrefs";
 
 export type Live = {
   getCwd: () => string | null;
-  getTerminalContext: () => string | null;
+  getTerminalContext: () => string | null | Promise<string | null>;
   isActiveTerminalPrivate: () => boolean;
   injectIntoActivePty: (text: string) => boolean;
   getWorkspaceRoot: () => string | null;
@@ -37,7 +37,7 @@ export type Live = {
     prompt: string,
     sessionId: string,
   ) => { tabId: number; leafId: number } | null;
-  readLeafBuffer: (leafId: number) => string | null;
+  readLeafBuffer: (leafId: number) => string | null | Promise<string | null>;
 };
 
 export type AgentRunStatus =
