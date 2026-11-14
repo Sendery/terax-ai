@@ -288,3 +288,38 @@ an open whose id arrived after failure and blocks further writes, credits,
 resize, scroll and color controls. An observer exception cannot erase the
 failure or prevent the exit callback. Already-drawn pixels can remain visible;
 they are not evidence that the failed session consumed later output.
+
+
+### Window frame envelope: codec preparation
+
+The registered window-delivery experiment adds an autorun-only envelope,
+`TXW1`, around unchanged V1 frames. Only its pure decoder is implemented at
+this stage; no native transport or candidate lab mode is connected yet.
+Production xterm and ordinary engine sessions remain unchanged.
+
+All integers are little endian. The header is u32 magic `0x31575854`, u16
+member count (1 through 24), and zero reserved u16. Each member is u32 route
+(0 through 11), u32 frame byte length, then that complete V1 frame. Lengths
+are multiples of four, at least 36 and at most 256 KiB. The exact final offset
+must equal the envelope length; the envelope limit is 8 MiB. The native
+transport must separately reserve its entire original-plus-envelope memory
+peak within 8 MiB, including queued and in-flight originals and headers.
+This is an owner allocation bound, not a Tauri/WebKit or whole-process bound.
+
+The receiver registers a route before starting its producer. It validates the
+whole envelope and every complete inner V1 frame before applying any member.
+Unknown/closed routes, malformed data or noncontiguous sequences invalidate
+the run. The decoder checks ordering within an envelope; the receiver must
+also enforce continuity across envelopes before mutation. `decodeFrame` can
+read an aligned, bounded byte region of the received ArrayBuffer. Inner views
+alias that buffer, and the prepared session hook must consume those validated
+views once rather than copying or decoding them again.
+
+The optional stage profile appends `validationWaitMs` after `creditReplyOk`,
+leaving earlier tuple indices unchanged. It is finite and nonnegative, with
+its own distribution. Direct frames default to zero; the window candidate
+will report the time between a member's validation and application after the
+whole envelope is validated. Keep this wait separate from decode/apply CPU
+durations and from the subsequent ready-to-draw interval. This preparation
+has no graphical or performance result. The execution order and decision
+limit are in the registered window-frame experiment plan.

@@ -323,3 +323,31 @@ describe("underline kinds in attrs", () => {
     ]);
   });
 });
+
+it("decodes a bounded aligned frame view without copying or reading the envelope", () => {
+  const original = encodeFrame(base());
+  const packet = new ArrayBuffer(original.byteLength + 32);
+  new Uint8Array(packet).fill(0xa5);
+  new Uint8Array(packet, 16, original.byteLength).set(new Uint8Array(original));
+  const frame = decodeFrame(packet, 16, original.byteLength);
+  expect(frame.u32.buffer).toBe(packet);
+  expect(frame.u32.byteOffset).toBe(16);
+  expect(frame.u16.byteOffset).toBe(16);
+  expect(frame.byteLength).toBe(original.byteLength);
+  expect(describeFrame(frame)).toEqual(describeFrame(decodeFrame(original)));
+});
+
+it("rejects invalid frame regions with codec errors before constructing typed views", () => {
+  const buffer = encodeFrame(base());
+  for (const [offset, length] of [
+    [-4, buffer.byteLength],
+    [4, buffer.byteLength],
+    [0, -4],
+    [1, buffer.byteLength - 4],
+    [0.5, buffer.byteLength - 4],
+    [0, Number.NaN],
+    [0, buffer.byteLength + 4],
+  ]) {
+    expect(() => decodeFrame(buffer, offset, length)).toThrow(FrameDecodeError);
+  }
+});

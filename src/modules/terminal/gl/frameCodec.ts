@@ -100,14 +100,37 @@ export function createRowView(): RowView {
 
 const IS_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
-export function decodeFrame(buffer: ArrayBuffer): DecodedFrame {
+export function decodeFrame(
+  buffer: ArrayBuffer,
+  byteOffset = 0,
+  byteLength = buffer.byteLength - byteOffset,
+): DecodedFrame {
   if (!IS_LITTLE_ENDIAN) {
     throw new FrameDecodeError(
       "unsupported-platform",
       "frame views assume a little-endian host",
     );
   }
-  const length = buffer.byteLength;
+  if (
+    !Number.isSafeInteger(byteOffset) ||
+    !Number.isSafeInteger(byteLength) ||
+    byteOffset < 0 ||
+    byteLength < 0 ||
+    byteOffset > buffer.byteLength ||
+    byteLength > buffer.byteLength - byteOffset
+  ) {
+    throw new FrameDecodeError(
+      "truncated",
+      "frame region is outside the buffer",
+    );
+  }
+  if (byteOffset % 4 !== 0) {
+    throw new FrameDecodeError(
+      "misaligned",
+      "frame offset is not a multiple of 4",
+    );
+  }
+  const length = byteLength;
   if (length < HEADER_BYTES) {
     throw new FrameDecodeError("truncated", `${length} bytes, header needs 36`);
   }
@@ -117,8 +140,8 @@ export function decodeFrame(buffer: ArrayBuffer): DecodedFrame {
       `${length} is not a multiple of 4`,
     );
   }
-  const u32 = new Uint32Array(buffer);
-  const u16 = new Uint16Array(buffer);
+  const u32 = new Uint32Array(buffer, byteOffset, length / 4);
+  const u16 = new Uint16Array(buffer, byteOffset, length / 2);
   if (u32[0] !== FRAME_MAGIC) {
     throw new FrameDecodeError(
       "bad-magic",

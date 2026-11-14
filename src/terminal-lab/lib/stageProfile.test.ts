@@ -11,7 +11,7 @@ it("correlates local stages by session/sequence and keeps CPU submission separat
   profile.render(29, 4, 12);
   profile.stop(35);
   const report = profile.toJSON();
-  expect(report.frames).toEqual([[0, 1, 2, 3, 10, 30, 31, 34, true]]);
+  expect(report.frames).toEqual([[0, 1, 2, 3, 10, 30, 31, 34, true, 0]]);
   expect(report.draws).toEqual([[29, 4, 12]]);
   expect(report.decodeMs.p50).toBe(2);
   expect(report.applyMs.p50).toBe(3);
@@ -64,4 +64,23 @@ it("cannot declare a final profile complete while a received frame has no dispat
   p.stop(2);
   expect(p.toJSON().missingCredits).toBe(1);
   expect(p.toJSON().complete).toBe(false);
+});
+
+it("keeps whole-envelope validation wait separate from decode and apply CPU durations", () => {
+  const p = new StageProfile();
+  p.frame(0, {
+    seq: 1,
+    decodeMs: 2,
+    applyMs: 3,
+    validationWaitMs: 7,
+    readyAt: 20,
+  });
+  p.credit(0, 1, 21);
+  p.reply(0, 1, 22, true);
+  const r = p.toJSON();
+  expect(r.frameColumns[9]).toBe("validationWaitMs");
+  expect(r.frames[0][9]).toBe(7);
+  expect(r.validationWaitMs.p50).toBe(7);
+  expect(r.decodeMs.p50).toBe(2);
+  expect(r.applyMs.p50).toBe(3);
 });

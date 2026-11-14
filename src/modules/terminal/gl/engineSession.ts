@@ -57,6 +57,7 @@ export type FrameTiming = {
   seq: number;
   decodeMs: number;
   applyMs: number;
+  validationWaitMs?: number;
   readyAt: number;
 };
 

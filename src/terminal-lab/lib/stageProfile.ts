@@ -11,6 +11,7 @@ type FrameSample = [
   number | null,
   number | null,
   boolean | null,
+  number,
 ];
 type DrawSample = [number, number, number];
 
@@ -26,14 +27,14 @@ export class StageProfile {
       this.errors.push("frame after profile stopped");
       return;
     }
-    const { seq, decodeMs, applyMs, readyAt } = timing;
+    const { seq, decodeMs, applyMs, readyAt, validationWaitMs = 0 } = timing;
     const key = `${session}:${seq}`;
     if (
       !Number.isSafeInteger(session) ||
       session < 0 ||
       !Number.isSafeInteger(seq) ||
       seq < 1 ||
-      ![decodeMs, applyMs, readyAt].every(
+      ![decodeMs, applyMs, readyAt, validationWaitMs].every(
         (n) => Number.isFinite(n) && n >= 0,
       ) ||
       this.samples.has(key)
@@ -51,6 +52,7 @@ export class StageProfile {
       null,
       null,
       null,
+      validationWaitMs,
     ]);
   }
 
@@ -129,6 +131,7 @@ export class StageProfile {
         "creditSentAt",
         "creditReplyAt",
         "creditReplyOk",
+        "validationWaitMs",
       ],
       frames,
       drawColumns: ["at", "submissionMs", "renderedPanes"],
@@ -136,6 +139,7 @@ export class StageProfile {
       stoppedAt: this.stoppedAt,
       decodeMs: distribution(frames.map((s) => s[2])),
       applyMs: distribution(frames.map((s) => s[3])),
+      validationWaitMs: distribution(frames.map((s) => s[9])),
       readyToDrawMs: distribution(
         frames.flatMap((s) => (s[5] === null ? [] : [s[5] - s[4]])),
       ),
