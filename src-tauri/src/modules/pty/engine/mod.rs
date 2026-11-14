@@ -197,10 +197,21 @@ mod runtime {
     /// Bytes the terminal answers with (device attributes, cursor reports).
     pub type ReplySink = Box<dyn FnMut(&[u8]) + Send>;
 
+    pub type FinishReceiver = Receiver<Result<(), EngineFailure>>;
+
     pub(super) enum Input {
         Bytes(Vec<u8>),
         Wake,
+        Finish(SyncSender<Result<(), EngineFailure>>),
         Shutdown,
+    }
+
+    #[derive(Default, PartialEq, Eq)]
+    enum InputState {
+        #[default]
+        Accepting,
+        Finished,
+        Closed,
     }
 
     // Commands from the webview never wait on the byte queue: they land here,
@@ -356,16 +367,41 @@ mod runtime {
     #[derive(Clone)]
     pub struct EngineInput {
         tx: SyncSender<Input>,
+        gate: Arc<Mutex<InputState>>,
     }
 
     impl EngineInput {
         /// Blocks while the queue is full. False when the engine is gone.
         pub fn feed(&self, bytes: Vec<u8>) -> bool {
+            let gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+            if *gate != InputState::Accepting {
+                return false;
+            }
             self.tx.send(Input::Bytes(bytes)).is_ok()
+        }
+
+        /// Call from the producer after its output is drained, never from the actor itself.
+        pub fn finish(&self) -> Result<FinishReceiver, String> {
+            let mut gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+            if *gate != InputState::Accepting {
+                return Err("terminal input is already finished".into());
+            }
+            let (reply, receiver) = sync_channel(1);
+            *gate = InputState::Finished;
+            if self.tx.send(Input::Finish(reply)).is_err() {
+                *gate = InputState::Closed;
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
         }
 
         /// Queued behind every byte already fed, so the final frame shows them.
         pub fn shutdown(&self) {
+            let mut gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+            if *gate == InputState::Closed {
+                return;
+            }
+            *gate = InputState::Closed;
             let _ = self.tx.send(Input::Shutdown);
         }
     }
@@ -459,7 +495,10 @@ mod runtime {
                 stats,
                 health: health.clone(),
             },
-            input: EngineInput { tx },
+            input: EngineInput {
+                tx,
+                gate: Arc::new(Mutex::new(InputState::Accepting)),
+            },
             thread: EngineThread { thread, health },
         })
     }
@@ -473,7 +512,8 @@ mod runtime {
         sink_open: bool,
         health: Arc<EngineHealth>,
         replies: &'cb RefCell<Vec<u8>>,
-        reply_sink: ReplySink,
+        reply_sink: Option<ReplySink>,
+        input_finished: bool,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -504,7 +544,9 @@ mod runtime {
         fn flush_replies(&mut self) {
             let mut buf = self.replies.borrow_mut();
             if !buf.is_empty() {
-                (self.reply_sink)(&buf);
+                if let Some(sink) = self.reply_sink.as_mut() {
+                    sink(&buf);
+                }
                 buf.clear();
             }
         }
@@ -627,13 +669,23 @@ mod runtime {
             }
         }
 
-        // The stream has ended, so the last frame goes out without waiting for
-        // a credit: nothing can follow it.
+        // The final input snapshot may supersede the in-flight frame. Later
+        // presentation updates still wait for the next returned credit.
         fn finish(&mut self) {
             self.apply_control();
             if self.sink_open && self.pump.has_pending() {
                 self.emit();
             }
+        }
+
+        fn finish_input(&mut self) -> Result<(), EngineFailure> {
+            if !self.input_finished {
+                self.finish();
+                self.input_finished = true;
+                self.reply_sink.take();
+                *self.replies.borrow_mut() = Vec::new();
+            }
+            self.health.failure().map_or(Ok(()), Err)
         }
     }
 
@@ -680,7 +732,8 @@ mod runtime {
             sink_open: true,
             health,
             replies: &replies,
-            reply_sink,
+            reply_sink: Some(reply_sink),
+            input_finished: false,
             control,
             stats,
         };
@@ -701,8 +754,12 @@ mod runtime {
             match message {
                 Input::Bytes(bytes) => session.feed(&bytes),
                 Input::Wake => {}
+                Input::Finish(reply) => {
+                    let result = session.finish_input();
+                    let _ = reply.try_send(result);
+                }
                 Input::Shutdown => {
-                    session.finish();
+                    let _ = session.finish_input();
                     return;
                 }
             }
@@ -1405,5 +1462,150 @@ mod engine_tests {
             reply.is_err(),
             "failed engines cannot provide valid app context"
         );
+    }
+    #[test]
+    fn finishing_input_keeps_history_and_presentation_available_until_shutdown() {
+        let h = harness(8, 2);
+        h.frame();
+        h.feed(b"one\r\ntwo\r\nthree\r\nfour");
+        let finished = h.input.finish().unwrap();
+        assert_eq!(finished.recv_timeout(WAIT).unwrap(), Ok(()));
+        assert_eq!(
+            h.handle
+                .read_text(2)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            "three\nfour"
+        );
+        assert!(!h.input.feed(b"late output".to_vec()));
+        assert!(h.input.finish().is_err());
+        let final_frame = h.frame();
+        h.handle.credit(final_frame.seq);
+        h.handle.resize(12, 3);
+        let resized = h.frame();
+        assert_eq!((resized.cols, resized.rows), (12, 3));
+        assert_eq!(
+            h.handle
+                .read_text(3)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            "two\nthree\nfour"
+        );
+        let handle = h.handle.clone();
+        h.shutdown();
+        assert!(handle.read_text(2).is_err());
+    }
+
+    #[test]
+    fn finish_releases_the_reply_writer_before_receipt_without_destroying_the_grid() {
+        struct WriterGuard {
+            dropped: mpsc::Sender<()>,
+            replied: mpsc::Sender<Vec<u8>>,
+        }
+        impl WriterGuard {
+            fn write(&self, bytes: &[u8]) {
+                let _ = self.replied.send(bytes.to_vec());
+            }
+        }
+        impl Drop for WriterGuard {
+            fn drop(&mut self) {
+                let _ = self.dropped.send(());
+            }
+        }
+        let (dropped, drops) = mpsc::channel();
+        let (replied, replies) = mpsc::channel();
+        let writer = WriterGuard { dropped, replied };
+        let engine = start(
+            8,
+            2,
+            Box::new(|_| true),
+            Box::new(move |bytes| writer.write(bytes)),
+        )
+        .unwrap();
+        assert!(engine.input.feed(b"\x1b[c".to_vec()));
+        assert!(!replies.recv_timeout(WAIT).unwrap().is_empty());
+        assert!(drops.try_recv().is_err());
+        assert_eq!(
+            engine.input.finish().unwrap().recv_timeout(WAIT).unwrap(),
+            Ok(())
+        );
+        drops
+            .try_recv()
+            .expect("reply writer was released before the finish receipt");
+        assert_eq!(
+            engine
+                .handle
+                .read_text(2)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            ""
+        );
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+        assert!(drops.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_failed_final_frame_rejects_finish_instead_of_retaining_a_healthy_grid() {
+        let (sent, frames) = mpsc::channel();
+        let count = Arc::new(AtomicUsize::new(0));
+        let calls = count.clone();
+        let engine = start(
+            8,
+            2,
+            Box::new(move |frame| {
+                if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    sent.send(frame).is_ok()
+                } else {
+                    false
+                }
+            }),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        frames.recv_timeout(WAIT).unwrap();
+        assert!(engine.input.feed(b"final output".to_vec()));
+        let result = engine.input.finish().unwrap().recv_timeout(WAIT).unwrap();
+        assert_eq!(result, Err(EngineFailure::FrameChannelClosed));
+        assert!(engine.handle.read_text(2).is_err());
+        engine.input.shutdown();
+        assert_eq!(engine.thread.join(), Err(EngineFailure::FrameChannelClosed));
+    }
+
+    #[test]
+    fn finishing_after_a_full_byte_queue_preserves_every_accepted_byte() {
+        let gate: Gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let h = harness_with_gate(16, 2, Some(gate.clone()));
+        let mut total = 0;
+        for n in 0..QUEUE_DEPTH {
+            let line = format!("line{n}\r\n");
+            total += line.len();
+            h.feed(line.as_bytes());
+        }
+        let input = h.input.clone();
+        let finishing = thread::spawn(move || input.finish().unwrap());
+        let (open, wake) = &*gate;
+        *open.lock().unwrap() = true;
+        wake.notify_all();
+        let result = finishing.join().unwrap();
+        assert_eq!(result.recv_timeout(WAIT).unwrap(), Ok(()));
+        assert_eq!(h.handle.stats().bytes_fed, total as u64);
+        let text = h
+            .handle
+            .read_text(1000)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        for n in 0..QUEUE_DEPTH {
+            assert!(text.contains(&format!("line{n}")));
+        }
+        h.shutdown();
     }
 }

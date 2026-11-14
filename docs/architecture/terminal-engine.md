@@ -413,3 +413,32 @@ wrapper bug; its isolated regression was observed failing, fixed through the
 existing selection API, and the entire floor was rerun green. Astra reviewed
 both the query boundary and final empty-output helper without blockers.
 No benchmark, Actions, push, merge or original-Mac native build occurred.
+
+
+### End of input versus actor shutdown
+
+EngineInput.finish fences the producer stream in the same ordered byte queue
+and returns a completion receipt. A shared input gate serializes accepted
+feeds with Finish/Shutdown; new output and repeated Finish are rejected after
+the fence. Control wakeups remain independent and non-blocking.
+
+Finish sends any final pending snapshot under the existing final-frame policy,
+propagates a failed sink/snapshot through engine health, releases the PTY
+reply writer and its buffered bytes before confirmation, then leaves the
+native terminal actor available for text queries and presentation controls.
+Subsequent presentation frames use ordinary credits. Shutdown still terminates
+the actor and does not repeat the input finalization. Neither blocking input
+operation may be called synchronously from an actor callback; such teardown
+must run outside the actor.
+
+This checkpoint is the actor transition, not completed PTY retention. The
+current process waiter still uses Shutdown and joins the core on child exit.
+A separate normal-core owner, native cleanup and post-exit core-failure
+notification remain required before the normal UI can retain history.
+
+M2 checks passed: 26 actor tests including four new Finish regressions,
+strict writer-Drop-before-receipt assertion, full frontend/Pi/Node floor,
+production build, Clippy and locked Rust tests bare (588 unit, 58 integration,
+one ignored) and with the verified prebuilt feature (641 unit, 58 integration,
+two ignored), and git diff --check. Astra reviewed concurrency and lifecycle
+without a residual blocker. No benchmark, Actions, merge or push ran.
