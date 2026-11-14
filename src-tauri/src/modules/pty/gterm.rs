@@ -190,6 +190,30 @@ pub fn gterm_bench_stats(state: State<'_, PtyState>, id: u32) -> Result<Stats, S
 }
 
 #[tauri::command]
+pub async fn gterm_read_text(
+    state: State<'_, PtyState>,
+    id: u32,
+    max_lines: u16,
+) -> Result<String, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let receiver = imp::engine(&state, id)?.read_text(max_lines)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal text query failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal text query task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, max_lines);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
 pub fn gterm_lab_autorun(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -417,7 +441,10 @@ mod imp {
         Err("no session".into())
     }
 
-    pub fn bench_credits(state: &PtyState, credits: &super::credit_batch::CreditBatch) -> Result<(), String> {
+    pub fn bench_credits(
+        state: &PtyState,
+        credits: &super::credit_batch::CreditBatch,
+    ) -> Result<(), String> {
         let benches = state.bench.lock().unwrap_or_else(PoisonError::into_inner);
         super::credit_batch::register(
             credits,

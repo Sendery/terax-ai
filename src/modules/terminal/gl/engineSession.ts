@@ -456,6 +456,23 @@ export class EngineSession {
     invoke("gterm_scroll", { id, delta }).catch(this.reportError);
   }
 
+  readText(maxLines = 200): Promise<string> {
+    if (!Number.isInteger(maxLines) || maxLines < 1 || maxLines > 1000)
+      return Promise.reject(
+        new Error("terminal text line limit must be 1 through 1000"),
+      );
+    const id = this.id;
+    if (id === null || this.closed || this.failed)
+      return Promise.reject(new Error("terminal engine is unavailable"));
+    return invoke<unknown>("gterm_read_text", { id, maxLines }).then((text) => {
+      if (this.closed || this.failed || this.id !== id)
+        throw new Error("terminal engine is unavailable");
+      if (typeof text !== "string")
+        throw new Error("invalid terminal text reply");
+      return text;
+    });
+  }
+
   benchStats(): Promise<BenchStats> {
     if (this.id === null) return Promise.reject(new Error("not open"));
     return invoke<BenchStats>("gterm_bench_stats", { id: this.id });

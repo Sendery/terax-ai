@@ -345,7 +345,7 @@ The existing fire-and-forget resize entry remains for its existing callers.
 TerminalSessionController opens one driver, keeps startup input in order,
 serializes writes, coalesces resize in an independent loop, retains the first
 exit/failure and retires each acquired resource once. Its close promise waits
-for pending acquisition and actual teardown; failed initialization also closes
+for pending acquisition and the driver's close result; failed initialization also closes
 an acquired resource. Cleanup failure is reported without replacing the
 original cause. The startup limit retains the existing 262144 UTF-16 code-unit
 bound and rejects overflow explicitly without discarding accepted input.
@@ -369,3 +369,47 @@ passed bare and through the verified prebuilt wrapper with
 last indexing for the existing TypeScript target; no check was relaxed.
 Astra reviewed the final implementation and found no residual blocker.
 Native normal-pane integration remains required before claiming delivery.
+
+
+### Native text queries for normal-pane consumers
+
+`gterm_read_text(id, maxLines)` returns a string from the native terminal's
+active screen, including its history. Limits are 1 through 1000 physical rows
+and 1 MiB of formatted UTF-8. The range is the screen tail, independent of the
+current scroll viewport. A temporary selection formats that range without
+changing the user's selection; full combining/wide text is preserved and
+physical wrapped rows remain separate. Blank trailing rows are removed.
+
+Requests run on the terminal's owning thread through a control mailbox with
+at most 32 queued and in-flight requests. A full byte/wake queue does not block
+registration. Control snapshots preserve the pending count while requests are
+being formatted. Engine termination/panic rejects remaining requests; a failed
+frame pipeline cannot supply valid context. Formatting errors and overflow are
+errors, never truncated or synthetic success. The pinned wrapper's empty-size
+bug is avoided with the selection formatting API, which preserves empty
+success and required length before exact bounded allocation.
+
+The asynchronous Tauri command waits on a worker with a 2 s receive timeout.
+This limits caller waiting, not necessarily work already queued on the actor.
+No extra polling, idle thread or per-frame query is introduced. Without the
+feature the command returns engine-unavailable. It is not added to Pi/MCP.
+EngineSession.readText validates limits, response type and session health/
+identity before and after the await. Application consumers must separately
+recheck active pane, privacy and redaction policy after asynchronous reads.
+
+This slice supplies the real native read surface, not completed AI/task
+integration. Currently normal PTY completion still shuts down the actor and
+reaps Session; retaining the grid after process exit remains required before
+normal-pane parity. Driver close acknowledgement also does not by itself
+prove native OS Drop has completed; existing pty_close may detach that cleanup.
+The forthcoming retained-core lifecycle must verify that boundary explicitly.
+
+M2 verification: frontend/Pi/Node and build/type/lint gates passed (2327
+frontend tests, one existing skip; 101 Pi). Strict Clippy and locked Rust tests
+passed bare (588 unit, 58 integration, one ignored) and with the verified
+prebuilt ghostty-engine feature (637 unit, 58 integration, two ignored).
+`git diff --check` passed. The first full feature run exposed the empty-size
+wrapper bug; its isolated regression was observed failing, fixed through the
+existing selection API, and the entire floor was rerun green. Astra reviewed
+both the query boundary and final empty-output helper without blockers.
+No benchmark, Actions, push, merge or original-Mac native build occurred.

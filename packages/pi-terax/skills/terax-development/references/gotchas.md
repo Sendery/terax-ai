@@ -652,3 +652,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a resize loop finishes before the native resize, new input overtakes buffered startup input, or a failed initialization leaves its acquired PTY open. A close promise that resolves before a pending open can also hide failed late teardown.
 - **Prevention:** require adapters to return the real operation promise. Keep acquisition separate from initialization, serialize/coalesce resize independently of writes, retain the startup input phase through awaited initialization, and share one retirement promise for every acquired resource. Closing waits acquisition and actual retirement; preserve the first cause while reporting cleanup failures separately. Connection initialization is not shell or TUI readiness.
 - **Verification:** use deferred invokes on the actual adapter, request another size while the first is pending, type during startup resize, close before acquisition, reject initial resize, and reject late cleanup. Assert input order, no concurrent resize, exactly one resource close and observable failures.
+
+
+### The pinned formatter size wrapper rejects valid empty output
+
+- **Trigger:** sizing plain terminal text with libghostty-vt 0.2.2 `Formatter.format_len`.
+- **Failure mode:** the wrapper assumes the zero-space probe always returns OutOfSpace and maps a valid SUCCESS/0 to InvalidValue. Its general format_buf also loses the required-length field on OutOfSpace. A new empty terminal can therefore fail context reads even though nonempty text works.
+- **Prevention:** use Terminal.format_selection_buf with an explicit temporary selection, preserving the required length from the wrapper. Accept only Some(0) as valid empty sizing; preserve None and other errors. Bound the required size before allocating and validate the second result and UTF-8. Do not reinterpret arbitrary InvalidValue as empty output or mutate the user's selection.
+- **Verification:** test an empty terminal, Unicode/combining text, history/alternate screen and insufficient space. Re-evaluate this workaround when the dependency pin changes, and retire it once its size wrapper handles empty success correctly.

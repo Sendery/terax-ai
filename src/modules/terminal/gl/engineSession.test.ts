@@ -16,6 +16,7 @@ type Call = { command: string; args: unknown };
 const ipc = vi.hoisted(() => ({
   calls: [] as { command: string; args: unknown }[],
   resize: null as Promise<unknown> | null,
+  text: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
     reject: (error: unknown) => void;
@@ -36,6 +37,8 @@ vi.mock("@tauri-apps/api/core", () => {
         });
       }
       if (command === "pty_resize" && ipc.resize) return ipc.resize;
+      if (command === "gterm_read_text")
+        return ipc.text ?? Promise.resolve("native text");
       if (command === "gterm_available") return Promise.resolve(true);
       return Promise.resolve(null);
     },
@@ -123,6 +126,7 @@ beforeEach(() => {
   ipc.calls.length = 0;
   ipc.open = null;
   ipc.resize = null;
+  ipc.text = null;
 });
 
 describe("EngineSession credits", () => {
@@ -705,4 +709,36 @@ it("the real ghostty adapter awaits native resize completion", async () => {
     { id: 9, cols: 100, rows: 30 },
   ]);
   await owner.close();
+});
+
+it("reads bounded text from the native engine without substituting the visible grid", async () => {
+  const session = await openSession(new FakeRenderer());
+  expect(await session.readText(300)).toBe("native text");
+  expect(commands("gterm_read_text")).toEqual([
+    { command: "gterm_read_text", args: { id: 9, maxLines: 300 } },
+  ]);
+  for (const max of [0, -1, 1001, 1.5, Number.NaN])
+    await expect(session.readText(max)).rejects.toThrow("line limit");
+  expect(commands("gterm_read_text")).toHaveLength(1);
+  await session.close();
+  await expect(session.readText()).rejects.toThrow("unavailable");
+  expect(commands("gterm_read_text")).toHaveLength(1);
+});
+
+it("rejects text returned after its session closed and rejects malformed native text", async () => {
+  const session = await openSession(new FakeRenderer());
+  ipc.text = Promise.resolve({ text: "invalid reply" });
+  await expect(session.readText()).rejects.toThrow(
+    "invalid terminal text reply",
+  );
+  let finish!: (text: string) => void;
+  ipc.text = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  const pending = session.readText();
+  const settled = Promise.allSettled([pending]);
+  await session.close();
+  finish("stale private content");
+  const result = (await settled)[0];
+  expect(result.status).toBe("rejected");
 });

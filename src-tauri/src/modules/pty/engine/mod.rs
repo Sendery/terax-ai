@@ -15,6 +15,8 @@ pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 pub mod bench;
 #[cfg(feature = "ghostty-engine")]
 mod snapshot;
+#[cfg(feature = "ghostty-engine")]
+mod text;
 
 #[cfg(feature = "ghostty-engine")]
 pub use runtime::*;
@@ -159,7 +161,7 @@ impl Pump {
 mod runtime {
     use std::cell::RefCell;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
+    use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TrySendError};
     use std::sync::{Arc, Mutex, PoisonError};
     use std::thread::{self, JoinHandle};
     use std::time::Instant;
@@ -174,8 +176,8 @@ mod runtime {
 
     use super::super::colors::Colors;
     use super::health::EngineHealth;
-    use super::EngineFailure;
     use super::snapshot::Snapshotter;
+    use super::EngineFailure;
     use super::{validate_size, Decision, Pump, QUEUE_DEPTH, SCROLLBACK_BYTES};
 
     // The same answers the xterm.js path gives today (`da_filter.rs`), so a
@@ -203,6 +205,15 @@ mod runtime {
 
     // Commands from the webview never wait on the byte queue: they land here,
     // coalesced, and a non-blocking wake makes the engine look.
+    pub type TextReply = Result<String, String>;
+    pub type TextReceiver = Receiver<TextReply>;
+    const MAX_TEXT_REQUESTS: usize = 32;
+
+    struct TextRequest {
+        lines: u16,
+        reply: SyncSender<TextReply>,
+    }
+
     #[derive(Default)]
     struct Control {
         ack: Option<u32>,
@@ -210,6 +221,30 @@ mod runtime {
         colors: Option<Colors>,
         scroll: i64,
         full: bool,
+        text_requests: Vec<TextRequest>,
+        text_pending: usize,
+        text_closed: bool,
+    }
+
+    impl Control {
+        fn take(&mut self) -> Self {
+            let current = std::mem::take(self);
+            self.text_pending = current.text_pending;
+            self.text_closed = current.text_closed;
+            current
+        }
+    }
+
+    fn reject_text_requests(control: &Mutex<Control>) {
+        let pending = {
+            let mut control = control.lock().unwrap_or_else(PoisonError::into_inner);
+            control.text_closed = true;
+            control.text_pending = 0;
+            std::mem::take(&mut control.text_requests)
+        };
+        for request in pending {
+            let _ = request.reply.try_send(Err("terminal engine closed".into()));
+        }
     }
 
     #[derive(Default)]
@@ -247,6 +282,29 @@ mod runtime {
     }
 
     impl EngineHandle {
+        pub fn read_text(&self, lines: u16) -> Result<TextReceiver, String> {
+            super::text::validate_lines(lines)?;
+            let (reply, receiver) = sync_channel(1);
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal text requests".into());
+                }
+                control.text_pending += 1;
+                control.text_requests.push(TextRequest { lines, reply });
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
+        }
+
         pub fn on_failure(&self, listener: impl FnOnce(EngineFailure) + Send + 'static) {
             self.health.subscribe(Box::new(listener));
         }
@@ -363,11 +421,23 @@ mod runtime {
                 .name("terax-pty-engine".into())
                 .spawn(move || {
                     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        run(cols, rows, colors, &rx, control, stats, frames, replies, ready_tx, health.clone());
+                        run(
+                            cols,
+                            rows,
+                            colors,
+                            &rx,
+                            control.clone(),
+                            stats,
+                            frames,
+                            replies,
+                            ready_tx,
+                            health.clone(),
+                        );
                     }));
                     if result.is_err() {
                         health.fail(EngineFailure::Panicked);
                     }
+                    reject_text_requests(&control);
                 })
                 .map_err(|e| format!("spawn engine thread: {e}"))?
         };
@@ -440,8 +510,11 @@ mod runtime {
         }
 
         fn apply_control(&mut self) {
-            let c =
-                std::mem::take(&mut *self.control.lock().unwrap_or_else(PoisonError::into_inner));
+            let c = self
+                .control
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
             if let Some((cols, rows)) = c.resize {
                 if (cols, rows) != self.size && validate_size(cols, rows).is_ok() {
                     match self.term.resize(cols, rows, 0, 0) {
@@ -472,6 +545,16 @@ mod runtime {
             }
             if c.full {
                 self.pump.request_full();
+            }
+            for request in c.text_requests {
+                let result = if self.health.failure().is_some() {
+                    Err("terminal engine is unavailable".into())
+                } else {
+                    super::text::read_text(&self.term, request.lines)
+                };
+                let _ = request.reply.try_send(result);
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                control.text_pending = control.text_pending.saturating_sub(1);
             }
             if let Some(seq) = c.ack {
                 if self.pump.credit(seq, Instant::now()) {
@@ -1226,6 +1309,101 @@ mod engine_tests {
         assert!(
             shown.iter().any(|t| t.starts_with("line 0063 ")),
             "last line is on screen: {shown:?}"
+        );
+    }
+    #[test]
+    fn native_text_queries_read_history_without_a_frame_credit() {
+        let h = harness(16, 2);
+        h.frame();
+        let bytes = b"one\r\ntwo\r\nthree\r\nfour";
+        h.feed(bytes);
+        let deadline = Instant::now() + WAIT;
+        while h.handle.stats().bytes_fed < bytes.len() as u64 && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert_eq!(h.handle.stats().bytes_fed, bytes.len() as u64);
+        let text = h
+            .handle
+            .read_text(2)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert_eq!(text, "three\nfour");
+        let handle = h.handle.clone();
+        h.shutdown();
+        assert!(handle.read_text(2).is_err());
+    }
+
+    #[test]
+    fn text_queries_are_bounded_outside_the_full_byte_wake_queue() {
+        let gate: Gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let waiting = gate.clone();
+        let (entered, began) = mpsc::channel();
+        let engine = start(
+            8,
+            2,
+            Box::new(move |_| {
+                let _ = entered.send(());
+                let (open, wake) = &*waiting;
+                let mut open = open.lock().unwrap();
+                while !*open {
+                    open = wake.wait(open).unwrap();
+                }
+                true
+            }),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        began.recv_timeout(WAIT).unwrap();
+        assert!(engine.handle.read_text(0).is_err());
+        assert!(engine.handle.read_text(1001).is_err());
+        let queries: Vec<_> = (0..32)
+            .map(|_| engine.handle.read_text(2).unwrap())
+            .collect();
+        assert!(engine.handle.read_text(2).is_err());
+        let (open, wake) = &*gate;
+        *open.lock().unwrap() = true;
+        wake.notify_all();
+        for query in queries {
+            assert_eq!(query.recv_timeout(WAIT).unwrap().unwrap(), "");
+        }
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+        assert!(engine.handle.read_text(2).is_err());
+    }
+
+    #[test]
+    fn a_text_request_cannot_succeed_after_the_frame_pipeline_failed() {
+        let gate: Gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let waiting = gate.clone();
+        let (entered, began) = mpsc::channel();
+        let engine = start(
+            8,
+            2,
+            Box::new(move |_| {
+                let _ = entered.send(());
+                let (open, wake) = &*waiting;
+                let mut open = open.lock().unwrap();
+                while !*open {
+                    open = wake.wait(open).unwrap();
+                }
+                false
+            }),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        began.recv_timeout(WAIT).unwrap();
+        let result = engine.handle.read_text(2).unwrap();
+        let (open, wake) = &*gate;
+        *open.lock().unwrap() = true;
+        wake.notify_all();
+        let reply = result.recv_timeout(WAIT).unwrap();
+        engine.input.shutdown();
+        assert_eq!(engine.thread.join(), Err(EngineFailure::FrameChannelClosed));
+        assert!(
+            reply.is_err(),
+            "failed engines cannot provide valid app context"
         );
     }
 }
