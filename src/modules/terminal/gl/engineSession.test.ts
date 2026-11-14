@@ -15,6 +15,7 @@ type Call = { command: string; args: unknown };
 
 const ipc = vi.hoisted(() => ({
   calls: [] as { command: string; args: unknown }[],
+  resize: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
     reject: (error: unknown) => void;
@@ -34,6 +35,7 @@ vi.mock("@tauri-apps/api/core", () => {
           ipc.open = { resolve, reject };
         });
       }
+      if (command === "pty_resize" && ipc.resize) return ipc.resize;
       if (command === "gterm_available") return Promise.resolve(true);
       return Promise.resolve(null);
     },
@@ -120,6 +122,7 @@ async function openSession(renderer: FakeRenderer) {
 beforeEach(() => {
   ipc.calls.length = 0;
   ipc.open = null;
+  ipc.resize = null;
 });
 
 describe("EngineSession credits", () => {
@@ -498,10 +501,22 @@ it("profiles decode/apply locally and credit response only after drawing", async
 
 it("uses the lab credit sender only after draw and after a delayed bench id arrives", async () => {
   const renderer = new FakeRenderer();
-  const sendCredit = vi.fn(async (_id: number, _seq: number, _at: number, _dispatch: (at: number) => void) => {});
+  const sendCredit = vi.fn(
+    async (
+      _id: number,
+      _seq: number,
+      _at: number,
+      _dispatch: (at: number) => void,
+    ) => {},
+  );
   const onDrawn = vi.fn();
   const pending = EngineSession.openBench(renderer as unknown as GridRenderer, {
-    kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onDrawn },
+    kind: "ascii",
+    megabytes: 1,
+    cols: 4,
+    rows: 2,
+    sendCredit,
+    observer: { onDrawn },
   });
   channelOf(0).onmessage(frameBuffer(1));
   renderer.drawFrame();
@@ -510,7 +525,10 @@ it("uses the lab credit sender only after draw and after a delayed bench id arri
   expect(sendCredit).not.toHaveBeenCalled();
   ipc.open?.resolve(71);
   const session = await pending;
-  expect(sendCredit.mock.calls).toEqual([[71, 1, onDrawn.mock.calls[0][0], expect.any(Function)], [71, 2, onDrawn.mock.calls[1][0], expect.any(Function)]]);
+  expect(sendCredit.mock.calls).toEqual([
+    [71, 1, onDrawn.mock.calls[0][0], expect.any(Function)],
+    [71, 2, onDrawn.mock.calls[1][0], expect.any(Function)],
+  ]);
   expect(credits()).toEqual([]);
   await session.close();
   channelOf(0).onmessage(frameBuffer(3));
@@ -521,9 +539,21 @@ it("uses the lab credit sender only after draw and after a delayed bench id arri
 it("a queued lab acknowledgement is not reported as sent before its actual dispatch callback", async () => {
   const renderer = new FakeRenderer();
   const onCredit = vi.fn();
-  const sendCredit = vi.fn(async (_id: number, _seq: number, _at: number, _dispatch: (at: number) => void) => {});
+  const sendCredit = vi.fn(
+    async (
+      _id: number,
+      _seq: number,
+      _at: number,
+      _dispatch: (at: number) => void,
+    ) => {},
+  );
   const opening = EngineSession.openBench(renderer as unknown as GridRenderer, {
-    kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onCredit },
+    kind: "ascii",
+    megabytes: 1,
+    cols: 4,
+    rows: 2,
+    sendCredit,
+    observer: { onCredit },
   });
   ipc.open?.resolve(72);
   const session = await opening;
@@ -535,12 +565,15 @@ it("a queued lab acknowledgement is not reported as sent before its actual dispa
   await session.close();
 });
 
-
 it("latches a fatal engine exit, reports it, and rejects later input without native writes", async () => {
   const renderer = new FakeRenderer();
   const onError = vi.fn();
   const onExit = vi.fn();
-  const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2, observer: { onError, onExit } });
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+    observer: { onError, onExit },
+  });
   ipc.open?.resolve(81);
   const session = await opening;
   channelOf(0).onmessage(frameBuffer(1));
@@ -551,7 +584,9 @@ it("latches a fatal engine exit, reports it, and rejects later input without nat
   expect(onError).toHaveBeenCalledTimes(1);
   expect(onExit).toHaveBeenCalledExactlyOnceWith(-2);
   const count = ipc.calls.length;
-  await expect(session.write("must not reach PTY")).rejects.toThrow("terminal engine failed");
+  await expect(session.write("must not reach PTY")).rejects.toThrow(
+    "terminal engine failed",
+  );
   session.resize(9, 7);
   session.scroll(-1);
   session.requestFull();
@@ -564,22 +599,34 @@ it("latches a fatal engine exit, reports it, and rejects later input without nat
 
 it("does not return a usable session if the engine fails before its open id arrives", async () => {
   const renderer = new FakeRenderer();
-  const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2 });
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+  });
   channelOf(1).onmessage(-2);
   ipc.open?.resolve(82);
   await expect(opening).rejects.toThrow("terminal engine failed");
   expect(renderer.panes).toHaveLength(0);
-  expect(commands("pty_close").some((call) => (call.args as { id: number }).id === 82)).toBe(true);
+  expect(
+    commands("pty_close").some(
+      (call) => (call.args as { id: number }).id === 82,
+    ),
+  ).toBe(true);
 });
-
 
 it("a throwing fatal-error observer cannot prevent the exit callback or leave the pending open usable", async () => {
   const renderer = new FakeRenderer();
-  const onError = vi.fn(() => { throw new Error("injected observer failure"); });
+  const onError = vi.fn(() => {
+    throw new Error("injected observer failure");
+  });
   const onExit = vi.fn();
   const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
-    const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2, observer: { onError, onExit } });
+    const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      observer: { onError, onExit },
+    });
     expect(() => channelOf(1).onmessage(-2)).not.toThrow();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onExit).toHaveBeenCalledExactlyOnceWith(-2);
@@ -594,14 +641,68 @@ it("a throwing fatal-error observer cannot prevent the exit callback or leave th
 it("a deferred batch cannot dispatch a credit after its session failed", async () => {
   const renderer = new FakeRenderer();
   const onCredit = vi.fn();
-  const sendCredit = vi.fn(async (_id: number, _seq: number, _drawn: number, _dispatch: (at: number) => void) => {});
-  const opening = EngineSession.openBench(renderer as unknown as GridRenderer, { kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onCredit } });
+  const sendCredit = vi.fn(
+    async (
+      _id: number,
+      _seq: number,
+      _drawn: number,
+      _dispatch: (at: number) => void,
+    ) => {},
+  );
+  const opening = EngineSession.openBench(renderer as unknown as GridRenderer, {
+    kind: "ascii",
+    megabytes: 1,
+    cols: 4,
+    rows: 2,
+    sendCredit,
+    observer: { onCredit },
+  });
   ipc.open?.resolve(84);
   const session = await opening;
   channelOf(0).onmessage(frameBuffer(1));
   renderer.drawFrame();
   channelOf(1).onmessage(-2);
-  expect(() => sendCredit.mock.calls[0][3](123)).toThrow("terminal engine failed");
+  expect(() => sendCredit.mock.calls[0][3](123)).toThrow(
+    "terminal engine failed",
+  );
   expect(onCredit).not.toHaveBeenCalled();
   await session.close();
+});
+
+it("the real ghostty adapter awaits native resize completion", async () => {
+  const { adaptGhosttyEngine } = await import(
+    "@/modules/terminal/lib/ghosttyEngine"
+  );
+  const { TerminalSessionController } = await import(
+    "@/modules/terminal/lib/terminalEngine"
+  );
+  const native = await openSession(new FakeRenderer());
+  const owner = new TerminalSessionController(
+    async () => adaptGhosttyEngine(native),
+    { cols: 4, rows: 2 },
+  );
+  await owner.opened;
+  let finish!: () => void;
+  ipc.resize = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  owner.resize(80, 24);
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  let completed = false;
+  const settled = owner.layoutSettled().then(() => {
+    completed = true;
+  });
+  await Promise.resolve();
+  expect(completed).toBe(false);
+  expect(commands("pty_resize")).toHaveLength(1);
+  owner.resize(100, 30);
+  await Promise.resolve();
+  expect(commands("pty_resize")).toHaveLength(1);
+  finish();
+  await settled;
+  expect(commands("pty_resize").map((c) => c.args)).toEqual([
+    { id: 9, cols: 80, rows: 24 },
+    { id: 9, cols: 100, rows: 30 },
+  ]);
+  await owner.close();
 });

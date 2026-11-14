@@ -332,3 +332,40 @@ makes 60 FPS optional. Existing negative measurements remain evidence, but
 no longer gate normal-pane integration. The window transport experiment is
 deferred. Continue functional migration and the full parity inventory; do not
 substitute laboratory or benchmark work for a usable new-engine terminal.
+
+
+### Normal-session lifecycle adapter
+
+`modules/terminal/lib/terminalEngine.ts` defines the shared transport/lifecycle
+surface: id, write, awaitable resize and close. The existing PtySession is
+structurally compatible; `ghosttyEngine.ts` explicitly adapts EngineSession
+using `resizeAndWait`, which returns the actual native `pty_resize` promise.
+The existing fire-and-forget resize entry remains for its existing callers.
+
+TerminalSessionController opens one driver, keeps startup input in order,
+serializes writes, coalesces resize in an independent loop, retains the first
+exit/failure and retires each acquired resource once. Its close promise waits
+for pending acquisition and actual teardown; failed initialization also closes
+an acquired resource. Cleanup failure is reported without replacing the
+original cause. The startup limit retains the existing 262144 UTF-16 code-unit
+bound and rejects overflow explicitly without discarding accepted input.
+
+`opened` means transport acquisition and initialization, not prompt-ready or
+TUI-ready. Real shell/protocol signals remain required for agent restore and
+tasks. This adapter is preparation for normal panes; the UI, text/selection,
+search, cwd and application consumers are not yet connected by this slice.
+It creates no benchmark or laboratory behavior.
+
+Validation on M2: 40 focused lifecycle/EngineSession tests passed, including
+observed-red ordering, teardown and failed-initialization regressions. Full
+`pnpm lint`, `pnpm check-types`, `pnpm test` (2325 passed, one existing skip),
+`pnpm build`, `pnpm --dir packages/pi-terax test` (101), and
+`node --test scripts/*.node-test.mjs scripts/libghostty/*.node-test.mjs` passed.
+Strict `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked
+-- -D warnings` and `cargo test --manifest-path src-tauri/Cargo.toml --locked`
+passed bare and through the verified prebuilt wrapper with
+`--features ghostty-engine` (588/629 unit, 58 integration, 1/2 ignored).
+`git diff --check` passed. One new test's Array.at was replaced with ordinary
+last indexing for the existing TypeScript target; no check was relaxed.
+Astra reviewed the final implementation and found no residual blocker.
+Native normal-pane integration remains required before claiming delivery.

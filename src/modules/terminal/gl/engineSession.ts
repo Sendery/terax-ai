@@ -19,9 +19,16 @@ import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
 
 export const ENGINE_FAILED_EXIT = -2;
 
-export type BenchCreditSender = (id: number, seq: number, drawnAt: number, onDispatch: (at: number) => void) => Promise<void>;
+export type BenchCreditSender = (
+  id: number,
+  seq: number,
+  drawnAt: number,
+  onDispatch: (at: number) => void,
+) => Promise<void>;
 
-export function registerLabCredits(credits: { id: number; seq: number }[]): Promise<void> {
+export function registerLabCredits(
+  credits: { id: number; seq: number }[],
+): Promise<void> {
   return invoke("gterm_lab_credits", { credits });
 }
 
@@ -256,7 +263,9 @@ export class EngineSession {
       const failed = this.failed;
       this.release();
       void this.closeById(this.id).catch(() => {});
-      throw new Error(failed ? "terminal engine failed" : "session closed while opening");
+      throw new Error(
+        failed ? "terminal engine failed" : "session closed while opening",
+      );
     }
     if (
       !this.isBench &&
@@ -330,7 +339,8 @@ export class EngineSession {
   private handleDrawn(rendered = true): void {
     const at = performance.now();
     if (this.awaitingDraw.length > 0) {
-      for (const seq of this.awaitingDraw) this.drawnUnsent.push({ seq, drawnAt: at });
+      for (const seq of this.awaitingDraw)
+        this.drawnUnsent.push({ seq, drawnAt: at });
       this.awaitingDraw = [];
     }
     const seq =
@@ -344,7 +354,13 @@ export class EngineSession {
 
   private flushCredits(): void {
     const id = this.id;
-    if (id === null || this.closed || this.failed || this.drawnUnsent.length === 0) return;
+    if (
+      id === null ||
+      this.closed ||
+      this.failed ||
+      this.drawnUnsent.length === 0
+    )
+      return;
     const seqs = this.drawnUnsent;
     this.drawnUnsent = [];
     for (const { seq, drawnAt } of seqs) {
@@ -352,7 +368,8 @@ export class EngineSession {
       if (this.sendCredit) {
         sent = this.sendCredit(id, seq, drawnAt, (at) => {
           if (this.failed) throw new Error("terminal engine failed");
-          if (this.closed) throw new Error("session closed before credit dispatch");
+          if (this.closed)
+            throw new Error("session closed before credit dispatch");
           this.observer.onCredit?.(seq, at);
         });
       } else {
@@ -413,10 +430,24 @@ export class EngineSession {
       (cols === this.size.cols && rows === this.size.rows)
     )
       return;
-    this.size = { cols, rows };
+    if (this.id === null) {
+      this.size = { cols, rows };
+      return;
+    }
+    void this.resizeAndWait(cols, rows).catch(this.reportError);
+  }
+
+  resizeAndWait(cols: number, rows: number): Promise<void> {
+    if (this.isBench) return Promise.resolve();
+    if (this.closed || this.failed)
+      return Promise.reject(new Error("terminal engine is unavailable"));
     const id = this.id;
-    if (id === null || this.closed) return;
-    invoke("pty_resize", { id, cols, rows }).catch(this.reportError);
+    if (id === null)
+      return Promise.reject(new Error("terminal engine is not open"));
+    if (cols === this.size.cols && rows === this.size.rows)
+      return Promise.resolve();
+    this.size = { cols, rows };
+    return invoke("pty_resize", { id, cols, rows });
   }
 
   scroll(delta: number): void {

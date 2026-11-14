@@ -644,3 +644,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** WebKit rejects a detached `Window.queueMicrotask` call when it is later invoked with the class instance as receiver. Node or an injected unbranded scheduler can pass while real WKWebView fails. A Promise executor converts a thrown schedule call to rejection without cleaning the application's pending queue.
 - **Prevention:** wrap native scheduling calls as `task => globalThis.queueMicrotask(task)`. If scheduling throws, invalidate the owner, clear and reject pending work, and suppress retained callbacks and new submissions.
 - **Verification:** construct the default scheduler under a branded global function that requires `this === globalThis`; test a scheduler that retains its callback before throwing, then exercise the actual WKWebView path. Invalid measurements stay invalid even if native parsing and exit complete.
+
+
+### Async terminal adapters must report real operation completion
+
+- **Trigger:** adapting a native engine to a shared session lifecycle, especially an API that starts an asynchronous invoke but returns void.
+- **Failure mode:** a resize loop finishes before the native resize, new input overtakes buffered startup input, or a failed initialization leaves its acquired PTY open. A close promise that resolves before a pending open can also hide failed late teardown.
+- **Prevention:** require adapters to return the real operation promise. Keep acquisition separate from initialization, serialize/coalesce resize independently of writes, retain the startup input phase through awaited initialization, and share one retirement promise for every acquired resource. Closing waits acquisition and actual retirement; preserve the first cause while reporting cleanup failures separately. Connection initialization is not shell or TUI readiness.
+- **Verification:** use deferred invokes on the actual adapter, request another size while the first is pending, type during startup resize, close before acquisition, reject initial resize, and reject late cleanup. Assert input order, no concurrent resize, exactly one resource close and observable failures.
