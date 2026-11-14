@@ -101,8 +101,11 @@ Aggregate encode, rAF and credit timing cannot isolate Channel serialization,
 JS decode/apply, GPU execution or scheduling. Do not label one as the cause
 without stage profiling. The pinned upstream can build Wasm, but moving grid
 ownership to a Worker would still transport raw PTY bytes, increase IPC volume
-for this workload and change the contract. This alternative has been
-evaluated, not built or measured. The next controlled experiment is stage
+for this workload and change the contract. A headless Rust + Zig proof now builds as one WASM module and matches
+three existing V1 goldens over 300 frames; see the
+[isolated feasibility experiment](../../spikes/terminal-ghostty-vt/wasm/README.md).
+Worker ownership, raw-byte transport and WKWebView performance remain unbuilt
+and unmeasured. The next controlled experiment is stage
 instrumentation followed by bounded credits grouped by window/rAF, preserving
 post-draw credit semantics and the unchanged acceptance workload. Evaluate
 frame batching after that; no implementation change meets 60 fps

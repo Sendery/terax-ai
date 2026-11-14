@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "observedAt": "2026-11-14T15:11:57.595Z",
+  "sourceCommit": "406a3d2ea64668426de509ad840da91a80518947",
+  "ghosttyCommit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "sourceTreeDirty": true,
+  "node": "v24.22.3",
+  "rust": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "module": {
+    "bytes": 867312,
+    "sha256": "42449edfb6e44675af0424a1edea8bc3ec7c1cbcd94b90196efb212b0b0eeb77",
+    "imports": [
+      {
+        "module": "env",
+        "name": "log",
+        "kind": "function"
+      }
+    ],
+    "exports": [
+      {
+        "name": "memory",
+        "kind": "memory"
+      },
+      {
+        "name": "clear_frame",
+        "kind": "function"
+      },
+      {
+        "name": "frame_len",
+        "kind": "function"
+      },
+      {
+        "name": "run_case",
+        "kind": "function"
+      }
+    ]
+  },
+  "core": {
+    "bytes": 4419060,
+    "sha256": "c23204704b051420af8d33dfa021fe5b084f842f76f9b2af29a16b07a0f9a7e9",
+    "abiTypes": 34,
+    "layoutAssertions": 68
+  },
+  "inputArchive": {
+    "bytes": 6290552,
+    "sha256": "f6edd27d4bf3635e6be1be3ce751c7e58eb266508695a0943d8589298c4ceec8"
+  },
+  "sources": {
+    "manifest": "9a0fa03cc8346a7e92c0756ef6254398cca5b8db53bdfd6d8dfdf5377fe10336",
+    "wrapper": "2de18dd2059e8adca9f16b11093fe42b96ddb760a8a2bf3b935df52bfa4fb727",
+    "prepare": "111ed07a8d71681464ca01487c0d63c6cfdbb902856aa06e953797fb0dbed715",
+    "verifier": "8bbb267fefce2c9922194972e26cb7ff4e5b052b0f1d6709fcd7843e80c5dff4",
+    "frame": "2dfe564a8a48d444b373c123a39d78cdaac3347d4e1bace73e9b8a132f5c27f9",
+    "nativeSnapshot": "001f58b45a9dfe98a83f4231765743462d298f7e55f3ebd17061ef9769cc51f9",
+    "derivedSnapshot": "985270e4360aa194a0f3b8b9c886ec2a160ff6d106103e6ba73b6621b08d6447",
+    "nativeBindings": "b044998cc81b073c843aad0f164b37df16de00ca1247b4d78bf37fdeac731e13",
+    "wasmBindings": "e5e40d8f252b7a6dc0a42ad1b7a974bc52264621deb3a8cb451d12bbeb0c9869",
+    "cargoLock": "3b75b41181508e0d141cc5cd91711c7fe6e674875e1fdb943cbb67eb4395ac61",
+    "bindgenLock": "89cb1be25418f42c0ecb16dabe0742b2f73d1aa49cb54a640e4a92d4686ee363"
+  },
+  "repetitions": 100,
+  "totalFrames": 300,
+  "cases": [
+    {
+      "fixture": "plain-text",
+      "bytes": 132,
+      "sha256": "4d91534bc96f069e759b0c9a79ec597cb62f4e4ab02adf2664fbe338a8274102"
+    },
+    {
+      "fixture": "styled-truecolor",
+      "bytes": 288,
+      "sha256": "c548b2e98d65702ebb06248b22c0b85c7d178906301683f58d7b5f60b74819d1"
+    },
+    {
+      "fixture": "wide-combining",
+      "bytes": 200,
+      "sha256": "8cdf797478f5179be76b69143a1cf3282ac32d48c3705836f9e1ce8cc26dfa38"
+    }
+  ],
+  "linearMemory": {
+    "beforeBytes": 1245184,
+    "maxBytes": 6553600,
+    "finalBytes": 6553600
+  },
+  "logCalls": 0,
+  "successfulRun": true,
+  "scope": "Headless Rust+Zig frame equivalence; no Worker, PTY transport, GPU or FPS validation"
+}

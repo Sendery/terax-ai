@@ -12,6 +12,7 @@ into the app, and nothing here runs inside or next to an installed Terax.
   same payloads through xterm.js 6.0 with its WebGL addon.
 - `wkwebview.swift`: opens the page in a plain `WKWebView`, the engine a Tauri
   window uses on macOS, and saves a snapshot when the page finishes.
+- `wasm/`: isolated Rust + Zig WASM feasibility, shared V1 golden checks and reproduction commands. No app integration or FPS claim.
 - `results/`: the numbers and the snapshot from 2026-11-10 (Apple M4 Pro,
   macOS 27.0.1).
 

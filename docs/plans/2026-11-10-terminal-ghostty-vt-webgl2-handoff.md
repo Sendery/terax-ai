@@ -608,3 +608,27 @@ GUI/energy guard final gates passed: `pnpm lint`, `pnpm check-types`,
 Astra reviewed the corrected independent cleanup paths with no residual
 blocker. These checks validate the guard; they do not replace the pending
 unlocked native profile run.
+
+
+### Headless WASM feasibility on M2
+
+The exact pinned Ghostty source now builds a freestanding static WASM core
+with the M2's Homebrew Zig 0.15.2. The official SDK previously failed its
+macOS host build-runner link; the packaged compiler solves that observed
+step without SDK shims or source-pin changes. Normal source fallback and the
+original protected Mac remain untouched.
+
+An isolated Rust cdylib links that archive and includes production frame.rs
+directly. It generates separate ABI32 bindings with the original pinned
+bindgen tool and retains every native ABI assertion. The derived snapshot
+changes only its three auxiliary constructors to Rust GLOBAL; Terminal uses
+that allocator too. The verifier checks all 68 size/alignment assertions for
+34 types against metadata from the compiled Zig core. It compares 300 full
+frames against the existing plain-text, truecolor and Unicode goldens.
+No Worker, transport, callbacks, selection, delta or performance claim is made.
+
+The stale-frame rejection regression was observed failing, then fixed by
+clearing retained output before a new case. Reproduction source, independent
+Cargo locks and the verifier are under `spikes/terminal-ghostty-vt/wasm/`.
+Phase 1's 60 fps answer remains no; later phases remain gated. Graphical
+profiling still waits for a verified unlocked M2 console session.

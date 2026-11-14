@@ -598,3 +598,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - Failure: a native app and its workers can start without establishing valid visible-webview animation/timer evidence. A process-alive check is insufficient.
 - Prevention: validate matching console user, completed login and explicit unlock before and during collection. Fail on ambiguous state. Keep any awake assertion process-scoped and bounded; it does not unlock the session. Clean its resources in independent steps so an app-cleanup failure cannot skip assertion cleanup.
 - Verification: exercise normalized locked/unlocked/unknown fixtures, parse real IORegistry plist shapes without retaining private fields, and repeat the same binary after an actual unlock. An observed lock alone does not prove the cause of an earlier stall.
+
+
+### Native generated FFI layouts do not transfer to wasm32
+
+- **Trigger:** reusing generated 64-bit bindings when linking a native C/Zig core into a Rust wasm32 module.
+- **Failure:** correct compile-time layout assertions reject pointer-sized structs; disabling them hides an ABI mismatch.
+- **Prevention:** regenerate a separate target-specific binding file from the exact pinned headers and original generator, keep native assertions intact and route only the isolated target to the new file. Use an explicit target pkg-config directory and a consistent allocator for terminal and helper objects.
+- **Verification:** first observe native ABI assertions reject wasm32. Compare the regenerated size/alignment assertions with the compiled core metadata, then execute create/feed/snapshot/drop and byte-for-byte shared golden checks. Stable smoke-test memory does not establish general leak freedom or Worker performance.

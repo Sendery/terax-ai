@@ -1,0 +1,74 @@
+{
+  "sourceCommit": "406a3d2ea64668426de509ad840da91a80518947",
+  "sourceTreeDirty": true,
+  "host": {
+    "os": "27.0.1",
+    "build": "26A434",
+    "arch": "arm64",
+    "cpu": "Apple M2"
+  },
+  "zig": {
+    "version": "0.15.2",
+    "distribution": "Homebrew zig@0.15 bottle, includes packaged patches",
+    "executableSha256": "6d448898e593fce3fe0dd350cef536fd6c2d648061378c8e3279a41378acffdf",
+    "linkedLibraries": [
+      "\t/opt/homebrew/opt/llvm@20/lib/libclang-cpp.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldMinGW.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldELF.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldCOFF.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldWasm.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldMachO.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/lld@20/lib/liblldCommon.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/opt/homebrew/opt/llvm@20/lib/libLLVM.dylib (compatibility version 1.0.0, current version 20.1.8)",
+      "\t/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.12)",
+      "\t/opt/homebrew/opt/zstd/lib/libzstd.1.dylib (compatibility version 1.0.0, current version 1.5.7)",
+      "\t/usr/lib/libxml2.2.dylib (compatibility version 10.0.0, current version 10.9.0)",
+      "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2200.27.0)",
+      "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.0.0)"
+    ],
+    "normalM2Path": "/opt/homebrew/Cellar/zig@0.15/0.15.2/bin/zig",
+    "nativeSourceFallback": "still requires TERAX_GHOSTTY_SOURCE_BUILD=1; prebuilt wrapper denies source overrides"
+  },
+  "clang": {
+    "version": "Homebrew clang version 20.1.8",
+    "executableSha256": "e89a392d7a6fe8bc7b76bbc94c9c2e7045c4e333ff8be7732fffbc3c903bb468"
+  },
+  "brew": [
+    "lld@20 20.1.8",
+    "llvm@20 20.1.8",
+    "zig@0.15 0.15.2"
+  ],
+  "rust": [
+    "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "binary: rustc",
+    "commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+    "commit-date: 2026-07-14",
+    "host: aarch64-apple-darwin",
+    "release: 1.97.1",
+    "LLVM version: 22.1.6"
+  ],
+  "node": "v24.22.3",
+  "ghosttyCommit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "ghosttySourceClean": true,
+  "producerArgs": [
+    "build",
+    "-Dtarget=wasm32-freestanding",
+    "-Dcpu=baseline",
+    "-Doptimize=ReleaseFast",
+    "-Demit-lib-vt=true",
+    "-Dapp-runtime=none",
+    "-Demit-xcframework=false",
+    "-Dsimd=false",
+    "-j2"
+  ],
+  "coreArchiveSha256": "f6edd27d4bf3635e6be1be3ce751c7e58eb266508695a0943d8589298c4ceec8",
+  "nativeGeneratorArchiveSha256": "fd8ca44691ced7b1fa368666fb5546ba8bf4318b717b356ea0a36a2aada49fe0",
+  "officialSdkAttempt": {
+    "version": "0.15.2",
+    "result": "host build-runner link failed before WASM compile; SDK unresolved system symbols",
+    "accepted": false
+  },
+  "nativeAppChanged": false,
+  "actionsExecuted": false,
+  "originalProtectedMacBuilds": false
+}
