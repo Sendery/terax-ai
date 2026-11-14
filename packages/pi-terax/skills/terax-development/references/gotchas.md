@@ -674,3 +674,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a Promise is sliced or compared as text; a pending result crosses a pane/privacy change; or a valid empty screen becomes unavailable and prematurely aborts agent startup.
 - **Prevention:** await at every consumer, capture and revalidate pane/handle/privacy and managed-agent ownership after await, then redact accepted AI text. Preserve empty text separately from unavailable. Submission confirmation needs both real baseline and current buffers.
 - **Verification:** async AI tail slicing, identity/privacy changes during a query, managed-agent reassociation, failed-query handoff, empty-screen-to-banner readiness and unavailable/timeout regressions.
+
+## Native key encoding buffers and admission
+
+- **Trigger:** encoding negotiated keys with the pinned native binding, especially committed text longer than the initial buffer.
+- **Failure mode:** its encode_to_vec helper reserves relative to length using a remaining-capacity calculation, so valid text can still fail OutOfSpace. A bounded actor queue alone also leaves an unbounded number of blocking workers waiting to enqueue.
+- **Prevention:** use explicit encode, validate the required byte count and resize/retry within a fixed output cap. Reserve per-core RAII admission before worker spawn and keep it through the receipt. Include encode-only requests in the frontend budget and queue. Keep stop independent from the producer gate, and describe receipt timeout scope precisely.
+- **Verification:** literal ASCII and Unicode above 128 bytes; FIFO mode negotiation; admission at capacity with drop/error release; encode-only budget, invalid reply and close/exit races. Kitty Enter/Backspace/Tab releases need REPORT_ALL as well as REPORT_EVENTS; empty output is valid and must not trigger fallback input.

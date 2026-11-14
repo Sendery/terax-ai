@@ -1,4 +1,5 @@
 use super::engine::{Engine, EngineFailure, EngineHandle, EngineInput, EngineThread};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 #[derive(Default)]
@@ -7,6 +8,7 @@ struct State {
     failed: bool,
     process_finished: bool,
     failure_reported: bool,
+    input_pending: Arc<AtomicUsize>,
     owner: Option<CoreOwner>,
 }
 
@@ -22,6 +24,27 @@ pub struct CoreOwner {
     handle: EngineHandle,
     input: EngineInput,
     thread: Option<EngineThread>,
+}
+
+pub struct InputLease {
+    input: EngineInput,
+    pending: Arc<AtomicUsize>,
+}
+
+impl InputLease {
+    /// Producer worker only. The receipt timeout starts after ordered enqueue.
+    pub fn encode(self, event: super::engine::input::InputEvent) -> Result<Vec<u8>, String> {
+        self.input
+            .encode_input(event)?
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .map_err(|error| format!("terminal input encoding failed: {error}"))?
+    }
+}
+
+impl Drop for InputLease {
+    fn drop(&mut self) {
+        self.pending.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 pub struct FailureAction {
@@ -64,6 +87,25 @@ impl CoreSlot {
             return Err("terminal core failed".into());
         }
         Ok(owner.handle.clone())
+    }
+
+    pub fn reserve_input(&self) -> Result<InputLease, String> {
+        let state = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.closed || state.failed || state.process_finished {
+            return Err("terminal input is unavailable".into());
+        }
+        let owner = state.owner.as_ref().ok_or("terminal core is opening")?;
+        if owner.handle.failure().is_some() {
+            return Err("terminal core failed".into());
+        }
+        if state.input_pending.load(Ordering::Acquire) >= 32 {
+            return Err("too many pending terminal input requests".into());
+        }
+        state.input_pending.fetch_add(1, Ordering::AcqRel);
+        Ok(InputLease {
+            input: owner.input.clone(),
+            pending: state.input_pending.clone(),
+        })
     }
 
     pub fn publish(&self, operation: impl FnOnce()) -> bool {
@@ -244,6 +286,28 @@ mod tests {
         assert!(failed.retire);
         assert!(!slot.record_failure().notify);
         slot.close().unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn input_admission_is_bounded_before_worker_spawn_and_released_on_drop_or_error() {
+        let slot = CoreSlot::new();
+        let process = slot.install(engine()).unwrap();
+        let mut permits: Vec<_> = (0..32).map(|_| slot.reserve_input().unwrap()).collect();
+        assert!(slot.reserve_input().is_err());
+        drop(permits.pop());
+        let released = slot.reserve_input().unwrap();
+        assert!(slot.reserve_input().is_err());
+        process.finish().unwrap();
+        let event =
+            serde_json::from_value(serde_json::json!({"kind":"focus","focused":true})).unwrap();
+        assert!(released.encode(event).is_err());
+        assert!(
+            slot.reserve_input().is_ok(),
+            "failed request releases admission"
+        );
+        slot.close().unwrap().join().unwrap();
+        assert!(slot.reserve_input().is_err());
+        drop(permits);
     }
 
     #[test]

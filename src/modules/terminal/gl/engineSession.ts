@@ -18,6 +18,21 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
 
 export const ENGINE_FAILED_EXIT = -2;
+const MAX_QUEUED_INPUT_BYTES = 1024 * 1024;
+
+export type NativeKeyEvent = {
+  code: string;
+  text?: string;
+  action?: "press" | "release" | "repeat";
+  mods?: number;
+  consumedMods?: number;
+  unshifted?: string;
+};
+
+type NativeInputEvent =
+  | { kind: "key"; event: NativeKeyEvent }
+  | { kind: "paste"; text: string }
+  | { kind: "focus"; focused: boolean };
 
 export type BenchCreditSender = (
   id: number,
@@ -155,6 +170,8 @@ export class EngineSession {
   private failed = false;
   private size: { cols: number; rows: number };
   private pendingColors: EngineColors | null = null;
+  private inputWrites: Promise<void> = Promise.resolve();
+  private queuedInputBytes = 0;
 
   private constructor(
     renderer: GridRenderer,
@@ -410,19 +427,119 @@ export class EngineSession {
   }
 
   write(text: string): Promise<void> {
-    if (this.failed) return Promise.reject(new Error("terminal engine failed"));
+    if (!text)
+      return this.failed
+        ? Promise.reject(new Error("terminal engine failed"))
+        : Promise.resolve();
+    const bytes = textEncoder.encode(text);
+    return this.enqueueInput(bytes.byteLength, (id) =>
+      this.writeBytes(id, bytes),
+    );
+  }
+
+  sendKey(event: NativeKeyEvent): Promise<void> {
+    return this.sendNativeInput(
+      { kind: "key", event: { ...event } },
+      64 + textEncoder.encode(event.text ?? "").byteLength,
+    );
+  }
+
+  paste(text: string): Promise<void> {
+    return this.sendNativeInput(
+      { kind: "paste", text },
+      textEncoder.encode(text).byteLength,
+    );
+  }
+
+  setInputFocused(focused: boolean): Promise<void> {
+    return this.sendNativeInput({ kind: "focus", focused }, 1);
+  }
+
+  async encodeKey(event: NativeKeyEvent): Promise<string> {
     const id = this.id;
-    if (
-      id === null ||
-      this.closed ||
-      this.exitCode !== null ||
-      text.length === 0
-    ) {
-      return Promise.resolve();
-    }
-    return invoke("pty_write", textEncoder.encode(text), {
-      headers: { "x-pty-id": String(id) },
+    if (id === null || this.closed || this.failed || this.exitCode !== null)
+      throw new Error("terminal input is unavailable");
+    const snapshot = { ...event };
+    const text = await this.enqueueInput(
+      64 + textEncoder.encode(snapshot.text ?? "").byteLength,
+      async (currentId) => {
+        const bytes = await this.encodeNativeInput(currentId, {
+          kind: "key",
+          event: snapshot,
+        });
+        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      },
+    );
+    if (typeof text !== "string")
+      throw new Error("terminal input is unavailable");
+    return text;
+  }
+
+  private sendNativeInput(
+    event: NativeInputEvent,
+    bytes: number,
+  ): Promise<void> {
+    return this.enqueueInput(bytes, async (id) => {
+      const encoded = await this.encodeNativeInput(id, event);
+      if (encoded.byteLength > 0) await this.writeBytes(id, encoded);
     });
+  }
+
+  private async encodeNativeInput(
+    id: number,
+    event: NativeInputEvent,
+  ): Promise<Uint8Array> {
+    const encoded = await invoke<unknown>("gterm_encode_input", { id, event });
+    if (this.id !== id || this.closed || this.failed || this.exitCode !== null)
+      throw new Error("terminal input is unavailable");
+    if (
+      !Array.isArray(encoded) ||
+      encoded.length > MAX_QUEUED_INPUT_BYTES + 12 ||
+      !encoded.every(
+        (byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255,
+      )
+    )
+      throw new Error("invalid native terminal input reply");
+    return Uint8Array.from(encoded);
+  }
+
+  private enqueueInput<T>(
+    bytes: number,
+    operation: (id: number) => Promise<T>,
+  ): Promise<T | undefined> {
+    bytes = Math.max(64, bytes);
+    if (this.failed) return Promise.reject(new Error("terminal engine failed"));
+    if (this.id === null || this.closed || this.exitCode !== null)
+      return Promise.resolve(undefined);
+    if (this.queuedInputBytes + bytes > MAX_QUEUED_INPUT_BYTES)
+      return Promise.reject(
+        new Error(
+          "Terminal input queue is full; wait before pasting more text.",
+        ),
+      );
+    this.queuedInputBytes += bytes;
+    const task = this.inputWrites
+      .then(async () => {
+        if (this.failed) throw new Error("terminal engine failed");
+        const id = this.id;
+        if (id === null || this.closed || this.exitCode !== null) return;
+        return operation(id);
+      })
+      .finally(() => {
+        this.queuedInputBytes -= bytes;
+      });
+    this.inputWrites = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
+  }
+
+  private writeBytes(id: number, bytes: Uint8Array): Promise<void> {
+    if (this.failed) return Promise.reject(new Error("terminal engine failed"));
+    if (this.id !== id || this.closed || this.exitCode !== null)
+      return Promise.resolve();
+    return invoke("pty_write", bytes, { headers: { "x-pty-id": String(id) } });
   }
 
   setColors(colors: EngineColors): void {

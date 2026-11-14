@@ -479,3 +479,30 @@ baseline and subsequent buffers; missing or rejected text is never evidence
 that a turn started. App task readers reject a response from a replaced handle.
 The native ordinary-pane renderer is still pending; these consumer contracts
 prepare its real bounded query without using viewport projection as history.
+
+### Negotiated native input surface
+
+`gterm_encode_input` accepts a closed typed key/paste/focus request, reserves
+one of 32 per-core RAII admission slots before creating a blocking worker, and
+encodes it on the terminal actor behind previously accepted output. The same
+producer gate orders it against Finish, so completed input cannot acquire new
+encoding requests. Presentation and retained history remain independent.
+
+The pinned Ghostty encoder reads the live terminal's application cursor/keypad,
+modifyOtherKeys and Kitty modes. Paste uses the current bracketed-paste mode;
+focus is emitted only when requested. DOM physical key codes map to a closed
+native enum; key text is capped at 4 KiB and paste at 1 MiB. Unknown codes,
+modifier bits and invalid consumed modifiers are rejected. The native result
+contains bytes, not a PTY write; the session revalidates its identity and state
+before sending those bytes. Valid empty encoding causes no write. In particular,
+Kitty Enter/Backspace/Tab releases additionally require REPORT_ALL.
+
+`EngineSession` serializes raw writes, native keys, paste, focus and encode-only
+queries through a 1 MiB input budget with a minimum event cost. It validates
+returned bytes and drops replies after close, failure or process exit. The
+native receipt timeout is two seconds after ordered enqueue; it is not an
+end-to-end deadline and does not cancel queued work. An abandoned encoding
+cannot independently write to the PTY. The pinned `encode_to_vec` growth helper
+is avoided in favor of a bounded explicit buffer and required-size retry.
+These APIs prepare ordinary-pane input; the existing lab input binding remains
+Phase 1 and normal-pane UI/IME/clipboard integration is still pending.

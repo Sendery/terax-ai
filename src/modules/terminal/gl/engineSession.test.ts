@@ -17,6 +17,7 @@ const ipc = vi.hoisted(() => ({
   calls: [] as { command: string; args: unknown }[],
   resize: null as Promise<unknown> | null,
   text: null as Promise<unknown> | null,
+  encoded: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
     reject: (error: unknown) => void;
@@ -37,6 +38,8 @@ vi.mock("@tauri-apps/api/core", () => {
         });
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
+      if (command === "gterm_encode_input")
+        return ipc.encoded ?? Promise.resolve([13]);
       if (command === "gterm_read_text")
         return ipc.text ?? Promise.resolve("native text");
       if (command === "gterm_available") return Promise.resolve(true);
@@ -127,6 +130,7 @@ beforeEach(() => {
   ipc.open = null;
   ipc.resize = null;
   ipc.text = null;
+  ipc.encoded = null;
 });
 
 describe("EngineSession credits", () => {
@@ -779,5 +783,98 @@ it("keeps retained presentation and text available after exit without writing to
     { command: "gterm_resize", args: { id: 9, cols: 80, rows: 24 } },
   ]);
   await expect(session.readText()).resolves.toBe("native text");
+  await session.close();
+});
+
+it("orders native key encoding with raw input and negotiated paste", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (bytes: number[]) => void;
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const key = session.sendKey({ code: "Enter", mods: 1 });
+  const raw = session.write("next");
+  const paste = session.paste("one\ntwo");
+  await Promise.resolve();
+  expect(commands("pty_write")).toEqual([]);
+  expect(commands("gterm_encode_input")).toHaveLength(1);
+  finish([27, 91, 49, 51, 59, 50, 117]);
+  await key;
+  ipc.encoded = Promise.resolve([112]);
+  await Promise.all([raw, paste]);
+  const writes = commands("pty_write").map((call) =>
+    new TextDecoder().decode(call.args as Uint8Array),
+  );
+  expect(writes).toEqual(["\x1b[13;2u", "next", "p"]);
+  expect(commands("gterm_encode_input")[1].args).toEqual({
+    id: 9,
+    event: { kind: "paste", text: "one\ntwo" },
+  });
+  await session.close();
+});
+
+it("rejects an invalid native input reply before writing bytes", async () => {
+  const session = await openSession(new FakeRenderer());
+  ipc.encoded = Promise.resolve([256]);
+  await expect(session.sendKey({ code: "Enter" })).rejects.toThrow("invalid");
+  expect(commands("pty_write")).toEqual([]);
+  await session.close();
+});
+
+it("discards encoded input that finishes after its pane was closed", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (bytes: number[]) => void;
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const key = session.sendKey({ code: "Enter" });
+  const result = Promise.allSettled([key]);
+  await Promise.resolve();
+  await session.close();
+  finish([13]);
+  expect((await result)[0].status).toBe("rejected");
+  expect(commands("pty_write")).toEqual([]);
+});
+
+it("sends no raw write when the native focus or key encoder emits nothing", async () => {
+  const session = await openSession(new FakeRenderer());
+  ipc.encoded = Promise.resolve([]);
+  await session.setInputFocused(true);
+  await session.sendKey({ code: "KeyA", action: "release" });
+  expect(commands("pty_write")).toEqual([]);
+  await session.close();
+});
+
+it("includes encode-only queries in the input budget", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (bytes: number[]) => void;
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const query = session.encodeKey({ code: "Enter", mods: 1 });
+  try {
+    await expect(session.write("x".repeat(1024 * 1024))).rejects.toThrow(
+      "queue is full",
+    );
+  } finally {
+    finish([13]);
+    await query;
+    await session.close();
+  }
+});
+
+it("does not write an encoded key after a process exit during the query", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (bytes: number[]) => void;
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const key = session.sendKey({ code: "Enter" });
+  const result = Promise.allSettled([key]);
+  await Promise.resolve();
+  channelOf(1).onmessage(0);
+  finish([13]);
+  expect((await result)[0].status).toBe("rejected");
+  expect(commands("pty_write")).toEqual([]);
   await session.close();
 });

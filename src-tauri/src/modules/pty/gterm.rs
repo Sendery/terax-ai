@@ -76,6 +76,32 @@ pub async fn gterm_open(
     }
 }
 
+#[cfg(feature = "ghostty-engine")]
+type InputEvent = super::engine::input::InputEvent;
+#[cfg(not(feature = "ghostty-engine"))]
+type InputEvent = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_encode_input(
+    state: State<'_, PtyState>,
+    id: u32,
+    event: InputEvent,
+) -> Result<Vec<u8>, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        event.validate()?;
+        let permit = state.core(id).ok_or("no terminal core")?.reserve_input()?;
+        tauri::async_runtime::spawn_blocking(move || permit.encode(event))
+            .await
+            .map_err(|error| format!("terminal input task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, event);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
 #[tauri::command]
 pub fn gterm_set_colors(
     state: State<'_, PtyState>,

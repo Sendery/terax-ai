@@ -14,6 +14,8 @@ pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 #[cfg(feature = "ghostty-engine")]
 pub mod bench;
 #[cfg(feature = "ghostty-engine")]
+pub mod input;
+#[cfg(feature = "ghostty-engine")]
 mod snapshot;
 #[cfg(feature = "ghostty-engine")]
 mod text;
@@ -203,6 +205,10 @@ mod runtime {
         Bytes(Vec<u8>),
         Wake,
         Finish(SyncSender<Result<(), EngineFailure>>),
+        Encode(
+            super::input::InputEvent,
+            SyncSender<Result<Vec<u8>, String>>,
+        ),
         Shutdown,
     }
 
@@ -387,6 +393,24 @@ mod runtime {
                 return false;
             }
             self.tx.send(Input::Bytes(bytes)).is_ok()
+        }
+
+        /// Ordered after accepted output. This may block on the bounded queue:
+        /// call only from a producer worker, never the actor or a UI thread.
+        pub fn encode_input(
+            &self,
+            event: super::input::InputEvent,
+        ) -> Result<Receiver<Result<Vec<u8>, String>>, String> {
+            event.validate()?;
+            let gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+            if *gate != InputState::Accepting {
+                return Err("terminal input is already finished".into());
+            }
+            let (reply, receiver) = sync_channel(1);
+            self.tx
+                .send(Input::Encode(event, reply))
+                .map_err(|_| "terminal engine closed")?;
+            Ok(receiver)
         }
 
         /// Call from the producer after its output is drained, never from the actor itself.
@@ -782,6 +806,14 @@ mod runtime {
             match message {
                 Input::Bytes(bytes) => session.feed(&bytes),
                 Input::Wake => {}
+                Input::Encode(event, reply) => {
+                    let result = if session.input_finished || session.health.failure().is_some() {
+                        Err("terminal engine input is unavailable".into())
+                    } else {
+                        super::input::encode(&session.term, &event)
+                    };
+                    let _ = reply.try_send(result);
+                }
                 Input::Finish(reply) => {
                     let result = session.finish_input();
                     let _ = reply.try_send(result);
