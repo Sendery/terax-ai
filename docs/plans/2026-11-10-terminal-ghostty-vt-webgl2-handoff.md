@@ -215,3 +215,129 @@ The prebuilt packager now carries an offline, SHA-256-verified bundle of 24 depe
 Full Linux validation after these follow-ups passes: strict clippy in both modes; 644 baseline and 679 feature Rust tests including integration suites; 2241 frontend tests and one skip; types, lint, production frontend build; and 27 Node wrapper, license and laboratory-runner tests. The native Windows and macOS gates must still run against the final published revision. These follow-ups are pending publication, not part of the recorded `ad27cf6` run.
 
 A separate ARM64 archive was prepared on Linux as a provisional transfer artifact, with complete notices, provenance and per-file checksums. Its archive SHA-256 is `fd8ca44691ced7b1fa368666fb5546ba8bf4318b717b356ea0a36a2aada49fe0`; size is 841375 bytes. All 11 objects are Mach-O ARM64 with minimum macOS 13.0. Debug information was removed from a copy, and the external symbol set was checked unchanged. This is not a native ARM link/runtime result, a canonical release or an accepted consumer input. It does not change repository pins. Do not invoke Cargo directly, opt into source mode or bypass the wrapper guard to consume it.
+
+### Prebuilt recovery, 2026-11-11
+
+Applied the supplied follow-up patch to `ad27cf6`, including Windows fixes,
+CLI entrypoint handling and dependency notices. No merge, push, publication
+or new Actions run was performed.
+
+Static review of the supplied ARM64 tar confirmed its recorded archive hash,
+all 62 per-file hashes and 11 Mach-O arm64 members. It contains no symlinks or
+unsafe paths. These checks do not establish ABI or runtime compatibility.
+
+An explicit `--provisional <archive>` wrapper route now consumes these exact
+bytes with a dedicated manifest and cache. Canonical pins are unchanged.
+Missing files, invalid hashes, host/source identity changes, corrupt caches,
+source environment overrides and pkg-config failure stop the consumer.
+Preparing the actual attached archive through this route succeeded with a
+Node-only child, without compiling or loading the static library.
+
+Independent review found that the previous PATH guard still allowed the
+upstream build script to clone Ghostty before it reached Zig. Both Cargo
+workspaces now patch sys 0.2.2 to an unchanged-binding copy with an explicit
+source-build guard. It fails before source fetch unless the exact opt-in
+`TERAX_GHOSTTY_SOURCE_BUILD=1` is supplied by the source wrapper. Its MIT
+notice and upstream provenance are included. Lockfile resolution was updated
+offline using the already installed Rust 1.97.1 toolchain.
+
+The existing Intel diagnostic artifact was retrieved and its ZIP checksum
+verified: `ac8e5bbfe1c326450cf9ff53354e450fe80e0ec447e3d3836b0b05b5d79106d2`.
+It reports pane-readiness failure, shader-allocation failure and a falsy-value
+error from autorun. No successful captures or performance measurements were
+produced. The root causes of those separate lab failures remain unverified.
+
+Validation completed on the recovery tree:
+
+```sh
+pnpm check-types
+# Passed.
+pnpm lint
+# Passed, existing 109 warnings and 2 infos.
+pnpm test
+# 228 files passed; 2241 tests passed, 1 skipped.
+pnpm build
+# Extension and production frontend built successfully.
+pnpm --dir packages/pi-terax test
+# 9 files, 101 tests passed.
+node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs scripts/libghostty/provisional.node-test.mjs scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
+# 31 tests passed, including actual wrapper/cache/process tests.
+```
+
+Native verification commands are prepared but have not been executed on this
+Mac, preserving the original user's host restriction while clarification is
+pending. They compile only the policy probe or small smoke consumer, not the
+whole app:
+
+```sh
+RUSTUP_TOOLCHAIN=1.97.1 node --test scripts/libghostty/policy.node-test.mjs
+RUSTUP_TOOLCHAIN=1.97.1 node scripts/with-zig.mjs --provisional /absolute/path/to/libghostty-vt-0.2.2-a887df4-aarch64-macos-provisional-linux-cross.tar.gz -- cargo run --offline --locked --manifest-path scripts/libghostty/smoke/Cargo.toml
+```
+
+The policy probe forces pkg-config failure and spies on git and Zig; it must
+reject missing/invalid opt-in and source-directory overrides before either
+producer process is started. Its explicit source case invokes a spy, not real
+git or Zig. Native smoke, backend clippy/tests, ARM64 app execution and Phase 1
+measurements remain pending. No native app was launched, no compiler Zig was
+executed and no antivirus settings were changed in this recovery work.
+
+### M2 setup and native ARM64 validation, 2026-11-14
+
+The dedicated M2 now has a separate checkout at the same project path as the
+original host, on this feature branch, with all pending recovery changes.
+No native build ran on the original protected host. No Actions run, push or
+merge was performed. Sendery's author/committer identity, SSH authentication,
+GitHub CLI login, repository push permission and a non-mutating push dry-run
+were verified on the new host.
+
+Host: macOS 27.0.1, Apple Silicon arm64, 8 GiB RAM, 8 CPUs. Build tools:
+Apple Command Line Tools, Rust 1.97.1 with clippy/rustfmt, Node 24.22.3, pnpm
+11.5.0, pkg-config 3.0.10, Python 3.13.18, CMake 4.5.0 and cargo-nextest
+0.9.152. Rust used two parallel jobs. Shell setup also covers non-interactive
+SSH. Machine-local instructions, the provisional artifact and output logs are
+under the ignored `.terax/pi-development/m2/` directory.
+
+The real sys build-script policy test passed, including missing and invalid
+source opt-in, a source-directory override and an explicit opt-in that reaches
+only a process spy. The ARM64 static archive then linked and executed the
+Rust create/feed/render smoke successfully. No Zig compiler is on the host's
+normal PATH. This establishes native smoke compatibility for these exact
+provisional bytes, not canonical publication or renderer performance.
+
+The machine-local `with-ghostty` helper expands to the checked-in wrapper with
+`--provisional` and the archive in its adjacent `artifacts/` directory. Exact
+validation commands and results:
+
+```sh
+pnpm install --frozen-lockfile
+# Passed.
+pnpm lint
+# Passed, existing warnings remain.
+pnpm check-types
+# Passed.
+pnpm test --maxWorkers=2
+# 228 files; 2241 passed, 1 skipped.
+pnpm --dir packages/pi-terax test --maxWorkers=2
+# 9 files; 101 passed.
+node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs scripts/libghostty/provisional.node-test.mjs scripts/libghostty/policy.node-test.mjs scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
+# 32 passed.
+.terax/pi-development/m2/with-ghostty cargo run --offline --locked --manifest-path scripts/libghostty/smoke/Cargo.toml
+# prebuilt terminal create/feed/render succeeded.
+.terax/pi-development/m2/with-ghostty pnpm build:sandbox --debug --no-bundle --features ghostty-engine
+# Production frontend and extension built; sandbox executable built successfully.
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+# Passed.
+cargo test --manifest-path src-tauri/Cargo.toml --locked
+# 578 unit + 25 + 26 + 7 integration passed; 1 ignored.
+.terax/pi-development/m2/with-ghostty cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked --features ghostty-engine -- -D warnings
+# Passed.
+.terax/pi-development/m2/with-ghostty cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
+# 613 unit + 25 + 26 + 7 integration passed; 2 ignored.
+```
+
+The sandbox was compiled, not launched. Its Rust profile is unoptimized debug,
+so it is not a Phase 1 measurement build. WKWebView integration, captures,
+optimized measurements and the 60 fps exit criterion still need a real lab
+run. Windows, the updated Linux policy and canonical release publication also
+remain pending. The full-migration handoff supplied later is context for the
+following phases; no merge or phase-advance criterion is implied by setup.

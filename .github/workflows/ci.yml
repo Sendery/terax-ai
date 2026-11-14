@@ -35,7 +35,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm check-types
       - run: pnpm test
-      - run: node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs
+      - run: node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs scripts/libghostty/provisional.node-test.mjs
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Feature clippy without Zig
@@ -48,3 +48,6 @@ jobs:
         env:
           CARGO_TARGET_DIR: target/prebuilt-consumer
         run: node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
+      - name: Reject implicit source builds before producer processes start
+        if: runner.os != 'Windows'
+        run: node --test scripts/libghostty/policy.node-test.mjs

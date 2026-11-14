@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync,
 import { dirname, join, resolve, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import { archiveName, hostTriple, parseArgs, prebuiltEnv, selectedTarget, verifyChecksum } from "./libghostty/core.mjs";
+import { provisionalPin } from "./libghostty/provisional.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 function run(command, args, options = {}) {
@@ -15,21 +16,28 @@ function run(command, args, options = {}) {
 }
 
 async function main() {
-  const { source, command } = parseArgs(process.argv.slice(2));
+  const { source, provisional, command } = parseArgs(process.argv.slice(2));
   if (source) {
     run(process.execPath, [join(ROOT, "scripts/libghostty/source.mjs"), "--", ...command]);
     return;
   }
-  const pin = { ...JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/source.json"), "utf8")), ...JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/pin.json"), "utf8")) };
+  let pin = { ...JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/source.json"), "utf8")), ...JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/pin.json"), "utf8")) };
   const triple = hostTriple();
+  let archiveRoot;
+  if (provisional) {
+    const manifest = JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/provisional.json"), "utf8"));
+    pin = provisionalPin(pin, manifest, triple);
+    archiveRoot = manifest.archiveRoot;
+  }
   const target = selectedTarget(pin, triple, process.env, command);
   if (process.platform === "linux" && !process.report.getReport().header.glibcVersionRuntime) throw new Error("prebuilt Linux requires glibc");
-  const base = join(ROOT, "src-tauri/target/toolchains");
+  const base = join(ROOT, "src-tauri/target/toolchains", ...(provisional ? ["provisional"] : []));
   const archive = join(base, archiveName(pin, triple));
   const final = join(base, `${pin.releaseTag}-${triple}-${target.sha256.slice(0, 16)}`);
   mkdirSync(base, { recursive: true });
   let bytes;
-  if (existsSync(archive)) bytes = readFileSync(archive);
+  if (provisional) bytes = readFileSync(resolve(provisional));
+  else if (existsSync(archive)) bytes = readFileSync(archive);
   else {
     const url = `https://github.com/${pin.repository}/releases/download/${pin.releaseTag}/${archiveName(pin, triple)}`;
     const response = await fetch(url);
@@ -37,11 +45,12 @@ async function main() {
     bytes = Buffer.from(await response.arrayBuffer());
   }
   verifyChecksum(bytes, target.sha256);
-  if (!existsSync(archive)) writeFileSync(archive, bytes, { flag: "wx" });
+  if (existsSync(archive)) verifyChecksum(readFileSync(archive), target.sha256);
+  else writeFileSync(archive, bytes, { flag: "wx" });
   const staging = `${final}.tmp-${randomBytes(8).toString("hex")}`;
   try {
     mkdirSync(staging);
-    run("tar", ["-xzf", archive, "-C", staging]);
+    run("tar", ["-xzf", archive, "-C", staging, ...(archiveRoot ? ["--strip-components", "1"] : [])]);
     const libName = process.platform === "win32" ? "ghostty-vt-static.lib" : "libghostty-vt.a";
     for (const file of [`lib/${libName}`, "include/ghostty/vt.h", "share/pkgconfig/libghostty-vt-static.pc"]) {
       if (!existsSync(join(staging, file))) throw new Error(`invalid prebuilt archive: missing ${file}`);

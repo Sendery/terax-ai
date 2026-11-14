@@ -99,6 +99,9 @@ tauri-plugin-window-state = "2"
 [profile.dev]
 incremental = true
 
+[patch.crates-io]
+libghostty-vt-sys = { path = "vendor/libghostty-vt-sys" }
+
 [profile.release]
 codegen-units = 1
 lto = "fat"

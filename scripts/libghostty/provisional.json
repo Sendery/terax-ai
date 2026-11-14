@@ -1,0 +1,9 @@
+{
+  "crateVersion": "0.2.2",
+  "commit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "zigVersion": "0.15.2",
+  "host": "aarch64-macos",
+  "rustTarget": "aarch64-apple-darwin",
+  "archiveRoot": "libghostty-vt-0.2.2-a887df4-aarch64-macos-provisional-linux-cross",
+  "sha256": "fd8ca44691ced7b1fa368666fb5546ba8bf4318b717b356ea0a36a2aada49fe0"
+}

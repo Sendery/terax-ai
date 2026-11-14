@@ -28,6 +28,7 @@ test("corruption is fatal", () => {
   assert.throws(() => verifyChecksum(bytes, "0".repeat(64)));
 });
 test("prebuilt environment blocks source overrides and sanitizes pkg-config", () => {
+  assert.throws(() => prebuiltEnv({ TERAX_GHOSTTY_SOURCE_BUILD: "1" }, "target", "/pc", "pkg-config"));
   assert.throws(() => prebuiltEnv({ GHOSTTY_SOURCE_DIR: "checkout" }, "target", "/pc", "pkg-config"));
   assert.throws(() => prebuiltEnv({ DOCS_RS: "1" }, "target", "/pc", "pkg-config"));
   const env = prebuiltEnv({ PKG_CONFIG_LIBDIR: "/wrong", LIBGHOSTTY_VT_STATIC_NO_PKG_CONFIG: "1", PATH: "/bin" }, "target", "/pc", "pkg-config");

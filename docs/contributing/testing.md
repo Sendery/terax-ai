@@ -20,7 +20,7 @@ If you do not have `cargo-nextest` installed, `cargo test --locked` is the local
 
 ### Terminal engine
 
-The frame codec (`src-tauri/src/modules/pty/engine/frame.rs`) and the pump bookkeeping are tested by the commands above. Everything that touches libghostty sits behind the `ghostty-engine` feature and needs Zig, which `scripts/with-zig.mjs` provides:
+The frame codec (`src-tauri/src/modules/pty/engine/frame.rs`) and the pump bookkeeping are tested by the commands above. Everything that touches libghostty sits behind the `ghostty-engine` feature and uses the checksum-pinned prebuilt route through `scripts/with-zig.mjs`. Zig is not needed for this route. Missing prebuilts or pkg-config failures are errors, with no implicit source build. See `docs/architecture/terminal-engine.md` for explicit provisional archive validation and the separate source opt-in:
 
 ```bash
 cd src-tauri

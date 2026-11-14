@@ -544,6 +544,13 @@ A row is complete only when implementation and verification evidence both exist.
 
 ## Catalog Maintenance
 
+### A compiler PATH guard does not disable dependency source fallback
+
+- **Trigger:** a native dependency falls back from pkg-config discovery to a source build.
+- **Failure mode:** the build script may clone sources before invoking the compiler; intermediate package managers may also change PATH. A rejection executable cannot prove that the source path was never entered.
+- **Prevention:** enforce explicit source opt-in at entry to the dependency's source-build function, before filesystem or process work. Apply the patched dependency in every Cargo workspace, including smoke consumers. Keep generated bindings and upstream notices intact.
+- **Verification:** run the actual build script with failing pkg-config and process spies. Missing or invalid opt-in and source-directory overrides must fail before git or Zig starts. Check lockfile resolution to the local patched dependency. Test the wrapper's separate archive integrity and cache policy too.
+
 At the end of each implementation:
 
 1. Read the run journal's gotcha candidates.

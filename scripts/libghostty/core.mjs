@@ -9,8 +9,12 @@ export function hostTriple(platform = process.platform, arch = process.arch) {
 
 export function parseArgs(args) {
   const split = args.indexOf("--");
-  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--source] -- <command> [args...]");
+  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--source | --provisional <archive>] -- <command> [args...]");
   const flags = args.slice(0, split);
+  if (flags[0] === "--provisional") {
+    if (flags.length !== 2 || !flags[1] || flags[1].startsWith("--")) throw new Error("provisional mode requires one local archive");
+    return { source: false, provisional: flags[1], command: args.slice(split + 1) };
+  }
   if (flags.some((flag) => flag !== "--source") || flags.length > 1) throw new Error("unknown wrapper option");
   return { source: flags.includes("--source"), command: args.slice(split + 1) };
 }
@@ -35,6 +39,7 @@ export function archiveName(pin, triple) {
 }
 
 export function prebuiltEnv(base, target, pkgdir, pkgconfig) {
+  if (base.TERAX_GHOSTTY_SOURCE_BUILD !== undefined) throw new Error("TERAX_GHOSTTY_SOURCE_BUILD conflicts with prebuilt mode");
   if (base.GHOSTTY_SOURCE_DIR) throw new Error("GHOSTTY_SOURCE_DIR conflicts with prebuilt mode");
   if (base.DOCS_RS) throw new Error("DOCS_RS cannot be used for a prebuilt build");
   const env = { ...base };

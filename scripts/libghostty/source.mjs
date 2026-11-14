@@ -160,6 +160,7 @@ async function main() {
   const binDir = dirname(zig);
 
   const env = { ...process.env };
+  env.TERAX_GHOSTTY_SOURCE_BUILD = "1";
   const key = pathKey(env);
   env[key] = `${binDir}${delimiter}${env[key] ?? ""}`;
   env.LIBGHOSTTY_VT_SYS_OPTIMIZE ??= "ReleaseFast";
