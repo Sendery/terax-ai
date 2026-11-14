@@ -12,6 +12,14 @@ const mock = vi.hoisted(() => ({
   dispose: vi.fn(),
   benchStats: vi.fn<() => Promise<BenchStats>>(),
   atlasError: false,
+  rendererStats: null as null | {
+    draws: number;
+    contextLosses: number;
+    atlasResets: number;
+  },
+  drawObserver: undefined as
+    | undefined
+    | ((at: number, ms: number, panes: number) => void),
 }));
 
 vi.mock("@/modules/terminal/gl/engineSession", () => ({
@@ -30,7 +38,15 @@ vi.mock("@/modules/terminal/gl/gridRenderer", () => ({
     cellSize = { width: 8, height: 18 };
     stats = { draws: 2, contextLosses: 0, atlasResets: 0 };
     dispose = mock.dispose;
-    constructor(private readonly canvas: HTMLCanvasElement) {}
+    constructor(
+      private readonly canvas: HTMLCanvasElement,
+      options: {
+        onDrawTiming?: (at: number, ms: number, panes: number) => void;
+      },
+    ) {
+      mock.drawObserver = options.onDrawTiming;
+      mock.rendererStats = this.stats;
+    }
     resize(width: number, height: number) {
       this.canvas.width = width;
       this.canvas.height = height;
@@ -67,11 +83,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   mock.observers.length = 0;
   mock.atlasError = false;
+  mock.drawObserver = undefined;
+  mock.rendererStats = null;
   mock.benchStats.mockResolvedValue({
     frames: 2,
     frameBytes: 80,
     bytesFed: 1024,
     encodeMicros: 1,
+    sendMicros: 1,
     creditWaitMicros: 1,
     credits: 1,
     scrollbackRows: 0,
@@ -121,6 +140,9 @@ describe("engine benchmark coordination", () => {
       settled = true;
     });
     await vi.advanceTimersByTimeAsync(0);
+    expect(mock.observers[0].onFrameTiming).toBeUndefined();
+    expect(mock.observers[0].onCreditReply).toBeUndefined();
+    expect(mock.drawObserver).toBeUndefined();
     received(1);
     drawn(1);
     mock.observers[0].onExit?.(0);
@@ -197,4 +219,75 @@ describe("engine benchmark coordination", () => {
     await rejected;
     expectClosed();
   });
+});
+
+it("stops the measured interval before draining late credit replies", async () => {
+  const pending = runBench(stage, font, colors, "ascii", 1, 1, {
+    profile: true,
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  const o = mock.observers[0];
+  received(1);
+  o.onFrameTiming?.({
+    seq: 1,
+    decodeMs: 0,
+    applyMs: 0,
+    readyAt: performance.now(),
+  });
+  mock.drawObserver?.(performance.now(), 0, 1);
+  drawn(1);
+  o.onCredit?.(1, performance.now());
+  o.onCreditReply?.(1, performance.now(), true);
+  received(2);
+  o.onFrameTiming?.({
+    seq: 2,
+    decodeMs: 0,
+    applyMs: 0,
+    readyAt: performance.now(),
+  });
+  mock.drawObserver?.(performance.now(), 0, 1);
+  drawn(2);
+  o.onCredit?.(2, performance.now());
+  o.onExit?.(0);
+  await vi.advanceTimersByTimeAsync(32);
+  expect(mock.close).not.toHaveBeenCalled();
+  if (mock.rendererStats) mock.rendererStats.draws = 99;
+  o.onCreditReply?.(2, performance.now(), true);
+  await vi.advanceTimersByTimeAsync(16);
+  const run = await pending;
+  expect(run.profile?.complete).toBe(true);
+  expect(run.profile?.frames).toHaveLength(2);
+  expect(run.profile?.draws).toHaveLength(2);
+  expect(run.rendererDraws).toBe(2);
+  expect(run.profileDrainMs).toBeGreaterThan(0);
+  expect(run.wallMs).toBeLessThan(run.profileDrainMs ?? 0);
+  expectClosed();
+});
+it("fails a profile with missing replies after the bounded out-of-band drain", async () => {
+  const pending = runBench(stage, font, colors, "ascii", 1, 1, {
+    profile: true,
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  const o = mock.observers[0];
+  for (const seq of [1, 2]) {
+    received(seq);
+    o.onFrameTiming?.({
+      seq,
+      decodeMs: 0,
+      applyMs: 0,
+      readyAt: performance.now(),
+    });
+    drawn(seq);
+    o.onCredit?.(seq, performance.now());
+  }
+  mock.drawObserver?.(performance.now(), 0, 1);
+  o.onExit?.(0);
+  await vi.advanceTimersByTimeAsync(5100);
+  const run = await pending;
+  expect(run.profile?.complete).toBe(false);
+  expect(run.profile?.pendingReplies).toBe(2);
+  expect(run.error).toContain("incomplete stage profile");
+  expect(run.profileDrainMs).toBeGreaterThanOrEqual(5000);
+  expect(run.wallMs).toBeLessThan(5000);
+  expectClosed();
 });

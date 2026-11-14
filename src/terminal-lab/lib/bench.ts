@@ -1,3 +1,4 @@
+import { StageProfile } from "@/terminal-lab/lib/stageProfile";
 import { benchGeometry } from "@/terminal-lab/lib/benchGeometry";
 import {
   FrameTimeline,
@@ -65,6 +66,8 @@ export type BenchRun = {
   geometry?: Record<string, unknown>;
   contextLosses?: number;
   atlasResets?: number;
+  profile?: ReturnType<StageProfile["toJSON"]>;
+  profileDrainMs?: number;
   error?: string;
 };
 
@@ -74,6 +77,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     frames: 0,
     frameBytes: 0,
     encodeMicros: 0,
+    sendMicros: 0,
     creditWaitMicros: 0,
     credits: 0,
     scrollbackRows: 0 as number | null,
@@ -84,6 +88,7 @@ function sumStats(stats: (BenchStats | null)[]): BenchRun["rustTotals"] {
     total.frames += s.frames;
     total.frameBytes += s.frameBytes;
     total.encodeMicros += s.encodeMicros;
+    total.sendMicros += s.sendMicros;
     total.creditWaitMicros += s.creditWaitMicros;
     total.credits += s.credits;
     total.scrollbackRows =
@@ -112,7 +117,9 @@ export async function runBench(
   kind: BenchKind,
   sessions: number,
   megabytes: number,
+  options?: { profile: boolean },
 ): Promise<BenchRun> {
+  const profile = options?.profile ? new StageProfile() : null;
   const cols = sessions === 1 ? 200 : 100;
   const rows = sessions === 1 ? 60 : 30;
   const canvas = document.createElement("canvas");
@@ -143,6 +150,9 @@ export async function runBench(
         font,
         background: colors.background,
         cursorFallback: colors.cursor,
+        onDrawTiming: profile
+          ? (at, ms, panes) => profile.render(at, ms, panes)
+          : undefined,
       });
       renderer = active;
       const layout = benchGeometry(cols, rows, sessions, active.cellSize);
@@ -181,6 +191,12 @@ export async function runBench(
           cols,
           rows,
           observer: {
+            onFrameTiming: profile
+              ? (timing) => profile.frame(index, timing)
+              : undefined,
+            onCreditReply: profile
+              ? (seq, at, ok) => profile.reply(index, seq, at, ok)
+              : undefined,
             onFrame: (event) => {
               frames += 1;
               frameBytes += event.bytes;
@@ -192,10 +208,14 @@ export async function runBench(
               }
             },
             onDrawn: (at, seq) => {
-              if (seq !== null) timeline.drawn(seq, at);
+              if (seq !== null) {
+                timeline.drawn(seq, at);
+                profile?.drawn(index, seq, at);
+              }
             },
             onCredit: (seq, at) => {
               timeline.credited(seq, at);
+              profile?.credit(index, seq, at);
               creditAt = at;
             },
             onError: (error) =>
@@ -243,8 +263,20 @@ export async function runBench(
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
-    const wallMs = performance.now() - start;
+    const finishedAt = performance.now();
+    const wallMs = finishedAt - start;
     const stamps = sampler.stop();
+    const rendererDraws = renderer?.stats.draws ?? 0;
+    profile?.stop(finishedAt);
+    if (profile) {
+      const deadline = finishedAt + 5000;
+      while (profile.pendingReplies > 0 && performance.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    const profileDrainMs = profile ? performance.now() - finishedAt : undefined;
+    const stageProfile = profile?.toJSON();
+    if (stageProfile && !stageProfile.complete)
+      errors.push("incomplete stage profile", ...stageProfile.errors);
     const completeness = timelines.map((timeline, i) =>
       timeline.completeness(rust[i] ?? { frames: 0, frameBytes: 0 }),
     );
@@ -269,7 +301,7 @@ export async function runBench(
       animationFrameIntervalMs: distribution(intervals(stamps)),
       creditRoundTripMs: distribution(roundTrips),
       decodeErrors,
-      rendererDraws: renderer?.stats.draws ?? 0,
+      rendererDraws,
       atlasGlyphs: renderer?.atlasInfo.glyphs ?? 0,
       rust,
       rustTotals: sumStats(rust),
@@ -279,6 +311,8 @@ export async function runBench(
       geometry,
       contextLosses: renderer?.stats.contextLosses ?? 0,
       atlasResets: renderer?.stats.atlasResets ?? 0,
+      profile: stageProfile,
+      profileDrainMs,
       error: errors.length ? errors.join("; ") : undefined,
     };
     return result;

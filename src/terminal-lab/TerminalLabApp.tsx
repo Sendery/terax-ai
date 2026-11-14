@@ -237,7 +237,10 @@ export function TerminalLabApp() {
           );
           if (!ready) throw new Error("panes not ready before the run");
           await sleep(SHELL_SETTLE_MS);
-          if (config.mode === "gate-engine") {
+          if (
+            config.mode === "gate-engine" ||
+            config.mode === "gate-engine-profile"
+          ) {
             const stage = stageRef.current;
             if (!stage) throw new Error("gate stage missing");
             result = await runEngineGate(
@@ -248,6 +251,9 @@ export function TerminalLabApp() {
                 onProgress: progress,
               },
               partial,
+              config.mode === "gate-engine-profile"
+                ? { profile: true }
+                : undefined,
             );
           } else if (config.mode !== "bench") {
             const stage = stageRef.current;

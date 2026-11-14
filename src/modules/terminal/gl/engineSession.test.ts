@@ -456,3 +456,42 @@ it("writes final reports and checkpoints as compact JSON with the same bounded t
     args: { json: JSON.stringify({ checkpoint: report }) },
   });
 });
+
+it("profiles decode/apply locally and credit response only after drawing", async () => {
+  const renderer = new FakeRenderer();
+  const timing = vi.fn();
+  const replies = vi.fn();
+  const clock = vi.spyOn(performance, "now");
+  clock.mockReturnValue(10);
+  try {
+    const pending = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      observer: { onFrameTiming: timing, onCreditReply: replies },
+    });
+    ipc.open?.resolve(9);
+    const session = await pending;
+    const apply = renderer.applyFrame.bind(renderer);
+    vi.spyOn(renderer, "applyFrame").mockImplementationOnce((pane, frame) => {
+      const result = apply(pane, frame);
+      clock.mockReturnValue(15);
+      return result;
+    });
+    channelOf(0).onmessage(frameBuffer(1));
+    expect(timing).toHaveBeenCalledWith({
+      seq: 1,
+      decodeMs: 0,
+      applyMs: 5,
+      readyAt: 15,
+    });
+    expect(replies).not.toHaveBeenCalled();
+    expect(credits()).toHaveLength(0);
+    clock.mockReturnValue(20);
+    renderer.drawFrame();
+    await Promise.resolve();
+    expect(replies).toHaveBeenCalledWith(1, 20, true);
+    await session.close();
+  } finally {
+    clock.mockRestore();
+  }
+});

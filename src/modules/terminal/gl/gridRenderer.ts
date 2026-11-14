@@ -47,6 +47,11 @@ export type GridRendererOptions = {
   cursorFallback?: number;
   /** Fired after the cell size changed (font or device pixel ratio). */
   onMetricsChange?: () => void;
+  onDrawTiming?: (
+    at: number,
+    submissionMs: number,
+    renderedPanes: number,
+  ) => void;
 };
 
 type PaneHeader = {
@@ -251,6 +256,7 @@ export class GridRenderer {
   private background: number;
   private cursorFallback: number | undefined;
   private onMetricsChange: (() => void) | undefined;
+  private readonly onDrawTiming: GridRendererOptions["onDrawTiming"];
   private panes: RenderPane[] = [];
   private readonly drawnPanes = new Map<RenderPane, boolean>();
   private lost = false;
@@ -286,6 +292,7 @@ export class GridRenderer {
     this.background = options.background;
     this.cursorFallback = options.cursorFallback;
     this.onMetricsChange = options.onMetricsChange;
+    this.onDrawTiming = options.onDrawTiming;
     this.dpr = window.devicePixelRatio || 1;
     let atlas: GlyphAtlas | null = null;
     try {
@@ -419,8 +426,15 @@ export class GridRenderer {
     if (this.disposed || this.lost) return;
     const start = performance.now();
     this.draw();
-    this.stats.lastDrawMs = performance.now() - start;
+    const at = performance.now();
+    this.stats.lastDrawMs = at - start;
     this.stats.draws += 1;
+    if (this.onDrawTiming) {
+      let renderedPanes = 0;
+      for (const rendered of this.drawnPanes.values())
+        if (rendered) renderedPanes++;
+      this.onDrawTiming(at, this.stats.lastDrawMs, renderedPanes);
+    }
     for (const [pane, rendered] of this.drawnPanes) {
       if (!pane.undrawn) continue;
       pane.undrawn = false;

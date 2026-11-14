@@ -57,3 +57,16 @@ it("retains failures and later measurements without changing workloads", async (
   expect(r.errors.join(";")).toContain("decode");
   expect(r.errors.join(";")).toContain("statistics missing");
 });
+it("profiles the same three payloads without changing their fixed workload", async () => {
+  runBench.mockResolvedValue({
+    rust: Array(12).fill({}),
+    timedOut: false,
+    decodeErrors: 0,
+  });
+  await runEngineGate(plan(), report(), { profile: true });
+  expect(runBench.mock.calls.map((args) => args.slice(3))).toEqual([
+    ["ascii", 12, 1024, { profile: true }],
+    ["sgr", 12, 1024, { profile: true }],
+    ["tui", 12, 1024, { profile: true }],
+  ]);
+});

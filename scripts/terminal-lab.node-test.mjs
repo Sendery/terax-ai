@@ -83,3 +83,11 @@ test("gate collection requires three clean sustained twelve-pane runs, not a tar
     assert.equal(successfulRun({ ...run, report: { ...run.report, bench: [{ ...b("ascii"), ...change }, b("sgr"), b("tui")] } }), false);
   }
 });
+test("profile gate mode remains closed and needs complete profiles for all fixed payloads",async()=>{
+ const {selectedModes}=await import("./terminal-lab.mjs");
+ assert.deepEqual(selectedModes("gate-engine-profile"),["gate-engine-profile"]);
+ const b=(kind)=>({kind,sessions:12,megabytesPerSession:1024,rust:Array(12).fill({}),frames:1,concurrent:{evaluable:true},completeness:Array(12).fill({complete:true}),contextLosses:0,profile:{complete:true,frames:[[0,1]],draws:[[1,0,12]]}});
+ const run={mode:"gate-engine-profile",reportExists:true,outcome:{code:0},cleanup:{},report:{errors:[],bench:[b("ascii"),b("sgr"),b("tui")]}};
+ assert.equal(successfulRun(run),true);
+ assert.equal(successfulRun({...run,report:{...run.report,bench:[{...b("ascii"),profile:{complete:false,frames:[]}},b("sgr"),b("tui")]}}),false);
+});

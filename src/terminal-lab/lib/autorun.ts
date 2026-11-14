@@ -1,6 +1,11 @@
 import type { EchoTarget } from "@/terminal-lab/lib/echo";
 
-export type LabMode = "bench" | "gate-engine" | "idle-engine" | "idle-xterm";
+export type LabMode =
+  | "bench"
+  | "gate-engine"
+  | "gate-engine-profile"
+  | "idle-engine"
+  | "idle-xterm";
 export type AutorunConfig = { mode: LabMode; count: number; holdMs: number };
 export type LabTarget = EchoTarget & { capture: () => Promise<string> };
 

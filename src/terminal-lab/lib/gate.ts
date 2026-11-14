@@ -7,19 +7,23 @@ export const GATE_MEGABYTES_PER_SESSION = 1024;
 export async function runEngineGate(
   plan: Pick<RunPlan, "stage" | "font" | "colors" | "onProgress">,
   report: LabReport,
+  options?: { profile: boolean },
 ): Promise<LabReport> {
   for (const kind of ["ascii", "sgr", "tui"] as const) {
     const label = `gate ${kind} x12`;
     plan.onProgress(report, label);
     try {
-      const run = await runBench(
+      const args = [
         plan.stage,
         plan.font,
         plan.colors,
         kind,
         12,
         GATE_MEGABYTES_PER_SESSION,
-      );
+      ] as const;
+      const run = options?.profile
+        ? await runBench(...args, options)
+        : await runBench(...args);
       report.bench.push(run);
       if (run.error) report.errors.push(`${label}: ${run.error}`);
       if (run.timedOut) report.errors.push(`${label}: timed out`);

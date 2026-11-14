@@ -212,6 +212,7 @@ mod runtime {
         frames: AtomicU64,
         frame_bytes: AtomicU64,
         encode_micros: AtomicU64,
+        send_micros: AtomicU64,
         credit_wait_micros: AtomicU64,
         credits: AtomicU64,
         scrollback_rows: AtomicU64,
@@ -224,6 +225,7 @@ mod runtime {
         pub frames: u64,
         pub frame_bytes: u64,
         pub encode_micros: u64,
+        pub send_micros: u64,
         pub credit_wait_micros: u64,
         pub credits: u64,
         pub scrollback_rows: Option<u64>,
@@ -266,6 +268,7 @@ mod runtime {
                 frames: s.frames.load(Ordering::Relaxed),
                 frame_bytes: s.frame_bytes.load(Ordering::Relaxed),
                 encode_micros: s.encode_micros.load(Ordering::Relaxed),
+                send_micros: s.send_micros.load(Ordering::Relaxed),
                 credit_wait_micros: s.credit_wait_micros.load(Ordering::Relaxed),
                 credits: s.credits.load(Ordering::Relaxed),
                 scrollback_rows: (scrollback_rows != u64::MAX).then_some(scrollback_rows),
@@ -481,7 +484,12 @@ mod runtime {
             };
             let encode = started.elapsed();
             let len = built.len() as u64;
-            if !(self.frames)(built) {
+            let sending = Instant::now();
+            let sent = (self.frames)(built);
+            self.stats
+                .send_micros
+                .fetch_add(sending.elapsed().as_micros() as u64, Ordering::Relaxed);
+            if !sent {
                 log::debug!("terminal engine frame channel closed; no more frames");
                 self.sink_open = false;
                 return;
@@ -821,6 +829,25 @@ mod engine_tests {
             self.thread.join();
             self.frames
         }
+    }
+
+    #[test]
+    fn frame_sink_duration_is_measured_separately_from_encoding() {
+        let engine = start(
+            4,
+            2,
+            Box::new(|_| {
+                std::thread::sleep(std::time::Duration::from_millis(3));
+                true
+            }),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        engine.input.shutdown();
+        engine.thread.join();
+        let stats = engine.handle.stats();
+        assert!(stats.frames > 0);
+        assert!(stats.send_micros >= stats.frames * 3000);
     }
 
     #[test]

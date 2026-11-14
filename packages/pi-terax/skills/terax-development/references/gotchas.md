@@ -584,3 +584,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - Failure: the installed Channel increments its sequence index after the handler returns, so an escaping exception prevents later messages from reaching the handler. A byte counter can stop far below the fixture length while animation frames continue.
 - Prevention: catch parser/write failures at the lab callback boundary, reject the measurement explicitly and close its sessions. Do not silently drop bytes or add an unreported pacing scheme.
 - Verification: exercise an actual write overflow with the installed packages and regress the orchestration path so the callback returns normally, the report fails and resources close.
+
+### A post-run drain can contaminate benchmark counters
+
+- Trigger: waiting for asynchronous replies after the benchmark's final draw and timer stop.
+- Failure: reading draw counts after the drain includes later cursor redraws outside the measured interval.
+- Prevention: freeze interval-based counters with the wall timer and rAF sampler, report drain duration separately, and retain pending/failed reply counts.
+- Verification: a regression injects redraws during the drain and checks that they do not increase the benchmark counter; missing replies fail after a bounded wait.

@@ -67,7 +67,7 @@ Engine sessions are ordinary `Session`s in `PtyState`, so `pty_write`, `pty_clos
 | `gterm_scroll` | `id`, `delta` (rows, negative is up, into history) | nothing |
 | `gterm_request_full` | `id` | nothing. The next frame is a full frame |
 | `gterm_bench_open` | `kind` (`ascii`, `sgr`, `tui`), `megabytes`, `cols`, `rows`, `colors?`, `onFrame`, `onExit` | session id. No PTY: the engine is fed a generated payload as fast as it accepts it, then exits with code 0. Credits and frames behave exactly as in a real session |
-| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, creditWaitMicros, credits, scrollbackRows }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
+| `gterm_bench_stats` | `id` | `{ bytesFed, frames, frameBytes, encodeMicros, sendMicros, creditWaitMicros, credits, scrollbackRows }`, valid until the session is closed. A bench session shares the id space of PTY sessions and is closed with `pty_close` |
 | `open_terminal_lab_window` | none | nothing. Singleton window, label `terminal-lab`, page `terminal-lab.html` |
 
 | `gterm_lab_autorun` | none | `string \| null`: the value of the `TERAX_TERMINAL_LAB_AUTORUN` environment variable (a result file path). When it is set, the app opens the Terminal Lab window at startup |
@@ -87,7 +87,7 @@ Autorun reporting, status, capture and fixture commands require all three: the s
 
 The lab resolves the same theme tokens as its xterm.js pane, including CSS color formats, into explicit RGB values before crossing IPC. A theme change while an open is pending is replayed after the session id arrives. Normal engine sessions similarly replay a changed size after opening; benchmark sessions do not invoke the PTY resize command.
 
-The byte, frame, encoding, wait and accepted-credit counters are cumulative. `scrollbackRows` is an instantaneous history-row gauge sampled on the engine thread at startup and after feeds and resizes, not a cumulative counter. A failed native query returns `null`, never an assumed or stale count. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
+The byte, frame, encoding, send-call, wait and accepted-credit counters are cumulative. `encodeMicros` includes snapshot extraction, binary encoding and the owned-frame copy. `sendMicros` measures the synchronous frame sink call (the native `Channel.send` call), not arrival or decoding in JavaScript. It includes failed sink attempts; per-successful-frame averages only describe clean complete runs. `scrollbackRows` is an instantaneous history-row gauge sampled on the engine thread at startup and after feeds and resizes, not a cumulative counter. A failed native query returns `null`, never an assumed or stale count. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
 
 ## Frame format v1
 
@@ -187,3 +187,29 @@ Recorded in the plan under the spike results, from the sandbox build on the engi
 The pinned Ghostty implementation interprets `TerminalOptions.max_scrollback` as a byte budget, despite the safe wrapper's line-oriented documentation. Normal engine sessions use an explicit 16 MiB page budget. Pages are allocated lazily; this is neither a 16 MiB initial allocation nor a guarantee of a fixed number of rows at arbitrary widths or content. Production xterm settings are unchanged.
 
 The lab clears initial history, fills its 100 by 30 terminal deterministically and verifies `scrollbackRows == 10000` before reporting `idle-ready`. xterm verifies its actual history count independently. A failed count prevents the memory comparison from passing. The external runner records the summed process names and states that RSS can double-count shared pages; it does not claim PSS.
+
+
+### Optional phase 1 stage profile
+
+`gate-engine-profile` runs the same fixed three generators, twelve 100x30 grids,
+1024 MiB per session and two repetitions as `gate-engine`. It enables optional
+JavaScript callbacks for decode, apply/upload, ready-to-draw wait, one shared
+draw-submission sample per rAF, and the reply to each credit command. Timestamps
+are local to JavaScript; do not subtract them from Rust's monotonic clock or
+sum percentiles to attribute latency. Browser clock quantization still applies.
+
+A credit-command reply means the native command registered control state,
+not that the engine thread accepted the credit. `credits` remains the actual
+accepted-credit counter. Draw timing is CPU/driver submission, not GPU
+execution or display presentation. Coalesced frames retain their own receive
+and credit data but have no invented draw timestamp.
+
+Profiles keep ordered session/sequence tuples, missing and failed reply
+counts, and exact column names. Benchmark wall time and rAF sampling stop at
+the normal final-frame barrier; up to 5 seconds of reply draining is reported
+separately. A missing credit or reply makes the profile incomplete. Compact
+JSON preserves all events under the unchanged 16 MiB bound; excessive reports
+fail explicitly. The normal gate does not allocate these tuples or enable
+JavaScript timing callbacks. The new native send-call counter is collected
+for both variants. Profile overhead must be reported and held constant in any
+subsequent credit-batching comparison.

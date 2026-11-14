@@ -31,6 +31,7 @@ export type BenchStats = {
   frames: number;
   frameBytes: number;
   encodeMicros: number;
+  sendMicros: number;
   creditWaitMicros: number;
   credits: number;
   scrollbackRows: number | null;
@@ -44,7 +45,16 @@ export type FrameEvent = {
   frame: DecodedFrame | null;
 };
 
+export type FrameTiming = {
+  seq: number;
+  decodeMs: number;
+  applyMs: number;
+  readyAt: number;
+};
+
 export type SessionObserver = {
+  onFrameTiming?: (timing: FrameTiming) => void;
+  onCreditReply?: (seq: number, at: number, ok: boolean) => void;
   onFrame?: (event: FrameEvent) => void;
   onDrawn?: (at: number, seq: number | null) => void;
   onCredit?: (seq: number, at: number) => void;
@@ -252,6 +262,9 @@ export class EngineSession {
       seq = peekSeq(buffer);
       this.observer.onError?.(error);
     }
+    const decodedAt = this.observer.onFrameTiming
+      ? performance.now()
+      : receivedAt;
     let applied = false;
     if (frame) {
       if (frame.full) this.fullRequested = false;
@@ -262,6 +275,7 @@ export class EngineSession {
         this.observer.onError?.(error);
       }
     }
+    const readyAt = this.observer.onFrameTiming ? performance.now() : decodedAt;
     this.awaitingDraw.push(seq);
     if (!applied) {
       // The frame still holds the session's only credit: it goes back after
@@ -274,6 +288,12 @@ export class EngineSession {
       bytes: buffer.byteLength,
       receivedAt,
       frame,
+    });
+    this.observer.onFrameTiming?.({
+      seq,
+      decodeMs: decodedAt - receivedAt,
+      applyMs: readyAt - decodedAt,
+      readyAt,
     });
   }
 
@@ -299,7 +319,20 @@ export class EngineSession {
     this.drawnUnsent = [];
     for (const seq of seqs) {
       this.observer.onCredit?.(seq, performance.now());
-      invoke("gterm_credit", { id, seq }).catch(this.reportError);
+      const sent = invoke("gterm_credit", { id, seq });
+      if (this.observer.onCreditReply) {
+        sent.then(
+          () => {
+            if (!this.closed)
+              this.observer.onCreditReply?.(seq, performance.now(), true);
+          },
+          (error) => {
+            if (!this.closed)
+              this.observer.onCreditReply?.(seq, performance.now(), false);
+            this.reportError(error);
+          },
+        );
+      } else sent.catch(this.reportError);
     }
   }
 

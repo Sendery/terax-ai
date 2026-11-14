@@ -535,3 +535,35 @@ rates from raw draw events inside their common intervals and verified the
 six clean teardowns, four memory medians and the checksum manifest. It found
 no blocker to recording the negative gate result. This review does not
 approve proceeding to later migration phases.
+
+### Stage-profile experiment registered before execution
+
+`gate-engine-profile` adds JavaScript-local per-sequence decode, apply,
+ready-to-draw and credit-command-reply timing, plus one draw-submission sample
+per shared rAF. Rust adds a cumulative synchronous frame-sink-call counter,
+collected in both variants. The default gate allocates no JS profile tuples
+or timing callbacks. The original `gate-engine` data and its negative exit
+criterion remain valid; the instrumented mode will be reported separately.
+
+The experiment preserves all three generators, twelve 100x30 grids, 1024 MiB per
+session, full native-font backbuffer, 180 s timeout, 250 ms warmup, 5 s minimum
+common interval and two repetitions. No batching or WASM implementation has
+been introduced in this experiment. JS timing values inherit WebKit clock
+quantization; 0 ms is not evidence of zero work. Native and JS clocks are never
+subtracted. Frame-sink duration is not delivery time, credit-command reply is
+not pump acceptance, and draw submission is not GPU execution/presentation.
+
+Ordered profile tuples retain session/sequence identity. Coalesced frames
+keep null draw timestamps; no percentile is invented for missing replies.
+The normal final-frame barrier and benchmark clocks stop before a separately
+reported reply drain of at most 5 s. Interval draw counts stop at that same
+boundary. Missing/failed credits or replies make the profile incomplete.
+Complete compact histories still respect the unchanged 16 MiB report bound.
+
+Stage-profile gates passed: frontend lint, types,2283tests(one existing skip),
+production bundle,37Node script tests and101Pi tests; strict all-target
+clippy and locked Rust tests passed both without the feature(582unit+58
+integration,one ignored) and with it(618unit+58integration,two ignored).
+Astra independently reviewed the final diff and found no residual blocker.
+The new regressions were observed failing before implementation; a test-double
+bookkeeping correction retained its original draw/credit assertions.
