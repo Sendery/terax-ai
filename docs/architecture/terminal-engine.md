@@ -241,3 +241,50 @@ barrier and bounded out-of-interval reply drain apply. The workload and
 measurement order are registered in
 [the credit batching experiment](../plans/2026-11-14-terminal-credit-batch-experiment.md).
 No graphical result has been collected for this candidate.
+
+
+### Failed engine and incomplete output
+
+Panic conversion below applies to unwind builds, including the current
+optimized dev-profile sandbox. `Cargo.toml` still sets release `panic=abort`:
+a release panic aborts the process and cannot be converted by `catch_unwind`.
+No release panic-isolation claim is made; rollout must verify its actual
+profile and failure behavior. Explicit channel/snapshot errors do not require
+unwinding.
+
+`onExit` reserves `-2` for an unusable terminal output pipeline, distinct from
+the child's normal exit status and the existing `-1` wait/cancel error. A closed
+frame sink, failed snapshot or engine panic is sticky. `EngineThread.join`
+returns failure even when every input byte was parsed or the child exited 0.
+A benchmark cannot count a rejected final frame as success.
+
+Failure subscription is atomic with the first failure and invokes listeners
+outside its mutex. A PTY subscribes before starting its reader. Its exit
+callback is consumed once, with the unusable flag set first; registry removal
+and exit notification precede normal detached teardown scheduling. Teardown
+must not block the engine thread under ordinary scheduling, particularly when
+ConPTY is waiting for the reader. If teardown scheduling itself fails, failure
+notification has already been attempted; complete cleanup under OS resource
+exhaustion is not claimed.
+
+The isolated engine still parses queued input after a frame sink closes, as
+its existing no-drop test requires. Its owning session is invalidated and
+closed rather than pretending the unseen output is healthy. An input producer
+that discovers the engine receiver gone reports failure and stops; it does
+not continue a discard loop. The engine receiver remains owned outside the
+unwind boundary until panic health notification has been recorded.
+
+Healthy PTY completion requires confirmed reader completion and successful
+engine join before propagating the child status. Windows retains its existing
+50 ms reader wait and shutdown/cleanup order: an unconfirmed drain is now an
+explicit failure, not an assumed successful final snapshot. This is a
+conservative guard, not proof of correct ConPTY draining or Windows parity;
+it may reject a tail that would eventually drain. Windows final floods,
+quick exit, descendants and pseudoconsole lifecycle still require native
+validation and a supported drain implementation before release acceptance.
+
+The webview fixes failed state before calling observers, reports `-2`, rejects
+an open whose id arrived after failure and blocks further writes, credits,
+resize, scroll and color controls. An observer exception cannot erase the
+failure or prevent the exit callback. Already-drawn pixels can remain visible;
+they are not evidence that the failed session consumed later output.

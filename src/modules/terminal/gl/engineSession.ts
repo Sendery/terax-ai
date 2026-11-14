@@ -17,6 +17,8 @@ import { currentWorkspaceEnv } from "@/modules/workspace";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
 
+export const ENGINE_FAILED_EXIT = -2;
+
 export type BenchCreditSender = (id: number, seq: number, drawnAt: number, onDispatch: (at: number) => void) => Promise<void>;
 
 export function registerLabCredits(credits: { id: number; seq: number }[]): Promise<void> {
@@ -141,6 +143,7 @@ export class EngineSession {
   private drawnUnsent: { seq: number; drawnAt: number }[] = [];
   private fullRequested = false;
   private closed = false;
+  private failed = false;
   private size: { cols: number; rows: number };
   private pendingColors: EngineColors | null = null;
 
@@ -161,8 +164,23 @@ export class EngineSession {
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
     this.exits.onmessage = (code) => {
+      if (this.exitCode !== null) return;
       this.exitCode = code;
-      this.observer.onExit?.(code);
+      if (code === ENGINE_FAILED_EXIT) {
+        this.failed = true;
+        this.awaitingDraw = [];
+        this.drawnUnsent = [];
+        try {
+          this.observer.onError?.(new Error("terminal engine failed"));
+        } catch {
+          console.error("terminal engine error observer failed");
+        }
+      }
+      try {
+        this.observer.onExit?.(code);
+      } catch {
+        console.error("terminal engine exit observer failed");
+      }
     };
   }
 
@@ -233,9 +251,11 @@ export class EngineSession {
       this.release();
       throw error;
     }
-    if (this.closed) {
+    if (this.closed || this.failed) {
+      const failed = this.failed;
+      this.release();
       void this.closeById(this.id).catch(() => {});
-      throw new Error("session closed while opening");
+      throw new Error(failed ? "terminal engine failed" : "session closed while opening");
     }
     if (
       !this.isBench &&
@@ -260,7 +280,7 @@ export class EngineSession {
   }
 
   private receive(buffer: ArrayBuffer): void {
-    if (this.closed) return;
+    if (this.closed || this.failed) return;
     const receivedAt = performance.now();
     let frame: DecodedFrame | null = null;
     let seq: number;
@@ -323,13 +343,15 @@ export class EngineSession {
 
   private flushCredits(): void {
     const id = this.id;
-    if (id === null || this.closed || this.drawnUnsent.length === 0) return;
+    if (id === null || this.closed || this.failed || this.drawnUnsent.length === 0) return;
     const seqs = this.drawnUnsent;
     this.drawnUnsent = [];
     for (const { seq, drawnAt } of seqs) {
       let sent: Promise<unknown>;
       if (this.sendCredit) {
         sent = this.sendCredit(id, seq, drawnAt, (at) => {
+          if (this.failed) throw new Error("terminal engine failed");
+          if (this.closed) throw new Error("session closed before credit dispatch");
           this.observer.onCredit?.(seq, at);
         });
       } else {
@@ -358,12 +380,13 @@ export class EngineSession {
 
   requestFull(): void {
     const id = this.id;
-    if (id === null || this.closed || this.fullRequested) return;
+    if (id === null || this.closed || this.failed || this.fullRequested) return;
     this.fullRequested = true;
     invoke("gterm_request_full", { id }).catch(this.reportError);
   }
 
   write(text: string): Promise<void> {
+    if (this.failed) return Promise.reject(new Error("terminal engine failed"));
     const id = this.id;
     if (id === null || this.closed || text.length === 0) {
       return Promise.resolve();
@@ -374,7 +397,7 @@ export class EngineSession {
   }
 
   setColors(colors: EngineColors): void {
-    if (this.closed) return;
+    if (this.closed || this.failed) return;
     this.pendingColors = colors;
     if (this.id === null) return;
     this.pendingColors = null;
@@ -385,6 +408,7 @@ export class EngineSession {
     if (
       this.isBench ||
       this.closed ||
+      this.failed ||
       (cols === this.size.cols && rows === this.size.rows)
     )
       return;
@@ -396,7 +420,7 @@ export class EngineSession {
 
   scroll(delta: number): void {
     const id = this.id;
-    if (id === null || this.closed || delta === 0) return;
+    if (id === null || this.closed || this.failed || delta === 0) return;
     invoke("gterm_scroll", { id, delta }).catch(this.reportError);
   }
 

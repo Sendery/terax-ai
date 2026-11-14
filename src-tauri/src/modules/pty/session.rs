@@ -51,8 +51,8 @@ pub struct Session {
     pub killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub master: Mutex<Box<dyn MasterPty + Send>>,
-    // Set by the waiter once the child exits, so pty_open can reap a shell
-    // that died before it was registered.
+    // Set once the child exits or its engine fails, so registration can reap
+    // a session that became unusable before pty_open returned.
     pub(super) exited: Arc<AtomicBool>,
     #[cfg(feature = "ghostty-engine")]
     pub(super) engine: Option<engine::EngineHandle>,
@@ -409,16 +409,42 @@ fn spawn_engine_threads(
             let _ = app_signals.emit(AGENT_EVENT, t.into_signal(id));
         },
         move |code| {
+            let removed = app.try_state::<super::PtyState>().and_then(|state| state.take(id));
             if let Err(e) = on_exit.send(code) {
                 log::debug!("pty exit send failed (channel closed): {e}");
             }
-            if let Some(state) = app.try_state::<super::PtyState>() {
-                if let Some(s) = state.take(id) {
-                    drop_session(s);
+            if let Some(s) = removed {
+                if let Err(error) = thread::Builder::new()
+                    .name(format!("terax-pty-drop-{id}"))
+                    .spawn(move || drop_session(s))
+                {
+                    log::error!("pty id={id}: could not schedule teardown: {error}");
                 }
             }
         },
     );
+}
+
+#[cfg(feature = "ghostty-engine")]
+type EngineExitCallback = Box<dyn FnOnce(i32) + Send>;
+
+#[cfg(feature = "ghostty-engine")]
+struct EngineExit {
+    exited: Arc<AtomicBool>,
+    callback: Mutex<Option<EngineExitCallback>>,
+}
+
+#[cfg(feature = "ghostty-engine")]
+impl EngineExit {
+    fn report(&self, code: i32) {
+        self.exited.store(true, Ordering::Release);
+        let callback = self.callback.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        if let Some(callback) = callback {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(code))).is_err() {
+                log::error!("terminal engine exit observer panicked");
+            }
+        }
+    }
 }
 
 // The reader keeps agent detection on the raw stream and hands every chunk to
@@ -437,8 +463,15 @@ fn run_engine_pipeline(
     let engine::Engine {
         input,
         thread: engine_thread,
-        ..
+        handle,
     } = engine;
+    let exit = Arc::new(EngineExit { exited: exited.clone(), callback: Mutex::new(Some(Box::new(on_exit))) });
+    let failure_exit = exit.clone();
+    handle.on_failure(move |failure| {
+        log::warn!("pty id={id}: terminal engine failed: {failure:?}");
+        failure_exit.report(engine::ENGINE_FAILED_EXIT);
+    });
+    let reader_exit = exit.clone();
     let spawn_at = Instant::now();
     let reader_input = input.clone();
     let reader_thread = thread::Builder::new()
@@ -447,7 +480,6 @@ fn run_engine_pipeline(
             let mut buf = [0u8; READ_BUF];
             let mut agent_detect = AgentDetector::new();
             let mut first_byte = true;
-            let mut engine_gone = false;
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
@@ -460,11 +492,9 @@ fn run_engine_pipeline(
                             );
                         }
                         agent_detect.process(&buf[..n], &mut signal);
-                        // Without an engine nothing renders, but draining keeps
-                        // the child from wedging on a full PTY until it is closed.
-                        if !engine_gone && !reader_input.feed(buf[..n].to_vec()) {
-                            engine_gone = true;
-                            log::warn!("pty id={id}: terminal engine gone, discarding output");
+                        if !reader_input.feed(buf[..n].to_vec()) {
+                            reader_exit.report(engine::ENGINE_FAILED_EXIT);
+                            break;
                         }
                     }
                     Err(e) => {
@@ -489,21 +519,29 @@ fn run_engine_pipeline(
             };
             exited.store(true, Ordering::Release);
             #[cfg(windows)]
-            {
+            let reader_drained = {
                 let deadline = Instant::now() + Duration::from_millis(50);
                 while Instant::now() < deadline && !reader_thread.is_finished() {
                     thread::sleep(Duration::from_millis(5));
                 }
-            }
+                if reader_thread.is_finished() {
+                    reader_thread.join().is_ok()
+                } else {
+                    log::warn!("pty id={id}: final PTY drain was not confirmed before shutdown");
+                    false
+                }
+            };
             #[cfg(not(windows))]
-            if let Err(e) = reader_thread.join() {
-                log::error!("pty reader thread panicked: {e:?}");
-            }
-            // Queued behind the last output, so the final frame shows it and
-            // goes out before the exit code.
+            let reader_drained = match reader_thread.join() {
+                Ok(()) => true,
+                Err(_) => {
+                    log::error!("pty reader thread panicked");
+                    false
+                }
+            };
             input.shutdown();
-            engine_thread.join();
-            on_exit(code);
+            let code = engine::final_exit_code(code, reader_drained, engine_thread.join().is_ok());
+            exit.report(code);
         })
         .expect("spawn pty waiter thread")
 }
@@ -678,4 +716,92 @@ mod engine_pipeline_tests {
         assert!(text.iter().any(|t| t == "hello"), "{text:?}");
         assert!(text.iter().any(|t| t == "reply:[?1;2c"), "{text:?}");
     }
+
+    #[test]
+    fn a_rejected_final_frame_invalidates_even_a_zero_exit_shell() {
+        use std::sync::atomic::AtomicUsize;
+        let pair = native_pty_system().openpty(PtySize { rows: 5, cols: 40, pixel_width: 0, pixel_height: 0 }).expect("openpty");
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c");
+        cmd.arg("printf 'undelivered last output'; exit 0");
+        let child = pair.slave.spawn_command(cmd).expect("spawn");
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().expect("reader");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let sink_calls = calls.clone();
+        let engine = engine::start(40, 5, Box::new(move |_| sink_calls.fetch_add(1, Ordering::SeqCst) == 0), Box::new(|_| {})).expect("engine");
+        let (tx, rx) = mpsc::channel();
+        let waiter = run_engine_pipeline(1, reader, engine, child, Arc::new(AtomicBool::new(false)), |_| {}, move |code| { tx.send(code).unwrap(); });
+        waiter.join().expect("waiter");
+        let code = rx.recv_timeout(Duration::from_secs(2)).expect("session exit");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_ne!(code, 0, "a dead frame sink cannot leave a successful session");
+        assert!(rx.try_recv().is_err(), "exit is emitted once");
+    }
+
+
+    #[test]
+    fn a_failed_engine_is_reported_before_any_more_pty_bytes_or_child_exit() {
+        let pair = native_pty_system().openpty(PtySize { rows: 5, cols: 40, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-c");
+        cmd.arg("stty -echo; read value; exit 0");
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let cleanup = Arc::new(Mutex::new(Some(child.clone_killer())));
+        let (failed_tx, failed_rx) = mpsc::channel();
+        let engine = engine::start(40, 5, Box::new(|_| false), Box::new(|_| {})).unwrap();
+        engine.handle.on_failure(move |_| { failed_tx.send(()).unwrap(); });
+        failed_rx.recv_timeout(Duration::from_secs(2)).expect("failure exists before pipeline subscribes");
+        let (tx, rx) = mpsc::channel();
+        let kill_on_exit = cleanup.clone();
+        let exited = Arc::new(AtomicBool::new(false));
+        let waiter = run_engine_pipeline(1, reader, engine, child, exited.clone(), |_| {}, move |code| {
+            if let Some(mut killer) = kill_on_exit.lock().unwrap().take() { let _ = killer.kill(); }
+            tx.send(code).unwrap();
+        });
+        let code = rx.recv_timeout(Duration::from_secs(2));
+        if let Some(mut killer) = cleanup.lock().unwrap().take() { let _ = killer.kill(); }
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !waiter.is_finished() && Instant::now() < deadline { thread::sleep(Duration::from_millis(5)); }
+        assert!(waiter.is_finished(), "owned test child/reader/waiter must finish");
+        waiter.join().unwrap();
+        assert_eq!(code.unwrap(), engine::ENGINE_FAILED_EXIT);
+        assert!(exited.load(Ordering::Acquire));
+        assert!(rx.try_recv().is_err(), "exit is reported only once");
+    }
+
+    #[test]
+    fn a_panicking_engine_is_reported_even_after_all_producers_are_done() {
+        let engine = engine::start(20, 5, Box::new(|_| panic!("injected frame sink panic")), Box::new(|_| {})).unwrap();
+        let (tx, rx) = mpsc::channel();
+        engine.handle.on_failure(move |failure| { tx.send(failure).unwrap(); });
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), engine::EngineFailure::Panicked);
+        assert_eq!(engine.thread.join(), Err(engine::EngineFailure::Panicked));
+    }
+
+
+    #[test]
+    fn an_exit_callback_can_reenter_without_deadlock_and_cannot_report_twice() {
+        let exited = Arc::new(AtomicBool::new(false));
+        let count = Arc::new(Mutex::new(Vec::new()));
+        let output = count.clone();
+        let observed = exited.clone();
+        let exit: Arc<EngineExit> = Arc::new_cyclic(|weak: &std::sync::Weak<EngineExit>| {
+            let weak = weak.clone();
+            EngineExit {
+                exited: exited.clone(),
+                callback: Mutex::new(Some(Box::new(move |code| {
+                    assert!(observed.load(Ordering::Acquire));
+                    output.lock().unwrap().push(code);
+                    weak.upgrade().unwrap().report(0);
+                }))),
+            }
+        });
+        exit.report(engine::ENGINE_FAILED_EXIT);
+        exit.report(0);
+        assert_eq!(*count.lock().unwrap(), vec![engine::ENGINE_FAILED_EXIT]);
+    }
+
 }

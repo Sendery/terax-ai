@@ -614,3 +614,18 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure:** an old pre-call timestamp now marks enqueue, so command percentiles include queue delay and cease to describe the same stage as the control variant.
 - **Prevention:** preserve the real draw time, notify each sequence from the actual dispatch path and record queue and draw delay separately. A successful command reply means registration, not native acceptance.
 - **Verification:** assert no sent event at enqueue, a per-sequence sent event before the actual invocation, and unchanged callback semantics on the direct path. Cover delayed open ids, rejection, bounded pending work and cleanup without dropping pairs.
+
+
+### Feeding all bytes does not prove a final frame reached its consumer
+
+- **Trigger:** declaring terminal/benchmark success from producer byte totals and the child's status while frame delivery or a worker can fail.
+- **Failure:** a rejected final send leaves receiver counts internally consistent but omits the final screen, and a swallowed thread error can still report exit 0.
+- **Prevention:** retain sticky pipeline health, return it from join, require confirmed producer drain and make failure observable before cleanup. Late subscribers and opening ids must see the same failed state. Panic conversion requires an unwind build; an abort profile is a separate acceptance scope.
+- **Verification:** reject only the final frame after an accepted initial frame on a real PTY and synthetic bench; both must fail despite child exit 0 or full byte input. Keep the healthy final-frame-before-exit regression. An uncertain Windows reader drain must not count as native Windows success.
+
+### Failure observers can run on the engine thread or during subscription
+
+- **Trigger:** notifying a sticky engine failure, including one recorded before the caller subscribed.
+- **Failure:** holding health/exit/registry locks during callbacks can deadlock reentry; synchronously dropping ConPTY on the engine can wait for a reader blocked on that same engine.
+- **Prevention:** resolve subscription atomically, invoke outside locks, latch unusable state first and consume the exit callback once. Remove the session, notify failure, then schedule normal teardown away from the engine; cleanup scheduling must not hide the notification. Keep the receiver owned outside the unwind boundary until failure is recorded.
+- **Verification:** cover subscription/failure races, late subscription, callback reentry/exception, failure before another PTY byte, rejected deferred credits and pending-open cleanup. Native ConPTY and OS resource-exhaustion cleanup require their own evidence.

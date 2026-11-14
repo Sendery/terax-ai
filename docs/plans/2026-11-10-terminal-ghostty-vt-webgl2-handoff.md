@@ -649,3 +649,39 @@ the historical profile after actual GUI unlock; diagnose a repeated stall
 before candidate collection; then compare equally instrumented modes from one
 new binary, twice each, and confirm any improvement without optional stage
 profiling. No FPS result or phase exit is claimed by preparation or unit tests.
+
+
+### Completion means normal-terminal parity
+
+The resumed objective explicitly ends only with a usable version whose new
+terminal preserves or improves the current project capabilities. The
+[source-based parity inventory](2026-11-14-terminal-parity.md) records direct
+xterm consumers, app/agent integration, observable acceptance and remaining
+platform/performance/soak requirements. Passing the lab or shared fixtures
+alone never closes that objective. The original normal-terminal baseline
+commit is an ancestor of this feature branch; its frontend is not replaced
+by this preparation work.
+
+
+### Fatal output failures cannot pass as success
+
+The parity audit reproduced a real Phase 1 false-success path: rejecting only
+the final frame still returned exit 0 from both a real PTY shell and the
+synthetic benchmark. Sticky engine health now covers closed frame channels,
+snapshot failure and panic in unwind builds, and `join` propagates the fault. PTY exit is emitted
+once with `-2` and the frontend rejects subsequent input/control or a delayed
+open id. The normal successful final-frame-before-exit path is retained.
+
+Astra's concurrency review required teardown to stay off the engine thread
+and failure notification to precede teardown scheduling. Tests cover late
+subscription, callback reentry/panic, fatal failure before new PTY bytes,
+benchmark/final-frame rejection and frontend observers. The existing test
+that parses 1500 bytes after a frame channel closes is preserved, with an
+additional failure-result assertion. No xterm raw pipeline behavior changed.
+
+Windows' existing 50 ms reader wait can leave drain completion uncertain.
+Such a run no longer returns success; closure order and timeout are unchanged.
+This guard is not Windows runtime validation or a complete ConPTY solution.
+The parity inventory keeps that platform requirement open. Historical binaries
+remain diagnostic artifacts; new acceptance runs must use the reviewed source
+with the explicit failure semantics, and still require an unlocked M2 GUI.

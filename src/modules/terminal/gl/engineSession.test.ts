@@ -534,3 +534,74 @@ it("a queued lab acknowledgement is not reported as sent before its actual dispa
   expect(onCredit).toHaveBeenCalledExactlyOnceWith(1, 123);
   await session.close();
 });
+
+
+it("latches a fatal engine exit, reports it, and rejects later input without native writes", async () => {
+  const renderer = new FakeRenderer();
+  const onError = vi.fn();
+  const onExit = vi.fn();
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2, observer: { onError, onExit } });
+  ipc.open?.resolve(81);
+  const session = await opening;
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  channelOf(1).onmessage(-2);
+  channelOf(1).onmessage(0);
+  expect(session.exitCode).toBe(-2);
+  expect(onError).toHaveBeenCalledTimes(1);
+  expect(onExit).toHaveBeenCalledExactlyOnceWith(-2);
+  const count = ipc.calls.length;
+  await expect(session.write("must not reach PTY")).rejects.toThrow("terminal engine failed");
+  session.resize(9, 7);
+  session.scroll(-1);
+  session.requestFull();
+  channelOf(0).onmessage(frameBuffer(2));
+  renderer.drawFrame();
+  expect(ipc.calls).toHaveLength(count);
+  expect(renderer.applied).toHaveLength(1);
+  await session.close();
+});
+
+it("does not return a usable session if the engine fails before its open id arrives", async () => {
+  const renderer = new FakeRenderer();
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2 });
+  channelOf(1).onmessage(-2);
+  ipc.open?.resolve(82);
+  await expect(opening).rejects.toThrow("terminal engine failed");
+  expect(renderer.panes).toHaveLength(0);
+  expect(commands("pty_close").some((call) => (call.args as { id: number }).id === 82)).toBe(true);
+});
+
+
+it("a throwing fatal-error observer cannot prevent the exit callback or leave the pending open usable", async () => {
+  const renderer = new FakeRenderer();
+  const onError = vi.fn(() => { throw new Error("injected observer failure"); });
+  const onExit = vi.fn();
+  const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const opening = EngineSession.open(renderer as unknown as GridRenderer, { cols: 4, rows: 2, observer: { onError, onExit } });
+    expect(() => channelOf(1).onmessage(-2)).not.toThrow();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledExactlyOnceWith(-2);
+    ipc.open?.resolve(83);
+    await expect(opening).rejects.toThrow("terminal engine failed");
+    expect(renderer.panes).toHaveLength(0);
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
+
+it("a deferred batch cannot dispatch a credit after its session failed", async () => {
+  const renderer = new FakeRenderer();
+  const onCredit = vi.fn();
+  const sendCredit = vi.fn(async (_id: number, _seq: number, _drawn: number, _dispatch: (at: number) => void) => {});
+  const opening = EngineSession.openBench(renderer as unknown as GridRenderer, { kind: "ascii", megabytes: 1, cols: 4, rows: 2, sendCredit, observer: { onCredit } });
+  ipc.open?.resolve(84);
+  const session = await opening;
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  channelOf(1).onmessage(-2);
+  expect(() => sendCredit.mock.calls[0][3](123)).toThrow("terminal engine failed");
+  expect(onCredit).not.toHaveBeenCalled();
+  await session.close();
+});

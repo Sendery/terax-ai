@@ -224,7 +224,9 @@ pub fn run(
     cancel: Arc<AtomicBool>,
     on_exit: impl FnOnce(i32) + Send + 'static,
 ) -> Result<(), String> {
-    let Engine { input, thread, .. } = engine;
+    let Engine { input, thread, handle } = engine;
+    let failed = cancel.clone();
+    handle.on_failure(move |_| failed.store(true, Ordering::Release));
     thread::Builder::new()
         .name("terax-gterm-bench".into())
         .spawn(move || {
@@ -244,8 +246,8 @@ pub fn run(
             }
             let completed = fed >= total && !cancel.load(Ordering::Relaxed);
             input.shutdown();
-            thread.join();
-            on_exit(if completed { 0 } else { -1 });
+            let healthy = thread.join().is_ok();
+            on_exit(if !healthy { super::ENGINE_FAILED_EXIT } else if completed { 0 } else { -1 });
         })
         .map(|_| ())
         .map_err(|e| format!("spawn bench feeder: {e}"))
@@ -290,4 +292,26 @@ mod tests {
         Payload::new(PayloadKind::Tui, 4).fill(&mut out, 16 * 1024);
         assert!(out.starts_with(b"\x1b[?1049h"));
     }
+
+    #[test]
+    fn a_rejected_final_frame_is_not_a_successful_benchmark() {
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let sink_calls = calls.clone();
+        let engine = super::super::start(
+            20, 5,
+            Box::new(move |_| sink_calls.fetch_add(1, Ordering::SeqCst) == 0),
+            Box::new(|_| {}),
+        ).unwrap();
+        let handle = engine.handle.clone();
+        let (tx, rx) = mpsc::channel();
+        run(engine, PayloadKind::Ascii, 1, 5, Arc::new(AtomicBool::new(false)), move |code| { tx.send(code).unwrap(); }).unwrap();
+        let code = rx.recv_timeout(Duration::from_secs(5)).expect("benchmark exit");
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "only the final send was rejected");
+        assert!(handle.stats().bytes_fed >= MIB as u64);
+        assert_ne!(code, 0, "fully fed bytes do not make an undelivered final frame successful");
+    }
+
 }

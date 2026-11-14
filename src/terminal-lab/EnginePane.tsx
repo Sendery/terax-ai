@@ -1,6 +1,7 @@
 import {
   attachInput,
   EngineSession,
+  ENGINE_FAILED_EXIT,
 } from "@/modules/terminal/gl/engineSession";
 import {
   GridRenderer,
@@ -103,7 +104,7 @@ export function EnginePane({ font, colors, autorun, onTarget }: Props) {
           capture = null;
           pending?.();
         },
-        onExit: (code) => setStatus(`exited with ${code}`),
+        onExit: (code) => setStatus(code === ENGINE_FAILED_EXIT ? "terminal engine failed" : `exited with ${code}`),
         onError: (error) => console.error("terminal lab engine:", error),
       },
     }).then(

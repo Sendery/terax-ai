@@ -6,6 +6,10 @@
 //! `ghostty-engine` feature; everything that touches libghostty is gated.
 
 pub mod frame;
+#[cfg(any(test, feature = "ghostty-engine"))]
+mod health;
+#[cfg(any(test, feature = "ghostty-engine"))]
+pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 
 #[cfg(feature = "ghostty-engine")]
 pub mod bench;
@@ -169,6 +173,8 @@ mod runtime {
     use serde::Serialize;
 
     use super::super::colors::Colors;
+    use super::health::EngineHealth;
+    use super::EngineFailure;
     use super::snapshot::Snapshotter;
     use super::{validate_size, Decision, Pump, QUEUE_DEPTH, SCROLLBACK_BYTES};
 
@@ -237,9 +243,14 @@ mod runtime {
         wake: SyncSender<Input>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
+        health: Arc<EngineHealth>,
     }
 
     impl EngineHandle {
+        pub fn on_failure(&self, listener: impl FnOnce(EngineFailure) + Send + 'static) {
+            self.health.subscribe(Box::new(listener));
+        }
+
         pub fn credit(&self, seq: u32) {
             self.update(|c| c.ack = Some(seq));
         }
@@ -301,13 +312,17 @@ mod runtime {
         }
     }
 
-    pub struct EngineThread(JoinHandle<()>);
+    pub struct EngineThread {
+        thread: JoinHandle<()>,
+        health: Arc<EngineHealth>,
+    }
 
     impl EngineThread {
-        pub fn join(self) {
-            if let Err(e) = self.0.join() {
-                log::error!("terminal engine thread panicked: {e:?}");
+        pub fn join(self) -> Result<(), EngineFailure> {
+            if self.thread.join().is_err() {
+                self.health.fail(EngineFailure::Panicked);
             }
+            self.health.failure().map_or(Ok(()), Err)
         }
     }
 
@@ -339,15 +354,20 @@ mod runtime {
         let (ready_tx, ready_rx) = sync_channel(1);
         let control = Arc::new(Mutex::new(Control::default()));
         let stats = Arc::new(Stats::default());
+        let health = Arc::new(EngineHealth::default());
         let thread = {
             let control = control.clone();
             let stats = stats.clone();
+            let health = health.clone();
             thread::Builder::new()
                 .name("terax-pty-engine".into())
                 .spawn(move || {
-                    run(
-                        cols, rows, colors, rx, control, stats, frames, replies, ready_tx,
-                    )
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        run(cols, rows, colors, &rx, control, stats, frames, replies, ready_tx, health.clone());
+                    }));
+                    if result.is_err() {
+                        health.fail(EngineFailure::Panicked);
+                    }
                 })
                 .map_err(|e| format!("spawn engine thread: {e}"))?
         };
@@ -367,9 +387,10 @@ mod runtime {
                 wake: tx.clone(),
                 control,
                 stats,
+                health: health.clone(),
             },
             input: EngineInput { tx },
-            thread: EngineThread(thread),
+            thread: EngineThread { thread, health },
         })
     }
 
@@ -380,6 +401,7 @@ mod runtime {
         size: (u16, u16),
         frames: FrameSink,
         sink_open: bool,
+        health: Arc<EngineHealth>,
         replies: &'cb RefCell<Vec<u8>>,
         reply_sink: ReplySink,
         control: Arc<Mutex<Control>>,
@@ -478,6 +500,8 @@ mod runtime {
                 }
                 Err(e) => {
                     log::warn!("terminal engine snapshot failed: {e}");
+                    self.sink_open = false;
+                    self.health.fail(EngineFailure::SnapshotFailed);
                     self.pump.nothing_changed();
                     return;
                 }
@@ -492,6 +516,7 @@ mod runtime {
             if !sent {
                 log::debug!("terminal engine frame channel closed; no more frames");
                 self.sink_open = false;
+                self.health.fail(EngineFailure::FrameChannelClosed);
                 return;
             }
             self.pump.sent(Instant::now());
@@ -534,12 +559,13 @@ mod runtime {
         cols: u16,
         rows: u16,
         colors: Option<Colors>,
-        rx: Receiver<Input>,
+        rx: &Receiver<Input>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
         frames: FrameSink,
         reply_sink: ReplySink,
         ready: SyncSender<Result<(), String>>,
+        health: Arc<EngineHealth>,
     ) {
         let replies = RefCell::new(Vec::new());
         let setup = || -> Result<(Terminal<'static, '_>, Snapshotter), libghostty_vt::Error> {
@@ -569,6 +595,7 @@ mod runtime {
             size: (cols, rows),
             frames,
             sink_open: true,
+            health,
             replies: &replies,
             reply_sink,
             control,
@@ -826,7 +853,7 @@ mod engine_tests {
 
         fn shutdown(self) -> Receiver<Vec<u8>> {
             self.input.shutdown();
-            self.thread.join();
+            self.thread.join().expect("healthy engine shutdown");
             self.frames
         }
     }
@@ -844,7 +871,7 @@ mod engine_tests {
         )
         .unwrap();
         engine.input.shutdown();
-        engine.thread.join();
+        engine.thread.join().expect("healthy engine shutdown");
         let stats = engine.handle.stats();
         assert!(stats.frames > 0);
         assert!(stats.send_micros >= stats.frames * 3000);
@@ -981,7 +1008,7 @@ mod engine_tests {
         assert_eq!(frame.default_bg, super::frame::rgb(4, 5, 6));
         assert_eq!(engine.handle.stats().credits, 0);
         engine.input.shutdown();
-        engine.thread.join();
+        engine.thread.join().expect("healthy engine shutdown");
     }
 
     #[test]
@@ -1141,7 +1168,7 @@ mod engine_tests {
             assert!(input.feed(b"still parsing\r\n".to_vec()));
         }
         input.shutdown();
-        thread.join();
+        assert_eq!(thread.join(), Err(EngineFailure::FrameChannelClosed));
         assert_eq!(handle.stats().bytes_fed, 1500);
         assert_eq!(handle.stats().frames, 0);
     }
