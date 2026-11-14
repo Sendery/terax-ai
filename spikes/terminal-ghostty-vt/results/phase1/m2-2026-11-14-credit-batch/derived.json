@@ -1,0 +1,3728 @@
+[
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-1",
+    "kind": "ascii",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 33.333333333333336,
+    "diagnosticMinPaneFps": 33.333333333333336,
+    "commonMs": 5280,
+    "wallMs": 8636,
+    "frames": 3913,
+    "frameBytes": 31683932,
+    "frameBytesPerSecond": 3668820.3,
+    "framesPerSecond": 453.1,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 3913,
+      "frameBytes": 31683932,
+      "encodeMicros": 1452200,
+      "sendMicros": 511344,
+      "creditWaitMicros": 92931966,
+      "credits": 3889,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 371.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10483,
+      "decodeMs": {
+        "count": 3913,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 3913,
+        "p50": 0,
+        "p95": 0,
+        "max": 6
+      },
+      "readyToDrawMs": {
+        "count": 3902,
+        "p50": 4,
+        "p95": 9,
+        "max": 33
+      },
+      "creditCommandMs": {
+        "count": 3913,
+        "p50": 11,
+        "p95": 16,
+        "max": 47
+      },
+      "drawSubmissionMs": {
+        "count": 477,
+        "p50": 0,
+        "p95": 1,
+        "max": 2
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-1",
+    "kind": "sgr",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.26737967914438,
+    "diagnosticMinPaneFps": 50.26737967914438,
+    "commonMs": 35530,
+    "wallMs": 36457,
+    "frames": 22263,
+    "frameBytes": 282207712,
+    "frameBytesPerSecond": 7740837.5,
+    "framesPerSecond": 610.7,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22263,
+      "frameBytes": 282207712,
+      "encodeMicros": 16675742,
+      "sendMicros": 10543163,
+      "creditWaitMicros": 384488148,
+      "credits": 22239,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 749
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46961,
+      "decodeMs": {
+        "count": 22263,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22263,
+        "p50": 0,
+        "p95": 0,
+        "max": 84
+      },
+      "readyToDrawMs": {
+        "count": 22251,
+        "p50": 7,
+        "p95": 12,
+        "max": 93
+      },
+      "creditCommandMs": {
+        "count": 22263,
+        "p50": 6,
+        "p95": 12,
+        "max": 64
+      },
+      "drawSubmissionMs": {
+        "count": 2121,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-1",
+    "kind": "tui",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.651441955789785,
+    "diagnosticMinPaneFps": 50.651441955789785,
+    "commonMs": 27324,
+    "wallMs": 28240,
+    "frames": 17680,
+    "frameBytes": 185749704,
+    "frameBytesPerSecond": 6577539.1,
+    "framesPerSecond": 626.1,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17680,
+      "frameBytes": 185749704,
+      "encodeMicros": 11848906,
+      "sendMicros": 8061531,
+      "creditWaitMicros": 297426800,
+      "credits": 17656,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 670.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 75265,
+      "decodeMs": {
+        "count": 17680,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17680,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 17670,
+        "p50": 9,
+        "p95": 13,
+        "max": 62
+      },
+      "creditCommandMs": {
+        "count": 17680,
+        "p50": 5,
+        "p95": 11,
+        "max": 51
+      },
+      "drawSubmissionMs": {
+        "count": 1645,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-2",
+    "kind": "ascii",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "common interval below 5 s"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 30.501089324618736,
+    "commonMs": 4131,
+    "wallMs": 8543,
+    "frames": 3632,
+    "frameBytes": 29393040,
+    "frameBytesPerSecond": 3440599.3,
+    "framesPerSecond": 425.1,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 3632,
+      "frameBytes": 29393040,
+      "encodeMicros": 1547614,
+      "sendMicros": 566936,
+      "creditWaitMicros": 89730677,
+      "credits": 3608,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 426.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10389,
+      "decodeMs": {
+        "count": 3632,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 3632,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 3621,
+        "p50": 5,
+        "p95": 13,
+        "max": 30
+      },
+      "creditCommandMs": {
+        "count": 3632,
+        "p50": 10,
+        "p95": 15,
+        "max": 81
+      },
+      "drawSubmissionMs": {
+        "count": 467,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-2",
+    "kind": "sgr",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.121328759099654,
+    "diagnosticMinPaneFps": 50.121328759099654,
+    "commonMs": 35853,
+    "wallMs": 36417,
+    "frames": 22399,
+    "frameBytes": 283925520,
+    "frameBytesPerSecond": 7796510.4,
+    "framesPerSecond": 615.1,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22399,
+      "frameBytes": 283925520,
+      "encodeMicros": 16647579,
+      "sendMicros": 11502008,
+      "creditWaitMicros": 383771003,
+      "credits": 22375,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 743.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46819,
+      "decodeMs": {
+        "count": 22399,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22399,
+        "p50": 0,
+        "p95": 0,
+        "max": 50
+      },
+      "readyToDrawMs": {
+        "count": 22390,
+        "p50": 7,
+        "p95": 12,
+        "max": 84
+      },
+      "creditCommandMs": {
+        "count": 22399,
+        "p50": 6,
+        "p95": 12,
+        "max": 85
+      },
+      "drawSubmissionMs": {
+        "count": 2120,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "historical-014",
+    "run": "gate-engine-profile-2",
+    "kind": "tui",
+    "sourceCommit": "014b72d592b411ee7fb2de46ed5b0dc01eba1479",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 52.80853707561305,
+    "diagnosticMinPaneFps": 52.80853707561305,
+    "commonMs": 27363,
+    "wallMs": 28237,
+    "frames": 17847,
+    "frameBytes": 187356312,
+    "frameBytesPerSecond": 6635135.2,
+    "framesPerSecond": 632,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17847,
+      "frameBytes": 187356312,
+      "encodeMicros": 11849959,
+      "sendMicros": 7678381,
+      "creditWaitMicros": 297628172,
+      "credits": 17823,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 664
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 75114,
+      "decodeMs": {
+        "count": 17847,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17847,
+        "p50": 0,
+        "p95": 0,
+        "max": 4
+      },
+      "readyToDrawMs": {
+        "count": 17836,
+        "p50": 9,
+        "p95": 13,
+        "max": 74
+      },
+      "creditCommandMs": {
+        "count": 17847,
+        "p50": 5,
+        "p95": 11,
+        "max": 46
+      },
+      "drawSubmissionMs": {
+        "count": 1649,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-1",
+    "kind": "ascii",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 37.5284306292646,
+    "diagnosticMinPaneFps": 37.5284306292646,
+    "commonMs": 7914,
+    "wallMs": 8545,
+    "frames": 4129,
+    "frameBytes": 33446044,
+    "frameBytesPerSecond": 3914107,
+    "framesPerSecond": 483.2,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 4129,
+      "frameBytes": 33446044,
+      "encodeMicros": 1553115,
+      "sendMicros": 569280,
+      "creditWaitMicros": 98002591,
+      "credits": 4105,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 376.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10286,
+      "decodeMs": {
+        "count": 4129,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 4129,
+        "p50": 0,
+        "p95": 0,
+        "max": 6
+      },
+      "readyToDrawMs": {
+        "count": 4117,
+        "p50": 5,
+        "p95": 9,
+        "max": 38
+      },
+      "creditCommandMs": {
+        "count": 4129,
+        "p50": 11,
+        "p95": 15,
+        "max": 68
+      },
+      "drawSubmissionMs": {
+        "count": 481,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-1",
+    "kind": "sgr",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.02804262478968,
+    "diagnosticMinPaneFps": 50.02804262478968,
+    "commonMs": 35660,
+    "wallMs": 36322,
+    "frames": 22103,
+    "frameBytes": 280335228,
+    "frameBytesPerSecond": 7718055.9,
+    "framesPerSecond": 608.5,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22103,
+      "frameBytes": 280335228,
+      "encodeMicros": 16164668,
+      "sendMicros": 10332468,
+      "creditWaitMicros": 384179596,
+      "credits": 22079,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 731.3
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46629,
+      "decodeMs": {
+        "count": 22103,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22103,
+        "p50": 0,
+        "p95": 0,
+        "max": 67
+      },
+      "readyToDrawMs": {
+        "count": 22093,
+        "p50": 7,
+        "p95": 13,
+        "max": 49
+      },
+      "creditCommandMs": {
+        "count": 22103,
+        "p50": 6,
+        "p95": 12,
+        "max": 87
+      },
+      "drawSubmissionMs": {
+        "count": 2113,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-1",
+    "kind": "tui",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 51.74107630171379,
+    "diagnosticMinPaneFps": 51.74107630171379,
+    "commonMs": 27483,
+    "wallMs": 28423,
+    "frames": 17736,
+    "frameBytes": 186165352,
+    "frameBytesPerSecond": 6549813.6,
+    "framesPerSecond": 624,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17736,
+      "frameBytes": 186165352,
+      "encodeMicros": 11982994,
+      "sendMicros": 7710445,
+      "creditWaitMicros": 299101347,
+      "credits": 17712,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 675.6
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 75111,
+      "decodeMs": {
+        "count": 17736,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17736,
+        "p50": 0,
+        "p95": 0,
+        "max": 3
+      },
+      "readyToDrawMs": {
+        "count": 17724,
+        "p50": 9,
+        "p95": 13,
+        "max": 30
+      },
+      "creditCommandMs": {
+        "count": 17736,
+        "p50": 5,
+        "p95": 11,
+        "max": 46
+      },
+      "drawSubmissionMs": {
+        "count": 1661,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-2",
+    "kind": "ascii",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 31.11288392500997,
+    "diagnosticMinPaneFps": 31.11288392500997,
+    "commonMs": 5014,
+    "wallMs": 8369,
+    "frames": 3657,
+    "frameBytes": 29664472,
+    "frameBytesPerSecond": 3544565.9,
+    "framesPerSecond": 437,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 3657,
+      "frameBytes": 29664472,
+      "encodeMicros": 1060857,
+      "sendMicros": 367312,
+      "creditWaitMicros": 87528697,
+      "credits": 3633,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 290.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10117,
+      "decodeMs": {
+        "count": 3657,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 3657,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 3648,
+        "p50": 5,
+        "p95": 11,
+        "max": 26
+      },
+      "creditCommandMs": {
+        "count": 3657,
+        "p50": 10,
+        "p95": 15,
+        "max": 51
+      },
+      "drawSubmissionMs": {
+        "count": 453,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-2",
+    "kind": "sgr",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.44817927170868,
+    "diagnosticMinPaneFps": 50.44817927170868,
+    "commonMs": 35700,
+    "wallMs": 36276,
+    "frames": 22303,
+    "frameBytes": 282475108,
+    "frameBytesPerSecond": 7786831.7,
+    "framesPerSecond": 614.8,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22303,
+      "frameBytes": 282475108,
+      "encodeMicros": 17062388,
+      "sendMicros": 10892772,
+      "creditWaitMicros": 382406135,
+      "credits": 22279,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 765
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46412,
+      "decodeMs": {
+        "count": 22303,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22303,
+        "p50": 0,
+        "p95": 0,
+        "max": 33
+      },
+      "readyToDrawMs": {
+        "count": 22293,
+        "p50": 7,
+        "p95": 12,
+        "max": 62
+      },
+      "creditCommandMs": {
+        "count": 22303,
+        "p50": 6,
+        "p95": 12,
+        "max": 41
+      },
+      "drawSubmissionMs": {
+        "count": 2104,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-489",
+    "run": "gate-engine-profile-2",
+    "kind": "tui",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 52.130940437706684,
+    "diagnosticMinPaneFps": 52.130940437706684,
+    "commonMs": 26913,
+    "wallMs": 27946,
+    "frames": 17528,
+    "frameBytes": 184113396,
+    "frameBytesPerSecond": 6588184.2,
+    "framesPerSecond": 627.2,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17528,
+      "frameBytes": 184113396,
+      "encodeMicros": 11427328,
+      "sendMicros": 7485006,
+      "creditWaitMicros": 294949266,
+      "credits": 17504,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 651.9
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 74421,
+      "decodeMs": {
+        "count": 17528,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17528,
+        "p50": 0,
+        "p95": 0,
+        "max": 3
+      },
+      "readyToDrawMs": {
+        "count": 17516,
+        "p50": 9,
+        "p95": 13,
+        "max": 72
+      },
+      "creditCommandMs": {
+        "count": 17528,
+        "p50": 5,
+        "p95": 11,
+        "max": 43
+      },
+      "drawSubmissionMs": {
+        "count": 1619,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "ascii",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 5298,
+    "wallMs": 5920,
+    "frames": 24,
+    "frameBytes": 93936,
+    "frameBytesPerSecond": 15867.6,
+    "framesPerSecond": 4.1,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 24,
+      "frameBytes": 93936,
+      "encodeMicros": 3489,
+      "sendMicros": 1263,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 145.4
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 7661,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 4
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 13,
+        "p95": 22,
+        "max": 23
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 11,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "sgr",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 27173,
+    "wallMs": 27899,
+    "frames": 24,
+    "frameBytes": 157392,
+    "frameBytesPerSecond": 5641.5,
+    "framesPerSecond": 0.9,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 24,
+      "frameBytes": 157392,
+      "encodeMicros": 4084,
+      "sendMicros": 228,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 170.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 40596,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 31
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 1,
+        "p95": 14,
+        "max": 14
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 12,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "tui",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 21382,
+    "wallMs": 22014,
+    "frames": 24,
+    "frameBytes": 137472,
+    "frameBytesPerSecond": 6244.8,
+    "framesPerSecond": 1.1,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 24,
+      "frameBytes": 137472,
+      "encodeMicros": 3341,
+      "sendMicros": 6804,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 139.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 67642,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 2
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 1,
+        "p95": 12,
+        "max": 14
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 9,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "ascii",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 5286,
+    "wallMs": 5964,
+    "frames": 24,
+    "frameBytes": 93936,
+    "frameBytesPerSecond": 15750.5,
+    "framesPerSecond": 4,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 24,
+      "frameBytes": 93936,
+      "encodeMicros": 3772,
+      "sendMicros": 1031,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 157.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 7705,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 13,
+        "p95": 31,
+        "max": 31
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 11,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "sgr",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 27500,
+    "wallMs": 28020,
+    "frames": 24,
+    "frameBytes": 157392,
+    "frameBytesPerSecond": 5617.1,
+    "framesPerSecond": 0.9,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 24,
+      "frameBytes": 157392,
+      "encodeMicros": 3616,
+      "sendMicros": 207,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 150.7
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 40746,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 30
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 1,
+        "p95": 11,
+        "max": 14
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 10,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "invalid-batched-489",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "tui",
+    "sourceCommit": "489be42c3fd6e53e560216120fb513db5f0009dd",
+    "runnerCommit": "89a5bd6e6cf591fa6c5732dbc4ecf197762f2f35",
+    "validCollection": false,
+    "invalidReasons": [
+      "explicit report error",
+      "incomplete profile",
+      "incomplete credit batch"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 0.0,
+    "commonMs": 21605,
+    "wallMs": 22071,
+    "frames": 24,
+    "frameBytes": 137472,
+    "frameBytesPerSecond": 6228.6,
+    "framesPerSecond": 1.1,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 24,
+      "frameBytes": 137472,
+      "encodeMicros": 3263,
+      "sendMicros": 460,
+      "creditWaitMicros": 0,
+      "credits": 0,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 136
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 67852,
+      "decodeMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "applyMs": {
+        "count": 24,
+        "p50": 0,
+        "p95": 1,
+        "max": 2
+      },
+      "readyToDrawMs": {
+        "count": 24,
+        "p50": 14,
+        "p95": 15,
+        "max": 16
+      },
+      "creditCommandMs": {
+        "count": 0,
+        "p50": null,
+        "p95": null,
+        "max": null
+      },
+      "drawSubmissionMs": {
+        "count": 9,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 24,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": false,
+      "errors": [
+        "invalid credit reply timing 0:1"
+      ]
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 24,
+      "registered": 0,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 24,
+      "maxPending": 24,
+      "invocations": 0,
+      "sizes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "dispatchDelayMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "drawToDispatchMs": {
+        "count": 0,
+        "total": 0,
+        "min": null,
+        "max": 0
+      },
+      "complete": false
+    },
+    "completePanes": 12,
+    "rootErrors": [
+      "gate ascii x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate sgr x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+      "gate tui x12: session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1"
+    ],
+    "caseError": "session 0: TypeError: Can only call Window.queueMicrotask on instances of Window; incomplete credit batch registration; incomplete stage profile; invalid credit reply timing 0:1",
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-1",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": false,
+    "invalidReasons": [
+      "common interval below 5 s"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 30.145530145530145,
+    "commonMs": 3848,
+    "wallMs": 8636,
+    "frames": 3703,
+    "frameBytes": 30011608,
+    "frameBytesPerSecond": 3475174.6,
+    "framesPerSecond": 428.8,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 3703,
+      "frameBytes": 30011608,
+      "encodeMicros": 1326594,
+      "sendMicros": 654155,
+      "creditWaitMicros": 90415466,
+      "credits": 3679,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 358.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10509,
+      "decodeMs": {
+        "count": 3703,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 3703,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 3697,
+        "p50": 4,
+        "p95": 9,
+        "max": 50
+      },
+      "creditCommandMs": {
+        "count": 3703,
+        "p50": 10,
+        "p95": 16,
+        "max": 140
+      },
+      "drawSubmissionMs": {
+        "count": 469,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-1",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 51.030753632984116,
+    "diagnosticMinPaneFps": 51.030753632984116,
+    "commonMs": 35508,
+    "wallMs": 36227,
+    "frames": 22518,
+    "frameBytes": 285413128,
+    "frameBytesPerSecond": 7878464.3,
+    "framesPerSecond": 621.6,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22518,
+      "frameBytes": 285413128,
+      "encodeMicros": 17640564,
+      "sendMicros": 10894861,
+      "creditWaitMicros": 380509201,
+      "credits": 22494,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 783.4
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46754,
+      "decodeMs": {
+        "count": 22518,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22518,
+        "p50": 0,
+        "p95": 0,
+        "max": 62
+      },
+      "readyToDrawMs": {
+        "count": 22509,
+        "p50": 8,
+        "p95": 13,
+        "max": 80
+      },
+      "creditCommandMs": {
+        "count": 22518,
+        "p50": 6,
+        "p95": 12,
+        "max": 28
+      },
+      "drawSubmissionMs": {
+        "count": 2121,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-1",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 51.08256880733945,
+    "diagnosticMinPaneFps": 51.08256880733945,
+    "commonMs": 27250,
+    "wallMs": 28227,
+    "frames": 17568,
+    "frameBytes": 184580964,
+    "frameBytesPerSecond": 6539163.4,
+    "framesPerSecond": 622.4,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17568,
+      "frameBytes": 184580964,
+      "encodeMicros": 11867888,
+      "sendMicros": 7981257,
+      "creditWaitMicros": 297763695,
+      "credits": 17545,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 675.5
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 75039,
+      "decodeMs": {
+        "count": 17568,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17568,
+        "p50": 0,
+        "p95": 0,
+        "max": 4
+      },
+      "readyToDrawMs": {
+        "count": 17558,
+        "p50": 9,
+        "p95": 13,
+        "max": 45
+      },
+      "creditCommandMs": {
+        "count": 17568,
+        "p50": 5,
+        "p95": 11,
+        "max": 68
+      },
+      "drawSubmissionMs": {
+        "count": 1636,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-2",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 31.148075668623616,
+    "diagnosticMinPaneFps": 31.148075668623616,
+    "commonMs": 6132,
+    "wallMs": 8617,
+    "frames": 3601,
+    "frameBytes": 29140176,
+    "frameBytesPerSecond": 3381707.8,
+    "framesPerSecond": 417.9,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 3601,
+      "frameBytes": 29140176,
+      "encodeMicros": 1444285,
+      "sendMicros": 532621,
+      "creditWaitMicros": 94095394,
+      "credits": 3577,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 401.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10361,
+      "decodeMs": {
+        "count": 3601,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 3601,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 3592,
+        "p50": 5,
+        "p95": 10,
+        "max": 41
+      },
+      "creditCommandMs": {
+        "count": 3601,
+        "p50": 10,
+        "p95": 16,
+        "max": 43
+      },
+      "drawSubmissionMs": {
+        "count": 475,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-2",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 50.07157091133627,
+    "diagnosticMinPaneFps": 50.07157091133627,
+    "commonMs": 35629,
+    "wallMs": 36387,
+    "frames": 22225,
+    "frameBytes": 281690116,
+    "frameBytesPerSecond": 7741504.3,
+    "framesPerSecond": 610.8,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22225,
+      "frameBytes": 281690116,
+      "encodeMicros": 16343747,
+      "sendMicros": 11215298,
+      "creditWaitMicros": 382727296,
+      "credits": 22201,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 735.4
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 46765,
+      "decodeMs": {
+        "count": 22225,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 22225,
+        "p50": 0,
+        "p95": 0,
+        "max": 48
+      },
+      "readyToDrawMs": {
+        "count": 22214,
+        "p50": 8,
+        "p95": 13,
+        "max": 62
+      },
+      "creditCommandMs": {
+        "count": 22225,
+        "p50": 6,
+        "p95": 12,
+        "max": 56
+      },
+      "drawSubmissionMs": {
+        "count": 2119,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "control-e500",
+    "run": "gate-engine-profile-2",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 51.96815568332596,
+    "diagnosticMinPaneFps": 51.96815568332596,
+    "commonMs": 27132,
+    "wallMs": 27985,
+    "frames": 17586,
+    "frameBytes": 184479840,
+    "frameBytesPerSecond": 6592097.2,
+    "framesPerSecond": 628.4,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17586,
+      "frameBytes": 184479840,
+      "encodeMicros": 11438014,
+      "sendMicros": 7327801,
+      "creditWaitMicros": 296208725,
+      "credits": 17562,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 650.4
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 74809,
+      "decodeMs": {
+        "count": 17586,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17586,
+        "p50": 0,
+        "p95": 0,
+        "max": 2
+      },
+      "readyToDrawMs": {
+        "count": 17574,
+        "p50": 9,
+        "p95": 13,
+        "max": 62
+      },
+      "creditCommandMs": {
+        "count": 17586,
+        "p50": 5,
+        "p95": 11,
+        "max": 29
+      },
+      "drawSubmissionMs": {
+        "count": 1629,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": null,
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 39.63935955230841,
+    "diagnosticMinPaneFps": 39.63935955230841,
+    "commonMs": 6433,
+    "wallMs": 8583,
+    "frames": 4242,
+    "frameBytes": 34344212,
+    "frameBytesPerSecond": 4001422.8,
+    "framesPerSecond": 494.2,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 4242,
+      "frameBytes": 34344212,
+      "encodeMicros": 1663509,
+      "sendMicros": 821876,
+      "creditWaitMicros": 95532567,
+      "credits": 4218,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 392.2
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10325,
+      "decodeMs": {
+        "count": 4242,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 4242,
+        "p50": 0,
+        "p95": 0,
+        "max": 4
+      },
+      "readyToDrawMs": {
+        "count": 4231,
+        "p50": 5,
+        "p95": 9,
+        "max": 25
+      },
+      "creditCommandMs": {
+        "count": 4242,
+        "p50": 10,
+        "p95": 14,
+        "max": 132
+      },
+      "drawSubmissionMs": {
+        "count": 502,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 4242,
+      "registered": 4242,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 12,
+      "invocations": 512,
+      "sizes": [
+        0,
+        9,
+        5,
+        5,
+        2,
+        6,
+        9,
+        87,
+        166,
+        118,
+        53,
+        37,
+        15
+      ],
+      "dispatchDelayMs": {
+        "count": 4242,
+        "total": 244,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 4242,
+        "total": 265,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 54.130397186833456,
+    "diagnosticMinPaneFps": 54.130397186833456,
+    "commonMs": 34694,
+    "wallMs": 35448,
+    "frames": 23135,
+    "frameBytes": 293201880,
+    "frameBytesPerSecond": 8271323.6,
+    "framesPerSecond": 652.6,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 23135,
+      "frameBytes": 293201880,
+      "encodeMicros": 17012572,
+      "sendMicros": 6092989,
+      "creditWaitMicros": 376825463,
+      "credits": 23111,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 735.4
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 45792,
+      "decodeMs": {
+        "count": 23135,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 23135,
+        "p50": 0,
+        "p95": 0,
+        "max": 36
+      },
+      "readyToDrawMs": {
+        "count": 23124,
+        "p50": 8,
+        "p95": 13,
+        "max": 27
+      },
+      "creditCommandMs": {
+        "count": 23135,
+        "p50": 6,
+        "p95": 11,
+        "max": 16
+      },
+      "drawSubmissionMs": {
+        "count": 2112,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 23135,
+      "registered": 23135,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 2122,
+      "sizes": [
+        0,
+        14,
+        7,
+        9,
+        7,
+        4,
+        14,
+        31,
+        61,
+        125,
+        265,
+        552,
+        1033
+      ],
+      "dispatchDelayMs": {
+        "count": 23135,
+        "total": 279,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 23135,
+        "total": 312,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-1",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 54.65624883173203,
+    "diagnosticMinPaneFps": 54.65624883173203,
+    "commonMs": 26749,
+    "wallMs": 27609,
+    "frames": 18023,
+    "frameBytes": 189205884,
+    "frameBytesPerSecond": 6853051,
+    "framesPerSecond": 652.8,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 18023,
+      "frameBytes": 189205884,
+      "encodeMicros": 11205322,
+      "sendMicros": 4923806,
+      "creditWaitMicros": 294566837,
+      "credits": 18000,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 621.7
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 73460,
+      "decodeMs": {
+        "count": 18023,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 18023,
+        "p50": 0,
+        "p95": 0,
+        "max": 2
+      },
+      "readyToDrawMs": {
+        "count": 18013,
+        "p50": 9,
+        "p95": 13,
+        "max": 34
+      },
+      "creditCommandMs": {
+        "count": 18023,
+        "p50": 5,
+        "p95": 10,
+        "max": 25
+      },
+      "drawSubmissionMs": {
+        "count": 1632,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 18023,
+      "registered": 18023,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 1641,
+      "sizes": [
+        0,
+        4,
+        7,
+        4,
+        6,
+        7,
+        13,
+        22,
+        49,
+        107,
+        189,
+        339,
+        894
+      ],
+      "dispatchDelayMs": {
+        "count": 18023,
+        "total": 139,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 18023,
+        "total": 149,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": false,
+    "invalidReasons": [
+      "common interval below 5 s"
+    ],
+    "minPaneFps": null,
+    "diagnosticMinPaneFps": 37.88214443952149,
+    "commonMs": 4514,
+    "wallMs": 8524,
+    "frames": 4157,
+    "frameBytes": 33685372,
+    "frameBytesPerSecond": 3951826.8,
+    "framesPerSecond": 487.7,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 4157,
+      "frameBytes": 33685372,
+      "encodeMicros": 1571934,
+      "sendMicros": 1042087,
+      "creditWaitMicros": 87839153,
+      "credits": 4133,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 378.1
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 10371,
+      "decodeMs": {
+        "count": 4157,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 4157,
+        "p50": 0,
+        "p95": 0,
+        "max": 5
+      },
+      "readyToDrawMs": {
+        "count": 4146,
+        "p50": 5,
+        "p95": 9,
+        "max": 44
+      },
+      "creditCommandMs": {
+        "count": 4157,
+        "p50": 10,
+        "p95": 14,
+        "max": 26
+      },
+      "drawSubmissionMs": {
+        "count": 498,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 4157,
+      "registered": 4157,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 12,
+      "invocations": 508,
+      "sizes": [
+        0,
+        6,
+        9,
+        4,
+        7,
+        7,
+        14,
+        77,
+        177,
+        108,
+        63,
+        15,
+        21
+      ],
+      "dispatchDelayMs": {
+        "count": 4157,
+        "total": 135,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 4157,
+        "total": 143,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 54.07885304659498,
+    "diagnosticMinPaneFps": 54.07885304659498,
+    "commonMs": 34875,
+    "wallMs": 35557,
+    "frames": 23228,
+    "frameBytes": 294458896,
+    "frameBytesPerSecond": 8281320,
+    "framesPerSecond": 653.3,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 23228,
+      "frameBytes": 294458896,
+      "encodeMicros": 17148964,
+      "sendMicros": 5580779,
+      "creditWaitMicros": 378496770,
+      "credits": 23204,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 738.3
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 45947,
+      "decodeMs": {
+        "count": 23228,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 23228,
+        "p50": 0,
+        "p95": 0,
+        "max": 44
+      },
+      "readyToDrawMs": {
+        "count": 23216,
+        "p50": 8,
+        "p95": 12,
+        "max": 29
+      },
+      "creditCommandMs": {
+        "count": 23228,
+        "p50": 6,
+        "p95": 12,
+        "max": 19
+      },
+      "drawSubmissionMs": {
+        "count": 2118,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 23228,
+      "registered": 23228,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 12,
+      "invocations": 2128,
+      "sizes": [
+        0,
+        10,
+        5,
+        6,
+        4,
+        7,
+        13,
+        36,
+        75,
+        133,
+        247,
+        562,
+        1030
+      ],
+      "dispatchDelayMs": {
+        "count": 23228,
+        "total": 160,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 23228,
+        "total": 181,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "profile-batched-e500",
+    "run": "gate-engine-profile-batched-2",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 54.96033983684824,
+    "diagnosticMinPaneFps": 54.96033983684824,
+    "commonMs": 26601,
+    "wallMs": 27311,
+    "frames": 17949,
+    "frameBytes": 188458456,
+    "frameBytesPerSecond": 6900459.7,
+    "framesPerSecond": 657.2,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 17949,
+      "frameBytes": 188458456,
+      "encodeMicros": 11287805,
+      "sendMicros": 5005804,
+      "creditWaitMicros": 291600985,
+      "credits": 17925,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 628.9
+    },
+    "profile": {
+      "frameColumns": [
+        "session",
+        "seq",
+        "decodeMs",
+        "applyMs",
+        "readyAt",
+        "drawAt",
+        "creditSentAt",
+        "creditReplyAt",
+        "creditReplyOk"
+      ],
+      "drawColumns": [
+        "at",
+        "submissionMs",
+        "renderedPanes"
+      ],
+      "stoppedAt": 73321,
+      "decodeMs": {
+        "count": 17949,
+        "p50": 0,
+        "p95": 0,
+        "max": 1
+      },
+      "applyMs": {
+        "count": 17949,
+        "p50": 0,
+        "p95": 0,
+        "max": 2
+      },
+      "readyToDrawMs": {
+        "count": 17938,
+        "p50": 9,
+        "p95": 13,
+        "max": 72
+      },
+      "creditCommandMs": {
+        "count": 17949,
+        "p50": 5,
+        "p95": 10,
+        "max": 21
+      },
+      "drawSubmissionMs": {
+        "count": 1614,
+        "p50": 0,
+        "p95": 1,
+        "max": 1
+      },
+      "missingCredits": 0,
+      "pendingReplies": 0,
+      "failedReplies": 0,
+      "complete": true,
+      "errors": []
+    },
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 17949,
+      "registered": 17949,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 1624,
+      "sizes": [
+        0,
+        5,
+        8,
+        3,
+        3,
+        5,
+        3,
+        22,
+        47,
+        108,
+        163,
+        352,
+        905
+      ],
+      "dispatchDelayMs": {
+        "count": 17949,
+        "total": 148,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 17949,
+        "total": 160,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-1",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 39.20208152645273,
+    "diagnosticMinPaneFps": 39.20208152645273,
+    "commonMs": 5765,
+    "wallMs": 8513,
+    "frames": 4285,
+    "frameBytes": 34763100,
+    "frameBytesPerSecond": 4083531.1,
+    "framesPerSecond": 503.3,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 4285,
+      "frameBytes": 34763100,
+      "encodeMicros": 2000792,
+      "sendMicros": 725453,
+      "creditWaitMicros": 94319187,
+      "credits": 4261,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 466.9
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 4285,
+      "registered": 4285,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 12,
+      "invocations": 511,
+      "sizes": [
+        0,
+        10,
+        6,
+        6,
+        4,
+        3,
+        20,
+        88,
+        124,
+        108,
+        75,
+        40,
+        27
+      ],
+      "dispatchDelayMs": {
+        "count": 4285,
+        "total": 111,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 4285,
+        "total": 119,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-1",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 54.32548985557582,
+    "diagnosticMinPaneFps": 54.32548985557582,
+    "commonMs": 34551,
+    "wallMs": 35395,
+    "frames": 23004,
+    "frameBytes": 291574804,
+    "frameBytesPerSecond": 8237739.9,
+    "framesPerSecond": 649.9,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 23004,
+      "frameBytes": 291574804,
+      "encodeMicros": 17574495,
+      "sendMicros": 6137083,
+      "creditWaitMicros": 374741306,
+      "credits": 22980,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 764
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 23004,
+      "registered": 23004,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 2114,
+      "sizes": [
+        0,
+        11,
+        8,
+        8,
+        8,
+        6,
+        24,
+        27,
+        56,
+        130,
+        269,
+        554,
+        1013
+      ],
+      "dispatchDelayMs": {
+        "count": 23004,
+        "total": 425,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 23004,
+        "total": 460,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-1",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 55.23344522429051,
+    "diagnosticMinPaneFps": 55.23344522429051,
+    "commonMs": 26216,
+    "wallMs": 27312,
+    "frames": 18060,
+    "frameBytes": 189709652,
+    "frameBytesPerSecond": 6946018.3,
+    "framesPerSecond": 661.2,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 18060,
+      "frameBytes": 189709652,
+      "encodeMicros": 11277972,
+      "sendMicros": 5343282,
+      "creditWaitMicros": 290630222,
+      "credits": 18036,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 624.5
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 18060,
+      "registered": 18060,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 1631,
+      "sizes": [
+        0,
+        8,
+        5,
+        7,
+        2,
+        5,
+        10,
+        19,
+        40,
+        100,
+        156,
+        333,
+        946
+      ],
+      "dispatchDelayMs": {
+        "count": 18060,
+        "total": 350,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 18060,
+        "total": 387,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-2",
+    "kind": "ascii",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 39.50493811726466,
+    "diagnosticMinPaneFps": 39.50493811726466,
+    "commonMs": 7999,
+    "wallMs": 8583,
+    "frames": 4373,
+    "frameBytes": 35435164,
+    "frameBytesPerSecond": 4128529,
+    "framesPerSecond": 509.5,
+    "native": {
+      "bytesFed": 12884902044,
+      "frames": 4373,
+      "frameBytes": 35435164,
+      "encodeMicros": 1785487,
+      "sendMicros": 1173323,
+      "creditWaitMicros": 97205001,
+      "credits": 4349,
+      "scrollbackRows": 224928,
+      "encodeMicrosPerFrame": 408.3
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 4373,
+      "registered": 4373,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 12,
+      "invocations": 514,
+      "sizes": [
+        0,
+        10,
+        6,
+        6,
+        2,
+        2,
+        3,
+        77,
+        143,
+        126,
+        75,
+        38,
+        26
+      ],
+      "dispatchDelayMs": {
+        "count": 4373,
+        "total": 65,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 4373,
+        "total": 76,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-2",
+    "kind": "sgr",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 53.58273381294964,
+    "diagnosticMinPaneFps": 53.58273381294964,
+    "commonMs": 34750,
+    "wallMs": 35502,
+    "frames": 22997,
+    "frameBytes": 291178564,
+    "frameBytesPerSecond": 8201751,
+    "framesPerSecond": 647.8,
+    "native": {
+      "bytesFed": 12884903124,
+      "frames": 22997,
+      "frameBytes": 291178564,
+      "encodeMicros": 17160985,
+      "sendMicros": 6000519,
+      "creditWaitMicros": 377812694,
+      "credits": 22974,
+      "scrollbackRows": 195768,
+      "encodeMicrosPerFrame": 746.2
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 22997,
+      "registered": 22997,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 2116,
+      "sizes": [
+        0,
+        9,
+        8,
+        10,
+        6,
+        3,
+        16,
+        33,
+        65,
+        133,
+        273,
+        591,
+        969
+      ],
+      "dispatchDelayMs": {
+        "count": 22997,
+        "total": 266,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 22997,
+        "total": 295,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  },
+  {
+    "label": "confirm-e500",
+    "run": "gate-engine-batched-2",
+    "kind": "tui",
+    "sourceCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "runnerCommit": "e500b3260520c4262b465347f07d5ba0e64e440d",
+    "validCollection": true,
+    "invalidReasons": [],
+    "minPaneFps": 55.301628073886604,
+    "diagnosticMinPaneFps": 55.301628073886604,
+    "commonMs": 26473,
+    "wallMs": 27283,
+    "frames": 18068,
+    "frameBytes": 189857972,
+    "frameBytesPerSecond": 6958837.8,
+    "framesPerSecond": 662.2,
+    "native": {
+      "bytesFed": 12884912976,
+      "frames": 18068,
+      "frameBytes": 189857972,
+      "encodeMicros": 11384402,
+      "sendMicros": 4829105,
+      "creditWaitMicros": 291365789,
+      "credits": 18044,
+      "scrollbackRows": 0,
+      "encodeMicrosPerFrame": 630.1
+    },
+    "profile": {},
+    "creditBatch": {
+      "mode": "window-microtask",
+      "queued": 18068,
+      "registered": 18068,
+      "failed": 0,
+      "rejected": 0,
+      "pending": 0,
+      "maxPending": 13,
+      "invocations": 1624,
+      "sizes": [
+        0,
+        7,
+        4,
+        4,
+        4,
+        4,
+        9,
+        17,
+        35,
+        84,
+        167,
+        342,
+        947
+      ],
+      "dispatchDelayMs": {
+        "count": 18068,
+        "total": 477,
+        "min": 0,
+        "max": 1
+      },
+      "drawToDispatchMs": {
+        "count": 18068,
+        "total": 520,
+        "min": 0,
+        "max": 1
+      },
+      "complete": true
+    },
+    "completePanes": 12,
+    "rootErrors": [],
+    "caseError": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanupErrors": [],
+    "survivors": []
+  }
+]

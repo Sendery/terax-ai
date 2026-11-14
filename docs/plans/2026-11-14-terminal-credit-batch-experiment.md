@@ -170,3 +170,20 @@ src-tauri/Cargo.toml --locked` passed both without the feature (588 unit,
 `git diff --check` passed. Astra's independent final read found no blocker.
 These checks establish the correction's preparation; graphical validity and
 performance still require the new same-source comparison.
+
+
+## Measured decision after correction
+
+The `e500b32` candidate runs correctly in real WKWebView. Both final
+unprofiled confirmations are valid, but the minimum individual-pane rates
+remain ASCII 39.2021/39.5049, SGR 54.3255/53.5827 and TUI 55.2334/55.3016.
+The answer to the Phase 1 60 FPS criterion remains **no**. Batching credits
+reduces invocation traffic but is insufficient; this experiment is closed.
+Do not continue tuning its batch size or waiting policy.
+
+The instrumented comparison, its short ASCII intervals, all earlier invalid
+runs, exact provenance, native accepted-credit counters and full raw reports
+are retained in [the M2 result record](../../spikes/terminal-ghostty-vt/results/phase1/m2-2026-11-14-credit-batch/README.md).
+The next bounded transport comparison must be registered separately before
+measurement. Normal-pane integration, rollout and the full parity matrix are
+still required, after the performance architecture decision.
