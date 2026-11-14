@@ -84,33 +84,55 @@ export function TerminalLabApp() {
   const liveReport = useRef<LabReport | null>(null);
   const isAutorun = useRef(false);
   const progressSequence = useRef(0);
+  const reportFailed = useRef(false);
   const pendingStatus = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     latest.current = { font, colors };
   }, [font, colors]);
 
-  const progress = useCallback((current: LabReport, label: string) => {
-    liveReport.current = current;
-    step.current = label;
-    setReport({ ...current });
-    setStepLabel(label);
-    if (isAutorun.current) {
-      const saved = labStatus({
-        status: "running",
+  const failReport = useCallback(
+    async (current: LabReport, label: string, error: unknown) => {
+      if (reportFailed.current) return;
+      reportFailed.current = true;
+      const message = `report ${label}: ${String(error).slice(0, 1024)}`;
+      current.errors.push(message);
+      await labStatus({
+        status: "failed",
         step: label,
-        at: new Date().toISOString(),
+        error: message,
         sequence: ++progressSequence.current,
-        checkpoint: current,
-      }).catch((error) => {
-        current.errors.push(`checkpoint ${label}: ${String(error)}`);
-        console.error("lab status failed", error);
-      });
-      pendingStatus.current = Promise.all([pendingStatus.current, saved]).then(
-        () => {},
+      }).catch((failure) =>
+        console.error("lab failure status failed", failure),
       );
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const progress = useCallback(
+    (current: LabReport, label: string) => {
+      liveReport.current = current;
+      step.current = label;
+      setReport({ ...current });
+      setStepLabel(label);
+      if (isAutorun.current && !reportFailed.current) {
+        const saved = labStatus({
+          status: "running",
+          step: label,
+          at: new Date().toISOString(),
+          sequence: ++progressSequence.current,
+          checkpoint: current,
+        }).catch((error) => {
+          return failReport(current, `checkpoint ${label}`, error);
+        });
+        pendingStatus.current = Promise.all([
+          pendingStatus.current,
+          saved,
+        ]).then(() => {});
+      }
+    },
+    [failReport],
+  );
 
   const runEverything = useCallback(
     async (
@@ -189,7 +211,10 @@ export function TerminalLabApp() {
       const watchdog = setTimeout(() => {
         const current = liveReport.current ?? partial;
         current.errors.push(`autorun watchdog fired at step ${step.current}`);
-        void submitLabReport(JSON.stringify(current, null, 2));
+        if (!reportFailed.current)
+          void submitLabReport(current).catch((error) =>
+            failReport(current, "watchdog", error),
+          );
       }, AUTORUN_WATCHDOG_MS);
       let result = partial;
       try {
@@ -263,15 +288,16 @@ export function TerminalLabApp() {
         clearTimeout(watchdog);
         await pendingStatus.current;
         result.finishedAt ??= new Date().toISOString();
-        await submitLabReport(JSON.stringify(result, null, 2)).catch((error) =>
-          console.error("terminal lab report failed:", error),
-        );
+        if (!reportFailed.current)
+          await submitLabReport(result).catch((error) =>
+            failReport(result, "final", error),
+          );
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [runEverything, progress]);
+  }, [runEverything, progress, failReport]);
 
   const setEngineTarget = useCallback((target: LabTarget | null) => {
     engineTarget.current = target;

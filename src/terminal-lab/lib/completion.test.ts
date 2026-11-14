@@ -44,3 +44,13 @@ describe("lab payload completion", () => {
     await expect(barrier.done).rejects.toThrow("exited 2");
   });
 });
+
+it("rejects explicitly on an xterm write failure without waiting for exit or draw", async () => {
+  const completion = new PayloadCompletion(1, () => 1);
+  completion.fail(new Error("write data discarded"));
+  await expect(completion.done).rejects.toThrow("write data discarded");
+  completion.exit(0);
+  completion.parsed();
+  completion.rendered();
+  completion.dispose();
+});

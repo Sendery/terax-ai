@@ -74,17 +74,24 @@ export async function runXtermBench(
         renderEvents++;
         completion.rendered();
       });
+      let failed = false;
       const pty = await openLabPty(cols, rows, {
         onData: (bytes) => {
-          const payload = stream.push(bytes);
-          if (!payload.length) return;
-          const last = stream.received === fixture.bytes;
-          surface.term.write(payload, () => {
-            if (last) {
-              completion.parsed();
-              surface.term.refresh(0, rows - 1);
-            }
-          });
+          if (failed) return;
+          try {
+            const payload = stream.push(bytes);
+            if (!payload.length) return;
+            const last = stream.received === fixture.bytes;
+            surface.term.write(payload, () => {
+              if (last) {
+                completion.parsed();
+                surface.term.refresh(0, rows - 1);
+              }
+            });
+          } catch (error) {
+            failed = true;
+            completion.fail(error);
+          }
         },
         onExit: (code) => {
           completion.exit(code);

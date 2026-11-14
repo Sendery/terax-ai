@@ -1,3 +1,4 @@
+import { labJson, awaitLabWrite } from "@/terminal-lab/lib/labReport";
 import {
   type DecodedFrame,
   decodeFrame,
@@ -68,16 +69,16 @@ export function labAutorunPath(): Promise<string | null> {
 }
 
 /** Writes the run's report and exits the app (autorun only). */
-export function submitLabReport(json: string): Promise<void> {
-  return invoke("gterm_lab_report", { json });
+export async function submitLabReport(report: unknown): Promise<void> {
+  return awaitLabWrite(invoke("gterm_lab_report", { json: labJson(report) }));
 }
 
 export function labConfig(): Promise<AutorunConfig> {
   return invoke("gterm_lab_config");
 }
 
-export function labStatus(status: unknown): Promise<void> {
-  return invoke("gterm_lab_status", { json: JSON.stringify(status, null, 2) });
+export async function labStatus(status: unknown): Promise<void> {
+  return awaitLabWrite(invoke("gterm_lab_status", { json: labJson(status) }));
 }
 
 export function labFixture(

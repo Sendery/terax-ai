@@ -436,3 +436,23 @@ describe("EngineSession opening synchronization", () => {
     expect(commands("gterm_set_colors")).toEqual([]);
   });
 });
+
+it("writes final reports and checkpoints as compact JSON with the same bounded transport", async () => {
+  const { submitLabReport, labStatus } = await import(
+    "@/modules/terminal/gl/engineSession"
+  );
+  const report = {
+    bench: [{ kind: "ascii", events: [{ kind: "drawn", seq: 1, at: 10 }] }],
+    errors: [],
+  };
+  await submitLabReport(report);
+  await labStatus({ checkpoint: report });
+  expect(ipc.calls[ipc.calls.length - 2]).toEqual({
+    command: "gterm_lab_report",
+    args: { json: JSON.stringify(report) },
+  });
+  expect(ipc.calls[ipc.calls.length - 1]).toEqual({
+    command: "gterm_lab_status",
+    args: { json: JSON.stringify({ checkpoint: report }) },
+  });
+});

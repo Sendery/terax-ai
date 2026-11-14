@@ -450,3 +450,35 @@ all Node script tests (36 passed). Strict all-target clippy and locked Rust
 tests passed with and without the feature. Its new mode/runner tests were
 observed failing before implementation. Astra independently reviewed the
 final mode and found no blocker to collecting its registered measurements.
+
+### Sustained collection reporting correction
+
+The first sustained collection retained a clean SGR result below 60 fps, but
+the detailed TUI report was not written. Native sessions closed normally and
+the app became idle. The earlier two-kind checkpoint was 5547982 bytes in
+compact JSON but 14451470 bytes with indentation. Both checkpoint and final
+paths used indentation and hit the unchanged 16 MiB native bound as the event
+history grew. That collection was stopped with identity-verified cleanup;
+no survivors remained. It is retained as diagnostic evidence, not a complete
+three-kind acceptance run.
+
+Both paths now use compact JSON, preserve every event, validate UTF-8 bytes
+before IPC and bound writes to ten seconds. A write rejection stops later
+large writes and attempts a small sequenced failure status. If even that IPC
+fails, the existing runner timeout remains the fallback. No payload, geometry,
+minimum common duration, FPS threshold or native size limit changed.
+
+Installed xterm/Tauri packages also reproduced a callback hazard: xterm can
+throw above its 50 million pending-byte watermark, and an escaping exception
+prevents Channel's delivery index from advancing. The original timed-out
+floods did not capture that exception, so their exact cause remains unproven.
+The lab now catches write/parse failures, rejects the measurement and closes
+its sessions; it does not add pacing or count discarded data as success.
+
+These reporting/callback regressions failed before implementation, then
+passed. Final gates: `pnpm lint`, `pnpm check-types`, `pnpm test` (2275 passed,
+one existing skip), `pnpm build`, Pi tests and all Node tests passed. Strict
+locked Rust clippy/tests passed in both feature configurations. A new test
+initially used `Array.at`, unsupported by this project's TypeScript target;
+indexed access fixes it without changing the configuration. Astra's final
+independent review found no blocker for repeating the registered workload.

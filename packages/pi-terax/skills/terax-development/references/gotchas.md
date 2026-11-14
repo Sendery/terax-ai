@@ -570,3 +570,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** the runtime's default reload creates a fresh JavaScript world; refs reset and autorun repeats, overwriting status while a parent runner waits for apparent progress.
 - **Prevention:** keep bootstrap ownership and failure state in the native process, persist bounded checkpoints and sample streams, and reject a second bootstrap while preserving the first run's evidence.
 - **Verification:** duplicate-bootstrap tests must preserve checkpoints and fail the process; sample logs must survive a missing final report. Confirm actual termination reasons from system evidence instead of inferring them from RSS or a generic JavaScript error.
+
+### Detailed lab reports cross native byte limits when pretty-printed
+
+- Trigger: adding per-frame event histories to bounded native report commands.
+- Failure: indentation multiplies payload size; a rejected checkpoint leaves old status, while a rejected final report can leave an idle app waiting for the runner timeout.
+- Prevention: serialize compact JSON, check UTF-8 bytes against the unchanged native bound before IPC, bound native-write waits, and persist a small failed status on rejection. Stop further large writes after the first failure.
+- Verification: compare compact and indented sizes, preserve ordered events, test multibyte input and hung writes, and inspect final native files after a sustained run.
+
+### Throwing from a Tauri Channel handler can stop later deliveries
+
+- Trigger: an xterm flood exceeds its pending write watermark and `Terminal.write` throws inside `Channel.onmessage`.
+- Failure: the installed Channel increments its sequence index after the handler returns, so an escaping exception prevents later messages from reaching the handler. A byte counter can stop far below the fixture length while animation frames continue.
+- Prevention: catch parser/write failures at the lab callback boundary, reject the measurement explicitly and close its sessions. Do not silently drop bytes or add an unreported pacing scheme.
+- Verification: exercise an actual write overflow with the installed packages and regress the orchestration path so the callback returns normally, the report fails and resources close.

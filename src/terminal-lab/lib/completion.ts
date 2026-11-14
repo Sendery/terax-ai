@@ -49,6 +49,9 @@ export class PayloadCompletion {
     if (this.drained) this.drawn = true;
     this.check();
   }
+  fail(error: unknown): void {
+    this.finish(error instanceof Error ? error : new Error(String(error)));
+  }
   dispose(): void {
     this.finish(new Error("xterm benchmark closed"));
   }
