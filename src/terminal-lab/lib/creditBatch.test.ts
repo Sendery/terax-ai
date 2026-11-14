@@ -235,3 +235,52 @@ it("separate window-local senders never mix queues or lifecycle", async () => {
   expect(second.send).toHaveBeenCalledExactlyOnceWith([{ id: 2, seq: 1 }]);
   expect(second.batch.snapshot().complete).toBe(true);
 });
+
+
+it("calls the default browser scheduler with its global receiver", async () => {
+  const tasks: (() => void)[] = [];
+  const send = vi.fn(async () => {});
+  vi.stubGlobal("queueMicrotask", function (this: unknown, task: () => void) {
+    if (this !== globalThis) throw new TypeError("invalid browser receiver");
+    tasks.push(task);
+  });
+  const batch = new LabCreditBatcher(send);
+  try {
+    const pending = batch.send(1, 1);
+    const settled = Promise.allSettled([pending]);
+    expect(tasks).toHaveLength(1);
+    tasks[0]();
+    expect((await settled)[0].status).toBe("fulfilled");
+    expect(send).toHaveBeenCalledWith([{ id: 1, seq: 1 }]);
+    expect(batch.snapshot()).toMatchObject({ complete: true, pending: 0 });
+  } finally {
+    batch.close();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("closes and clears pending work if scheduling throws, including a retained callback", async () => {
+  const failure = new Error("scheduler failed");
+  let late = () => {};
+  const send = vi.fn(async () => {});
+  const schedule = vi.fn((task: () => void) => {
+    late = task;
+    throw failure;
+  });
+  const batch = new LabCreditBatcher(send, schedule);
+  await expect(batch.send(1, 1)).rejects.toBe(failure);
+  expect(batch.snapshot()).toMatchObject({
+    complete: false,
+    pending: 0,
+    queued: 1,
+    failed: 1,
+    registered: 0,
+    invocations: 0,
+  });
+  late();
+  await expect(batch.send(2, 1)).rejects.toThrow("closed");
+  batch.close();
+  expect(schedule).toHaveBeenCalledTimes(1);
+  expect(send).not.toHaveBeenCalled();
+  expect(batch.snapshot()).toMatchObject({ failed: 1, rejected: 1, pending: 0 });
+});

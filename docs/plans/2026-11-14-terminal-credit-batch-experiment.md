@@ -131,3 +131,42 @@ target, SHA256 `662f87d1668d3f0032e943290d82aa74d534a9a133db66703e0c83084c7fe32b
 This artifact and any new optimized binary are preparation, not proof that
 WKWebView ran the candidate. No Actions, push, merge, production default or
 protected-original-Mac native build occurred in this step.
+
+
+## First graphical collection and scheduler correction
+
+The unlocked historical `014b72d` diagnostic completed twice with native exit
+0 and complete frame/profile accounting. ASCII repetition 2 had only 4.131 s
+of common activity and is not a valid sustained gate; it is retained rather
+than selectively repeated. This does not establish the cause of the earlier
+stalls. The `489be42` control completed two valid collections, still below
+60 minimum pane updates/s for every payload.
+
+Both first `489be42` candidate repetitions are invalid. Real WKWebView
+rejected the detached `Window.queueMicrotask` receiver, so no batch command
+was dispatched. The native engines parsed all bytes and sent initial/final
+frames, which is not evidence of continuous repainting. The runner correctly
+rejected the reports for explicit errors and incomplete batch/profile data.
+Do not use their zero FPS values as candidate performance results.
+
+The correction wraps the global scheduling method and closes/rejects pending
+work if scheduling throws, including a callback retained before the throw.
+Two new unit regressions were observed failing before the correction. This
+changes neither the registered workload nor the intended microtask policy.
+Preserve the old runs; rebuild one new optimized binary and repeat the whole
+A,A,B,B comparison from that source. No control result is spliced across
+binary versions. Native graphical confirmation is still required.
+
+
+Correction validation on M2: the focused credit batch suite passes 13 tests.
+`pnpm lint`, `pnpm check-types`, `pnpm test` (2305 passed, one existing skip),
+`pnpm build`, `pnpm --dir packages/pi-terax test` (101 passed), and
+`node --test scripts/*.node-test.mjs scripts/libghostty/*.node-test.mjs`
+all passed. Strict `cargo clippy --manifest-path src-tauri/Cargo.toml
+--all-targets --locked -- -D warnings` and `cargo test --manifest-path
+src-tauri/Cargo.toml --locked` passed both without the feature (588 unit,
+58 integration, one ignored) and through the verified prebuilt wrapper with
+`--features ghostty-engine` (629 unit, 58 integration, two ignored).
+`git diff --check` passed. Astra's independent final read found no blocker.
+These checks establish the correction's preparation; graphical validity and
+performance still require the new same-source comparison.

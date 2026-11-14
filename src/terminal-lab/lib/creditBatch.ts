@@ -24,7 +24,8 @@ export class LabCreditBatcher {
 
   constructor(
     private readonly invoke: (acks: CreditAck[]) => Promise<void>,
-    private readonly schedule: (task: () => void) => void = queueMicrotask,
+    private readonly schedule: (task: () => void) => void = (task) =>
+      globalThis.queueMicrotask(task),
     private readonly now: () => number = () => performance.now(),
   ) {}
 
@@ -70,7 +71,11 @@ export class LabCreditBatcher {
       this.maxPending = Math.max(this.maxPending, this.pending.size);
       if (!this.scheduled) {
         this.scheduled = true;
-        this.schedule(this.flush);
+        try {
+          this.schedule(this.flush);
+        } catch (error) {
+          this.stop(error instanceof Error ? error : new Error(String(error)));
+        }
       }
     });
   };
@@ -162,14 +167,19 @@ export class LabCreditBatcher {
     };
   }
 
-  close(): void {
+  private stop(error: Error): void {
     if (this.closed) return;
     this.closed = true;
+    this.scheduled = false;
     this.queue = [];
     for (const ack of this.pending) {
       this.failed += 1;
-      ack.reject(new Error("credit batcher closed"));
+      ack.reject(error);
     }
     this.pending.clear();
+  }
+
+  close(): void {
+    this.stop(new Error("credit batcher closed"));
   }
 }

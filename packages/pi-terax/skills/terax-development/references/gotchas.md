@@ -636,3 +636,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure:** a valid unlocked console is rejected as unknown, even while the root explicitly reports `IOConsoleLocked=false`.
 - **Prevention:** use the root's typed lock boolean for a valid active console when per-session evidence is absent. A true signal wins; absence alone or malformed evidence must never imply unlocked. Preserve UID/login/ambiguity checks.
 - **Verification:** cover actual missing-session-key/root-false output, root/session true conflicts, missing or malformed evidence and another user's console. Do not store account names, UUIDs or OS lock timestamps.
+
+
+### Browser scheduler methods retain their native receiver
+
+- **Trigger:** storing a browser scheduling method as a class property or passing it as a callback.
+- **Failure mode:** WebKit rejects a detached `Window.queueMicrotask` call when it is later invoked with the class instance as receiver. Node or an injected unbranded scheduler can pass while real WKWebView fails. A Promise executor converts a thrown schedule call to rejection without cleaning the application's pending queue.
+- **Prevention:** wrap native scheduling calls as `task => globalThis.queueMicrotask(task)`. If scheduling throws, invalidate the owner, clear and reject pending work, and suppress retained callbacks and new submissions.
+- **Verification:** construct the default scheduler under a branded global function that requires `this === globalThis`; test a scheduler that retains its callback before throwing, then exercise the actual WKWebView path. Invalid measurements stay invalid even if native parsing and exit complete.
