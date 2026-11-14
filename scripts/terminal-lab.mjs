@@ -1,10 +1,32 @@
 import { spawn, execFileSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, platform, release, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainModule } from "./cli-entrypoint.mjs";
 import { cleanupOwned, observeDescendants } from "./terminal-lab-cleanup.mjs";
+
+export function appendRunnerSample(path, sample) {
+  appendFileSync(path, JSON.stringify(sample) + "\n");
+}
+
+export function readRunArtifacts(folder) {
+  const read = (name) => {
+    const path = join(folder, name);
+    if (!existsSync(path)) return null;
+    try { return JSON.parse(readFileSync(path, "utf8")); }
+    catch (error) { return { errors: [`Invalid ${name}: ${String(error)}`], error: `Invalid ${name}` }; }
+  };
+  const reportExists = existsSync(join(folder, "report.json"));
+  const checkpointExists = existsSync(join(folder, "report.checkpoint.json"));
+  const failure = read("report.failure.json");
+  const reportSource = reportExists ? "final" : checkpointExists ? "checkpoint" : null;
+  let report = reportSource ? read(reportExists ? "report.json" : "report.checkpoint.json") : null;
+  if (failure) {
+    report = { ...report, errors: [...(Array.isArray(report?.errors) ? report.errors : []), failure.error ?? "Native lab failed"] };
+  }
+  return { reportExists, reportSource, failure, report };
+}
 
 export function parseProcesses(text) {
   return text.split("\n").flatMap((line) => {
@@ -77,6 +99,7 @@ export async function run(binary, output, mode, repetition, timeoutMs) {
   const started = Date.now();
   let timedOut = false;
   let timeoutReason = null;
+  let failureReason = null;
   let lastStatus = null;
   let lastProgress = started;
   const owned = new Map();
@@ -95,7 +118,13 @@ export async function run(binary, output, mode, repetition, timeoutMs) {
       }
       observeDescendants(all, owned);
       const attributed = attributedProcesses(all, child.pid, baselinePids);
-      samples.push({ at: new Date().toISOString(), elapsedMs: Date.now() - started, status, rssKiB: attributed.reduce((sum, p) => sum + p.rssKiB, 0), processes: attributed });
+      const sample = { at: new Date().toISOString(), elapsedMs: Date.now() - started, status, rssKiB: attributed.reduce((sum, p) => sum + p.rssKiB, 0), processes: attributed };
+      samples.push(sample);
+      appendRunnerSample(join(folder, "runner.samples.jsonl"), sample);
+      if (status?.status === "failed" || existsSync(join(folder, "report.failure.json"))) {
+        failureReason = status?.error ?? "Native lab failed; see report.failure.json";
+        break;
+      }
       const statusKey = JSON.stringify(status);
       if (statusKey !== lastStatus) { lastStatus = statusKey; lastProgress = Date.now(); }
       if (!status && Date.now() - started > 90_000) timeoutReason = "No webview startup status within 90 seconds";
@@ -122,12 +151,9 @@ export async function run(binary, output, mode, repetition, timeoutMs) {
   }
   const idle = samples.filter((sample) => isIdleSample(sample, child.pid));
   const rss = idle.map((sample) => sample.rssKiB).sort((a, b) => a - b);
-  const result = { mode, repetition, pid: child.pid, elapsedMs: Date.now() - started, timedOut, timeoutReason, outcome, cleanup, reportExists: existsSync(reportPath), rssMethod: "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.", idleSamples: idle.length, idleRssKiB: rss.length ? { min: rss[0], median: rss[Math.floor(rss.length / 2)], max: rss.at(-1) } : null, samples };
-  json(join(folder, "runner.json"), result);
-  if (result.reportExists) {
-    try { result.report = JSON.parse(readFileSync(reportPath, "utf8")); }
-    catch (error) { result.report = { errors: [`Invalid report: ${String(error)}`] }; }
-  }
+  const result = { mode, repetition, pid: child.pid, elapsedMs: Date.now() - started, timedOut, timeoutReason, failureReason, outcome, cleanup, ...readRunArtifacts(folder), rssMethod: "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.", idleSamples: idle.length, idleRssKiB: rss.length ? { min: rss[0], median: rss[Math.floor(rss.length / 2)], max: rss.at(-1) } : null, samples };
+  const { report: _report, ...runner } = result;
+  json(join(folder, "runner.json"), runner);
   return result;
 }
 
@@ -144,7 +170,7 @@ async function main() {
     for (const mode of ["bench", "idle-engine", "idle-xterm"]) {
       const result = await run(binary, output, mode, repetition, mode === "bench" ? 42 * 60_000 : 3 * 60_000);
       runs.push(result);
-      if (result.cleanup.errors.length || result.cleanup.survivors.length) break repetitions;
+      if (result.failure || result.failureReason || result.cleanup.errors.length || result.cleanup.survivors.length) break repetitions;
     }
   }
   json(join(output, "summary.json"), runs.map(({ samples, report, ...run }) => ({ ...run, errors: report?.errors ?? ["No webview report: GUI launch or rendering did not finish"], engineBenchRuns: report?.bench?.length ?? 0, xtermBenchRuns: report?.xtermBench?.length ?? 0, captures: report?.captures ?? null })));
@@ -153,7 +179,7 @@ async function main() {
 
 export function successfulRun(run) {
   const report = run.report;
-  if (run.timedOut || !run.reportExists || run.outcome?.code !== 0 || run.cleanup?.errors?.length || run.cleanup?.survivors?.length || !Array.isArray(report?.errors) || report.errors.length) return false;
+  if (run.failure || run.failureReason || run.timedOut || !run.reportExists || run.outcome?.code !== 0 || run.cleanup?.errors?.length || run.cleanup?.survivors?.length || !Array.isArray(report?.errors) || report.errors.length) return false;
   if (run.mode !== "bench") return run.idleSamples >= 10 && report.idle?.scrollbackVerified === true && report.idle.measuredScrollbackRows?.length === 12 && report.idle.measuredScrollbackRows.every((rows) => rows === 10_000);
   return report.bench?.length === 6 && report.xtermBench?.length === 6 && report.captures?.engine === true && report.captures?.xterm === true && [report.echo?.engine, report.echo?.xterm].every((echo) => echo?.count === 50 && echo.samples?.length === 50 && echo.timeouts === 0 && !echo.error);
 }

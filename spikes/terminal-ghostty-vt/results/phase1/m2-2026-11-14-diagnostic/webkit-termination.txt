@@ -1,0 +1,21 @@
+Source: macOS unified log, local machine time (UTC+01:00).
+Scope: Terax PID 62209, terminated WebContent PID 62364, replacement WebContent PID 86068.
+Filtered to memory accounting, termination, reload and replacement events; no other apps or URLs.
+
+2026-11-14 12:59:17.745 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] Current memory footprint: 8570 MB
+2026-11-14 12:59:17.747 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] Process is above the memory kill threshold. Trying to shrink down.
+2026-11-14 12:59:17.976 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] New memory footprint: 8245 MB
+2026-11-14 12:59:17.979 Df terax[62209:120ebf3] [com.apple.WebKit:Generic] WebContent[62364] Unable to shrink memory footprint of process (8245 MB) below the kill thresold (8192 MB). Killed
+2026-11-14 12:59:18.004 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] javascript_gc_heap_extra_memory_size_mb: 452
+2026-11-14 12:59:18.004 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] javascript_gc_heap_size_mb: 771
+2026-11-14 12:59:18.004 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] phys_footprint_mb: 8245
+2026-11-14 12:59:18.004 Df terax[62209:120ebf3] [com.apple.WebKit:MemoryPressure] WebContent[62364] resident_size_mb: 580
+2026-11-14 12:59:18.020 E  terax[62209:120ea02] [com.apple.WebKit:Process] 0x11e0bc680 - [PID=62364] WebProcessProxy::requestTermination: reason=ExceededMemoryLimit
+2026-11-14 12:59:18.028 E  terax[62209:120ea02] [com.apple.WebKit:Process] 0x11e0bc680 - [PID=62364] WebProcessProxy::processDidTerminateOrFailedToLaunch: reason=ExceededMemoryLimit
+2026-11-14 12:59:18.051 E  terax[62209:120ea02] [com.apple.WebKit:Process] 0x1031685c8 - [pageProxyID=8, webPageID=9, PID=62364] WebPageProxy::processDidTerminate: (pid 62364), reason=ExceededMemoryLimit
+2026-11-14 12:59:18.242 E  terax[62209:120ea02] [com.apple.WebKit:Loading] 0x1031685c8 - [pageProxyID=8, webPageID=9, PID=62364] WebPageProxy::dispatchProcessDidTerminate: reason=ExceededMemoryLimit
+2026-11-14 12:59:18.245 Df terax[62209:120ea02] [com.apple.WebKit:Loading] 0x1031685c8 - [pageProxyID=8, webPageID=9, PID=62364] WebPageProxy::reload:
+2026-11-14 12:59:18.245 Df terax[62209:120ea02] [com.apple.WebKit:Loading] 0x1031685c8 - [pageProxyID=8, webPageID=9, PID=62364] WebPageProxy::launchProcessForReload:
+2026-11-14 12:59:18.647 Df terax[62209:120ea02] [com.apple.WebKit:PerformanceLogging] WebContent[86068] Memory usage info dump at MainFrameLoadCompleted:
+2026-11-14 12:59:18.727 Df terax[62209:120ea02] [com.apple.WebKit:Process] 0x11e0bc0c0 - [PID=86068] WebProcessProxy::canTerminateAuxiliaryProcess: returns false (pageCount=1, remotePageCount=0, provisionalPageCount=0, suspendedPageCount=0, m_isInProcessCache=0, m_shutdownPreventingScopeCounter=0)
+2026-11-14 12:59:18.841 Df terax[62209:120ebf3] [com.apple.WebKit:PerformanceLogging] WebContent[86068]: Memory usage info dump at MainFrameLoadCompleted:

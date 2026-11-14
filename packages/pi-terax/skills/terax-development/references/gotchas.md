@@ -563,3 +563,10 @@ At the end of each implementation:
 8. Ensure no entry contains secrets, local identities, temporary paths, branch names, process IDs, or soon-stale results.
 
 A catalog update is complete when each candidate is promoted, merged, deferred with a reason, or discarded, and no two active entries prescribe conflicting actions for the same trigger.
+
+### WKWebView termination can silently restart an unattended benchmark
+
+- **Trigger:** a webview process terminates during an autorun, including memory-limit termination.
+- **Failure mode:** the runtime's default reload creates a fresh JavaScript world; refs reset and autorun repeats, overwriting status while a parent runner waits for apparent progress.
+- **Prevention:** keep bootstrap ownership and failure state in the native process, persist bounded checkpoints and sample streams, and reject a second bootstrap while preserving the first run's evidence.
+- **Verification:** duplicate-bootstrap tests must preserve checkpoints and fail the process; sample logs must survive a missing final report. Confirm actual termination reasons from system evidence instead of inferring them from RSS or a generic JavaScript error.

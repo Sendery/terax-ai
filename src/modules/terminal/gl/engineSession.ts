@@ -45,7 +45,7 @@ export type FrameEvent = {
 
 export type SessionObserver = {
   onFrame?: (event: FrameEvent) => void;
-  onDrawn?: (at: number) => void;
+  onDrawn?: (at: number, seq: number | null) => void;
   onCredit?: (seq: number, at: number) => void;
   onExit?: (code: number) => void;
   onError?: (error: unknown) => void;
@@ -119,6 +119,8 @@ export class EngineSession {
   private readonly exits = new Channel<number>();
   private readonly isBench: boolean;
   private awaitingDraw: number[] = [];
+  private latestAppliedSeq: number | null = null;
+  private lastDrawnSeq: number | null = null;
   private drawnUnsent: number[] = [];
   private fullRequested = false;
   private closed = false;
@@ -137,7 +139,7 @@ export class EngineSession {
     this.isBench = isBench;
     this.pane = renderer.addPane({
       onNeedFullFrame: () => this.requestFull(),
-      onDrawn: () => this.handleDrawn(),
+      onDrawn: (rendered) => this.handleDrawn(rendered),
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
     this.exits.onmessage = (code) => {
@@ -252,7 +254,12 @@ export class EngineSession {
     let applied = false;
     if (frame) {
       if (frame.full) this.fullRequested = false;
-      applied = this.renderer.applyFrame(this.pane, frame) === "applied";
+      try {
+        applied = this.renderer.applyFrame(this.pane, frame) === "applied";
+        if (applied) this.latestAppliedSeq = seq;
+      } catch (error) {
+        this.observer.onError?.(error);
+      }
     }
     this.awaitingDraw.push(seq);
     if (!applied) {
@@ -269,13 +276,18 @@ export class EngineSession {
     });
   }
 
-  private handleDrawn(): void {
+  private handleDrawn(rendered = true): void {
     const at = performance.now();
     if (this.awaitingDraw.length > 0) {
       for (const seq of this.awaitingDraw) this.drawnUnsent.push(seq);
       this.awaitingDraw = [];
     }
-    this.observer.onDrawn?.(at);
+    const seq =
+      rendered && this.latestAppliedSeq !== this.lastDrawnSeq
+        ? this.latestAppliedSeq
+        : null;
+    if (seq !== null) this.lastDrawnSeq = seq;
+    this.observer.onDrawn?.(at, seq);
     this.flushCredits();
   }
 

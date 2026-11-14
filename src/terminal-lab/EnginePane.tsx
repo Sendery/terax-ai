@@ -97,8 +97,8 @@ export function EnginePane({ font, colors, autorun, onTarget }: Props) {
       colors: colors.engine,
       observer: {
         onFrame: watchers.observer.onFrame,
-        onDrawn: (at) => {
-          watchers.observer.onDrawn?.(at);
+        onDrawn: (at, seq) => {
+          watchers.observer.onDrawn?.(at, seq);
           const pending = capture;
           capture = null;
           pending?.();

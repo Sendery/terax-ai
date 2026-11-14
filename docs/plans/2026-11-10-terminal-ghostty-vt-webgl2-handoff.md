@@ -341,3 +341,73 @@ optimized measurements and the 60 fps exit criterion still need a real lab
 run. Windows, the updated Linux policy and canonical release publication also
 remain pending. The full-migration handoff supplied later is context for the
 following phases; no merge or phase-advance criterion is implied by setup.
+
+### First native WKWebView diagnostic on M2, 2026-11-14
+
+The optimized lab-only sandbox built and launched in the real M2 graphical
+session. Use the same optimized dev-profile settings as the hosted command,
+plus `CARGO_PROFILE_DEV_STRIP=none`: without it, macOS failed to load
+`zerofrom_derive` with E0463. The existing release-profile proc-macro exception
+does not cover this optimized development profile. The successful build used
+`CARGO_TARGET_DIR=src-tauri/target/lab-optimized`, `OPT_LEVEL=3`, `DEBUG=false`,
+`DEBUG_ASSERTIONS=false`, `INCREMENTAL=false`, the production frontend and the
+same checksum-pinned ARM64 core. No source compilation or Actions were used.
+
+The first capture attempt exercised both Rust and WKWebView, but its fixture
+moved the cursor to the first row before returning to the shell prompt. Prompt
+cleanup erased the content below the marker in both engine and xterm images.
+The fixture now reserves the first row and saves/restores the final cursor
+around its readiness marker. The corrected pixels still require a new run.
+
+The initial benchmark did not finish. Unified-log evidence confirms that
+WebContent PID 62364 reached a footprint of 8570 MB, then 8245 MB after attempted
+shrinking, above its 8192 MB kill threshold. WebKit terminated it with
+`ExceededMemoryLimit` during xterm SGR x12 and Tauri's default handler reloaded
+the webview. A replacement process restarted the autorun. The precise memory
+allocation source is not yet established; RSS alone was much smaller and
+must not be interpreted as the footprint. The diagnostic runner and its
+verified descendants were explicitly stopped; cleanup reported no errors or
+survivors. Evidence is under
+`spikes/terminal-ghostty-vt/results/phase1/m2-2026-11-14-diagnostic/`.
+
+Corrections prepared from this run and Astra's independent review:
+
+- Native bootstrap state rejects a second autorun in the same process, records
+  a failure and exits, preserving checkpoints. Status sequence numbers prevent
+  late progress writes replacing newer state. Runner samples are flushed as
+  JSONL and a native failure stops further repetitions.
+- Every engine benchmark tracks received, drawn and credited sequences per
+  session, checks final Rust frame/byte counters and waits for the final draw.
+  Nonzero exit, decode/upload errors and context loss are recorded.
+- The common measurement interval starts 250 ms after every pane has drawn and
+  must last at least 5000 ms. Reports expose each pane's update rate and the
+  minimum; aggregate received frames divided by twelve is not the exit test.
+- Fixed 200x60 and twelve 100x30 grids are rasterized completely at the original
+  font cell size into a full backbuffer, then CSS-scaled for display. This
+  removes the old 224px-stage scissor reduction without reducing protocol or
+  raster work. Reports name both backbuffer and display dimensions. Idle
+  memory setup records its canvas dimensions too.
+- Empty or fully clipped panes cannot acknowledge a valid draw. Background
+  recovery after an invalid frame is distinguished from a new rendered
+  sequence. Constructor and benchmark failures release their contexts and
+  sessions.
+
+No frame-rate result from the first diagnostic is accepted. The 60 fps exit
+criterion remains unverified, and phases 2 through 5 remain gated. The next
+run must verify corrected captures, stable checkpoints and per-pane data;
+short fixed-payload runs are inconclusive, not a pass. A longer workload must
+preserve the generator and geometry, and must not reduce work to pass.
+
+Validation of the diagnostic corrections on M2: `pnpm lint`,
+`pnpm check-types`, `pnpm test` (2267 passed, one existing skip), `pnpm build`,
+`pnpm --dir packages/pi-terax test` (101 passed), and
+`node --test scripts/*.node-test.mjs scripts/libghostty/*.node-test.mjs`
+(34 passed) all completed successfully. Strict all-target clippy and
+`cargo test --locked` passed without the feature (581 unit plus 58 integration
+passed, one ignored) and through the pinned provisional wrapper with
+`--features ghostty-engine` (616 unit plus 58 integration passed, two ignored).
+Independent Astra review found no remaining blocker for the next native run.
+`successfulRun` checks complete collection, not the 60 fps gate: acceptance
+also requires twelve clean per-pane timelines, the common five-second window,
+complete final-frame checks, no timeout and no context loss. Draw events mark
+WebGL command submission, not physical display presentation.

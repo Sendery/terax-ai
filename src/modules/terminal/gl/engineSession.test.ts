@@ -123,6 +123,44 @@ beforeEach(() => {
 });
 
 describe("EngineSession credits", () => {
+  it("reports only the latest applied sequence as a new drawn update", async () => {
+    const renderer = new FakeRenderer();
+    const drawn: (number | null)[] = [];
+    const pending = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      observer: { onDrawn: (_at, seq) => drawn.push(seq) },
+    });
+    ipc.open?.resolve(9);
+    await pending;
+    channelOf(0).onmessage(frameBuffer(1));
+    channelOf(0).onmessage(frameBuffer(2));
+    renderer.drawFrame();
+    renderer.markUndrawn(renderer.panes[0].pane);
+    renderer.drawFrame();
+    expect(drawn).toEqual([2, null]);
+  });
+
+  it("reports upload failures and releases their credit after a display frame", async () => {
+    const renderer = new FakeRenderer();
+    const errors: unknown[] = [];
+    const pending = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      observer: { onError: (error) => errors.push(error) },
+    });
+    ipc.open?.resolve(9);
+    await pending;
+    vi.spyOn(renderer, "applyFrame").mockImplementationOnce(() => {
+      throw new Error("upload failed");
+    });
+    expect(() => channelOf(0).onmessage(frameBuffer(1))).not.toThrow();
+    expect(errors).toHaveLength(1);
+    expect(credits()).toHaveLength(0);
+    renderer.drawFrame();
+    expect(credits()).toHaveLength(1);
+  });
+
   it("returns a credit only after the frame has been drawn", async () => {
     const renderer = new FakeRenderer();
     await openSession(renderer);

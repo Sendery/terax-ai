@@ -43,17 +43,17 @@ describe("FrameWatchers", () => {
     const watchers = new FrameWatchers();
     const pending = watchers.waitForCell(2, 1, 97, 1000);
     const event = { seq: 1, bytes: 0, receivedAt: 0 };
-    watchers.observer.onDrawn?.(5);
+    watchers.observer.onDrawn?.(5, null);
     watchers.observer.onFrame?.({
       ...event,
       frame: frame([textRow(0, "zzz")]),
     });
-    watchers.observer.onDrawn?.(6);
+    watchers.observer.onDrawn?.(6, null);
     watchers.observer.onFrame?.({
       ...event,
       frame: frame([textRow(1, "$ a")]),
     });
-    watchers.observer.onDrawn?.(7);
+    watchers.observer.onDrawn?.(7, null);
     await expect(pending).resolves.toBe(7);
   });
 

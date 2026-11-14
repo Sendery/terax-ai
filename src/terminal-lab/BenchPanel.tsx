@@ -151,8 +151,8 @@ export function BenchPanel({
       </div>
       <p className="text-muted-foreground">
         {TIMER_NOTE} Bench runs use 200x60 for one session and 100x30 for
-        twelve, whatever the stage size; panes past the stage are clipped, not
-        skipped.
+        twelve. Every grid is rasterized at its original cell size; the complete
+        backbuffer is scaled into the stage for presentation.
       </p>
       <div
         ref={stageRef}

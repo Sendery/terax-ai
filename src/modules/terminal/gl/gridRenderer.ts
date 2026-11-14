@@ -36,7 +36,7 @@ export type PaneCallbacks = {
   /** The pane's glyphs or GPU state were rebuilt; its next frame must be full. */
   onNeedFullFrame: () => void;
   /** A display frame showing everything applied so far has been drawn. */
-  onDrawn: () => void;
+  onDrawn: (rendered?: boolean) => void;
 };
 
 export type GridRendererOptions = {
@@ -252,6 +252,7 @@ export class GridRenderer {
   private cursorFallback: number | undefined;
   private onMetricsChange: (() => void) | undefined;
   private panes: RenderPane[] = [];
+  private readonly drawnPanes = new Map<RenderPane, boolean>();
   private lost = false;
   private disposed = false;
   private rafId = 0;
@@ -286,8 +287,16 @@ export class GridRenderer {
     this.cursorFallback = options.cursorFallback;
     this.onMetricsChange = options.onMetricsChange;
     this.dpr = window.devicePixelRatio || 1;
-    this.atlas = new GlyphAtlas(this.atlasFont());
-    this.initGl();
+    let atlas: GlyphAtlas | null = null;
+    try {
+      atlas = new GlyphAtlas(this.atlasFont());
+      this.atlas = atlas;
+      this.initGl();
+    } catch (error) {
+      atlas?.release();
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      throw error;
+    }
     canvas.addEventListener("webglcontextlost", this.handleLost);
     canvas.addEventListener("webglcontextrestored", this.handleRestored);
     this.watchDevicePixelRatio();
@@ -412,14 +421,15 @@ export class GridRenderer {
     this.draw();
     this.stats.lastDrawMs = performance.now() - start;
     this.stats.draws += 1;
-    for (const pane of this.panes) {
+    for (const [pane, rendered] of this.drawnPanes) {
       if (!pane.undrawn) continue;
       pane.undrawn = false;
-      pane.callbacks.onDrawn();
+      pane.callbacks.onDrawn(rendered);
     }
   };
 
   private draw(): void {
+    this.drawnPanes.clear();
     const gl = this.gl;
     const u = this.uniforms;
     if (!u || !this.program) return;
@@ -456,20 +466,29 @@ export class GridRenderer {
     for (const pane of this.panes) {
       const grid = pane.grid;
       const header = pane.header;
-      if (!grid || !header || !pane.vao) continue;
       const x = Math.round(pane.rect.x * this.dpr);
       const top = Math.round(pane.rect.y * this.dpr);
       const w = Math.round(pane.rect.width * this.dpr);
       const h = Math.round(pane.rect.height * this.dpr);
-      if (w <= 0 || h <= 0) continue;
+      if (
+        w <= 0 ||
+        h <= 0 ||
+        x >= this.canvas.width ||
+        top >= height ||
+        x + w <= 0 ||
+        top + h <= 0
+      )
+        continue;
       gl.scissor(x, height - top - h, w, h);
       gl.clearColor(
-        channel(header.defaultBg, 0),
-        channel(header.defaultBg, 8),
-        channel(header.defaultBg, 16),
+        channel(header?.defaultBg ?? this.background, 0),
+        channel(header?.defaultBg ?? this.background, 8),
+        channel(header?.defaultBg ?? this.background, 16),
         1,
       );
       gl.clear(gl.COLOR_BUFFER_BIT);
+      this.drawnPanes.set(pane, false);
+      if (!grid || !header || !pane.vao) continue;
       const gridW = grid.cols * m.width;
       const gridH = grid.rows * m.height;
       gl.viewport(x, height - top - gridH, gridW, gridH);
@@ -478,6 +497,7 @@ export class GridRenderer {
       this.setCursorUniforms(u, pane, header, grid);
       gl.bindVertexArray(pane.vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, grid.cols * grid.rows);
+      this.drawnPanes.set(pane, true);
     }
     gl.bindVertexArray(null);
   }

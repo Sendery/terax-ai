@@ -1,0 +1,69 @@
+{
+  "platform": "darwin",
+  "osRelease": "27.0.0",
+  "architecture": "arm64",
+  "cpus": [
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    },
+    {
+      "model": "Apple M2",
+      "mhz": 2400
+    }
+  ],
+  "totalMemoryBytes": 8589934592,
+  "apple": {
+    "model": "Mac14,7",
+    "modelName": "MacBook Pro",
+    "chip": "Apple M2",
+    "memory": "8 GB",
+    "graphics": [
+      {
+        "name": "Apple M2",
+        "chipset": "Apple M2",
+        "vendor": "sppci_vendor_Apple",
+        "displays": [
+          {
+            "name": "Color LCD",
+            "resolution": "1440 x 900 @ 60.00Hz"
+          }
+        ]
+      }
+    ]
+  },
+  "commit": "9060542fdc0b4c2515da4a27a807a5cbaabf62cc",
+  "build": {
+    "frontend": "pnpm build (Vite production)",
+    "rust": "dev profile, opt-level=3, debug=false, debug-assertions=false",
+    "terminalCore": "checksum-pinned prebuilt ReleaseFast, no source fallback",
+    "terminalCoreSource": "provisional Linux-cross archive, native ARM64 smoke validated on M2; canonical publication pending",
+    "terminalCoreSha256": "fd8ca44691ced7b1fa368666fb5546ba8bf4318b717b356ea0a36a2aada49fe0",
+    "sandboxIdentifier": "app.crynta.terax.sandbox",
+    "mainWindowCreated": false
+  }
+}

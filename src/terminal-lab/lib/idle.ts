@@ -1,3 +1,4 @@
+import { benchGeometry } from "@/terminal-lab/lib/benchGeometry";
 import { EngineSession, labStatus } from "@/modules/terminal/gl/engineSession";
 import {
   GridRenderer,
@@ -33,14 +34,16 @@ export async function runIdle(
   try {
     if (config.mode === "idle-engine") {
       const canvas = document.createElement("canvas");
+      canvas.style.cssText =
+        "position:absolute;inset:0;width:100%;height:100%;";
       stage.appendChild(canvas);
       renderer = new GridRenderer(canvas, {
         font,
         background: colors.background,
         cursorFallback: colors.cursor,
       });
-      const box = stage.getBoundingClientRect();
-      renderer.resize(box.width, box.height);
+      const layout = benchGeometry(cols, rows, config.count, renderer.cellSize);
+      renderer.resize(layout.width, layout.height);
       for (let i = 0; i < config.count; i++) {
         const watchers = new FrameWatchers();
         const session = await EngineSession.open(renderer, {
@@ -50,12 +53,7 @@ export async function runIdle(
           observer: watchers.observer,
         });
         sessions.push(session);
-        renderer.setPaneRect(session.pane, {
-          x: ((i % 4) * box.width) / 4,
-          y: (Math.floor(i / 4) * box.height) / Math.ceil(config.count / 4),
-          width: box.width / 4,
-          height: box.height / Math.ceil(config.count / 4),
-        });
+        renderer.setPaneRect(session.pane, layout.panes[i]);
         const drawn = watchers.waitForCell(0, 0, 84, 30_000).then((at) => {
           if (at === null)
             throw new Error(`idle engine ${i} did not draw readiness marker`);
@@ -126,6 +124,10 @@ export async function runIdle(
       sessionIds: sessions.map((s) => s.id),
       engineScrollbackLines,
       xtermScrollbackLines,
+      canvasBackings: [...stage.querySelectorAll("canvas")].map((canvas) => ({
+        width: canvas.width,
+        height: canvas.height,
+      })),
     };
     await labStatus({ ...status, status: "idle-ready" });
     await sleep(config.holdMs);

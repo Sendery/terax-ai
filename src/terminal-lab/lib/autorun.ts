@@ -13,13 +13,14 @@ export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+// Reserve the marker row; restore the end cursor so prompt cleanup preserves the fixture.
 // Only a disposable autorun shell receives these commands. Escape Unicode in source.
 export const SCRIPTED_SESSION =
-  "printf '\\033[2J\\033[H'; ls -la; " +
+  "printf '\\033[2J\\033[2;1H'; ls -la; " +
   "printf '\\033[31mred \\033[32mgreen \\033[34mblue\\033[0m\\n" +
   "wide: \u4e2d\u6587 \u65e5\u672c\u8a9e  emoji: \u{1f680}\\n" +
   "\\033[1mbold\\033[0m \\033[4munderline\\033[0m\\n'; " +
-  "printf '\\033[1;1HTERAX_LAB_READY';\r";
+  "printf '\\0337\\033[1;1HTERAX_LAB_READY\\0338';\r";
 
 export function idleCommand(rows: number): string {
   const lines = IDLE_LINES + rows - 1;

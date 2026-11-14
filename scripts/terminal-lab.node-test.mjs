@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attributedProcesses, isIdleSample, parseProcesses, successfulRun } from "./terminal-lab.mjs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { attributedProcesses, isIdleSample, parseProcesses, successfulRun, appendRunnerSample, readRunArtifacts } from "./terminal-lab.mjs";
 
 test("RSS names exact processes, includes descendants and new WebKit, excludes baseline helpers", () => {
   const all = parseProcesses(" 10 1 200 /tmp/terax\n11 10 30 /bin/bash\n12 11 10 /bin/cat\n20 1 300 /System/com.apple.WebKit.WebContent\n21 1 50 /System/com.apple.WebKit.GPU\n30 1 80 /bin/other\n");
@@ -29,4 +32,37 @@ test("successful runs require both complete echo measurements and successful cle
   assert.equal(successfulRun({ ...run, report: { ...run.report, echo: { engine: { count: 0, samples: [], timeouts: 50 }, xterm: echo } } }), false);
   assert.equal(successfulRun({ ...run, report: {} }), false);
   assert.equal(successfulRun({ ...run, cleanup: { errors: [], survivors: [{ pid: 1 }] } }), false);
+});
+
+
+test("runner persists each sample before a native or runner crash", () => {
+  const dir = mkdtempSync(join(tmpdir(), "terax-lab-samples-"));
+  try {
+    const path = join(dir, "runner.samples.jsonl");
+    appendRunnerSample(path, { at: "first", rssKiB: 100 });
+    appendRunnerSample(path, { at: "second", rssKiB: 200 });
+    assert.deepEqual(readFileSync(path, "utf8").trim().split("\n").map(JSON.parse), [
+      { at: "first", rssKiB: 100 }, { at: "second", rssKiB: 200 },
+    ]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("native failure retains partial measurements and can never pass as a final report", () => {
+  const dir = mkdtempSync(join(tmpdir(), "terax-lab-checkpoint-"));
+  try {
+    const checkpoint = { bench: [{ frames: 123 }], errors: [] };
+    writeFileSync(join(dir, "report.checkpoint.json"), JSON.stringify(checkpoint));
+    writeFileSync(join(dir, "report.failure.json"), JSON.stringify({ status: "failed", reason: "webview-restarted", error: "WebContent restarted" }));
+    const result = readRunArtifacts(dir);
+    assert.equal(result.reportExists, false);
+    assert.equal(result.reportSource, "checkpoint");
+    assert.equal(result.failure.reason, "webview-restarted");
+    assert.deepEqual(result.report.bench, checkpoint.bench);
+    assert.deepEqual(result.report.errors, ["WebContent restarted"]);
+    assert.equal(successfulRun({ ...result, outcome: { code: 0 }, cleanup: {} }), false);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "report.checkpoint.json"), "utf8")), checkpoint);
+    writeFileSync(join(dir, "report.json"), JSON.stringify({ errors: [], bench: ["final"] }));
+    assert.deepEqual(readRunArtifacts(dir).report.bench, ["final"]);
+    assert.deepEqual(readRunArtifacts(dir).report.errors, ["WebContent restarted"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -3,6 +3,85 @@ use std::path::{Path, PathBuf};
 
 pub const MAX_CAPTURE_BYTES: usize = 400_000;
 
+pub struct RunState {
+    started: bool,
+    failed: bool,
+    sequence: Option<u64>,
+}
+
+impl RunState {
+    pub const fn new() -> Self {
+        Self {
+            started: false,
+            failed: false,
+            sequence: None,
+        }
+    }
+
+    pub fn claim(&mut self, report: &Path) -> Result<(), String> {
+        if !self.started {
+            self.started = true;
+            return Ok(());
+        }
+        self.failed = true;
+        let error = "webview-restarted: autorun bootstrapped more than once in this process";
+        let failure = serde_json::json!({
+            "status": "failed", "reason": "webview-restarted", "error": error,
+            "pid": std::process::id(),
+        })
+        .to_string();
+        super::lab::write_report(&report.with_extension("failure.json"), &failure)?;
+        super::lab::write_report(&report.with_extension("status.json"), &failure)?;
+        Err(error.into())
+    }
+
+    fn ensure_active(&self) -> Result<(), String> {
+        if !self.started || self.failed {
+            return Err("autorun is not active or already failed".into());
+        }
+        Ok(())
+    }
+
+    pub fn write_report(&self, report: &Path, json: &str) -> Result<(), String> {
+        self.ensure_active()?;
+        super::lab::write_report(report, json)
+    }
+
+    pub fn write_status(&mut self, report: &Path, json: &str) -> Result<(), String> {
+        self.ensure_active()?;
+        if json.len() > super::lab::MAX_REPORT_BYTES {
+            return Err("status and checkpoint exceed the report byte limit".into());
+        }
+        let mut status: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let object = status.as_object_mut().ok_or("status must be an object")?;
+        let sequence = object
+            .get("sequence")
+            .map(|value| value.as_u64().ok_or("invalid status sequence"))
+            .transpose()?;
+        if sequence
+            .zip(self.sequence)
+            .is_some_and(|(next, previous)| next <= previous)
+        {
+            return Ok(());
+        }
+        if let Some(checkpoint) = object.remove("checkpoint") {
+            if !checkpoint.is_object() {
+                return Err("checkpoint must be an object".into());
+            }
+            super::lab::write_report(
+                &report.with_extension("checkpoint.json"),
+                &checkpoint.to_string(),
+            )?;
+        }
+        super::lab::write_report(&report.with_extension("status.json"), &status.to_string())?;
+        if let Some(sequence) = sequence {
+            self.sequence = Some(sequence);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -94,6 +173,89 @@ pub fn write_fixture(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reloaded_autorun_fails_and_preserves_the_last_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = dir.path().join("report.json");
+        let mut run = RunState::new();
+        run.claim(&report).unwrap();
+        run.write_status(&report, r#"{"status":"running","sequence":1,"checkpoint":{"bench":[{"frames":12}],"errors":[]}}"#).unwrap();
+        let before = std::fs::read(report.with_extension("checkpoint.json")).unwrap();
+        assert!(run
+            .claim(&report)
+            .unwrap_err()
+            .contains("webview-restarted"));
+        assert!(run
+            .write_status(&report, r#"{"status":"starting","checkpoint":{}}"#)
+            .is_err());
+        assert!(run.write_report(&report, r#"{"errors":[]}"#).is_err());
+        assert_eq!(
+            std::fs::read(report.with_extension("checkpoint.json")).unwrap(),
+            before
+        );
+        assert!(!report.exists());
+        let failure: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report.with_extension("failure.json")).unwrap())
+                .unwrap();
+        assert_eq!(failure["reason"], "webview-restarted");
+        let status: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report.with_extension("status.json")).unwrap())
+                .unwrap();
+        assert_eq!(status["status"], "failed");
+    }
+
+    #[test]
+    fn checkpoints_use_a_fixed_path_and_stale_progress_cannot_replace_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = dir.path().join("report.json");
+        let mut run = RunState::new();
+        run.claim(&report).unwrap();
+        run.write_status(
+            &report,
+            r#"{"status":"running","step":"second","sequence":2,"checkpoint":{"bench":[2]}}"#,
+        )
+        .unwrap();
+        run.write_status(
+            &report,
+            r#"{"status":"running","step":"first","sequence":1,"checkpoint":{"bench":[1]}}"#,
+        )
+        .unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(report.with_extension("checkpoint.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(saved["bench"], serde_json::json!([2]));
+        let status: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report.with_extension("status.json")).unwrap())
+                .unwrap();
+        assert_eq!(status["step"], "second");
+        assert!(status.get("checkpoint").is_none());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn invalid_and_oversized_status_cannot_replace_a_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = dir.path().join("report.json");
+        let mut run = RunState::new();
+        run.claim(&report).unwrap();
+        run.write_status(&report, r#"{"status":"running","checkpoint":{"ok":true}}"#)
+            .unwrap();
+        let before = std::fs::read(report.with_extension("checkpoint.json")).unwrap();
+        for invalid in [
+            "invalid".to_owned(),
+            "[]".to_owned(),
+            r#"{"checkpoint":[]}"#.to_owned(),
+            format!("{{\"padding\":\"{}\"}}", "x".repeat(16 * 1024 * 1024)),
+        ] {
+            assert!(run.write_status(&report, &invalid).is_err());
+        }
+        assert_eq!(
+            std::fs::read(report.with_extension("checkpoint.json")).unwrap(),
+            before
+        );
+    }
 
     #[test]
     fn automation_requires_lab_sandbox_and_absolute_result() {

@@ -82,6 +82,8 @@ export function TerminalLabApp() {
   const stageRef = useRef<HTMLDivElement>(null);
   const liveReport = useRef<LabReport | null>(null);
   const isAutorun = useRef(false);
+  const progressSequence = useRef(0);
+  const pendingStatus = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     latest.current = { font, colors };
@@ -92,12 +94,21 @@ export function TerminalLabApp() {
     step.current = label;
     setReport({ ...current });
     setStepLabel(label);
-    if (isAutorun.current)
-      void labStatus({
+    if (isAutorun.current) {
+      const saved = labStatus({
         status: "running",
         step: label,
         at: new Date().toISOString(),
-      }).catch((error) => console.error("lab status failed", error));
+        sequence: ++progressSequence.current,
+        checkpoint: current,
+      }).catch((error) => {
+        current.errors.push(`checkpoint ${label}: ${String(error)}`);
+        console.error("lab status failed", error);
+      });
+      pendingStatus.current = Promise.all([pendingStatus.current, saved]).then(
+        () => {},
+      );
+    }
   }, []);
 
   const runEverything = useCallback(
@@ -237,6 +248,7 @@ export function TerminalLabApp() {
         );
       } finally {
         clearTimeout(watchdog);
+        await pendingStatus.current;
         result.finishedAt ??= new Date().toISOString();
         await submitLabReport(JSON.stringify(result, null, 2)).catch((error) =>
           console.error("terminal lab report failed:", error),

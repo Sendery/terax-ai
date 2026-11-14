@@ -1,0 +1,95 @@
+{
+  "reason": "Repeated WKWebView termination ExceededMemoryLimit; diagnostic only, no accepted measurements",
+  "cleanup": {
+    "initial": [
+      {
+        "pid": 62130,
+        "ppid": 62128,
+        "rssKiB": 25552,
+        "command": "node",
+        "pgid": 62128,
+        "birth": "1794657345:319614"
+      },
+      {
+        "pid": 62209,
+        "ppid": 62130,
+        "rssKiB": 42320,
+        "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+        "pgid": 62209,
+        "birth": "1794657345:990797"
+      },
+      {
+        "pid": 62504,
+        "ppid": 62209,
+        "rssKiB": 736,
+        "command": "/bin/zsh",
+        "pgid": 62504,
+        "birth": "1794657348:542727"
+      },
+      {
+        "pid": 62545,
+        "ppid": 62209,
+        "rssKiB": 736,
+        "command": "/bin/zsh",
+        "pgid": 62545,
+        "birth": "1794657348:850365"
+      },
+      {
+        "pid": 86176,
+        "ppid": 62209,
+        "rssKiB": 784,
+        "command": "/bin/zsh",
+        "pgid": 86176,
+        "birth": "1794657559:100425"
+      },
+      {
+        "pid": 86177,
+        "ppid": 62209,
+        "rssKiB": 784,
+        "command": "/bin/zsh",
+        "pgid": 86177,
+        "birth": "1794657559:117311"
+      }
+    ],
+    "sent": [
+      {
+        "pid": 86177,
+        "birth": "1794657559:117311",
+        "command": "/bin/zsh",
+        "signal": "SIGTERM"
+      },
+      {
+        "pid": 86176,
+        "birth": "1794657559:100425",
+        "command": "/bin/zsh",
+        "signal": "SIGTERM"
+      },
+      {
+        "pid": 62545,
+        "birth": "1794657348:850365",
+        "command": "/bin/zsh",
+        "signal": "SIGTERM"
+      },
+      {
+        "pid": 62504,
+        "birth": "1794657348:542727",
+        "command": "/bin/zsh",
+        "signal": "SIGTERM"
+      },
+      {
+        "pid": 62209,
+        "birth": "1794657345:990797",
+        "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+        "signal": "SIGTERM"
+      },
+      {
+        "pid": 62130,
+        "birth": "1794657345:319614",
+        "command": "node",
+        "signal": "SIGTERM"
+      }
+    ],
+    "errors": [],
+    "survivors": []
+  }
+}

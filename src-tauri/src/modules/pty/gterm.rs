@@ -19,6 +19,10 @@ pub const AUTORUN_ENV: &str = "TERAX_TERMINAL_LAB_AUTORUN";
 mod automation;
 
 #[cfg(feature = "ghostty-engine")]
+static AUTORUN: std::sync::Mutex<automation::RunState> =
+    std::sync::Mutex::new(automation::RunState::new());
+
+#[cfg(feature = "ghostty-engine")]
 fn autorun_for(window: &tauri::WebviewWindow) -> Result<std::path::PathBuf, String> {
     automation::authorize(
         window.label(),
@@ -165,17 +169,34 @@ pub fn gterm_bench_stats(state: State<'_, PtyState>, id: u32) -> Result<Stats, S
 }
 
 #[tauri::command]
-pub fn gterm_lab_autorun(window: tauri::WebviewWindow) -> Result<Option<String>, String> {
+pub fn gterm_lab_autorun(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, PtyState>,
+) -> Result<Option<String>, String> {
     #[cfg(feature = "ghostty-engine")]
     {
         if std::env::var_os(AUTORUN_ENV).is_none() {
             return Ok(None);
         }
-        autorun_for(&window).map(|p| Some(p.to_string_lossy().into_owned()))
+        let path = autorun_for(&window)?;
+        let claimed = AUTORUN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .claim(&path);
+        if let Err(error) = claimed {
+            log::error!("terminal lab bootstrap failed: {error}");
+            if let Err(close_error) = super::pty_close_all(state) {
+                log::error!("terminal lab cleanup failed: {close_error}");
+            }
+            app.exit(1);
+            return Err(error);
+        }
+        Ok(Some(path.to_string_lossy().into_owned()))
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
-        let _ = window;
+        let _ = (app, window, state);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -192,7 +213,10 @@ pub fn gterm_lab_report(
     #[cfg(feature = "ghostty-engine")]
     {
         let path = autorun_for(&window)?;
-        lab::write_report(&path, &json)?;
+        AUTORUN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .write_report(&path, &json)?;
         super::pty_close_all(state)?;
         log::info!("terminal lab report written to {}; exiting", path.display());
         app.exit(0);
@@ -228,7 +252,11 @@ pub fn gterm_lab_config(window: tauri::WebviewWindow) -> Result<serde_json::Valu
 pub fn gterm_lab_status(window: tauri::WebviewWindow, json: String) -> Result<(), String> {
     #[cfg(feature = "ghostty-engine")]
     {
-        lab::write_report(&autorun_for(&window)?.with_extension("status.json"), &json)
+        let path = autorun_for(&window)?;
+        AUTORUN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .write_status(&path, &json)
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
@@ -495,7 +523,7 @@ mod lab {
     use std::io::Write;
     use std::path::{Path, PathBuf};
 
-    const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
+    pub(super) const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
 
     pub fn autorun_path(value: Option<OsString>) -> Option<PathBuf> {
         let path = PathBuf::from(value?);
