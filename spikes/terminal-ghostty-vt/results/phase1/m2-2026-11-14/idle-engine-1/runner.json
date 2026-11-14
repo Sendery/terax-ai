@@ -1,0 +1,6333 @@
+{
+  "mode": "idle-engine",
+  "repetition": 1,
+  "pid": 5276,
+  "elapsedMs": 34680,
+  "timedOut": false,
+  "timeoutReason": null,
+  "failureReason": null,
+  "outcome": {
+    "code": 0,
+    "signal": null
+  },
+  "cleanup": {
+    "initial": [
+      {
+        "pid": 5276,
+        "ppid": 5232,
+        "rssKiB": 220176,
+        "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+        "pgid": 5276,
+        "birth": "1794661207:683278"
+      },
+      {
+        "pid": 5524,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5524,
+        "birth": "1794661209:758140"
+      },
+      {
+        "pid": 5531,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5531,
+        "birth": "1794661209:772405"
+      },
+      {
+        "pid": 5533,
+        "ppid": 5276,
+        "rssKiB": 3568,
+        "command": "/bin/zsh",
+        "pgid": 5533,
+        "birth": "1794661209:777601"
+      },
+      {
+        "pid": 5539,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5539,
+        "birth": "1794661209:797433"
+      },
+      {
+        "pid": 5546,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5546,
+        "birth": "1794661209:806068"
+      },
+      {
+        "pid": 5553,
+        "ppid": 5276,
+        "rssKiB": 3568,
+        "command": "/bin/zsh",
+        "pgid": 5553,
+        "birth": "1794661209:813852"
+      },
+      {
+        "pid": 5556,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5556,
+        "birth": "1794661209:823026"
+      },
+      {
+        "pid": 5568,
+        "ppid": 5276,
+        "rssKiB": 3600,
+        "command": "/bin/zsh",
+        "pgid": 5568,
+        "birth": "1794661209:844423"
+      },
+      {
+        "pid": 5572,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5572,
+        "birth": "1794661209:855601"
+      },
+      {
+        "pid": 5598,
+        "ppid": 5276,
+        "rssKiB": 3584,
+        "command": "/bin/zsh",
+        "pgid": 5598,
+        "birth": "1794661209:897904"
+      },
+      {
+        "pid": 5604,
+        "ppid": 5276,
+        "rssKiB": 3568,
+        "command": "/bin/zsh",
+        "pgid": 5604,
+        "birth": "1794661209:908463"
+      },
+      {
+        "pid": 5618,
+        "ppid": 5276,
+        "rssKiB": 3600,
+        "command": "/bin/zsh",
+        "pgid": 5618,
+        "birth": "1794661209:942220"
+      }
+    ],
+    "sent": [],
+    "errors": [],
+    "survivors": []
+  },
+  "reportExists": true,
+  "reportSource": "final",
+  "failure": null,
+  "rssMethod": "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.",
+  "idleSamples": 25,
+  "idleRssKiB": {
+    "min": 394688,
+    "median": 394816,
+    "max": 395408
+  },
+  "samples": [
+    {
+      "at": "2026-11-14T13:00:07.733Z",
+      "elapsedMs": 49,
+      "status": null,
+      "rssKiB": 384,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 384,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:08.806Z",
+      "elapsedMs": 1122,
+      "status": {
+        "at": "2026-11-14T13:00:08.116Z",
+        "mode": "idle-engine",
+        "status": "starting"
+      },
+      "rssKiB": 227008,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 112480,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 27456,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 72624,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14448,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:09.910Z",
+      "elapsedMs": 2226,
+      "status": {
+        "at": "2026-11-14T13:00:09.725Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "idle-engine"
+      },
+      "rssKiB": 254864,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 115888,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 31888,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 77280,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3504,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3520,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3504,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 2848,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 2000,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:10.996Z",
+      "elapsedMs": 3312,
+      "status": {
+        "at": "2026-11-14T13:00:09.725Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "idle-engine"
+      },
+      "rssKiB": 395792,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220576,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34752,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 83024,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14448,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:12.082Z",
+      "elapsedMs": 4398,
+      "status": {
+        "at": "2026-11-14T13:00:09.725Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "idle-engine"
+      },
+      "rssKiB": 395792,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220576,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34752,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 83024,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14448,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:13.167Z",
+      "elapsedMs": 5483,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395648,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220432,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34752,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 83040,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:14.254Z",
+      "elapsedMs": 6570,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395408,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220336,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34608,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 83040,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:15.335Z",
+      "elapsedMs": 7651,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395392,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220336,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34592,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 83040,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:16.421Z",
+      "elapsedMs": 8737,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395216,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220256,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34592,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82944,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:17.495Z",
+      "elapsedMs": 9811,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395104,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220256,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34480,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82944,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:18.580Z",
+      "elapsedMs": 10896,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 395008,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220256,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34480,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82912,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:19.655Z",
+      "elapsedMs": 11971,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394992,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220256,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34480,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82896,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:20.735Z",
+      "elapsedMs": 13051,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394848,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34480,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:21.820Z",
+      "elapsedMs": 14136,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394848,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34480,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:22.903Z",
+      "elapsedMs": 15219,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394832,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:23.984Z",
+      "elapsedMs": 16300,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394832,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14368,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:25.067Z",
+      "elapsedMs": 17383,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394816,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:26.141Z",
+      "elapsedMs": 18457,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394816,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:27.228Z",
+      "elapsedMs": 19544,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394816,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:28.311Z",
+      "elapsedMs": 20627,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394816,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:29.376Z",
+      "elapsedMs": 21692,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394816,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82848,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:30.461Z",
+      "elapsedMs": 22777,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:31.544Z",
+      "elapsedMs": 23860,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:32.632Z",
+      "elapsedMs": 24948,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:33.708Z",
+      "elapsedMs": 26024,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394688,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:34.789Z",
+      "elapsedMs": 27105,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394688,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:35.864Z",
+      "elapsedMs": 28180,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394688,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:36.950Z",
+      "elapsedMs": 29266,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394688,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:38.035Z",
+      "elapsedMs": 30351,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:39.116Z",
+      "elapsedMs": 31432,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:40.198Z",
+      "elapsedMs": 32514,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394720,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220176,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82736,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T13:00:41.283Z",
+      "elapsedMs": 33599,
+      "status": {
+        "canvasBackings": [
+          {
+            "height": 3330,
+            "width": 6800
+          }
+        ],
+        "cols": 100,
+        "engineScrollbackLines": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "expectedScrollbackLines": 10000,
+        "holdMs": 30000,
+        "measuredScrollbackRows": [
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000,
+          10000
+        ],
+        "mode": "idle-engine",
+        "readyAt": "2026-11-14T13:00:12.201Z",
+        "rows": 30,
+        "scrollbackVerified": true,
+        "sessionIds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "sessions": 12,
+        "startedAt": "2026-11-14T13:00:09.728Z",
+        "status": "idle-ready",
+        "xtermScrollbackLines": []
+      },
+      "rssKiB": 394704,
+      "processes": [
+        {
+          "pid": 5276,
+          "ppid": 5232,
+          "rssKiB": 220176,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 5276,
+          "birth": "1794661207:683278",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5301,
+          "ppid": 1,
+          "rssKiB": 34464,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 5301,
+          "birth": "1794661207:845749",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5306,
+          "ppid": 1,
+          "rssKiB": 82720,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 5306,
+          "birth": "1794661207:859644",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5318,
+          "ppid": 1,
+          "rssKiB": 14352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 5318,
+          "birth": "1794661207:890171",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 5524,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5524,
+          "birth": "1794661209:758140",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5531,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5531,
+          "birth": "1794661209:772405",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5533,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5533,
+          "birth": "1794661209:777601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5539,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5539,
+          "birth": "1794661209:797433",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5546,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5546,
+          "birth": "1794661209:806068",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5553,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5553,
+          "birth": "1794661209:813852",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5556,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5556,
+          "birth": "1794661209:823026",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5568,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5568,
+          "birth": "1794661209:844423",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5572,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5572,
+          "birth": "1794661209:855601",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5598,
+          "ppid": 5276,
+          "rssKiB": 3584,
+          "command": "/bin/zsh",
+          "pgid": 5598,
+          "birth": "1794661209:897904",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5604,
+          "ppid": 5276,
+          "rssKiB": 3568,
+          "command": "/bin/zsh",
+          "pgid": 5604,
+          "birth": "1794661209:908463",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 5618,
+          "ppid": 5276,
+          "rssKiB": 3600,
+          "command": "/bin/zsh",
+          "pgid": 5618,
+          "birth": "1794661209:942220",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    }
+  ]
+}

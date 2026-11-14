@@ -60,33 +60,73 @@ The WebGL2 renderer spends 0.6 ms of main-thread time per display frame to updat
 
 ## Phase 1 results (sandbox)
 
-Development and static-core verification ran on Linux x86_64, Debian 13, Rust 1.99.1, Node 24.22.1 and pnpm 11.25.0. The frontend production bundle builds. Rust clippy and tests pass with and without the engine feature; the feature uses a checksum-verified static core built with Zig 0.15.2, ReleaseFast and baseline CPU. The Rust application tests themselves use the normal unoptimized development profile, so their durations are not terminal-performance measurements.
+### M2 native WKWebView, 2026-11-14
 
-The graphical run is blocked: Xvfb cannot create its local display sockets in this execution environment, including with the supported execution approval. No graphical sandbox, shell-pane capture, IPC benchmark, echo measurement or resident-memory measurement has been reported as completed. No security setting was changed to get around this restriction. No build or link test ran on the original Mac.
+**Phase 1 exit criterion: no.** The current native Channel path does not
+sustain 60 drawn updates per second in every one of twelve continuously
+repainting panes. Two clean sustained runs at `4e8694a` produced:
 
-| Required measurement | Linux WebKitGTK | macOS WKWebView |
-|---|---|---|
-| Channel FPS and bytes/s, 1 and 12 panes, ascii/sgr/tui | Not measured | Pending |
-| rAF intervals p50/p95/max | Not measured | Pending |
-| Credit round trip p50/p95 | Not measured | Pending |
-| Engine and xterm key echo p50/p95 | Not measured | Pending |
-| 12 idle terminal RSS, named processes | Not measured | Pending |
-| xterm flood comparison and repeated-run spread | Not measured | Pending |
+| Payload | Slowest pane updates/s, runs 1 / 2 | Common interval s, runs 1 / 2 | Meets 60 |
+|---|---:|---:|---|
+| ascii | 35.62 / 38.66 | 8.030 / 7.915 | No |
+| sgr | 49.80 / 50.64 | 35.258 / 35.503 | No |
+| tui | 53.17 / 52.41 | 26.990 / 27.229 | No |
 
-**Phase 1 exit criterion: not verified.** There is no evidence yet to answer yes to 60 fps with 12 continuously repainting panes over the real Channel. Successful native parsing/linking and unit tests do not establish this. The macOS measurement gate remains open; no later phase is approved by these results.
+Each run used the existing generator, twelve 100x30 grids, 1024 MiB per session,
+full native-font rasterization into a 6800x3330 backbuffer at DPR 2, 250 ms warmup
+and a minimum 5 s common interval. The production frontend and optimized Rust
+dev profile ran with the verified provisional ARM64 static core on the M2.
+Both apps and the runner exited 0; all final receive/draw checks completed,
+with no decode errors, context loss, timeout or cleanup survivor. Runner
+success means complete data collection, not an FPS pass. Draws represent
+WebGL command submission rather than physical display presentation.
 
-For meaningful follow-up measurements, use the production frontend and optimized Rust without changing default development settings:
+[Raw reports, full timing/throughput tables, build commands and WASM evaluation](../../spikes/terminal-ghostty-vt/results/phase1/m2-2026-11-14/README.md)
+include hardware/provenance, checksums, per-pane events, named-process samples
+and observed spread. [Engine](assets/terminal-lab-m2-engine.png) and
+[xterm](assets/terminal-lab-m2-xterm.png) canvas captures were inspected:
+listing, palette colours, CJK, emoji, bold and underline render. The engine
+block cursor is visible; xterm was captured during its cursor blink-off phase.
 
-```sh
-CARGO_PROFILE_DEV_OPT_LEVEL=3 CARGO_PROFILE_DEV_DEBUG=false CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=false node scripts/with-zig.mjs -- pnpm build:sandbox --debug --no-bundle --features ghostty-engine
-TERAX_TERMINAL_LAB_AUTORUN=/absolute/path/report.json <sandbox executable>
-```
+| Remaining comparison | Status |
+|---|---|
+| One-pane Channel throughput/FPS | Short diagnostic only; no accepted clean repeated table yet |
+| Keystroke echo | Diagnostic engine 0/50 timed out; xterm 50/50. Cause of the engine stall remains unproved |
+| xterm flood | Diagnostic ASCII/TUI single-pane floods timed out; other cases completed. No accepted complete repeated comparison yet |
+| Twelve idle terminals, 10000 history rows each | Both modes passed twice; median RSS engine 385.56 / 384.33 MiB, xterm 602.83 / 613.95 MiB (ps sum, not PSS); see raw report |
+| Intel WKWebView | Existing artifact inspected: pane/shader initialization failed before measurements |
+| Windows runtime and real-agent soak | Unverified |
 
-A hosted macOS Intel lab workflow is configured to run the bench, idle-engine and idle-xterm modes twice with an optimized Rust development profile and production frontend. It creates only the isolated Lab window, records named-process RSS externally, and retains raw reports, bounded PNG captures and failure logs. It has not yet supplied measurements to this table. The workflow explicitly bootstraps the verified native Intel artifact from producer run `42835004064`, SHA-256 `9a045b43db4a32733316b075a5b38a681fc34591656c7a4eeb923b1d9e6fed01`, while release publication waits for arm64 runner capacity. The checksum override exists only inside that job and is recorded in its hardware report; it is not a source-build fallback.
+Aggregate encode, rAF and credit timing cannot isolate Channel serialization,
+JS decode/apply, GPU execution or scheduling. Do not label one as the cause
+without stage profiling. The pinned upstream can build Wasm, but moving grid
+ownership to a Worker would still transport raw PTY bytes, increase IPC volume
+for this workload and change the contract. This alternative has been
+evaluated, not built or measured. The next controlled experiment is stage
+instrumentation followed by bounded credits grouped by window/rAF, preserving
+post-draw credit semantics and the unchanged acceptance workload. Evaluate
+frame batching after that; no implementation change meets 60 fps
+without remeasurement. Phases 2 through 5 remain gated, production xterm stays
+unchanged and ghostty remains feature gated and lab only.
 
-The first hosted Intel laboratory run [42842787247](https://github.com/Sendery/terax-ai/actions/runs/42842787247), at `ad27cf6149464fecd4ee848419a71b1c6be41121`, completed the sandbox build but failed during native execution. The diagnostic artifact (`13778865488`, 18791 bytes) and logs await inspection. Public annotations establish exit code 1 only. No image or measurement from this run has been accepted, so the table above remains unmeasured.
+### Earlier environments and diagnostics
 
-The default wrapper must first have published, reviewed checksum pins for the host. Do not choose `--source` on the protected original Mac. Record the actual app/core build metadata with every run. Two runs, captures, xterm flood and idle-memory modes still need to be completed before closing Tasks C/D.
+Linux x86_64 gates and prebuilt-core smoke passed, but Xvfb could not create
+display sockets, so no Linux graphics or performance claim was made. The
+existing hosted Intel run 42842787247 built at `ad27cf6` but failed graphics
+setup; its retrieved diagnostics are under
+`spikes/terminal-ghostty-vt/results/phase1/hosted-intel-ad27cf6/`.
+The first M2 diagnostic demonstrated WebKit termination above its 8 GiB footprint
+limit during an xterm comparison, with automatic webview reload. It was not
+accepted. The harness now preserves checkpoints, rejects duplicate bootstrap,
+waits for final drawings, records real per-pane updates, rasterizes complete
+grids and fails explicitly on report/parse errors. Detailed history is in the
+[handoff](2026-11-10-terminal-ghostty-vt-webgl2-handoff.md).
+
+No build/run occurred on the original protected Mac and no GitHub Actions were
+launched for this work. The provisional core is natively validated as a
+consumer on M2; canonical release publication remains separate. Tasks C/D
+are not declared complete while the remaining comparisons are unresolved.
 
 ## Acceptance criteria
 
@@ -108,7 +148,7 @@ Each phase merges into `qa` on its own with `--no-ff`. Until Phase 5 the new eng
 - Add `libghostty-vt` to `src-tauri` behind a cargo feature (`ghostty-engine`), default off until Phase 5.
 - Zig 0.15.2 as a pinned build prerequisite: `flake.nix`, CI (`ci.yml`, release workflows), `CONTRIBUTING.md`. Decide between building from source on every platform and consuming a prebuilt `libghostty-vt.a` per target through the crate's `pkg-config` feature; prebuilt removes Zig from contributor machines and sidesteps the macOS 27 SDK problem.
 - Confirm the three targets build and link: macOS universal, Linux, Windows (static `ghostty-vt-static.lib`).
-- Record the Ghostty commit and the upgrade procedure. The C API has no stable release yet and announces one more breaking pass before 1.0, so the pin moves deliberately.
+- Record the Ghostty commit and the upgrade procedure. These bindings pin a pre-1.0 API. A newer upstream ABI requires a deliberate pin/bindings upgrade; current API documentation is not assumed compatible.
 
 ### Phase 1: one pane in the sandbox, measured
 

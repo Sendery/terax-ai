@@ -1,0 +1,3433 @@
+{
+  "mode": "gate-engine",
+  "repetition": 2,
+  "pid": 90266,
+  "elapsedMs": 76284,
+  "timedOut": false,
+  "timeoutReason": null,
+  "failureReason": null,
+  "outcome": {
+    "code": 0,
+    "signal": null
+  },
+  "cleanup": {
+    "initial": [
+      {
+        "pid": 90266,
+        "ppid": 81608,
+        "rssKiB": 361216,
+        "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+        "pgid": 90266,
+        "birth": "1794661071:454784"
+      }
+    ],
+    "sent": [],
+    "errors": [],
+    "survivors": []
+  },
+  "reportExists": true,
+  "reportSource": "final",
+  "failure": null,
+  "rssMethod": "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.",
+  "idleSamples": 0,
+  "idleRssKiB": null,
+  "samples": [
+    {
+      "at": "2026-11-14T12:57:51.522Z",
+      "elapsedMs": 67,
+      "status": null,
+      "rssKiB": 32,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 32,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:52.608Z",
+      "elapsedMs": 1153,
+      "status": {
+        "at": "2026-11-14T12:57:51.904Z",
+        "mode": "gate-engine",
+        "status": "starting"
+      },
+      "rssKiB": 226880,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 112064,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 26832,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 74144,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:53.816Z",
+      "elapsedMs": 2361,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 438864,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312416,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 32880,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 79728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:54.924Z",
+      "elapsedMs": 3469,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 451264,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312992,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33472,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 90960,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:56.014Z",
+      "elapsedMs": 4559,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 460176,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 313024,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33472,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 99840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:57.145Z",
+      "elapsedMs": 5690,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 462000,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312880,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33488,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 101792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:58.261Z",
+      "elapsedMs": 6806,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 465904,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312848,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33296,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 105920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:57:59.364Z",
+      "elapsedMs": 7909,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 471104,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312848,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33296,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 111120,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:00.453Z",
+      "elapsedMs": 8998,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 480880,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312848,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33264,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 120928,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:01.549Z",
+      "elapsedMs": 10094,
+      "status": {
+        "at": "2026-11-14T12:57:53.513Z",
+        "sequence": 1,
+        "status": "running",
+        "step": "gate ascii x12"
+      },
+      "rssKiB": 487504,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 312848,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 33264,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 127552,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13840,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:02.644Z",
+      "elapsedMs": 11189,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 559200,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 348096,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 157984,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:03.726Z",
+      "elapsedMs": 12271,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 564864,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346928,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39360,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 164784,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:04.811Z",
+      "elapsedMs": 13356,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 572816,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347936,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39360,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 171728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:05.883Z",
+      "elapsedMs": 14428,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 578864,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347616,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39376,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 178080,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:06.959Z",
+      "elapsedMs": 15504,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 585040,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347232,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39376,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184640,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:08.052Z",
+      "elapsedMs": 16597,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 584832,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347152,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39232,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184656,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:09.142Z",
+      "elapsedMs": 17687,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 585344,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347584,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39232,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184752,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:10.226Z",
+      "elapsedMs": 18771,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 586016,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 348272,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39216,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184752,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:11.328Z",
+      "elapsedMs": 19873,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 585024,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347232,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39216,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184800,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:12.410Z",
+      "elapsedMs": 20955,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 584496,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346576,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39216,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 184928,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:13.495Z",
+      "elapsedMs": 22040,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 585584,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347392,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39216,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 185200,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:14.575Z",
+      "elapsedMs": 23120,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 591056,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347616,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39216,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190448,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:15.667Z",
+      "elapsedMs": 24212,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 591120,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347552,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39232,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190560,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:16.753Z",
+      "elapsedMs": 25298,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 590448,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346752,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39232,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190688,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:17.831Z",
+      "elapsedMs": 26376,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 591392,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347472,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39248,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190896,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:18.908Z",
+      "elapsedMs": 27453,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 591088,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347168,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39248,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190896,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:19.981Z",
+      "elapsedMs": 28526,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 590960,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347024,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39264,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190896,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:21.069Z",
+      "elapsedMs": 29614,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 590928,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346944,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39264,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 190944,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:22.167Z",
+      "elapsedMs": 30712,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 592416,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347008,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39280,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 192352,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:23.253Z",
+      "elapsedMs": 31798,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 593264,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347024,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39280,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193184,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:24.344Z",
+      "elapsedMs": 32889,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 593248,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346992,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39296,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193184,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:25.440Z",
+      "elapsedMs": 33985,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 593952,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347696,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39296,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193184,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:26.517Z",
+      "elapsedMs": 35062,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 593728,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 346976,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39296,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193680,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:27.601Z",
+      "elapsedMs": 36146,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 593840,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347072,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39312,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193680,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:28.686Z",
+      "elapsedMs": 37231,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594192,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347424,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39312,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193680,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:29.777Z",
+      "elapsedMs": 38322,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594432,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347600,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:30.850Z",
+      "elapsedMs": 39395,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594080,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347056,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:31.934Z",
+      "elapsedMs": 40479,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594048,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347024,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:33.030Z",
+      "elapsedMs": 41575,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594368,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347344,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:34.122Z",
+      "elapsedMs": 42667,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594128,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347104,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:35.217Z",
+      "elapsedMs": 43762,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 594528,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347504,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193920,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:36.294Z",
+      "elapsedMs": 44839,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 595248,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 348192,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 193952,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:37.394Z",
+      "elapsedMs": 45939,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 595024,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 347824,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39328,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 194096,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:38.445Z",
+      "elapsedMs": 46990,
+      "status": {
+        "at": "2026-11-14T12:58:02.135Z",
+        "sequence": 3,
+        "status": "running",
+        "step": "gate sgr x12"
+      },
+      "rssKiB": 570176,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 242944,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 39872,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 273584,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13776,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:39.533Z",
+      "elapsedMs": 48078,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 652144,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318224,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43760,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 276432,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:40.615Z",
+      "elapsedMs": 49160,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 652496,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318000,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 276976,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:41.709Z",
+      "elapsedMs": 50254,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653152,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43744,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 277536,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:42.792Z",
+      "elapsedMs": 51337,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653776,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318208,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43856,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 277984,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:43.872Z",
+      "elapsedMs": 52417,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653520,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318032,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43680,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278080,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:44.956Z",
+      "elapsedMs": 53501,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653584,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318096,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43680,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278080,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:46.050Z",
+      "elapsedMs": 54595,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653584,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318080,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278080,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:47.135Z",
+      "elapsedMs": 55680,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653792,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278208,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:48.225Z",
+      "elapsedMs": 56770,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 654032,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318448,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278208,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:49.312Z",
+      "elapsedMs": 57857,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653648,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318176,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278096,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:50.411Z",
+      "elapsedMs": 58956,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 653776,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318240,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43712,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278096,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:51.493Z",
+      "elapsedMs": 60038,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 654160,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318160,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 278576,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:52.587Z",
+      "elapsedMs": 61132,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 655168,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318240,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 279552,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:53.670Z",
+      "elapsedMs": 62215,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 658208,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318192,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 282592,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:54.755Z",
+      "elapsedMs": 63300,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 662672,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318272,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43744,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 286928,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:55.847Z",
+      "elapsedMs": 64392,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 662576,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318176,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43744,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 286928,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:56.933Z",
+      "elapsedMs": 65478,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 662704,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318336,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 286944,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:58.022Z",
+      "elapsedMs": 66567,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 662512,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318128,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 287008,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:58:59.106Z",
+      "elapsedMs": 67651,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 663728,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318192,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:00.192Z",
+      "elapsedMs": 68737,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 663808,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318272,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43648,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:01.273Z",
+      "elapsedMs": 69818,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 664064,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318432,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43744,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:02.349Z",
+      "elapsedMs": 70894,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 664016,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318432,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:03.439Z",
+      "elapsedMs": 71984,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 663952,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318368,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:04.515Z",
+      "elapsedMs": 73060,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 663792,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318208,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288160,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:05.596Z",
+      "elapsedMs": 74141,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 663984,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 318144,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43696,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 288416,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    },
+    {
+      "at": "2026-11-14T12:59:06.646Z",
+      "elapsedMs": 75191,
+      "status": {
+        "at": "2026-11-14T12:58:38.342Z",
+        "sequence": 5,
+        "status": "running",
+        "step": "gate tui x12"
+      },
+      "rssKiB": 794960,
+      "processes": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 361216,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784",
+          "attribution": "app-or-descendant"
+        },
+        {
+          "pid": 90285,
+          "ppid": 1,
+          "rssKiB": 43792,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+          "pgid": 90285,
+          "birth": "1794661071:627183",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90292,
+          "ppid": 1,
+          "rssKiB": 376224,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+          "pgid": 90292,
+          "birth": "1794661071:643735",
+          "attribution": "new-WebKit-helper"
+        },
+        {
+          "pid": 90300,
+          "ppid": 1,
+          "rssKiB": 13728,
+          "command": "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+          "pgid": 90300,
+          "birth": "1794661071:673271",
+          "attribution": "new-WebKit-helper"
+        }
+      ]
+    }
+  ]
+}

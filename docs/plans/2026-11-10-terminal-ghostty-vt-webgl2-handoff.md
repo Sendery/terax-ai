@@ -482,3 +482,56 @@ locked Rust clippy/tests passed in both feature configurations. A new test
 initially used `Array.at`, unsupported by this project's TypeScript target;
 indexed access fixes it without changing the configuration. Astra's final
 independent review found no blocker for repeating the registered workload.
+
+
+### M2 measured result at `4e8694a`
+
+Both registered sustained repetitions now completed and saved compact final
+reports, with all events retained and no receive/draw mismatch, decode error,
+context loss, timeout or surviving owned process. Native apps and runner
+exited 0. No other build or test ran concurrently. The slowest pane updates/s
+were ASCII 35.62/38.66, SGR 49.80/50.64, TUI 53.17/52.41; all common intervals
+exceeded 5 s. **The answer to the 60 fps exit criterion is no.**
+
+Both idle modes also completed twice, checking 10000 history rows in every one
+of 12 sessions. Stable named-process RSS medians were engine 385.56/384.33 MiB
+and xterm 602.83/613.95 MiB. This is a ps RSS sum, not PSS, physical footprint or
+exclusive process memory. The separate earlier 8 GiB WebKit footprint event
+cannot be inferred from these RSS values.
+
+The plan's Phase 1 results section and
+`spikes/terminal-ghostty-vt/results/phase1/m2-2026-11-14/README.md` contain the
+full throughput/timing/memory tables, exact build/launch commands, recorded
+hardware and core provenance, per-session histories, process rosters and
+checksums. The production xterm frontend still has no diff from `ad27cf6`.
+The engine stays feature gated, off by default and lab only.
+
+WASM-in-Worker was evaluated against the exact pinned upstream Wasm target
+and allocator exports. It is feasible in principle, but no prototype or speed
+claim is made: raw PTY transport, bounded flow control, state ownership and
+ABI compatibility remain work. Stage profiling and a bounded per-window
+credit-batch comparison are the next small experiments. No measured evidence
+yet isolates serialization, decode/apply or GPU cost. Later migration phases
+remain gated. Tasks C/D still lack a clean repeated one-pane/flood/echo table;
+Intel initialization, Windows runtime, canonical publication and real-agent
+soak also remain unverified.
+
+The M2 is operational at `/Users/andres.rojo/Workspaces/terax-ai`, with
+passwordless sudo, the installed development toolchain and Sendery-scoped
+Git/GitHub credentials. Source builds are blocked by default; M2's ignored
+`with-ghostty` launcher uses the verified adjacent ARM64 core. Development:
+
+```sh
+ssh arb@10.0.0.20
+cd /Users/andres.rojo/Workspaces/terax-ai
+.terax/pi-development/m2/with-ghostty pnpm dev:sandbox --features ghostty-engine
+```
+
+No security policy was changed on the original Mac, no native build/run was
+performed there and no Actions, push or merge were performed in this work.
+
+Final independent Astra evidence review recalculated all six slowest-pane
+rates from raw draw events inside their common intervals and verified the
+six clean teardowns, four memory medians and the checksum manifest. It found
+no blocker to recording the negative gate result. This review does not
+approve proceeding to later migration phases.

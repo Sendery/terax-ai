@@ -1,0 +1,84 @@
+[
+  {
+    "mode": "gate-engine",
+    "repetition": 1,
+    "pid": 81651,
+    "elapsedMs": 77180,
+    "timedOut": false,
+    "timeoutReason": null,
+    "failureReason": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanup": {
+      "initial": [
+        {
+          "pid": 81651,
+          "ppid": 81608,
+          "rssKiB": 310960,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 81651,
+          "birth": "1794660994:187427"
+        }
+      ],
+      "sent": [],
+      "errors": [],
+      "survivors": []
+    },
+    "reportExists": true,
+    "reportSource": "final",
+    "failure": null,
+    "rssMethod": "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.",
+    "idleSamples": 0,
+    "idleRssKiB": null,
+    "errors": [],
+    "engineBenchRuns": 3,
+    "xtermBenchRuns": 0,
+    "captures": {
+      "engine": false,
+      "xterm": false
+    }
+  },
+  {
+    "mode": "gate-engine",
+    "repetition": 2,
+    "pid": 90266,
+    "elapsedMs": 76284,
+    "timedOut": false,
+    "timeoutReason": null,
+    "failureReason": null,
+    "outcome": {
+      "code": 0,
+      "signal": null
+    },
+    "cleanup": {
+      "initial": [
+        {
+          "pid": 90266,
+          "ppid": 81608,
+          "rssKiB": 361216,
+          "command": "/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target/lab-optimized/debug/terax",
+          "pgid": 90266,
+          "birth": "1794661071:454784"
+        }
+      ],
+      "sent": [],
+      "errors": [],
+      "survivors": []
+    },
+    "reportExists": true,
+    "reportSource": "final",
+    "failure": null,
+    "rssMethod": "ps RSS KiB sum of app descendants and new named WebKit helpers. Shared pages can be counted more than once; no PSS claim. Pre-existing WebKit helpers are excluded and listed in the baseline.",
+    "idleSamples": 0,
+    "idleRssKiB": null,
+    "errors": [],
+    "engineBenchRuns": 3,
+    "xtermBenchRuns": 0,
+    "captures": {
+      "engine": false,
+      "xterm": false
+    }
+  }
+]
