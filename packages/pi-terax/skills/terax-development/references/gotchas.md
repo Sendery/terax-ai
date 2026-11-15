@@ -908,3 +908,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** sequential width/height writes multiply unrelated dimensions into a much larger transient bitmap; an unregistered allocation escapes deterministic cleanup; unbalanced nested context state corrupts the next pane and an uncaught paint failure holds credits.
 - **Prevention:** reduce dimensions before growing, register resources before fallible initialization, balance every canvas state level with finally, and isolate capacity failures per pane. Invalidate presented metadata and return credit with rendered=false; do not restart the PTY. Renew failed capacity on explicit redraw, font and DPR changes.
 - **Verification:** opposite thin crop aspect ratios record every allocated area, failed upload releases the new bitmap, paint failure balances state and preserves another pane position, and the real session callback returns credit while input remains usable. Actual software WebKit pixels remain separate acceptance.
+
+### A locked graphical session can masquerade as a broken AX locator
+
+- **Trigger:** a previously valid own-app window locator sees AXApplication elements where AXWindow objects should be.
+- **Failure mode:** retrying broad selectors or guessed clicks risks selecting the wrong surface; repeated permission requests do not address the current screen state.
+- **Prevention:** inspect the current session lock state separately from AX trust and console ownership. Keep strict own-instance/window guards and wait for an actual unlock when locked.
+- **Verification:** M2 reported trusted AX and on-console, but CGSSessionScreenIsLocked=true. No click or GPU preference mutation was attempted. Recheck the same instance after unlock before claiming graphical acceptance.
+
+### Restored commands need caller ownership until the final write
+
+- **Trigger:** readiness or native input encoding waits while a pane is replaced, dismissed, made private or moved to another context.
+- **Failure mode:** a leaf ID can be reused, readiness timeout can look successful, and checking only before submit permits an obsolete command after encoding. Marking restore settled before deleting its snapshot can also delete a new capture.
+- **Prevention:** capture an internal owner-bound submitter, distinguish timeout from shell readiness, pass caller guards through the last async boundary to pty_write, and await snapshot cleanup before capture resumes.
+- **Verification:** deferred read/encoding/write/cleanup tests cover dismiss, private, CWD, space, replacement and empty submission. No new public bridge input or buffer-reading API is required.
