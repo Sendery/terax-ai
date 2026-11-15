@@ -6,10 +6,10 @@ export function terminalEngineChoice(value: unknown): "ghostty" | "xterm" {
 
 export function initialLeafEngine(
   requested: boolean,
-  blocks: boolean,
+  _blocks: boolean,
   existing?: "ghostty" | "xterm",
 ): "ghostty" | "xterm" {
-  return existing ?? (requested && !blocks ? "ghostty" : "xterm");
+  return existing ?? (requested ? "ghostty" : "xterm");
 }
 
 export function nativePaneLayout(

@@ -15,12 +15,30 @@ export class NativeBlockInput {
     null;
   private readonly listeners = new Set<() => void>();
   private submitted = false;
+  private seenContent = false;
   private inputActive = false;
   get active(): boolean {
     return this.inputActive;
   }
   set active(value: boolean) {
+    const watermark = this.watermark;
     if (!this.disposed) this.inputActive = value;
+    this.changed(this.mode, this.directInput, watermark);
+  }
+  get watermark(): "visible" | "hidden" | "dead" {
+    if (
+      this.disposed ||
+      this.submitted ||
+      this.seenContent ||
+      (this.state?.blocksMetadataVersion ?? 0) > 0
+    )
+      return "dead";
+    return this.mode === "prompt" && !this.inputActive ? "visible" : "hidden";
+  }
+  markContent(): void {
+    const watermark = this.watermark;
+    this.seenContent = true;
+    this.changed(this.mode, this.directInput, watermark);
   }
 
   get mode(): BlockMode {
@@ -47,9 +65,11 @@ export class NativeBlockInput {
   }
   set draft(text: string) {
     if (this.disposed || this.value === text) return;
+    const watermark = this.watermark;
     this.value = text;
     this.inputActive = text.length > 0;
     this.draftRevision++;
+    this.changed(this.mode, this.directInput, watermark);
     for (const listener of [...this.draftListeners]) {
       try {
         listener();
@@ -83,6 +103,7 @@ export class NativeBlockInput {
       return;
     const before = this.mode;
     const direct = this.directInput;
+    const watermark = this.watermark;
     this.state = state;
     if (
       this.pending &&
@@ -90,7 +111,7 @@ export class NativeBlockInput {
         state.promptVersion > this.pending.prompt)
     )
       this.pending = null;
-    this.changed(before, direct);
+    this.changed(before, direct, watermark);
   }
   beginSubmit(text = this.value): symbol {
     const state = this.state;
@@ -158,10 +179,15 @@ export class NativeBlockInput {
     this.listeners.clear();
     this.draftListeners.clear();
   }
-  private changed(before: BlockMode, direct?: boolean): void {
+  private changed(
+    before: BlockMode,
+    direct?: boolean,
+    watermark?: string,
+  ): void {
     if (
       before === this.mode &&
-      (direct === undefined || direct === this.directInput)
+      (direct === undefined || direct === this.directInput) &&
+      (watermark === undefined || watermark === this.watermark)
     )
       return;
     for (const listener of this.listeners) {

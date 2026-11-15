@@ -1,6 +1,7 @@
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   getNativeLeaf,
+  focusedNativeLeaf,
   subscribeNativeLeaf,
   nativeLeafForPty,
   takeNativeLeaf,
@@ -253,6 +254,11 @@ export function leafCwd(leafId: number): string | null {
 }
 
 export function navigateFocusedBlocks(dir: -1 | 1): boolean {
+  const native = focusedNativeLeaf();
+  if (native?.blockInput && native.navigateBlocks) {
+    void native.navigateBlocks(dir).catch(() => {});
+    return true;
+  }
   for (const [, s] of sessions) {
     if (!s.visibleNow || !s.focusedNow || !s.blockDecorations) continue;
     s.blockDecorations.navigateBlocks(dir);
@@ -262,6 +268,8 @@ export function navigateFocusedBlocks(dir: -1 | 1): boolean {
 }
 
 export function clearLeafBlockSelection(leafId: number): boolean {
+  const native = getNativeLeaf(leafId);
+  if (native?.blockInput) return native.clearBlockSelection?.() ?? false;
   return sessions.get(leafId)?.blockDecorations?.clearBlockSelection() ?? false;
 }
 
@@ -401,6 +409,8 @@ export type WatermarkState = "visible" | "hidden" | "dead";
 // scans glyphs, not the cursor: the prompt integration prints a blank gap line
 // at spawn, so the cursor sits below row 0 even on a visually empty terminal.
 export function blockWatermarkState(leafId: number): WatermarkState {
+  const native = getNativeLeaf(leafId)?.blockInput;
+  if (native) return native.watermark;
   const s = sessions.get(leafId);
   if (!s || s.disposed) return "dead";
   if (s.everSubmitted || s.blockDecorations?.hasAnyBlock()) return "dead";

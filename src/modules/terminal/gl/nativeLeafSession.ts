@@ -1,5 +1,10 @@
 import { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
-import type { DecodedFrame } from "@/modules/terminal/gl/frameCodec";
+import {
+  CELL_CODEPOINT_MASK,
+  createRowView,
+  readRow,
+  type DecodedFrame,
+} from "@/modules/terminal/gl/frameCodec";
 import { createNativeSearch } from "@/modules/terminal/gl/nativeSearch";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
@@ -34,6 +39,7 @@ export type NativeLeafView = {
   onExit: (code: number) => void;
   onCwd?: (cwd: string) => void;
   focused: () => boolean;
+  active?: () => boolean;
   focus: () => void;
 };
 type OpenNative = (
@@ -99,7 +105,9 @@ export class NativeLeafSession implements NativeLeaf {
   }
   get focused(): boolean {
     return Boolean(
-      this.view && (this.view.focused() || this.blockInput?.focused),
+      this.view &&
+        (this.view.active?.() ?? true) &&
+        (this.view.focused() || this.blockInput?.focused),
     );
   }
   get tuiReady(): boolean {
@@ -158,6 +166,22 @@ export class NativeLeafSession implements NativeLeaf {
   }
   repaint(): void {
     this.native?.requestFull();
+  }
+
+  async navigateBlocks(direction: -1 | 1): Promise<void> {
+    const native = this.native;
+    if (!this.blockInput || !native || this.id === null) return;
+    try {
+      await native.blockAction({ kind: "navigate", direction });
+    } catch (error) {
+      this.report(error);
+    }
+  }
+  clearBlockSelection(): boolean {
+    const native = this.native;
+    if (!this.blockInput || !native || !this.getSelection()) return false;
+    void native.select({ kind: "clear" }).catch(this.report);
+    return true;
   }
 
   get search(): TerminalSearch {
@@ -331,6 +355,25 @@ export class NativeLeafSession implements NativeLeaf {
             },
             onFrame: (event) => {
               if (generation !== this.generation || this.disposed) return;
+              if (
+                event.frame &&
+                this.blockInput?.watermark !== "dead" &&
+                this.blockInput
+              ) {
+                const frame = event.frame;
+                const row = createRowView();
+                outer: for (let index = 0; index < frame.rowCount; index++) {
+                  readRow(frame, index, row);
+                  for (let col = 0; col < row.cellCount; col++) {
+                    const value =
+                      frame.u32[row.cellsAt + col] & CELL_CODEPOINT_MASK;
+                    if (value !== 0 && value !== 32) {
+                      this.blockInput.markContent();
+                      break outer;
+                    }
+                  }
+                }
+              }
               try {
                 this.view?.onFrame(event.frame);
               } catch (error) {

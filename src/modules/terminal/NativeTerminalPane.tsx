@@ -1,3 +1,6 @@
+import { NativeBlockView } from "@/modules/terminal/gl/nativeBlockView";
+import { BlockOverlay } from "@/modules/terminal/block/BlockOverlay";
+import { BlockWatermark } from "@/modules/terminal/block/BlockWatermark";
 import {
   bindNativeLinks,
   type NativeLinkBinding,
@@ -8,6 +11,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { registerCanvasSnapshotProvider } from "@/modules/capture/lib/rasterize";
 import type { EngineSession } from "@/modules/terminal/gl/engineSession";
@@ -35,6 +39,8 @@ import type {
   TerminalPaneProps,
 } from "@/modules/terminal/TerminalPane";
 
+const noSubscription = () => () => {};
+
 export const NativeTerminalPane = forwardRef<
   TerminalPaneHandle,
   TerminalPaneProps
@@ -45,6 +51,7 @@ export const NativeTerminalPane = forwardRef<
   const latest = useRef(props);
   latest.current = props;
   const host = useRef<HTMLDivElement>(null);
+  const paneRoot = useRef<HTMLDivElement>(null);
   const engine = useRef<EngineSession | null>(null);
   const controller = useRef<NativeLeafSession | null>(null);
   const input = useRef<NativeInputBinding | null>(null);
@@ -55,6 +62,16 @@ export const NativeTerminalPane = forwardRef<
   const preClickSelection = useRef<string | null>(null);
   const replayContextMenu = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocksView, setBlocksView] = useState<{
+    view: NativeBlockView;
+    session: EngineSession;
+    owner: NativeLeafSession;
+  } | null>(null);
+  const blockMode = useSyncExternalStore(
+    blocksView?.owner.blockInput?.subscribe ?? noSubscription,
+    () => blocksView?.owner.blockInput?.mode ?? "running",
+    () => "running",
+  );
   const renderer = surface?.renderer ?? null;
   const { leafId, visible, focused = true } = props;
 
@@ -67,6 +84,7 @@ export const NativeTerminalPane = forwardRef<
     let linkBinding: NativeLinkBinding | null = null;
     let unsubscribeInput: () => void = () => {};
     let native: EngineSession | null = null;
+    let blockView: NativeBlockView | null = null;
     let layoutFrame = 0;
     const report = (cause: unknown) => {
       if (!disposed)
@@ -127,6 +145,7 @@ export const NativeTerminalPane = forwardRef<
         );
       binding?.updateCursor();
       linkBinding?.updateLayout();
+      blockView?.layout();
     };
     const scheduleLayout = () => {
       if (!layoutFrame && !disposed)
@@ -151,6 +170,9 @@ export const NativeTerminalPane = forwardRef<
     const detach = owner.attach(
       {
         onSession: (session) => {
+          blockView?.dispose();
+          blockView = null;
+          if (!disposed) setBlocksView(null);
           if (input.current === binding) input.current = null;
           unsubscribeInput();
           unsubscribeInput = () => {};
@@ -163,6 +185,20 @@ export const NativeTerminalPane = forwardRef<
           engine.current = session;
           if (disposed || !session) return;
           const current = surfaceRef.current ?? model;
+          if (owner.blockInput) {
+            blockView = new NativeBlockView({
+              session,
+              input: owner.blockInput,
+              available: () =>
+                !disposed &&
+                latest.current.visible &&
+                controller.current === owner &&
+                engine.current === session,
+              metrics: () => ({ height: renderer.cellSize.height, padding: 6 }),
+              onError: report,
+            });
+            setBlocksView({ view: blockView, session, owner });
+          }
           binding = bindNativeInput(session, renderer, element, {
             font: current.font,
             foreground: current.colors.engine.foreground,
@@ -174,6 +210,17 @@ export const NativeTerminalPane = forwardRef<
             focusPrompt: () => {
               owner.blockInput?.focus();
             },
+            onBlockClick: owner.blockInput
+              ? async (seq, row) => {
+                  if (
+                    disposed ||
+                    !latest.current.visible ||
+                    engine.current !== session
+                  )
+                    return;
+                  await session.blockAction({ kind: "selectAt", seq, row });
+                }
+              : undefined,
           });
           input.current = binding;
           unsubscribeInput =
@@ -195,6 +242,7 @@ export const NativeTerminalPane = forwardRef<
           links.current = linkBinding;
           latest.current.onSearchReady?.(leafId, owner.search);
           measure();
+          blockView?.present(session.drawnSeq);
           if (latest.current.visible && (latest.current.focused ?? true))
             binding.focus();
         },
@@ -202,7 +250,10 @@ export const NativeTerminalPane = forwardRef<
           binding?.updateCursor();
           linkBinding?.onFrame(frame);
         },
-        onDrawn: () => linkBinding?.onDrawn(),
+        onDrawn: (seq) => {
+          linkBinding?.onDrawn();
+          blockView?.present(seq);
+        },
         onError: report,
         onExit: (code) => latest.current.onExit?.(leafId, code),
         onCwd: (cwd) => {
@@ -210,10 +261,12 @@ export const NativeTerminalPane = forwardRef<
           latest.current.onCwd?.(leafId, cwd);
         },
         focus: () => binding?.focus(),
+        active: () =>
+          latest.current.visible && Boolean(latest.current.focused ?? true),
         focused: () =>
           latest.current.visible &&
           Boolean(latest.current.focused ?? true) &&
-          element.contains(document.activeElement),
+          Boolean(paneRoot.current?.contains(document.activeElement)),
       },
       config,
     );
@@ -223,6 +276,7 @@ export const NativeTerminalPane = forwardRef<
     void owner.opened.catch(report);
     return () => {
       disposed = true;
+      blockView?.dispose();
       detach();
       unregisterCapture();
       captureProxy.remove();
@@ -253,8 +307,9 @@ export const NativeTerminalPane = forwardRef<
       session.pane,
       visible && focused && document.hasFocus(),
     );
+    blocksView?.view.present(session.drawnSeq);
     if (visible && focused) input.current?.focus();
-  }, [visible, focused, renderer]);
+  }, [visible, focused, renderer, blocksView]);
   useEffect(() => {
     if (!visible || !focused) links.current?.invalidate();
   }, [visible, focused]);
@@ -376,9 +431,8 @@ export const NativeTerminalPane = forwardRef<
       onPaste={pasteFromMenu}
       onRedraw={() => adapter.current?.repaint()}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: native terminal input and context menu surface */}
       <div
-        ref={host}
+        ref={paneRoot}
         data-native-terminal-leaf={leafId}
         data-terminal-engine="ghostty"
         className="zoom-exempt relative h-full w-full overflow-hidden"
@@ -386,15 +440,46 @@ export const NativeTerminalPane = forwardRef<
           visibility: visible ? "visible" : "hidden",
           pointerEvents: visible ? "auto" : "none",
         }}
-        onMouseDownCapture={(event) => {
-          if (isSecondaryClick(event, IS_MAC))
-            preClickSelection.current = engine.current?.getSelection() ?? null;
-        }}
-        onContextMenuCapture={onContextMenuCapture}
       >
+        <div
+          ref={host}
+          data-native-terminal-grid=""
+          className="absolute inset-0"
+          onMouseDownCapture={(event) => {
+            if (isSecondaryClick(event, IS_MAC))
+              preClickSelection.current =
+                engine.current?.getSelection() ?? null;
+          }}
+          onContextMenuCapture={onContextMenuCapture}
+        />
+        {blocksView && props.blocks && (
+          <>
+            <BlockWatermark
+              leafId={leafId}
+              subscribe={blocksView.view.subscribe}
+            />
+            <BlockOverlay
+              key={blocksView.session.id}
+              actionOwner={blocksView.session}
+              active={visible}
+              available={() => engine.current === blocksView.session}
+              privateTerminal={props.privateTerminal}
+              subscribe={blocksView.view.subscribe}
+              getVisible={blocksView.view.visible}
+              readOutput={blocksView.view.readOutput}
+              searchBlock={blocksView.view.searchBlock}
+              revealMatch={blocksView.view.revealMatch}
+              clearSearch={blocksView.view.clearSearch}
+              promptReady={blockMode === "prompt"}
+              onRunAgain={(command) => blocksView.owner.submit(command)}
+              onRestoreFocus={restoreFocus}
+            />
+          </>
+        )}
         {(error ?? surface?.error) && (
           <div
             role="alert"
+            data-terax-capture-foreground=""
             className="absolute inset-x-2 bottom-2 z-10 rounded bg-background/95 p-2 text-xs text-destructive"
           >
             {error ?? surface?.error}

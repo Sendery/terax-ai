@@ -40,6 +40,7 @@ it("retains the registered engine after blocks change and the view remounts", ()
   expect(initialLeafEngine(true, true, "ghostty")).toBe("ghostty");
   expect(initialLeafEngine(true, false, "xterm")).toBe("xterm");
   expect(initialLeafEngine(true, false)).toBe("ghostty");
-  expect(initialLeafEngine(true, true)).toBe("xterm");
+  expect(initialLeafEngine(true, true)).toBe("ghostty");
+  expect(initialLeafEngine(false, true)).toBe("xterm");
   expect(initialLeafEngine(false, false)).toBe("xterm");
 });

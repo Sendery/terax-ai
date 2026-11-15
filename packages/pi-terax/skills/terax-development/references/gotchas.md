@@ -702,7 +702,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Trigger:** rasterizing a pane whose canvas lives outside its DOM subtree, or changing tabs during asynchronous font/image work.
 - **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels. Compositing the crop after the DOM clone also covers native DOM hover/preedit overlays in the artifact, even when those overlays display correctly.
 - **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards. OS gesture points can differ from capture device pixels; derive gestures from the actual window bounds and scale rather than copying bitmap coordinates.
-- **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider. Qualify overlay pixel claims until capture preserves their stacking order; successful interaction or paint mocks alone do not prove captured appearance.
+- **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider. Restore frozen visible foreground DOM over native pixels, preserving computed visibility and each ancestor overflow clip; bound count/area and deduplicate nested roots. Freeze before any await. Successful interaction or paint mocks alone do not prove captured appearance.
 
 
 ### Shell state is not engine acquisition or arbitrary OSC output
@@ -725,7 +725,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** Cmd+F when a compact search field is already mounted, or Escape immediately after typing.
 - **Failure mode:** opening an already open field does not refocus it, and clearing pendingFocus because its ref exists loses the focus request. A native text-field interaction can also consume a first Escape; assuming a tab title is prompt readiness makes the UI harness wait incorrectly.
-- **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Before retargeting after simulated typing, verify the known editor value was consumed; the input tool returning is not that acknowledgement. An empty CodeMirror AXValue may contain its known placeholder, so match that known UI state explicitly while keeping nonempty fixture matching exact. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug.
+- **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Before retargeting after simulated typing, verify the known editor value was consumed; the input tool returning is not that acknowledgement. An empty CodeMirror AXValue may contain its known placeholder, so match that known UI state explicitly while keeping nonempty fixture matching exact. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug. For Radix modal menus, open/focus the search from onCloseAutoFocus after its FocusScope closes. Closing an already-mounted search must restore editor focus after React commits removal; guard menu-close and search-close restoration by owner/visibility. Use an explicit repeated-focus request for an existing same-block field.
 - **Verification:** pre-fix AXTextArea after Cmd+F versus post-fix AXTextField; one Escape returns AXTextArea, then a public shell program writes its acknowledgement. Split tests require distinct PIDs and the unchanged original PID. Use exact inspected captures and remove temporary diagnostics before final gates.
 
 ### Native link activation must retain presented, bounded metadata
@@ -804,7 +804,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** asynchronous block projections while output, scrolling, resize or process identity changes.
 - **Failure mode:** metadata revisions deduplicate changing geometry, an old projection paints over a new frame, or a reused seq attaches old blocks after respawn.
-- **Prevention:** retain bounded immutable projections keyed by frame, force presentation for metadata-only changes and reject unavailable frames without a live-grid fallback. Coalesce to one in-flight plus the latest query, validate rows/text/IDs before rendering, and dispose the projection model on process replacement. Recompute pixel geometry when cell metrics change.
+- **Prevention:** retain bounded immutable projections keyed by frame, force presentation for metadata-only changes and reject unavailable frames without a live-grid fallback. Coalesce to one in-flight plus the latest query, validate rows/text/IDs before rendering, and dispose the projection model on process replacement. Recompute pixel geometry when cell metrics change. A hidden view can discard an in-flight result: re-present the actual drawn sequence on visibility even when the number is unchanged. Bind pointer/key handlers only to the native grid host, while focus ownership includes sibling overlay controls.
 - **Verification:** old/new viewport with identical metadata revision, cache count/allocation limits, actual actor frame query after EOF, stale/closed replies, coalescing and layout-only projection tests. Check real scroll/reflow and process replacement when connecting the UI.
 
 ### An expired receipt does not cancel an accepted native selection
@@ -820,3 +820,25 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** copying or selecting the old block returns cells belonging to a later command. An empty range searched as a point reads a later prompt.
 - **Prevention:** retain native endpoint references and a bounded canonical unwrapped content digest at completion; revalidate both for explicit reads/actions and visible retirement. The digest is a cell-content guard, not a replacement for reference lifetime. Retire damaged visible metadata without changing the command acceptance revision. Represent a valid empty output as an absent search scope, separately from an unavailable block.
 - **Verification:** native overwrite/ED2/DCH/ICH rejection preserves an existing manual selection; retirement does not advance command metadata; Find -> Unicode soft-wrap reflow -> Reveal paints the exact native cells; empty and wide-endpoint output excludes a following prompt.
+
+
+### Deferred block copy must retain the WebKit user gesture
+
+- **Trigger:** Copy output reads native block text asynchronously before writing the clipboard in WKWebView.
+- **Failure mode:** starting write after the read loses the gesture and is rejected; an old owner can publish replaced output or a misleading success toast.
+- **Prevention:** begin ClipboardItem/write synchronously with a promised text Blob, validate the bound session before and after reading, and report success only after acknowledged write while still current. Distinguish unavailable output from a valid empty string. Preserve the Linux native clipboard path. Revalidate private-terminal eligibility before attaching an async body to AI chat.
+- **Verification:** deferred clipboard and unavailable/stale-owner tests; actual M2 Copy output then paste into the owned editor matches the known Unicode fixture exactly. Primary WebKit reference: https://webkit.org/blog/10855/async-clipboard-api/ .
+
+### A delayed block click must not overtake a newer selection
+
+- **Trigger:** the native pointer-release reply resolves after another pointer press or selection mutation.
+- **Failure mode:** the old click selects a block over the user's newer selection.
+- **Prevention:** retain the original presented sequence/row, compare both local gesture generation and the shared EngineSession selection revision after release, and reject drag/cancel/modifier cases. Never recover missing presented geometry from live coordinates.
+- **Verification:** deferred release regression yields a complete event-loop turn before checking; a few microtasks plus disposal can hide the late callback. The old release must not invoke block selection after the new press.
+
+### UI acknowledgements and current window bounds are authoritative
+
+- **Trigger:** HMR or window state changes the sandbox size while automation reuses a screenshot coordinate; a sent key returns before the shell accepts it.
+- **Failure mode:** clicks miss real controls, or an immediate missing-file read is misclassified as a terminal failure.
+- **Prevention:** resolve known controls within the authenticated Terax PID and current AX window bounds. Poll the same owned public acknowledgement without resending the command. Verify the actual editor value before retargeting. Read the existing tab capabilities before attempting a split; blocks intentionally retain their single-leaf baseline.
+- **Verification:** actual menu/search controls, two independent native block drafts, foreground read reply and separate ordinary split cwd acknowledgements on M2. Capture only Terax surfaces and inspect private-capture rejection without recording private pixels.

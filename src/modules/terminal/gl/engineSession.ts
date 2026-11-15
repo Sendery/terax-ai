@@ -746,6 +746,10 @@ export class EngineSession {
     return this.acceptState(state);
   }
 
+  get selectionRevision(): number {
+    return this.selectionVersion;
+  }
+
   getSelection(): string | null {
     return this.closed || this.failed ? null : this.selectionSnapshot;
   }

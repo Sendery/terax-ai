@@ -174,3 +174,22 @@ it("distinguishes a submission gap from a running program even when both modes a
   expect(input.directInput).toBe(true);
   expect(changed).toHaveBeenCalledOnce();
 });
+
+it("announces initial hints only for a ready empty native block grid and never over real content", () => {
+  const input = new NativeBlockInput();
+  expect(input.watermark).toBe("hidden");
+  input.accept(state());
+  expect(input.watermark).toBe("visible");
+  const changed = vi.fn();
+  input.subscribe(changed);
+  input.draft = "draft";
+  expect(input.watermark).toBe("hidden");
+  input.draft = "";
+  expect(input.watermark).toBe("visible");
+  input.markContent();
+  expect(input.watermark).toBe("dead");
+  expect(changed).toHaveBeenCalledTimes(3);
+  input.reset();
+  input.accept(state());
+  expect(input.watermark).toBe("dead");
+});

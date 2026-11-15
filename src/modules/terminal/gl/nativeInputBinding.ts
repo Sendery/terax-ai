@@ -27,6 +27,7 @@ type Options = Appearance & {
   focusPrompt?: () => void;
   onError: (error: unknown) => void;
   onSelection?: (text: string | null) => void;
+  onBlockClick?: (seq: number, row: number) => Promise<void>;
 };
 export type NativeInputBinding = {
   focus: () => void;
@@ -54,6 +55,7 @@ export function bindNativeInput(
     "position:absolute;left:6px;top:6px;width:2px;height:1em;opacity:0;padding:0;border:0;margin:0;resize:none;overflow:hidden;white-space:nowrap;pointer-events:none;caret-color:transparent;";
   const preedit = document.createElement("span");
   preedit.setAttribute("aria-hidden", "true");
+  preedit.setAttribute("data-terax-capture-foreground", "");
   preedit.style.cssText =
     "position:absolute;left:6px;top:6px;display:none;white-space:pre;pointer-events:none;z-index:2;";
   host.append(textarea, preedit);
@@ -61,6 +63,8 @@ export function bindNativeInput(
   const composition = createNativeComposition();
   const pressed = new Set<string>();
   let disposed = false;
+  let blockPress: { seq: number; row: number; x: number; y: number } | null =
+    null;
   let focusReported = false;
   let compositionTurn: ReturnType<typeof setTimeout> | null = null;
   let wheelCarry = 0;
@@ -68,6 +72,7 @@ export function bindNativeInput(
   let pendingDrag: NativeSelectionCommand | null = null;
   let dragFrame = 0;
   let selectionBusy = 0;
+  let selectionGeneration = 0;
 
   const canInput = () => options.allowInput?.() ?? true;
   const report = (error: unknown) => {
@@ -138,6 +143,8 @@ export function bindNativeInput(
     else reportFocus(false);
   };
   const select = (command: NativeSelectionCommand) => {
+    if (command.kind !== "read" && command.kind !== "release")
+      selectionGeneration++;
     selectionBusy++;
     return session
       .select(command)
@@ -351,6 +358,11 @@ export function bindNativeInput(
       /* A detached host cannot capture. */
     }
     const { col, row, x, y } = point(event.clientX, event.clientY);
+    const seq = session.drawnSeq;
+    blockPress =
+      options.onBlockClick && seq != null && !event.metaKey && !event.ctrlKey
+        ? { seq, row, x: event.clientX, y: event.clientY }
+        : null;
     watch(
       select({
         kind: "press",
@@ -364,6 +376,11 @@ export function bindNativeInput(
   };
   const onPointerMove = (event: PointerEvent) => {
     if (pointer !== event.pointerId) return;
+    if (
+      blockPress &&
+      Math.hypot(event.clientX - blockPress.x, event.clientY - blockPress.y) > 4
+    )
+      blockPress = null;
     pendingDrag = {
       kind: "drag",
       ...point(event.clientX, event.clientY),
@@ -375,7 +392,24 @@ export function bindNativeInput(
     if (pointer !== event.pointerId) return;
     flushDrag(true);
     pointer = null;
-    watch(select({ kind: "release" }));
+    const click = blockPress;
+    blockPress = null;
+    const released = select({ kind: "release" });
+    const generation = selectionGeneration;
+    const revision = session.selectionRevision;
+    watch(
+      released.then(async () => {
+        if (
+          !disposed &&
+          click &&
+          generation === selectionGeneration &&
+          session.selectionRevision === revision &&
+          event.type !== "pointercancel" &&
+          Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 4
+        )
+          await options.onBlockClick?.(click.seq, click.row);
+      }),
+    );
     try {
       host.releasePointerCapture(event.pointerId);
     } catch {

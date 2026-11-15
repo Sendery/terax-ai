@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { bindNativeInput } from "@/modules/terminal/gl/nativeInputBinding";
-import type { EngineSession } from "@/modules/terminal/gl/engineSession";
+import type {
+  EngineSession,
+  NativeSelectionCommand,
+} from "@/modules/terminal/gl/engineSession";
 import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
 vi.mock("@/lib/platform", () => ({ IS_MAC: true }));
 afterEach(() => vi.unstubAllGlobals());
@@ -48,9 +51,13 @@ it("keeps the terminal textarea focused after primary pointer default processing
     cursor: null,
     grid: { cols: 10, rows: 2 },
     setInputFocused: vi.fn(async () => {}),
-    select: vi.fn(async () => null),
+    select: vi.fn(
+      async (_command: NativeSelectionCommand): Promise<string | null> => null,
+    ),
     getSelection: () => null,
+    drawnSeq: 9,
   };
+  const blockClick = vi.fn(async () => {});
   const binding = bindNativeInput(
     session as unknown as EngineSession,
     {
@@ -64,6 +71,7 @@ it("keeps the terminal textarea focused after primary pointer default processing
       background: "#000",
       isActive: () => true,
       onError: vi.fn(),
+      onBlockClick: blockClick,
     },
   );
   const primary = {
@@ -84,6 +92,37 @@ it("keeps the terminal textarea focused after primary pointer default processing
   const secondary = { ...primary, button: 2, defaultPrevented: false };
   listeners.get("pointerdown")?.(secondary);
   expect(secondary.defaultPrevented).toBe(false);
+  listeners.get("pointerup")?.({ ...primary, type: "pointerup" });
+  await vi.waitFor(() =>
+    expect(blockClick).toHaveBeenCalledExactlyOnceWith(9, 0),
+  );
+  blockClick.mockClear();
+  listeners.get("pointerdown")?.(primary);
+  listeners.get("pointerup")?.({ ...primary, clientX: 30, type: "pointerup" });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(blockClick).not.toHaveBeenCalled();
+  let release!: () => void;
+  let delay = true;
+  session.select.mockImplementation((command) =>
+    command.kind === "release" && delay
+      ? new Promise((resolve) => {
+          delay = false;
+          release = () => resolve(null);
+        })
+      : Promise.resolve(null),
+  );
+  listeners.get("pointerdown")?.(primary);
+  listeners.get("pointerup")?.({ ...primary, type: "pointerup" });
+  listeners.get("pointerdown")?.({ ...primary, pointerId: 2 });
+  release();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(blockClick).not.toHaveBeenCalled();
+  listeners.get("pointercancel")?.({
+    ...primary,
+    pointerId: 2,
+    type: "pointercancel",
+  });
   await Promise.resolve();
   binding.dispose();
 });

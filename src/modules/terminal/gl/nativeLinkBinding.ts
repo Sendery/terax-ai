@@ -50,6 +50,7 @@ export function bindNativeLinks(
   const initialTitle = host.title;
   const overlay = document.createElement("div");
   overlay.setAttribute("aria-hidden", "true");
+  overlay.setAttribute("data-terax-capture-foreground", "");
   overlay.dataset.nativeLinkHover = "";
   overlay.style.cssText =
     "position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;";

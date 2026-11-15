@@ -21,14 +21,19 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { homeDir } from "@tauri-apps/api/path";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type {
-  BlockMatch,
-  PositionedBlock,
-  VisibleBlocks,
-} from "./lib/blockDecorations";
+import type { PositionedBlock, VisibleBlocks } from "./lib/blockDecorations";
 import { capAttachOutput } from "./lib/outputCap";
+import {
+  BlockSearchController,
+  readAvailableBlockOutput,
+  type Awaitable,
+  type BlockUiMatch,
+  type BlockReveal,
+  type BlockSearchState,
+} from "./lib/blockSearchController";
+import { writeDeferredTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 
 let cachedHome: string | null = null;
 void homeDir()
@@ -40,12 +45,16 @@ void homeDir()
 type Props = {
   subscribe: (cb: () => void) => () => void;
   getVisible: () => VisibleBlocks;
-  readOutput: (id: string) => string | null;
-  searchBlock: (id: string, query: string) => BlockMatch[];
-  revealMatch: (m: BlockMatch) => void;
-  clearSearch: () => void;
+  readOutput: (id: string) => Awaitable<string | null>;
+  searchBlock: (id: string, query: string) => Awaitable<BlockUiMatch[]>;
+  revealMatch: BlockReveal;
+  clearSearch: () => Awaitable<void>;
   promptReady: boolean;
-  onRunAgain: (command: string) => void;
+  onRunAgain: (command: string) => Awaitable<void>;
+  actionOwner?: unknown;
+  active?: boolean;
+  available?: () => boolean;
+  privateTerminal?: boolean;
   onRestoreFocus: () => void;
 };
 
@@ -79,28 +88,70 @@ function relPath(p: string): string {
   return p;
 }
 
-function copy(text: string, message: string) {
-  void navigator.clipboard
-    .writeText(text)
-    .then(() => toast.success(message))
-    .catch(() => {});
+function copy(
+  read: () => Promise<string>,
+  message: string,
+  current: () => boolean,
+) {
+  void writeDeferredTerminalClipboard(read, current)
+    .then(() => {
+      if (current()) toast.success(message);
+    })
+    .catch((error: unknown) => {
+      if (current())
+        toast.error(
+          error instanceof Error &&
+            error.message.includes("no longer available")
+            ? "Block output is no longer available."
+            : "Could not copy block.",
+        );
+    });
 }
 
 function signature(v: VisibleBlocks): string {
-  let s = v.sticky?.id ?? "";
-  for (const b of v.blocks) {
-    s += `|${b.id}:${Math.round(b.top)}:${Math.round(b.bottom)}:${b.running}`;
-  }
-  return s;
+  return JSON.stringify(v);
 }
-
+type OverlayActions = Props & {
+  current: () => boolean;
+  canAttach: () => boolean;
+};
 export function BlockOverlay(props: Props) {
   const { subscribe, getVisible } = props;
   const [vis, setVis] = useState<VisibleBlocks>(EMPTY);
   const [searchId, setSearchId] = useState<string | null>(null);
+  const [searchFocus, setSearchFocus] = useState(0);
+  const openSearch = (id: string) => {
+    setSearchId(id);
+    setSearchFocus((value) => value + 1);
+  };
   const lastSig = useRef("");
+  const mounted = useRef(true);
+  const returnFocus = useRef<(() => boolean) | null>(null);
+  const latest = useRef(props);
+  latest.current = props;
+  const owner = props.actionOwner ?? props.getVisible;
+  const current = () =>
+    mounted.current &&
+    (latest.current.actionOwner ?? latest.current.getVisible) === owner &&
+    (latest.current.active ?? true) &&
+    (latest.current.available?.() ?? true);
+  const actions: OverlayActions = {
+    ...props,
+    current,
+    canAttach: () => current() && !latest.current.privateTerminal,
+  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (props.active === false) setSearchId(null);
+  }, [props.active]);
 
   useEffect(() => {
+    lastSig.current = "";
     const update = () => {
       const v = getVisible();
       const sig = signature(v);
@@ -113,23 +164,36 @@ export function BlockOverlay(props: Props) {
   }, [subscribe, getVisible]);
 
   const closeSearch = () => {
-    props.clearSearch();
+    returnFocus.current = current;
     setSearchId(null);
   };
+  useEffect(() => {
+    if (searchId !== null) return;
+    const valid = returnFocus.current;
+    returnFocus.current = null;
+    if (valid?.()) latest.current.onRestoreFocus();
+  }, [searchId]);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+    <div
+      data-terax-capture-foreground=""
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+    >
       {vis.blocks.map((b) => (
-        <BlockChrome key={b.id} block={b} all={props} onSearch={setSearchId} />
+        <BlockChrome key={b.id} block={b} all={actions} onSearch={openSearch} />
       ))}
       {vis.sticky && (
-        <StickyHeader block={vis.sticky} all={props} onSearch={setSearchId} />
+        <StickyHeader block={vis.sticky} all={actions} onSearch={openSearch} />
       )}
-      {searchId && (
+      {searchId && props.active !== false && (
         <SearchBar
+          key={searchId}
           blockId={searchId}
+          focusRequest={searchFocus}
+          current={current}
           searchBlock={props.searchBlock}
           revealMatch={props.revealMatch}
+          clearSearch={props.clearSearch}
           onClose={closeSearch}
         />
       )}
@@ -139,7 +203,7 @@ export function BlockOverlay(props: Props) {
 
 type ChromeProps = {
   block: PositionedBlock;
-  all: Props;
+  all: OverlayActions;
   onSearch: (id: string) => void;
 };
 
@@ -203,7 +267,12 @@ function Toolbar({ block, all, onSearch }: ChromeProps) {
           title="Run again"
           className="bt-btn"
           disabled={!all.promptReady}
-          onClick={() => all.onRunAgain(block.command)}
+          onClick={() => {
+            if (all.current() && all.promptReady)
+              void Promise.resolve(all.onRunAgain(block.command)).catch(() =>
+                toast.error("Could not run command."),
+              );
+          }}
         >
           <HugeiconsIcon icon={Refresh01Icon} size={12.5} strokeWidth={1.75} />
         </button>
@@ -214,11 +283,21 @@ function Toolbar({ block, all, onSearch }: ChromeProps) {
 }
 
 function BlockMenu({ block, all, onSearch }: ChromeProps) {
-  const output = () => all.readOutput(block.id) ?? "";
+  const openingSearch = useRef(false);
+  const output = (current = all.current) =>
+    readAvailableBlockOutput(all.readOutput, block.id, current);
   const attach = () => {
-    const out = capAttachOutput(output());
-    const text = out ? `$ ${block.command}\n${out}` : `$ ${block.command}`;
-    useChatStore.getState().attachSelection(text, "terminal");
+    void output(all.canAttach)
+      .then((value) => {
+        if (!all.canAttach()) return;
+        const out = capAttachOutput(value);
+        const text = out ? `$ ${block.command}\n${out}` : `$ ${block.command}`;
+        useChatStore.getState().attachSelection(text, "terminal");
+      })
+      .catch(() => {
+        if (all.canAttach())
+          toast.error("Block output is no longer available.");
+      });
   };
   return (
     <DropdownMenu>
@@ -236,46 +315,64 @@ function BlockMenu({ block, all, onSearch }: ChromeProps) {
         className="min-w-44"
         onCloseAutoFocus={(e) => {
           e.preventDefault();
-          all.onRestoreFocus();
+          if (openingSearch.current) {
+            if (all.current()) onSearch(block.id);
+          } else if (all.current()) all.onRestoreFocus();
+          openingSearch.current = false;
         }}
       >
         <MenuItem
           icon={Refresh01Icon}
           label="Run again"
           disabled={block.running || !all.promptReady || !block.command}
-          onClick={() => all.onRunAgain(block.command)}
+          onClick={() => {
+            if (all.current() && all.promptReady)
+              void Promise.resolve(all.onRunAgain(block.command)).catch(() =>
+                toast.error("Could not run command."),
+              );
+          }}
         />
         <MenuItem
           icon={Copy01Icon}
           label="Copy command"
           disabled={!block.command}
-          onClick={() => copy(block.command, "Command copied")}
+          onClick={() =>
+            copy(async () => block.command, "Command copied", all.current)
+          }
         />
         <MenuItem
           icon={ComputerTerminal02Icon}
           label="Copy output"
-          onClick={() => {
-            const o = output();
-            if (o) copy(o, "Output copied");
-          }}
+          disabled={block.running}
+          onClick={() => copy(() => output(), "Output copied", all.current)}
         />
         <MenuItem
           icon={Copy01Icon}
           label="Copy command and output"
-          onClick={() => {
-            const text = `$ ${block.command}\n${output()}`;
-            copy(text, "Block copied");
-          }}
+          disabled={block.running}
+          onClick={() =>
+            copy(
+              async () => `$ ${block.command}\n${await output()}`,
+              "Block copied",
+              all.current,
+            )
+          }
         />
-        <MenuItem
-          icon={SparklesIcon}
-          label="Attach to AI chat"
-          onClick={attach}
-        />
+        {!all.privateTerminal && (
+          <MenuItem
+            icon={SparklesIcon}
+            label="Attach to AI chat"
+            disabled={block.running}
+            onClick={attach}
+          />
+        )}
         <MenuItem
           icon={Search01Icon}
           label="Find in block"
-          onClick={() => onSearch(block.id)}
+          disabled={block.running}
+          onClick={() => {
+            if (all.current()) openingSearch.current = true;
+          }}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -309,36 +406,62 @@ function MenuItem({
 // navigating matches (the grid scrolls underneath).
 function SearchBar({
   blockId,
+  focusRequest,
   searchBlock,
   revealMatch,
+  clearSearch,
+  current,
   onClose,
 }: {
   blockId: string;
-  searchBlock: (id: string, query: string) => BlockMatch[];
-  revealMatch: (m: BlockMatch) => void;
+  focusRequest: number;
+  searchBlock: Props["searchBlock"];
+  revealMatch: Props["revealMatch"];
+  clearSearch: Props["clearSearch"];
+  current: () => boolean;
   onClose: () => void;
 }) {
-  const [matches, setMatches] = useState<BlockMatch[]>([]);
-  const [idx, setIdx] = useState(0);
+  const [state, setState] = useState<BlockSearchState>({
+    matches: [],
+    index: 0,
+    pending: false,
+    error: null,
+  });
   const inputRef = useRef<HTMLInputElement>(null);
-
+  const lastFocus = useRef<number | null>(null);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const controller = useMemo(() => {
+    const model = new BlockSearchController({
+      searchBlock: (query) => {
+        if (!currentRef.current())
+          throw new Error("Block output is no longer available.");
+        return searchBlock(blockId, query);
+      },
+      revealMatch: async (match) => {
+        if (!currentRef.current()) return false;
+        return (await revealMatch(match)) !== false;
+      },
+      clearSearch,
+      onChange: () => setState(model.state),
+    });
+    return model;
+  }, [blockId, searchBlock, revealMatch, clearSearch]);
   useEffect(() => {
+    setState(controller.state);
+    return () => {
+      void controller.dispose().catch(() => {});
+    };
+  }, [controller]);
+  useEffect(() => {
+    if (lastFocus.current === focusRequest) return;
+    lastFocus.current = focusRequest;
     inputRef.current?.focus();
-  }, []);
-
-  const run = (query: string) => {
-    const m = searchBlock(blockId, query);
-    setMatches(m);
-    setIdx(0);
-    if (m.length) revealMatch(m[0]);
+  }, [focusRequest]);
+  const nav = (direction: -1 | 1) => {
+    void controller.navigate(direction);
   };
-  const nav = (dir: number) => {
-    if (!matches.length) return;
-    const next = (idx + dir + matches.length) % matches.length;
-    setIdx(next);
-    revealMatch(matches[next]);
-  };
-
+  const { matches, index: idx, pending, error } = state;
   return (
     <div className="bt-search pointer-events-auto">
       <HugeiconsIcon icon={Search01Icon} size={12} strokeWidth={1.75} />
@@ -346,7 +469,12 @@ function SearchBar({
         ref={inputRef}
         className="bt-search-input"
         placeholder="Find in block"
-        onChange={(e) => run(e.target.value)}
+        aria-label="Find in block"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        onChange={(e) => controller.find(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -357,15 +485,26 @@ function SearchBar({
           }
         }}
       />
-      <span className="bt-search-count">
-        {matches.length ? `${idx + 1}/${matches.length}` : "0"}
+      <span className="bt-search-count" role="status" aria-live="polite">
+        {pending ? "…" : matches.length ? `${idx + 1}/${matches.length}` : "0"}
       </span>
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
       <SearchBtn
         title="Previous"
+        disabled={pending || !matches.length}
         icon={ArrowUp01Icon}
         onClick={() => nav(-1)}
       />
-      <SearchBtn title="Next" icon={ArrowDown01Icon} onClick={() => nav(1)} />
+      <SearchBtn
+        title="Next"
+        disabled={pending || !matches.length}
+        icon={ArrowDown01Icon}
+        onClick={() => nav(1)}
+      />
       <SearchBtn title="Close" icon={Cancel01Icon} onClick={onClose} />
     </div>
   );
@@ -375,13 +514,22 @@ function SearchBtn({
   title,
   icon,
   onClick,
+  disabled,
 }: {
   title: string;
+  disabled?: boolean;
   icon: typeof Copy01Icon;
   onClick: () => void;
 }) {
   return (
-    <button type="button" title={title} onClick={onClick} className="bt-btn">
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className="bt-btn"
+    >
       <HugeiconsIcon icon={icon} size={13} strokeWidth={1.75} />
     </button>
   );

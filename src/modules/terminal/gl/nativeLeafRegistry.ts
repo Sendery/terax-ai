@@ -10,6 +10,8 @@ export type NativeLeaf = {
   readonly tuiReady: boolean;
   readonly alternateScreen: boolean;
   getSelection: () => string | null;
+  navigateBlocks?: (direction: -1 | 1) => Promise<void>;
+  clearBlockSelection?: () => boolean;
   write: (text: string) => boolean;
   paste: (text: string) => Promise<void>;
   submit: (text: string) => Promise<void>;

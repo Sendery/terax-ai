@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSvgMarkup,
+  collectForegroundElements,
+  compositeCaptureLayers,
   collectCanvasOverlays,
   registerCanvasSnapshotProvider,
   captureScaleFor,
@@ -9,6 +11,8 @@ import {
   MAX_CAPTURE_WIDTH,
   validateCaptureDimensions,
 } from "./rasterize";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("validateCaptureDimensions", () => {
   it("accepts a normal window size", () => {
@@ -119,4 +123,159 @@ it("rejects a visible required pane whose snapshot provider is unavailable", () 
   expect(() =>
     collectCanvasOverlays(root, { left: 0, top: 0 } as DOMRect),
   ).toThrow("Terminal capture is no longer available.");
+});
+
+it("restores only visible foregrounds intersecting native pixels, without nested duplication", () => {
+  vi.stubGlobal("window", {
+    getComputedStyle: () => ({ visibility: "visible", display: "block" }),
+  });
+
+  const node = (left: number, hidden = false) => ({
+    getBoundingClientRect: () => ({ left, top: 20, width: 20, height: 20 }),
+    closest: () => ({ style: { visibility: hidden ? "hidden" : "visible" } }),
+    contains: () => false,
+  });
+  const above = node(15);
+  const nested = node(16);
+  const outside = node(300);
+  const hidden = node(15, true);
+  above.contains = (other?: unknown) => other === nested;
+  const root = {
+    querySelectorAll: () => [above, nested, outside, hidden],
+  } as unknown as HTMLElement;
+  const rect = { left: 10, top: 10, width: 200, height: 100 } as DOMRect;
+  const native = {
+    canvas: {} as HTMLCanvasElement,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 80,
+  };
+  const found = collectForegroundElements(root, rect, [native]);
+  expect(found.map((item) => item.element)).toEqual([above]);
+  expect(found[0]).toMatchObject({ x: 5, y: 10, width: 20, height: 20 });
+});
+it("paints the frozen DOM foreground after native canvas pixels and clips it to those pixels", async () => {
+  const calls: string[] = [];
+  const base = { id: "base" };
+  const terminal = { id: "terminal" };
+  const foreground = { id: "foreground" };
+  const context = {
+    drawImage: (image: { id: string }) => calls.push(image.id),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+  } as unknown as CanvasRenderingContext2D;
+  await compositeCaptureLayers(
+    context,
+    base as unknown as CanvasImageSource,
+    [
+      {
+        canvas: terminal as unknown as HTMLCanvasElement,
+        x: 1,
+        y: 2,
+        width: 30,
+        height: 40,
+      },
+    ],
+    [
+      {
+        image: foreground as unknown as CanvasImageSource,
+        x: 1,
+        y: 2,
+        width: 30,
+        height: 40,
+      },
+    ],
+  );
+  expect(calls).toEqual(["base", "terminal", "foreground"]);
+  expect(context.rect).toHaveBeenCalledExactlyOnceWith(1, 2, 30, 40);
+  expect(context.clip).toHaveBeenCalledOnce();
+  expect(context.restore).toHaveBeenCalledTimes(2);
+});
+
+it("does not promote CSS-hidden foregrounds into visible capture layers", () => {
+  const hidden = {
+    style: { visibility: "" },
+    getBoundingClientRect: () => ({ left: 10, top: 10, width: 20, height: 20 }),
+    closest: () => null,
+    contains: () => false,
+  };
+  vi.stubGlobal("window", {
+    getComputedStyle: () => ({ visibility: "hidden", display: "block" }),
+  });
+  expect(
+    collectForegroundElements(
+      { querySelectorAll: () => [hidden] } as unknown as HTMLElement,
+      { left: 0, top: 0, width: 100, height: 100 } as DOMRect,
+      [
+        {
+          canvas: {} as HTMLCanvasElement,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+        },
+      ],
+    ),
+  ).toEqual([]);
+});
+it("retains pane clipping for an IME foreground instead of bleeding into a neighbor", async () => {
+  const pane = {
+    parentElement: null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 50, height: 80 }),
+  };
+  const preedit = {
+    parentElement: pane,
+    style: {},
+    getBoundingClientRect: () => ({ left: 40, top: 10, width: 60, height: 20 }),
+    closest: () => ({ style: { visibility: "visible" } }),
+    contains: () => false,
+  };
+  vi.stubGlobal("window", {
+    getComputedStyle: (element: unknown) =>
+      element === pane
+        ? {
+            visibility: "visible",
+            display: "block",
+            overflowX: "hidden",
+            overflowY: "hidden",
+          }
+        : {
+            visibility: "visible",
+            display: "block",
+            overflowX: "visible",
+            overflowY: "visible",
+          },
+  });
+  const overlays = [
+    { canvas: {} as HTMLCanvasElement, x: 0, y: 0, width: 50, height: 80 },
+    { canvas: {} as HTMLCanvasElement, x: 50, y: 0, width: 50, height: 80 },
+  ];
+  const foreground = collectForegroundElements(
+    { querySelectorAll: () => [preedit] } as unknown as HTMLElement,
+    { left: 0, top: 0, width: 100, height: 80 } as DOMRect,
+    overlays,
+  );
+  expect(foreground[0].clip).toEqual({ x: 0, y: 0, width: 50, height: 80 });
+  const context = {
+    drawImage: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+  } as unknown as CanvasRenderingContext2D;
+  await compositeCaptureLayers(
+    context,
+    {} as CanvasImageSource,
+    overlays,
+    foreground.map(({ element, ...item }) => ({
+      ...item,
+      image: {} as CanvasImageSource,
+    })),
+  );
+  expect(context.rect).toHaveBeenLastCalledWith(0, 0, 50, 80);
 });

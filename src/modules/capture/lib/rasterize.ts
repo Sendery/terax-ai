@@ -164,6 +164,145 @@ export function collectCanvasOverlays(
   return overlays;
 }
 
+type ForegroundElement = {
+  clip?: { x: number; y: number; width: number; height: number };
+  element: HTMLElement;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+type ForegroundImage = Omit<ForegroundElement, "element"> & {
+  image: CanvasImageSource;
+};
+const FOREGROUND_SELECTOR = [
+  "[data-terax-capture-foreground]",
+  "[data-radix-popper-content-wrapper]",
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+].join(",");
+export function collectForegroundElements(
+  root: HTMLElement,
+  rootRect: DOMRect,
+  overlays: CanvasOverlay[],
+): ForegroundElement[] {
+  if (!overlays.length) return [];
+  const candidates: ForegroundElement[] = [];
+  let pixels = 0;
+  for (const element of Array.from(
+    root.querySelectorAll<HTMLElement>(FOREGROUND_SELECTOR),
+  )) {
+    if (
+      element.closest<HTMLElement>("[data-terminal-engine]")?.style
+        .visibility === "hidden" ||
+      element.style?.visibility === "hidden"
+    )
+      continue;
+    const computed = window.getComputedStyle(element);
+    if (computed.visibility !== "visible" || computed.display === "none")
+      continue;
+    const rect = element.getBoundingClientRect();
+    const x = rect.left - rootRect.left,
+      y = rect.top - rootRect.top;
+    const width = Math.ceil(rect.width),
+      height = Math.ceil(rect.height);
+    if (
+      width < 1 ||
+      height < 1 ||
+      !overlays.some(
+        (item) =>
+          x < item.x + item.width &&
+          x + width > item.x &&
+          y < item.y + item.height &&
+          y + height > item.y,
+      )
+    )
+      continue;
+    const error = validateCaptureDimensions(width, height);
+    if (error) throw new Error(error);
+    if (candidates.some((parent) => parent.element.contains(element))) continue;
+    pixels += width * height;
+    if (candidates.length >= 128 || pixels > MAX_CAPTURE_PIXELS * 4)
+      throw new Error("Capture foreground exceeds its limits");
+    let left = 0,
+      top = 0,
+      right = rootRect.width,
+      bottom = rootRect.height;
+    for (
+      let parent = element.parentElement;
+      parent;
+      parent = parent.parentElement
+    ) {
+      const style = window.getComputedStyle(parent);
+      const bounds = parent.getBoundingClientRect();
+      if (/^(hidden|clip|auto|scroll|overlay)$/.test(style.overflowX)) {
+        left = Math.max(left, bounds.left - rootRect.left);
+        right = Math.min(right, bounds.left - rootRect.left + bounds.width);
+      }
+      if (/^(hidden|clip|auto|scroll|overlay)$/.test(style.overflowY)) {
+        top = Math.max(top, bounds.top - rootRect.top);
+        bottom = Math.min(bottom, bounds.top - rootRect.top + bounds.height);
+      }
+      if (parent === root) break;
+    }
+    if (right <= left || bottom <= top) continue;
+    candidates.push({
+      element,
+      x,
+      y,
+      width,
+      height,
+      clip: { x: left, y: top, width: right - left, height: bottom - top },
+    });
+  }
+  return candidates.filter(
+    (item) =>
+      !candidates.some(
+        (parent) => parent !== item && parent.element.contains(item.element),
+      ),
+  );
+}
+export async function compositeCaptureLayers(
+  context: CanvasRenderingContext2D,
+  base: CanvasImageSource,
+  overlays: CanvasOverlay[],
+  foregrounds: ForegroundImage[],
+): Promise<void> {
+  context.drawImage(base, 0, 0);
+  for (const overlay of overlays) await drawOverlay(context, overlay);
+  if (!foregrounds.length || !overlays.length) return;
+  context.save();
+  try {
+    context.beginPath();
+    for (const overlay of overlays)
+      context.rect(overlay.x, overlay.y, overlay.width, overlay.height);
+    context.clip();
+    for (const foreground of foregrounds) {
+      context.save();
+      try {
+        if (foreground.clip) {
+          const { x, y, width, height } = foreground.clip;
+          context.beginPath();
+          context.rect(x, y, width, height);
+          context.clip();
+        }
+        context.drawImage(
+          foreground.image,
+          foreground.x,
+          foreground.y,
+          foreground.width,
+          foreground.height,
+        );
+      } finally {
+        context.restore();
+      }
+    }
+  } finally {
+    context.restore();
+  }
+}
+
 const SKIPPED_STYLE_PROPERTIES = new Set(["cursor", "pointer-events"]);
 
 function inlineComputedStyles(
@@ -290,18 +429,13 @@ export type CaptureImage = {
   height: number;
 };
 
-export async function rasterizeElement(
+function freezeElement(
   element: HTMLElement,
-): Promise<CaptureImage> {
-  const rect = element.getBoundingClientRect();
-  const width = Math.ceil(rect.width);
-  const height = Math.ceil(rect.height);
-  const dimensionError = validateCaptureDimensions(width, height);
-  if (dimensionError) throw new Error(dimensionError);
-
-  const overlays = collectCanvasOverlays(element, rect);
+  width: number,
+  height: number,
+  forceVisible = window.getComputedStyle(element).visibility === "hidden",
+): HTMLElement {
   const clone = element.cloneNode(true) as HTMLElement;
-  const forceVisible = window.getComputedStyle(element).visibility === "hidden";
   inlineComputedStyles(element, clone, forceVisible);
   stripCanvases(clone);
   syncInputState(element, clone);
@@ -315,22 +449,60 @@ export async function rasterizeElement(
   clone.style.position = "static";
   clone.style.inset = "auto";
   // Inactive panes stay mounted but hidden; the capture clone must render.
-  clone.style.visibility = "visible";
+  if (forceVisible) clone.style.visibility = "visible";
   clone.style.display =
     clone.style.display === "none" ? "block" : clone.style.display;
 
-  const fontCss = await collectFontCss();
+  return clone;
+}
+async function markupImage(
+  width: number,
+  height: number,
+  clone: HTMLElement,
+  fontCss: string,
+): Promise<HTMLImageElement> {
   const serialized = new XMLSerializer().serializeToString(clone);
   const svg = buildSvgMarkup(width, height, serialized, fontCss);
-  const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-
   const image = new Image();
   image.decoding = "sync";
   await new Promise<void>((resolve, reject) => {
     image.onload = () => resolve();
     image.onerror = () => reject(new Error("Capture rasterization failed"));
-    image.src = svgUrl;
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   });
+  return image;
+}
+
+export async function rasterizeElement(
+  element: HTMLElement,
+): Promise<CaptureImage> {
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(rect.width);
+  const height = Math.ceil(rect.height);
+  const dimensionError = validateCaptureDimensions(width, height);
+  if (dimensionError) throw new Error(dimensionError);
+
+  const overlays = collectCanvasOverlays(element, rect);
+  const clone = freezeElement(element, width, height);
+  // Freeze foreground DOM at the same time as the required native snapshots.
+  const foregrounds = collectForegroundElements(element, rect, overlays).map(
+    (item) => ({
+      ...item,
+      clone: freezeElement(item.element, item.width, item.height, false),
+    }),
+  );
+  const fontCss = await collectFontCss();
+  const image = await markupImage(width, height, clone, fontCss);
+  const foregroundImages = await Promise.all(
+    foregrounds.map(async (item) => ({
+      image: await markupImage(item.width, item.height, item.clone, fontCss),
+      clip: item.clip,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    })),
+  );
 
   const scale = captureScaleFor(width, height, window.devicePixelRatio || 1);
   const canvas = document.createElement("canvas");
@@ -344,10 +516,7 @@ export async function rasterizeElement(
     context.fillRect(0, 0, canvas.width, canvas.height);
   }
   context.scale(scale, scale);
-  context.drawImage(image, 0, 0);
-  for (const overlay of overlays) {
-    await drawOverlay(context, overlay);
-  }
+  await compositeCaptureLayers(context, image, overlays, foregroundImages);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((value) => {

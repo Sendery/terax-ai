@@ -196,6 +196,9 @@ const LegacyTerminalPane = memo(
                 subscribe={session.subscribeBlocks}
               />
               <BlockOverlay
+                actionOwner={leafId}
+                active={visible}
+                privateTerminal={privateTerminal}
                 subscribe={session.subscribeBlocks}
                 getVisible={session.visibleBlocks}
                 readOutput={(id) => session.readBlockId(id)?.output ?? null}
@@ -233,7 +236,7 @@ export const TerminalPane = memo(
   forwardRef<TerminalPaneHandle, TerminalPaneProps>(
     function TerminalPaneRouter(props, ref) {
       // Keep a live leaf on its original engine when display preferences change.
-      // Native blocks remain on the existing path until their migration is complete.
+      // New blocks panes share the native path only in explicit native development builds.
       const native = useRef(
         initialLeafEngine(
           nativeTerminalRequested,
