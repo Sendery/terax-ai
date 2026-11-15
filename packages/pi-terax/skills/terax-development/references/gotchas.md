@@ -703,3 +703,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels.
 - **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards.
 - **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider.
+
+
+### Shell state is not engine acquisition or arbitrary OSC output
+
+- **Trigger:** native terminals need CWD/readiness or a process is replaced while state delivery is pending.
+- **Failure mode:** accepting bare OSC 7 or trusting any printed A/D allows untrusted output to change app CWD. Treating engine open as ready loses restoration input. A late ready message can re-arm global readiness after retirement reset.
+- **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
+- **Verification:** fragment/cancel/oversize/opaque-string tests, real shell script output and actor ordering, deferred open/respawn and post-exit state tests, and actual two-pane CWD plus forged-output rejection. Check native target cfg branches; M2 gates do not compile Windows. Canonicalize temporary directory fixtures before comparing physical shell PWD, per the existing macOS path lesson.

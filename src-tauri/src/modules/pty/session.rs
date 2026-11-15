@@ -148,7 +148,24 @@ pub fn spawn(
     };
     let pair = pty_system.openpty(size).map_err(|e| e.to_string())?;
 
+    #[cfg(feature = "ghostty-engine")]
+    let mut shell_token = if matches!(&sink, OutputSink::Engine { .. }) { Some(engine::shell::ShellToken::generate()?) } else { None };
     let cmd = shell_init::build_command(cwd, workspace, blocks)?;
+    #[cfg(feature = "ghostty-engine")]
+    let cmd = {
+        let mut cmd = cmd;
+        if let Some(token) = &shell_token {
+            cmd.env(shell_init::SHELL_MARKER_ENV, token.as_str());
+            #[cfg(windows)]
+            {
+                let inherited = cmd.get_env("WSLENV").and_then(|value| value.to_str()).unwrap_or("").to_owned();
+                let mut names: Vec<&str> = inherited.split(':').filter(|name| !name.is_empty() && name.split('/').next()!=Some(shell_init::SHELL_MARKER_ENV)).collect();
+                names.push(shell_init::SHELL_MARKER_ENV);
+                cmd.env("WSLENV", names.join(":"));
+            }
+        }
+        cmd
+    };
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     drop(pair.slave);
 
@@ -164,7 +181,7 @@ pub fn spawn(
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
         OutputSink::Engine { on_frame, colors, slot, on_failure, on_state } => {
-            let engine = start_engine(cols, rows, colors, on_frame, on_state, writer.clone())?;
+            let engine = start_engine(cols, rows, colors, shell_token.take().ok_or("native shell marker is missing")?, on_frame, on_state, writer.clone())?;
             Pipeline::Engine(EnginePipeline {
                 core: slot.install(engine)?,
                 slot,
@@ -383,13 +400,14 @@ fn start_engine(
     cols: u16,
     rows: u16,
     colors: Option<super::colors::Colors>,
+    shell_token: engine::shell::ShellToken,
     on_frame: Channel<Response>,
     on_state: Channel<engine::state::EngineState>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
 ) -> Result<engine::Engine, String> {
     let frames: engine::FrameSink =
         Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok());
-    let engine = engine::start_with_colors(cols, rows, colors, frames, reply_sink(writer))?;
+    let engine = engine::start_with_shell(cols, rows, colors, shell_token, frames, reply_sink(writer))?;
     engine.handle.on_state(move |state| on_state.send(state).is_ok());
     Ok(engine)
 }

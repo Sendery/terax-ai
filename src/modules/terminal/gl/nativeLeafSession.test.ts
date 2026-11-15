@@ -22,6 +22,9 @@ function driver(id: number, closing: Promise<void> = Promise.resolve()) {
       focusTracking: false,
       modifyOtherKeys: 0,
       kittyFlags: 0,
+      cwd: null,
+      shellReady: false,
+      commandRunning: false,
     },
     close: vi.fn(() => closing),
     write: vi.fn(async () => {}),
@@ -218,5 +221,125 @@ it("isolates a throwing view frame callback from the native channel", async () =
   await session.opened;
   expect(() => frame()).not.toThrow();
   expect(attached.onError).toHaveBeenCalled();
+  await session.dispose();
+});
+
+it("reports actual shell readiness and cwd, including after a view remount", async () => {
+  let state!: NonNullable<
+    import("@/modules/terminal/gl/engineSession").SessionObserver["onState"]
+  >;
+  const onReady = vi.fn();
+  const onResetReady = vi.fn();
+  const native = driver(9);
+  const session = new NativeLeafSession(
+    { ...config(), onReady, onResetReady },
+    async (_renderer, options) => {
+      state = options.observer.onState!;
+      return native as unknown as EngineSession;
+    },
+  );
+  const first = { ...view(), onCwd: vi.fn() };
+  const detach = session.attach(first, { ...config(), onReady, onResetReady });
+  await session.opened;
+  expect(onReady).not.toHaveBeenCalled();
+  expect(session.cwd).toBeNull();
+  state({
+    ...native.inputState,
+    version: 1,
+    cwd: "/workspace/one",
+    shellReady: true,
+    commandRunning: false,
+  });
+  expect(onReady).toHaveBeenCalledOnce();
+  expect(first.onCwd).toHaveBeenCalledWith("/workspace/one");
+  expect(session.cwd).toBe("/workspace/one");
+  detach();
+  const next = { ...view(), onCwd: vi.fn() };
+  session.attach(next, { ...config(), onReady, onResetReady });
+  expect(next.onCwd).toHaveBeenCalledWith("/workspace/one");
+  expect(onReady).toHaveBeenCalledOnce();
+  await session.dispose();
+});
+
+it("retires the native process even if readiness-reset notification throws", async () => {
+  const onResetReady = vi.fn();
+  const native = driver(9);
+  const session = new NativeLeafSession(
+    { ...config(), onResetReady },
+    async () => native as unknown as EngineSession,
+  );
+  await session.opened;
+  onResetReady.mockImplementation(() => {
+    throw new Error("readiness observer failed");
+  });
+  await session.dispose();
+  expect(native.close).toHaveBeenCalled();
+});
+
+it("ignores readiness from an opening process already being replaced", async () => {
+  const onReady = vi.fn();
+  const onResetReady = vi.fn();
+  const observers: import("@/modules/terminal/gl/engineSession").SessionObserver[] =
+    [];
+  let release!: (engine: EngineSession) => void;
+  let called!: () => void;
+  const acquired = new Promise<void>((yes) => {
+    called = yes;
+  });
+  const first = new Promise<EngineSession>((yes) => {
+    release = yes;
+  });
+  const open = vi.fn(async (_renderer, options) => {
+    observers.push(options.observer);
+    called();
+    return observers.length === 1
+      ? first
+      : (driver(10) as unknown as EngineSession);
+  });
+  const session = new NativeLeafSession(
+    { ...config(), onReady, onResetReady },
+    open,
+  );
+  await acquired;
+  const restart = session.respawn();
+  observers[0].onState?.({
+    ...driver(9).inputState,
+    version: 1,
+    cwd: "/stale",
+    shellReady: true,
+  });
+  expect(onReady).not.toHaveBeenCalled();
+  release(driver(9) as unknown as EngineSession);
+  await restart;
+  observers[1].onState?.({
+    ...driver(10).inputState,
+    version: 1,
+    cwd: "/current",
+    shellReady: true,
+  });
+  expect(onReady).toHaveBeenCalledOnce();
+  expect(session.cwd).toBe("/current");
+  await session.dispose();
+});
+it("does not mark an exited shell ready from a delayed state message", async () => {
+  const onReady = vi.fn();
+  let observer!: import("@/modules/terminal/gl/engineSession").SessionObserver;
+  const session = new NativeLeafSession(
+    { ...config(), onReady },
+    async (_renderer, options) => {
+      observer = options.observer;
+      return driver(9) as unknown as EngineSession;
+    },
+  );
+  await session.opened;
+  observer.onExit?.(0);
+  observer.onState?.({
+    ...driver(9).inputState,
+    version: 1,
+    cwd: "/finished",
+    shellReady: true,
+  });
+  expect(onReady).not.toHaveBeenCalled();
+  expect(session.shellReady).toBe(false);
   await session.dispose();
 });

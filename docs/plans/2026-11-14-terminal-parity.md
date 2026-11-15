@@ -50,7 +50,7 @@ to close a row; an alternative must deliver the same or better user behavior.
 
 | ID | Existing capability and primary source | Current new-engine evidence/gap | Observable completion evidence |
 |---|---|---|---|
-| A01 | Local cwd and readiness: OSC 7/133 handlers, shell init scripts, `markSessionReady` | Native row semantic flags do not carry the complete cwd/command lifecycle. Engine callbacks currently install PTY replies/device attributes only. | `cd` updates the correct pane and downstream cwd consumers; command output cannot spoof local cwd; readiness follows the shell rather than a guessed delay. |
+| A01 | Local cwd and readiness: OSC 7/133 handlers, shell init scripts, `markSessionReady` | A bounded actor-side observer and correlated OSC 133 markers now publish versioned CWD/readiness/running state. M2 ordinary zsh splits preserve independent Unicode/space CWD across focus/tab changes and ignore forged unsigned D/A plus OSC 7. Actual zsh/bash script bytes and native ordering are tested. Fish/PowerShell/WSL runtime and complete consumer scenarios remain open. | `cd` updates the correct pane and downstream cwd consumers; command output cannot spoof local cwd; readiness follows the shell rather than a guessed delay. |
 | A02 | Blocks mode: `blockController.ts`, `BlockDecorations`, `BlockOverlay`, `ShellInput` | `gterm_open` currently passes `blocks=false`; decorators and prompt/command markers depend on xterm objects. | Prompt/running/alternate-screen transitions, command text, exit status/duration, navigation, output selection, rerun, block search and input drafts work through stable Rust row anchors. |
 | A03 | Header search: `SearchInline.tsx`, App's SearchAddon maps | The public header/pane props still expose `SearchAddon`; no Rust search adapter is connected. | Incremental search, next/previous, highlights, clearing and focus restoration work across live/history text and survive pane changes and reflow. |
 | A04 | Selection actions: `TerminalContextMenu.tsx`, selection popup, notes/Mermaid/TTS actions | Text selection APIs still read xterm; engine selection is missing. | Copy, Ask Terax, Add to Note, Open Mermaid and Read Aloud receive the same captured selection and never switch to a different pane or post-click selection. |
@@ -137,3 +137,14 @@ their full product scenarios remain unverified. No capability row is closed by
 this update. Inactive native-pane capture rejects clearly until offscreen
 capture is implemented. Shell CWD/readiness, blocks, search and links remain
 priority gaps. No further lab or FPS measurement was run.
+
+
+## Native shell integration update (2026-11-15)
+
+[Native shell integration report](2026-11-15-terminal-native-shell-integration.md)
+records the next vertical slice after ordinary-pane startup. A01 now has actual
+normal M2 zsh CWD/focus/tab-return and forged-output rejection evidence, plus
+real zsh/bash script and ordered native state tests. Native opening is not shell
+readiness; generation/exit/failure regressions reject stale ready signals. A08
+and A09 still require complete agent restore/task scenarios, and A01 remains
+open for other supported shells/platforms. Search, links and blocks are next.

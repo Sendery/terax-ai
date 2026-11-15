@@ -966,6 +966,9 @@ it("accepts versioned mode events before and after open while rejecting stale st
     focusTracking: false,
     modifyOtherKeys: 2,
     kittyFlags: 0,
+    cwd: null,
+    shellReady: false,
+    commandRunning: false,
   };
   args.onState.onmessage(state);
   ipc.open!.resolve(9);

@@ -1,5 +1,8 @@
 export type NativeLeaf = {
   readonly id: number | null;
+  readonly cwd: string | null;
+  readonly shellReady: boolean;
+  readonly commandRunning: boolean;
   readonly exited: boolean;
   readonly focused: boolean;
   readonly tuiReady: boolean;

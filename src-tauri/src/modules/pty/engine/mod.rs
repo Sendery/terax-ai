@@ -9,6 +9,8 @@ pub mod frame;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod health;
 #[cfg(any(test, feature = "ghostty-engine"))]
+pub mod shell;
+#[cfg(any(test, feature = "ghostty-engine"))]
 pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 
 #[cfg(feature = "ghostty-engine")]
@@ -537,6 +539,35 @@ mod runtime {
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
+        start_config(cols, rows, colors, None, frames, replies)
+    }
+
+    pub fn start_with_shell(
+        cols: u16,
+        rows: u16,
+        colors: Option<Colors>,
+        token: super::shell::ShellToken,
+        frames: FrameSink,
+        replies: ReplySink,
+    ) -> Result<Engine, String> {
+        start_config(
+            cols,
+            rows,
+            colors,
+            Some(token.into_string()),
+            frames,
+            replies,
+        )
+    }
+
+    fn start_config(
+        cols: u16,
+        rows: u16,
+        colors: Option<Colors>,
+        shell_token: Option<String>,
+        frames: FrameSink,
+        replies: ReplySink,
+    ) -> Result<Engine, String> {
         validate_size(cols, rows)?;
         let (tx, rx) = sync_channel(QUEUE_DEPTH);
         let (ready_tx, ready_rx) = sync_channel(1);
@@ -555,6 +586,7 @@ mod runtime {
                             cols,
                             rows,
                             colors,
+                            shell_token,
                             &rx,
                             control.clone(),
                             stats,
@@ -611,6 +643,7 @@ mod runtime {
         stop_requested: bool,
         selection: super::selection::SelectionState,
         keyboard_modes: super::keyboard_modes::KeyboardModes,
+        shell: super::shell::ShellIntegration,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -618,6 +651,7 @@ mod runtime {
     impl Session<'_> {
         fn feed(&mut self, bytes: &[u8]) {
             self.keyboard_modes.ingest(bytes);
+            self.shell.ingest(bytes);
             self.term.vt_write(bytes);
             self.update_input_state();
             self.update_scrollback_rows();
@@ -634,7 +668,7 @@ mod runtime {
             }
             match super::state::Modes::read(&self.term, self.keyboard_modes.modify_other_keys()) {
                 Ok(modes) => {
-                    if !self.stats.input_state.publish(modes) {
+                    if !self.stats.input_state.publish(modes, self.shell.state()) {
                         self.health.fail(EngineFailure::StateChannelClosed);
                     }
                 }
@@ -846,6 +880,7 @@ mod runtime {
         cols: u16,
         rows: u16,
         colors: Option<Colors>,
+        shell_token: Option<String>,
         rx: &Receiver<Input>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
@@ -889,6 +924,7 @@ mod runtime {
             stop_requested: false,
             selection: super::selection::SelectionState::default(),
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
+            shell: super::shell::ShellIntegration::new(shell_token),
             control,
             stats,
         };
@@ -1779,5 +1815,33 @@ mod engine_tests {
             assert!(text.contains(&format!("line{n}")));
         }
         h.shutdown();
+    }
+}
+
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod shell_actor_tests {
+    use super::*;
+    #[test]
+    fn authenticated_shell_state_is_published_in_input_order() {
+        let engine = start_with_shell(
+            20,
+            3,
+            None,
+            shell::ShellToken::for_test(),
+            Box::new(|_| true),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        let token = "1234567890abcdef1234567890abcdef";
+        let ready=format!("\x1b]133;D;0;aid={token}\x07\x1b]7;file://host/tmp/native\x07\x1b]133;B;aid={token}\x07");
+        assert!(engine.input.feed(ready.into_bytes()));
+        let finished = engine.input.finish().unwrap();
+        finished.recv().unwrap().unwrap();
+        let state = engine.handle.input_state();
+        assert_eq!(state.shell.cwd.as_deref(), Some("/tmp/native"));
+        assert!(state.shell.shell_ready);
+        assert!(!state.shell.command_running);
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
     }
 }

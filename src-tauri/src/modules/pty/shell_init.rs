@@ -107,8 +107,10 @@ fn ensure_utf8_locale(cmd: &mut CommandBuilder) {
 // escape-sequence key encoding to native modifier probing when they see
 // TERM_PROGRAM=Apple_Terminal, which would break Shift+Enter under Terax.
 const TERM_PROGRAM: &str = "Terax";
+pub const SHELL_MARKER_ENV: &str = "TERAX_SHELL_INTEGRATION_TOKEN";
 
 fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
+    cmd.env_remove(SHELL_MARKER_ENV);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", TERM_PROGRAM);
@@ -347,6 +349,7 @@ mod unix {
 
 #[cfg(windows)]
 mod windows {
+    use super::SHELL_MARKER_ENV;
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -493,6 +496,7 @@ mod windows {
         for arg in &spec.args {
             cmd.arg(arg);
         }
+        cmd.env_remove(SHELL_MARKER_ENV);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", super::TERM_PROGRAM);

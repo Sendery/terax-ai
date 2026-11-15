@@ -136,7 +136,7 @@ const readyWaiters = new Map<
   { resolve: () => void; timer: ReturnType<typeof setTimeout> }[]
 >();
 
-function markSessionReady(leafId: number): void {
+export function markSessionReady(leafId: number): void {
   if (readyLeaves.has(leafId)) return;
   readyLeaves.add(leafId);
   const waiters = readyWaiters.get(leafId);
@@ -150,6 +150,10 @@ function markSessionReady(leafId: number): void {
 
 export function hasLegacyLeaf(leafId: number): boolean {
   return sessions.has(leafId);
+}
+
+export function resetSessionReady(leafId: number): void {
+  readyLeaves.delete(leafId);
 }
 
 export function whenSessionReady(
@@ -241,6 +245,8 @@ export function isLeafTuiReady(leafId: number): boolean {
 }
 
 export function leafCwd(leafId: number): string | null {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.cwd;
   return sessions.get(leafId)?.lastCwd ?? null;
 }
 

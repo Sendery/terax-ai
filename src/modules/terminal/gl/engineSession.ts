@@ -112,6 +112,7 @@ export type FrameTiming = {
 };
 
 export type SessionObserver = {
+  onState?: (state: NativeState) => void;
   onFrameTiming?: (timing: FrameTiming) => void;
   onCreditReply?: (seq: number, at: number, ok: boolean) => void;
   onFrame?: (event: FrameEvent) => void;
@@ -688,7 +689,16 @@ export class EngineSession {
       JSON.stringify(state) !== JSON.stringify(this.inputStateValue)
     )
       throw new Error("invalid native terminal state version");
+    const changed =
+      !this.inputStateValue || state.version !== this.inputStateValue.version;
     this.inputStateValue = state;
+    if (changed) {
+      try {
+        this.observer.onState?.(state);
+      } catch {
+        console.error("native terminal state observer failed");
+      }
+    }
     return state;
   }
 

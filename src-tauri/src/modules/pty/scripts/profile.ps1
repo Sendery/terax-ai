@@ -5,6 +5,10 @@
 
 if ($global:__TERAX_HOOKS_LOADED) { return }
 $global:__TERAX_HOOKS_LOADED = $true
+$global:__terax_aid = ''
+if ($env:TERAX_SHELL_INTEGRATION_TOKEN -match '^[a-f0-9]{32}$') {
+    $global:__terax_aid = ";aid=$env:TERAX_SHELL_INTEGRATION_TOKEN"
+}
 
 try {
     [Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
@@ -60,7 +64,12 @@ function global:__terax_install_readline {
                 $esc = [char]27
                 $cmd = $line -replace '[\x00-\x1F\x7F]', ' '
                 if ($cmd.Length -gt 256) { $cmd = $cmd.Substring(0, 256) }
-                [Console]::Write("$esc]133;C;$cmd$esc\")
+                if ($global:__terax_aid) {
+                    $encoded = __terax_urlencode $cmd
+                    [Console]::Write("$esc]133;C$global:__terax_aid;cmdline_url=$encoded$esc\")
+                } else {
+                    [Console]::Write("$esc]133;C;$cmd$esc\")
+                }
             }
         } catch {}
         $line
@@ -73,9 +82,9 @@ function global:prompt {
     if ($null -eq $lec) { $lec = if ($?) { 0 } else { 1 } }
     $esc = [char]27
 
-    $oscD = "$esc]133;D;$lec$esc\"
-    $oscA = "$esc]133;A$esc\"
-    $oscB = "$esc]133;B$esc\"
+    $oscD = "$esc]133;D;$lec$global:__terax_aid$esc\"
+    $oscA = "$esc]133;A$global:__terax_aid$esc\"
+    $oscB = "$esc]133;B$global:__terax_aid$esc\"
 
     $loc = Get-Location
     $osc7 = ''

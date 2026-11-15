@@ -561,6 +561,44 @@ private-terminal capture guards still apply.
 
 The real M2 normal sandbox now proves startup, text input, split, tab
 hide/show, mouse focus, surviving-pane close, renderer replacement and scoped
-capture. This is narrower than terminal parity. Search, links, blocks, native
-shell lifecycle/CWD, remaining settings, TUI mouse reporting, full graphemes,
+capture. This is narrower than terminal parity. Search, links, blocks, remaining settings, TUI mouse reporting, full graphemes,
 platform validation and rollout remain open in the parity inventory.
+
+
+### Native shell state and readiness
+
+Ordinary native spawns generate a fresh 128-bit correlation token and pass it
+only to their shell and engine. Shell profiles add `aid` to OSC 133 A/B/C/D for
+these sessions; command text on C uses the supported `cmdline_url` option.
+Raw spawns remove an inherited native token, keeping the existing unsigned
+marker output. Windows forwards the native variable through WSLENV; runtime
+acceptance of fish, PowerShell and WSL remains pending.
+
+The Rust actor runs a bounded OSC 7/133 metadata observer on accepted bytes
+before feeding the unchanged byte slice to Ghostty. It skips other OSCs and
+opaque control strings, handles fragmentation/cancellation and bounds decoded
+CWD to 128 KiB and prompt metadata to 4 KiB. Only correctly correlated A/D
+opens a CWD window; B/C closes it. Unmatched output cannot unlock that window.
+Decoded paths must be absolute, valid UTF-8 and control-free. Windows drive
+URIs are normalized. The token correlates local shell integration; it does not
+isolate a malicious local process that can inspect its inherited environment.
+Neither token nor command text enters EngineState, Pi snapshots or diagnostics.
+Native core `pwd()` and semantic row flags are not the trusted CWD source.
+
+EngineState now contains bounded `cwd`, `shellReady` and `commandRunning` beside
+the native input modes, with one version covering all fields. Unchanged state
+is coalesced; no frame polling or extra per-keystroke query is introduced.
+Readiness follows a genuine CWD/prompt marker, not engine opening. Native leaf
+adapters deliver CWD to the existing pane tree/app callback and mark the shared
+session-ready waiters. Remount delivers the cached CWD to the new view. Closing
+invalidates the observer generation before any await; respawn/exit/failure
+clears readiness and late state cannot mark a retired process ready again.
+Readiness callback exceptions cannot prevent process retirement. The existing
+whenSessionReady timeout fallback remains compatible; timeout does not set the
+ready flag and is not evidence of an initialized shell.
+
+M2 normal-window evidence covers zsh CWD in independent splits with Unicode and
+spaces, focus and tab return, and rejection of unsigned D/A plus OSC 7 while a
+command remains running. Actual zsh/bash profile output and native ordered
+state have regression coverage. Broader restore/task/agent scenarios and other
+platforms remain open in the parity inventory.

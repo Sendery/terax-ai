@@ -6,6 +6,9 @@ export type NativeState = Readonly<{
   focusTracking: boolean;
   modifyOtherKeys: number;
   kittyFlags: number;
+  cwd: string | null;
+  shellReady: boolean;
+  commandRunning: boolean;
 }>;
 export function decodeNativeState(value: unknown): NativeState {
   if (!value || typeof value !== "object")
@@ -16,6 +19,8 @@ export function decodeNativeState(value: unknown): NativeState {
     "mouseTracking",
     "bracketedPaste",
     "focusTracking",
+    "shellReady",
+    "commandRunning",
   ])
     if (typeof data[field] !== "boolean")
       throw new Error("invalid native terminal state");
@@ -31,7 +36,19 @@ export function decodeNativeState(value: unknown): NativeState {
       data[field] > max
     )
       throw new Error("invalid native terminal state");
+  const cwd = data.cwd;
+  if (
+    cwd !== null &&
+    (typeof cwd !== "string" ||
+      !/^(?:\/|[A-Za-z]:[\\/])/.test(cwd) ||
+      /[\u0000-\u001f\u007f-\u009f]/.test(cwd) ||
+      new TextEncoder().encode(cwd).byteLength > 128 * 1024)
+  )
+    throw new Error("invalid native terminal state");
   return {
+    cwd: cwd as string | null,
+    shellReady: data.shellReady as boolean,
+    commandRunning: data.commandRunning as boolean,
     version: data.version as number,
     alternateScreen: data.alternateScreen as boolean,
     mouseTracking: data.mouseTracking as boolean,

@@ -16,6 +16,10 @@ import {
   getNativeLeaf,
 } from "@/modules/terminal/gl/nativeLeafRegistry";
 import { nativePaneLayout } from "@/modules/terminal/gl/nativeSurface";
+import {
+  markSessionReady,
+  resetSessionReady,
+} from "@/modules/terminal/lib/useTerminalSession";
 import { NativeLeafSession } from "@/modules/terminal/gl/nativeLeafSession";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
@@ -72,6 +76,8 @@ export const NativeTerminalPane = forwardRef<
       size: initial,
       colors: model.colors.engine,
       cwd: latest.current.initialCwd,
+      onReady: () => markSessionReady(leafId),
+      onResetReady: () => resetSessionReady(leafId),
     };
     const existing = getNativeLeaf(leafId);
     if (existing && !(existing instanceof NativeLeafSession)) {
@@ -158,6 +164,7 @@ export const NativeTerminalPane = forwardRef<
         onFrame: () => binding?.updateCursor(),
         onError: report,
         onExit: (code) => latest.current.onExit?.(leafId, code),
+        onCwd: (cwd) => latest.current.onCwd?.(leafId, cwd),
         focus: () => binding?.focus(),
         focused: () =>
           latest.current.visible &&

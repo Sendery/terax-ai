@@ -8,6 +8,9 @@ import {
 function leaf(id: number): NativeLeaf {
   return {
     id,
+    cwd: null,
+    shellReady: false,
+    commandRunning: false,
     exited: false,
     focused: true,
     tuiReady: false,

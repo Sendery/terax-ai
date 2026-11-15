@@ -1,5 +1,6 @@
-use libghostty_vt::terminal::Mode;
+use super::shell::ShellState;
 use libghostty_vt::screen::Screen;
+use libghostty_vt::terminal::Mode;
 use libghostty_vt::Terminal;
 use serde::Serialize;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -29,12 +30,14 @@ impl Modes {
         })
     }
 }
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineState {
     pub version: u64,
     #[serde(flatten)]
     pub modes: Modes,
+    #[serde(flatten)]
+    pub shell: ShellState,
 }
 type Listener = Arc<dyn Fn(EngineState) -> bool + Send + Sync>;
 #[derive(Default)]
@@ -51,27 +54,32 @@ fn notify(listener: Option<Listener>, state: EngineState) -> bool {
 }
 impl StateStore {
     pub fn snapshot(&self) -> EngineState {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).state
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .state
+            .clone()
     }
     pub fn subscribe(&self, listener: Listener) -> bool {
         let state = {
             let mut inner = self.0.lock().unwrap_or_else(PoisonError::into_inner);
             inner.listener = Some(listener.clone());
-            inner.state
+            inner.state.clone()
         };
         notify(Some(listener), state)
     }
-    pub fn publish(&self, modes: Modes) -> bool {
+    pub fn publish(&self, modes: Modes, shell: &ShellState) -> bool {
         let (listener, state) = {
             let mut inner = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-            if inner.state.modes == modes {
+            if inner.state.modes == modes && &inner.state.shell == shell {
                 return true;
             }
             inner.state = EngineState {
                 version: inner.state.version.saturating_add(1),
                 modes,
+                shell: shell.clone(),
             };
-            (inner.listener.clone(), inner.state)
+            (inner.listener.clone(), inner.state.clone())
         };
         notify(listener, state)
     }
@@ -94,8 +102,8 @@ mod tests {
             modify_other_keys: 2,
             ..Modes::default()
         };
-        assert!(store.publish(modes));
-        assert!(store.publish(modes));
+        assert!(store.publish(modes, &ShellState::default()));
+        assert!(store.publish(modes, &ShellState::default()));
         assert_eq!(*values.lock().unwrap(), [0, 1]);
     }
     #[test]

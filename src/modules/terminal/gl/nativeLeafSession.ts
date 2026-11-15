@@ -3,6 +3,7 @@ import {
   type EngineColors,
   type SessionObserver,
 } from "@/modules/terminal/gl/engineSession";
+import type { NativeState } from "@/modules/terminal/gl/nativeState";
 import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
 import type { NativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
 import { adaptGhosttyEngine } from "@/modules/terminal/lib/ghosttyEngine";
@@ -17,12 +18,15 @@ export type NativeLeafConfig = {
   size: TerminalSize;
   colors: EngineColors;
   cwd?: string;
+  onReady?: () => void;
+  onResetReady?: () => void;
 };
 export type NativeLeafView = {
   onSession: (session: EngineSession | null) => void;
   onFrame: () => void;
   onError: (error: unknown) => void;
   onExit: (code: number) => void;
+  onCwd?: (cwd: string) => void;
   focused: () => boolean;
   focus: () => void;
 };
@@ -49,6 +53,7 @@ export class NativeLeafSession implements NativeLeaf {
   private error: unknown = null;
   private pendingExit: number | null = null;
   private selectionRefresh = false;
+  private state: NativeState | null = null;
 
   constructor(
     config: NativeLeafConfig,
@@ -57,6 +62,16 @@ export class NativeLeafSession implements NativeLeaf {
   ) {
     this.config = config;
     this.start();
+  }
+
+  get cwd(): string | null {
+    return this.disposed ? null : (this.state?.cwd ?? null);
+  }
+  get shellReady(): boolean {
+    return !this.exited && Boolean(this.state?.shellReady);
+  }
+  get commandRunning(): boolean {
+    return !this.exited && Boolean(this.state?.commandRunning);
   }
 
   get opened(): Promise<void> {
@@ -97,6 +112,7 @@ export class NativeLeafSession implements NativeLeaf {
     this.configure(config);
     if (this.native && this.owner.id !== null) this.notifySession(this.native);
     if (this.error !== null) this.report(this.error);
+    if (this.cwd) this.notifyCwd(this.cwd);
     this.deliverExit();
     return () => {
       if (this.view !== view) return;
@@ -181,6 +197,7 @@ export class NativeLeafSession implements NativeLeaf {
     await native.submit(text);
   }
   dispose(): Promise<void> {
+    this.resetReady();
     this.disposed = true;
     this.notifySession(null);
     this.view = null;
@@ -189,10 +206,12 @@ export class NativeLeafSession implements NativeLeaf {
   respawn(cwd?: string): Promise<void> {
     if (this.disposed) return Promise.reject(new Error("Terminal is closed."));
     if (this.restarting) return this.restarting;
+    this.resetReady();
+    const nextCwd = cwd ?? this.cwd ?? this.config.cwd;
     this.restarting = this.closeCurrent()
       .then(async () => {
         if (this.disposed) throw new Error("Terminal closed while restarting.");
-        this.config = { ...this.config, cwd: cwd ?? this.config.cwd };
+        this.config = { ...this.config, cwd: nextCwd };
         this.start();
         await this.opened;
       })
@@ -209,6 +228,8 @@ export class NativeLeafSession implements NativeLeaf {
     this.closing = null;
     this.error = null;
     this.pendingExit = null;
+    this.state = null;
+    this.resetReady();
     const owner = new TerminalSessionController(
       async (size, observer) => {
         await prerequisite;
@@ -219,6 +240,27 @@ export class NativeLeafSession implements NativeLeaf {
           cwd: this.config.cwd,
           colors: this.config.colors,
           observer: {
+            onState: (state) => {
+              if (
+                generation !== this.generation ||
+                this.disposed ||
+                this.closing ||
+                this.owner.exitCode !== null ||
+                this.owner.failure !== null
+              )
+                return;
+              const previous = this.state;
+              this.state = state;
+              if (state.cwd !== null && state.cwd !== previous?.cwd)
+                this.notifyCwd(state.cwd);
+              if (state.shellReady && !previous?.shellReady) {
+                try {
+                  this.config.onReady?.();
+                } catch (error) {
+                  this.report(error);
+                }
+              }
+            },
             onError: observer.onError,
             onExit: observer.onExit,
             onFrame: () => {
@@ -261,9 +303,13 @@ export class NativeLeafSession implements NativeLeaf {
       },
       this.config.size,
       {
-        onError: this.report,
+        onError: (error) => {
+          if (this.owner === owner && owner.failure) this.resetReady();
+          this.report(error);
+        },
         onExit: (code) => {
           if (generation !== this.generation || this.disposed) return;
+          this.resetReady();
           this.pendingExit = code;
           this.deliverExit();
         },
@@ -297,6 +343,20 @@ export class NativeLeafSession implements NativeLeaf {
       this.report(error);
     }
   }
+  private resetReady(): void {
+    try {
+      this.config.onResetReady?.();
+    } catch (error) {
+      this.report(error);
+    }
+  }
+  private notifyCwd(cwd: string): void {
+    try {
+      this.view?.onCwd?.(cwd);
+    } catch (error) {
+      this.report(error);
+    }
+  }
   private notifySession(session: EngineSession | null): void {
     try {
       this.view?.onSession(session);
@@ -317,6 +377,7 @@ export class NativeLeafSession implements NativeLeaf {
   }
   private closeCurrent(): Promise<void> {
     if (this.closing) return this.closing;
+    this.generation++;
     this.notifySession(null);
     this.hide();
     const native = this.native;

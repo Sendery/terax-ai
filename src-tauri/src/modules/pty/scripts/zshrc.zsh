@@ -17,6 +17,9 @@
 if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
   __TERAX_HOOKS_LOADED=1
   autoload -Uz add-zsh-hook 2>/dev/null
+  _terax_aid=''
+  [[ -n "$TERAX_SHELL_INTEGRATION_TOKEN" ]] && _terax_aid=";aid=$TERAX_SHELL_INTEGRATION_TOKEN"
+  _terax_prompt_end=$'\e]133;B'"$_terax_aid"$'\e\\'
 
   # URL-encode $PWD byte-wise so multi-byte paths stay valid in the `file://`
   # URI emitted via OSC 7. `no_multibyte` forces ${s[i]} to index bytes (not
@@ -36,7 +39,7 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
 
   _terax_precmd() {
     local _terax_ret=$?
-    printf '\e]133;D;%s\e\\' "$_terax_ret"
+    printf '\e]133;D;%s%s\e\\' "$_terax_ret" "$_terax_aid"
     printf '\e]7;file://%s%s\e\\' "${HOST}" "$(_terax_urlencode "$PWD")"
     # In block mode the host renders its own input bar, so suppress the shell
     # prompt entirely (keep only the OSC 133 B marker) and add a leading blank
@@ -48,16 +51,16 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
       # one is this command's header row. The very first prompt has no block
       # above it, so it gets a single row (header only) to avoid a tall top gap.
       if [[ -n "$_terax_block_seen" ]]; then
-        PS1=$'\n\n%{\e]133;B\e\\%}'
+        PS1=$'\n\n%{'"$_terax_prompt_end"$'%}'
       else
-        PS1=$'\n%{\e]133;B\e\\%}'
+        PS1=$'\n%{'"$_terax_prompt_end"$'%}'
       fi
       RPROMPT=''
-    elif [[ "$PS1" != *$'\e]133;B\e\\'* ]]; then
+    elif [[ "$PS1" != *"$_terax_prompt_end"* ]]; then
       # Re-inject prompt-end marker in case a framework rebuilt PS1 (p10k, starship).
-      PS1=$'%{\e]133;B\e\\%}'"$PS1"
+      PS1=$'%{'"$_terax_prompt_end"$'%}'"$PS1"
     fi
-    printf '\e]133;A\e\\'
+    printf '\e]133;A%s\e\\' "$_terax_aid"
   }
 
   _terax_preexec() {
@@ -65,7 +68,11 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
     # row (first prompt, no block above) to two (end gap + header row).
     [[ -n "$TERAX_BLOCKS" ]] && _terax_block_seen=1
     local cmd="${1//[[:cntrl:]]/ }"
-    printf '\e]133;C;%s\e\\' "${cmd[1,256]}"
+    if [[ -n "$_terax_aid" ]]; then
+      printf '\e]133;C%s;cmdline_url=%s\e\\' "$_terax_aid" "$(_terax_urlencode "${cmd[1,256]}")"
+    else
+      printf '\e]133;C;%s\e\\' "${cmd[1,256]}"
+    fi
   }
 
   if (( $+functions[add-zsh-hook] )); then
