@@ -1,3 +1,4 @@
+import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -267,12 +268,16 @@ export default function App() {
   }, [tabs, activeId]);
   const activeLeafId = activeTerminalTab?.activeLeafId ?? null;
 
+  const pendingGotoLocation = useRef<Map<string, TerminalFileLocation>>(
+    new Map(),
+  );
   const searchAddons = useRef<Map<number, TerminalSearch>>(new Map());
   const [activeSearchAddon, setActiveSearchAddon] =
     useState<TerminalSearch | null>(null);
   const searchInlineRef = useRef<SearchInlineHandle | null>(null);
   const terminalRefs = useRef<Map<number, TerminalPaneHandle>>(new Map());
   const editorRefs = useRef<Map<number, EditorPaneHandle>>(new Map());
+  const committedActiveIdRef = useRef(activeId);
   const previewRefs = useRef<Map<number, PreviewPaneHandle>>(new Map());
   const [activeEditorHandle, setActiveEditorHandle] =
     useState<EditorPaneHandle | null>(null);
@@ -553,6 +558,17 @@ export default function App() {
     setActiveEditorHandle(editorRefs.current.get(activeId) ?? null);
   }, [activeId, activeLeafId]);
 
+  useEffect(() => {
+    committedActiveIdRef.current = activeId;
+    const handle = editorRefs.current.get(activeId);
+    if (!handle) return;
+    const path = handle.getPath();
+    const location = pendingGotoLocation.current.get(path);
+    if (!location) return;
+    pendingGotoLocation.current.delete(path);
+    handle.gotoLine(location.line, location.column);
+  }, [activeId]);
+
   const handleSearchReady = useCallback(
     (leafId: number, addon: TerminalSearch) => {
       searchAddons.current.set(leafId, addon);
@@ -566,6 +582,8 @@ export default function App() {
       // Terminal-leaf-keyed maps (terminalRefs/searchAddons) are pruned by
       // the effect below as the pane tree changes; only the tab-id-keyed
       // handles need explicit cleanup here.
+      const tab = tabsRef.current.find((tab) => tab.id === id);
+      if (tab?.kind === "editor") pendingGotoLocation.current.delete(tab.path);
       editorRefs.current.delete(id);
       previewRefs.current.delete(id);
       closeTab(id);
@@ -1023,8 +1041,20 @@ export default function App() {
   );
 
   const handleOpenTerminalFileLink = useCallback(
-    (path: string) => {
-      openFileTab(path, true);
+    (path: string, location?: TerminalFileLocation) => {
+      if (location) pendingGotoLocation.current.set(path, location);
+      else pendingGotoLocation.current.delete(path);
+      const targetId = openFileTab(path, true);
+      const handle =
+        targetId === activeIdRef.current &&
+        targetId === committedActiveIdRef.current &&
+        targetId !== null
+          ? editorRefs.current.get(targetId)
+          : null;
+      if (location && handle) {
+        pendingGotoLocation.current.delete(path);
+        handle.gotoLine(location.line, location.column);
+      }
     },
     [openFileTab],
   );
@@ -1288,10 +1318,11 @@ export default function App() {
     (id: number, h: EditorPaneHandle | null) => {
       if (h) {
         editorRefs.current.set(id, h);
-        const line = pendingGotoLine.current.get(id);
-        if (line != null) {
-          pendingGotoLine.current.delete(id);
-          h.gotoLine(line);
+        const path = h.getPath();
+        const location = pendingGotoLocation.current.get(path);
+        if (location && id === activeId) {
+          pendingGotoLocation.current.delete(path);
+          h.gotoLine(location.line, location.column);
         }
       } else {
         editorRefs.current.delete(id);
@@ -2142,16 +2173,9 @@ export default function App() {
 
   useExternalCommandBridge(externalCommandHandlers);
 
-  const pendingGotoLine = useRef<Map<number, number>>(new Map());
   const openContentHit = useCallback(
-    (path: string, line: number) => {
-      const id = openFileTab(path, true);
-      if (id == null) return;
-      const h = editorRefs.current.get(id);
-      if (h) h.gotoLine(line);
-      else pendingGotoLine.current.set(id, line);
-    },
-    [openFileTab],
+    (path: string, line: number) => handleOpenTerminalFileLink(path, { line }),
+    [handleOpenTerminalFileLink],
   );
 
   useEffect(() => {

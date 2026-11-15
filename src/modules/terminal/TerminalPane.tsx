@@ -1,3 +1,4 @@
+import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import { initialLeafEngine } from "@/modules/terminal/gl/nativeSurface";
 import { getNativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
 import { hasLegacyLeaf } from "@/modules/terminal/lib/useTerminalSession";
@@ -51,7 +52,7 @@ export type TerminalPaneProps = {
   onSearchReady?: (leafId: number, addon: TerminalSearch) => void;
   onExit?: (leafId: number, code: number) => void;
   onCwd?: (leafId: number, cwd: string) => void;
-  onOpenFileLink?: (path: string) => void;
+  onOpenFileLink?: (path: string, location?: TerminalFileLocation) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   /** Ask Terax / Add to Note / Open Mermaid, shared with the selection popup. */

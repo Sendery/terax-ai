@@ -64,3 +64,38 @@ describe("terminal file links", () => {
     expect(stat).toHaveBeenCalledWith("/repo/missing.txt");
   });
 });
+
+describe("file link locations", () => {
+  it("preserves path, line and column while including the location in the link range", async () => {
+    const line = "at src/main.ts:12:3";
+    const links = await resolveTerminalFileLinks({
+      line,
+      cwd: "/repo",
+      home: null,
+      stat: async () => ({ kind: "file" }),
+    });
+    expect(links).toContainEqual({
+      text: "src/main.ts",
+      path: "/repo/src/main.ts",
+      start: 3,
+      end: line.length,
+      location: { line: 12, column: 3 },
+    });
+  });
+  it("recognizes a location outside a quoted path without adding it to the filesystem path", async () => {
+    const line = '"My File.ts":20:4';
+    const stat = vi.fn(async () => ({ kind: "file" as const }));
+    const links = await resolveTerminalFileLinks({
+      line,
+      cwd: "/repo",
+      home: null,
+      stat,
+    });
+    expect(stat).toHaveBeenCalledWith("/repo/My File.ts");
+    expect(links[0]).toMatchObject({
+      path: "/repo/My File.ts",
+      location: { line: 20, column: 4 },
+      end: line.length,
+    });
+  });
+});

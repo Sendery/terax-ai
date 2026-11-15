@@ -1,3 +1,4 @@
+import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import { NativeTerminalSurface } from "@/modules/terminal/NativeTerminalSurface";
 import type { Tab } from "@/modules/tabs";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
@@ -20,7 +21,7 @@ type Props = {
   onCwd: (leafId: number, cwd: string) => void;
   onExit: (leafId: number, code: number) => void;
   onFocusLeaf: (tabId: number, leafId: number) => void;
-  onOpenFileLink: (path: string) => void;
+  onOpenFileLink: (path: string, location?: TerminalFileLocation) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   selectionActions?: TerminalSelectionActions;

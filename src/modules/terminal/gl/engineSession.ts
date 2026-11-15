@@ -1,4 +1,8 @@
 import {
+  decodeNativeLinkContext,
+  type NativeLinkContext,
+} from "@/modules/terminal/gl/nativeLinks";
+import {
   validateSearchCommand,
   type NativeSearchCommand,
 } from "@/modules/terminal/gl/nativeSearch";
@@ -199,6 +203,8 @@ export class EngineSession {
   private awaitingDraw: number[] = [];
   private latestAppliedSeq: number | null = null;
   private lastDrawnSeq: number | null = null;
+  private latestAppliedSize: { cols: number; rows: number } | null = null;
+  private lastDrawnSize: { cols: number; rows: number } | null = null;
   private drawnUnsent: { seq: number; drawnAt: number }[] = [];
   private fullRequested = false;
   private closed = false;
@@ -212,6 +218,7 @@ export class EngineSession {
   private selectionSnapshotVersion = 0;
   private selectionQueries: Promise<void> = Promise.resolve();
   private selectionPending = 0;
+  private linkPending = 0;
   private selectionSnapshot: string | null = null;
 
   private constructor(
@@ -365,6 +372,7 @@ export class EngineSession {
     renderer.setPaneFocused(pane, false);
     this.latestAppliedSeq = null;
     this.lastDrawnSeq = null;
+    this.lastDrawnSize = null;
     this.fullRequested = false;
     this.requestFull();
     if (this.awaitingDraw.length > 0) renderer.markUndrawn(this.renderPane);
@@ -399,7 +407,10 @@ export class EngineSession {
       if (frame.full) this.fullRequested = false;
       try {
         applied = this.renderer.applyFrame(this.pane, frame) === "applied";
-        if (applied) this.latestAppliedSeq = seq;
+        if (applied) {
+          this.latestAppliedSeq = seq;
+          this.latestAppliedSize = { cols: frame.cols, rows: frame.rows };
+        }
       } catch (error) {
         this.observer.onError?.(error);
       }
@@ -437,7 +448,10 @@ export class EngineSession {
       rendered && this.latestAppliedSeq !== this.lastDrawnSeq
         ? this.latestAppliedSeq
         : null;
-    if (seq !== null) this.lastDrawnSeq = seq;
+    if (seq !== null) {
+      this.lastDrawnSeq = seq;
+      this.lastDrawnSize = this.latestAppliedSize;
+    }
     this.observer.onDrawn?.(at, seq);
     this.flushCredits();
   }
@@ -772,6 +786,52 @@ export class EngineSession {
       () => {},
     );
     return task;
+  }
+
+  get drawnSeq(): number | null {
+    return this.closed || this.failed ? null : this.lastDrawnSeq;
+  }
+  get drawnGrid(): { seq: number; cols: number; rows: number } | null {
+    const seq = this.drawnSeq;
+    return seq !== null && this.lastDrawnSize
+      ? { seq, ...this.lastDrawnSize }
+      : null;
+  }
+  linkContext(
+    seq: number,
+    col: number,
+    row: number,
+  ): Promise<NativeLinkContext | null> {
+    if (
+      !Number.isInteger(seq) ||
+      seq < 1 ||
+      seq > 0xffffffff ||
+      !Number.isInteger(col) ||
+      col < 0 ||
+      col >= 1000 ||
+      !Number.isInteger(row) ||
+      row < 0 ||
+      row >= 500
+    )
+      return Promise.reject(new Error("Invalid terminal link coordinates."));
+    const id = this.id;
+    if (id === null || this.closed || this.failed)
+      return Promise.reject(new Error("Terminal engine is unavailable."));
+    if (seq !== this.lastDrawnSeq) return Promise.resolve(null);
+    if (this.linkPending >= 32)
+      return Promise.reject(
+        new Error("Too many pending terminal link queries."),
+      );
+    this.linkPending++;
+    return invoke<unknown>("gterm_link_context", { id, seq, col, row })
+      .then((value) => {
+        if (this.closed || this.failed || this.id !== id)
+          throw new Error("Terminal engine is unavailable.");
+        return decodeNativeLinkContext(value, seq, col, row);
+      })
+      .finally(() => {
+        this.linkPending--;
+      });
   }
 
   search(command: NativeSearchCommand): Promise<boolean> {

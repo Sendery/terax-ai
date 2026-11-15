@@ -1,3 +1,4 @@
+import { editorLocationOffset } from "@/modules/editor/lib/locationOffset";
 import { getKey } from "@/modules/ai/lib/keyring";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
@@ -48,7 +49,7 @@ export type EditorPaneHandle = {
   /** Re-read the file from disk. Skips silently if the buffer is dirty. */
   reload: () => boolean;
   /** Move the cursor to a 1-based line and center it, once content is ready. */
-  gotoLine: (line: number) => void;
+  gotoLine: (line: number, column?: number) => void;
   /** Apply CodeMirror's undo/redo commands. */
   undo: () => void;
   redo: () => void;
@@ -126,16 +127,17 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
     const pathRef = useRef(path);
     pathRef.current = path;
 
-    const pendingLineRef = useRef<number | null>(null);
+    const pendingLineRef = useRef<{ line: number; column?: number } | null>(
+      null,
+    );
     const statusRef = useRef(doc.status);
     statusRef.current = doc.status;
 
-    const applyPendingGoto = useCallback(() => {
-      const view = cmRef.current?.view;
+    const applyPendingGoto = useCallback((createdView?: EditorView) => {
+      const view = createdView ?? cmRef.current?.view;
       const line = pendingLineRef.current;
       if (!view || line == null || statusRef.current !== "ready") return;
-      const target = Math.max(1, Math.min(line, view.state.doc.lines));
-      const at = view.state.doc.line(target).from;
+      const at = editorLocationOffset(view.state.doc, line.line, line.column);
       view.dispatch({
         selection: { anchor: at },
         effects: EditorView.scrollIntoView(at, { y: "center" }),
@@ -315,8 +317,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
         },
         getPath: () => path,
         reload: () => reloadRef.current(),
-        gotoLine: (line: number) => {
-          pendingLineRef.current = line;
+        gotoLine: (line: number, column?: number) => {
+          pendingLineRef.current = { line, column };
           applyPendingGoto();
         },
         undo: () => {
@@ -416,6 +418,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           ref={cmRef}
           value={doc.content}
           onChange={onChange}
+          onCreateEditor={applyPendingGoto}
           theme={themeExt}
           extensions={extensions}
           height="100%"

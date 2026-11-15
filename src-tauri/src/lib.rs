@@ -326,6 +326,7 @@ pub fn run() {
             pty::gterm::gterm_open,
             pty::gterm::gterm_read_text,
             pty::gterm::gterm_search,
+            pty::gterm::gterm_link_context,
             pty::gterm::gterm_credit,
             pty::gterm::gterm_lab_credits,
             pty::gterm::gterm_scroll,

@@ -17,6 +17,8 @@ pub struct Snapshotter {
     rows: RowIterator<'static>,
     cells: CellIterator<'static>,
     encoder: FrameEncoder,
+    links: super::links::LinkCache,
+    link_scratch: super::links::LinkScratch,
 }
 
 fn pack(c: RgbColor) -> u32 {
@@ -54,7 +56,18 @@ impl Snapshotter {
             rows: RowIterator::new()?,
             cells: CellIterator::new()?,
             encoder: FrameEncoder::new(),
+            links: super::links::LinkCache::default(),
+            link_scratch: super::links::LinkScratch::default(),
         })
+    }
+
+    pub fn link_context(
+        &self,
+        seq: u32,
+        col: u16,
+        row: u16,
+    ) -> Result<Option<super::links::LinkContext>, String> {
+        self.links.query(seq, col, row)
     }
 
     /// Encodes the rows that changed, or every row when `force_full` is set or
@@ -121,6 +134,7 @@ impl Snapshotter {
             cursor_color: snapshot.cursor_color()?.map(plain),
         };
 
+        self.links.prepare(cols, rows);
         let encoder = &mut self.encoder;
         encoder.begin();
         let mut row_iter = self.rows.update(&snapshot)?;
@@ -128,6 +142,13 @@ impl Snapshotter {
         while let Some(row) = row_iter.next() {
             if full || row.dirty()? {
                 let raw = row.raw_row()?;
+                let mut link_row = super::links::LinkRowBuilder::new(
+                    cols,
+                    raw.is_wrapped()?,
+                    raw.is_wrap_continuation()?,
+                );
+                let has_link_graphemes = raw.has_grapheme_cluster()?;
+                let has_links = raw.has_hyperlink()?;
                 let prompt = match raw.semantic_prompt()? {
                     RowSemanticPrompt::Prompt => SemanticPrompt::Prompt,
                     RowSemanticPrompt::Continuation => SemanticPrompt::Continuation,
@@ -148,12 +169,26 @@ impl Snapshotter {
                 let mut x = 0usize;
                 while let Some(cell) = cell_iter.next() {
                     let raw_cell = cell.raw_cell()?;
-                    let (codepoint, width) = match raw_cell.wide()? {
+                    let wide = raw_cell.wide()?;
+                    let (codepoint, width) = match wide {
                         CellWide::SpacerTail => (0, CellWidth::SpacerTail),
                         CellWide::SpacerHead => (0, CellWidth::Narrow),
                         CellWide::Wide => (raw_cell.codepoint()?, CellWidth::WideHead),
                         _ => (raw_cell.codepoint()?, CellWidth::Narrow),
                     };
+                    if link_row.valid() {
+                        let data = self.link_scratch.rendered(
+                            term,
+                            libghostty_vt::terminal::PointCoordinate {
+                                x: x as u16,
+                                y: u32::from(y),
+                            },
+                            cell,
+                            raw_cell,
+                            (has_link_graphemes, has_links),
+                        );
+                        link_row.push(codepoint, wide, data);
+                    }
                     let mut style = if raw_cell.has_styling()? {
                         let id = raw_cell.style_id()?;
                         match cached {
@@ -186,11 +221,13 @@ impl Snapshotter {
                     x += 1;
                 }
                 encoder.end_row();
+                self.links.update_row(y, link_row.finish());
                 row.set_dirty(false)?;
             }
             y += 1;
         }
         snapshot.set_dirty(Dirty::Clean)?;
+        self.links.commit(term, seq)?;
         Ok(Some(self.encoder.finish(&header)))
     }
 }

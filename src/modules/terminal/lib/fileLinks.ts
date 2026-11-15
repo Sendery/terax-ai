@@ -2,11 +2,14 @@ export type FileLinkStat = {
   kind: "file" | "dir" | "symlink";
 };
 
+export type TerminalFileLocation = { line: number; column?: number };
+
 export type TerminalFileLink = {
   text: string;
   path: string;
   start: number;
   end: number;
+  location?: TerminalFileLocation;
 };
 
 export type ResolveTerminalFileLinksOptions = {
@@ -21,6 +24,9 @@ type Candidate = {
   text: string;
   start: number;
   end: number;
+  location?: TerminalFileLocation;
+  rawStart: number;
+  rawEnd: number;
 };
 
 const MAX_LINE_LENGTH = 2_000;
@@ -52,6 +58,7 @@ export async function resolveTerminalFileLinks({
       path,
       start: candidate.start,
       end: candidate.end,
+      ...(candidate.location ? { location: candidate.location } : {}),
     });
   }
 
@@ -68,8 +75,21 @@ export function extractPathCandidates(line: string): Candidate[] {
     const start = fullStart + 1;
     const candidate = cleanToken(raw, start);
     if (!candidate) continue;
+    const after = fullStart + match[0].length;
+    const suffix = line
+      .slice(after)
+      .match(/^:(\d+)(?::(\d+))?(?=$|[\s,;)\]}>])/);
+    if (suffix) {
+      const parsed = splitTerminalFileLocation(candidate.text + suffix[0]);
+      if (parsed.location) {
+        candidate.location = parsed.location;
+        candidate.end = after + suffix[0].length;
+      }
+    }
+    candidate.rawStart = fullStart;
+    candidate.rawEnd = suffix ? after + suffix[0].length : after;
     candidates.push(candidate);
-    occupied.push([fullStart, fullStart + match[0].length]);
+    occupied.push([candidate.rawStart, candidate.rawEnd]);
   }
 
   for (const match of line.matchAll(UNQUOTED_TOKEN_RE)) {
@@ -114,20 +134,75 @@ function cleanToken(raw: string, offset: number): Candidate | null {
   while (end > start && isTrailingPathBoundary(raw[end - 1])) end--;
   if (start >= end) return null;
 
-  let text = raw.slice(start, end);
-  let adjustedEnd = end;
-  const location = text.match(/^(.*?)(?::\d+){1,2}$/);
-  if (location?.[1] && !/^[A-Za-z]$/.test(location[1])) {
-    adjustedEnd = start + location[1].length;
-    text = location[1];
-  }
-
-  if (!isEligiblePathText(text)) return null;
+  const original = raw.slice(start, end);
+  const parsed = splitTerminalFileLocation(original);
+  if (!isEligiblePathText(parsed.text)) return null;
   return {
-    text,
+    text: parsed.text,
+    rawStart: offset,
+    rawEnd: offset + raw.length,
     start: offset + start,
-    end: offset + adjustedEnd,
+    end: offset + (parsed.location ? end : start + parsed.text.length),
+    ...(parsed.location ? { location: parsed.location } : {}),
   };
+}
+
+export function splitTerminalFileLocation(text: string): {
+  text: string;
+  location?: TerminalFileLocation;
+} {
+  const match = text.match(/^(.*?):(\d+)(?::(\d+))?$/);
+  if (!match?.[1] || /^[A-Za-z]$/.test(match[1])) return { text };
+  const line = Number(match[2]);
+  const column = match[3] === undefined ? undefined : Number(match[3]);
+  if (
+    !Number.isSafeInteger(line) ||
+    line < 1 ||
+    (column !== undefined && (!Number.isSafeInteger(column) || column < 1))
+  )
+    return { text: match[1] };
+  return {
+    text: match[1],
+    location: { line, ...(column === undefined ? {} : { column }) },
+  };
+}
+
+export async function resolveTerminalFileLinkAt(
+  options: ResolveTerminalFileLinksOptions & {
+    offset: number;
+    startClipped?: boolean;
+    endClipped?: boolean;
+  },
+): Promise<TerminalFileLink | null> {
+  const { line, offset, cwd, home, stat } = options;
+  if (
+    line.length > 20480 ||
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    offset >= line.length
+  )
+    return null;
+  const candidate = extractPathCandidates(line).find(
+    (item) => item.start <= offset && offset < item.end,
+  );
+  if (
+    !candidate ||
+    (options.startClipped && candidate.rawStart === 0) ||
+    (options.endClipped && candidate.rawEnd === line.length)
+  )
+    return null;
+  const path = resolveCandidatePath(candidate.text, cwd, home);
+  if (!path) return null;
+  const result = await stat(path);
+  return result?.kind === "file"
+    ? {
+        text: candidate.text,
+        path,
+        start: candidate.start,
+        end: candidate.end,
+        ...(candidate.location ? { location: candidate.location } : {}),
+      }
+    : null;
 }
 
 function isEligiblePathText(text: string): boolean {

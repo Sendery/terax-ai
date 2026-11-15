@@ -24,7 +24,8 @@ import {
 import { atlasBytes, atlasResetDelay } from "./atlasBudget";
 import { needsAtlasClear } from "./atlasRepaint";
 import { POOL_MAX_SIZE, shouldGrowPool } from "./poolPolicy";
-import type { TerminalFileLink } from "./fileLinks";
+import type { TerminalFileLink, TerminalFileLocation } from "./fileLinks";
+import { TERMINAL_URL_REGEX } from "@/modules/terminal/lib/terminalUrls";
 import { shouldCursorBlink } from "./cursorBlink";
 import {
   readTerminalClipboard,
@@ -59,7 +60,7 @@ export type LeafBridge = {
   // foreground program negotiated (see keyboardProtocol.ts).
   shiftEnterSequence(): string;
   resolveFileLinks(line: string): Promise<TerminalFileLink[]>;
-  openFileLink(path: string): void;
+  openFileLink(path: string, location?: TerminalFileLocation): void;
   // Force a SIGWINCH on the underlying PTY at the given dims. Implemented
   // as a +1 row / restore bump because the Linux kernel suppresses winsize
   // ioctls that don't actually change the size. Used to make alt-screen
@@ -286,10 +287,13 @@ function createSlot(): Slot {
   term.loadAddon(searchAddon);
   term.loadAddon(serializeAddon);
   term.loadAddon(
-    new WebLinksAddon((event, uri) => {
-      if (!isLinkActivation(event, IS_MAC)) return;
-      void openExternalUrl(uri, () => term.focus());
-    }),
+    new WebLinksAddon(
+      (event, uri) => {
+        if (!isLinkActivation(event, IS_MAC)) return;
+        void openExternalUrl(uri, () => term.focus());
+      },
+      { urlRegex: TERMINAL_URL_REGEX },
+    ),
   );
 
   const host = document.createElement("div");
@@ -455,7 +459,8 @@ function toXtermFileLink(
       end: { x: link.end, y },
     },
     activate: (event) => {
-      if (isLinkActivation(event, IS_MAC)) bridge.openFileLink(link.path);
+      if (isLinkActivation(event, IS_MAC))
+        bridge.openFileLink(link.path, link.location);
     },
   };
 }

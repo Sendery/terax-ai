@@ -1,3 +1,4 @@
+import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -29,7 +30,7 @@ type Props = {
   blocks: boolean;
   onFocusLeaf: (leafId: number) => void;
   getBundle: (leafId: number) => LeafBundle;
-  onOpenFileLink: (path: string) => void;
+  onOpenFileLink: (path: string, location?: TerminalFileLocation) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   selectionActions?: TerminalSelectionActions;

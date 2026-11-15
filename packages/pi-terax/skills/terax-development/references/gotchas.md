@@ -700,9 +700,9 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 ### Shared-canvas capture needs frozen pane crops
 
 - **Trigger:** rasterizing a pane whose canvas lives outside its DOM subtree, or changing tabs during asynchronous font/image work.
-- **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels.
+- **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels. Compositing the crop after the DOM clone also covers native DOM hover/preedit overlays in the artifact, even when those overlays display correctly.
 - **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards.
-- **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider.
+- **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider. Qualify overlay pixel claims until capture preserves their stacking order; successful interaction or paint mocks alone do not prove captured appearance.
 
 
 ### Shell state is not engine acquisition or arbitrary OSC output
@@ -727,3 +727,38 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** opening an already open field does not refocus it, and clearing pendingFocus because its ref exists loses the focus request. A native text-field interaction can also consume a first Escape; assuming a tab title is prompt readiness makes the UI harness wait incorrectly.
 - **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug.
 - **Verification:** pre-fix AXTextArea after Cmd+F versus post-fix AXTextField; one Escape returns AXTextArea, then a public shell program writes its acknowledgement. Split tests require distinct PIDs and the unchanged original PID. Use exact inspected captures and remove temporary diagnostics before final gates.
+
+### Native link activation must retain presented, bounded metadata
+
+- **Trigger:** resolving a link asynchronously while PTY output, ownership, CWD or workspace can change.
+- **Failure mode:** current core cells resolve a different URI than the user clicked; a clipped suffix becomes another path; stale metadata opens after owner or scope replacement.
+- **Prevention:** retain immutable metadata for bounded actually drawn frames and guard activation by generation and source identity. Share unchanged rows and collect metadata in the dirty-row traversal. Preserve clipped provenance across unavailable rows and validate raw token bounds before punctuation cleanup. An unsupported OSC 8 URI must not fall back to its label. Metadata existence is not authorization.
+- **Verification:** old-frame URI mutation, eviction, UTF-16/wide-cell ranges, internal gaps and raw clipped-token regressions; deferred source replacement; actual URL, OSC 8, file location and soft-wrap activation.
+
+### Geometry-only redraws need a presentation notification
+
+- **Trigger:** pane position or sub-cell dimensions change without new PTY output.
+- **Failure mode:** hit testing is disabled until another frame arrives, even though the renderer already redrew the pane.
+- **Prevention:** request markUndrawn with geometry changes and resume hit testing only on onDrawn; preserve the last real frame sequence on a content-free redraw.
+- **Verification:** move a pane with a constant drawn sequence and verify hover/activation resumes. Exercise a small divider move with a static program in the real app.
+
+### React tab mutations cannot depend on eager state updaters
+
+- **Trigger:** a tab operation returns an allocated ID or disposes sessions outside a functional React state setter.
+- **Failure mode:** deferred updates return null, fail to activate an editor, or discard earlier queued mutations. Updater replay can duplicate side effects.
+- **Prevention:** serialize tab mutations once against a write-through ref and commit replacement values to React. Every tab mutation uses that path; a committed-state effect must not overwrite newer pending ref state. Explicit ref writers still need to commit.
+- **Verification:** defer React commits and open two files, reopen the same file, and mutate a tab before opening. Assert IDs, activation, uniqueness and preservation of earlier mutations.
+
+### Editor locations require content, view creation and committed visibility
+
+- **Trigger:** a terminal link or content-search result opens a new or hidden editor with a pending location.
+- **Failure mode:** content-ready precedes CodeMirror view creation, leaving the request stranded; focusing a hidden view consumes the location without giving the user keyboard focus. A bridge's optimistic active-ID ref can precede the DOM commit.
+- **Prevention:** retain pending locations through readiness and onCreateEditor, using the created view directly. Deliver hidden-editor requests after activation commits; distinguish optimistic and committed IDs. Consume only for the active matching path and clear on close.
+- **Verification:** a new editor and a reused hidden editor must each accept a typed/saved public marker at the requested line/column. Test batched tab opening separately; offset-unit tests alone do not prove mounting or focus.
+
+### Primary pointer default can steal hidden-textarea focus
+
+- **Trigger:** native pointerdown focuses the terminal's hidden textarea.
+- **Failure mode:** subsequent browser default processing focuses the non-focusable host/body, so clicks appear to work but typing is lost.
+- **Prevention:** prevent only the primary pointer default and retain native selection/pointer capture. Keep focus bubbling to the leaf owner and preserve secondary/context-menu handling.
+- **Verification:** simulate browser default processing after pointerdown, assert textarea focus and untouched secondary default, then click and type in the real app.

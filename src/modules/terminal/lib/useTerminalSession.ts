@@ -1,3 +1,4 @@
+import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   getNativeLeaf,
   nativeLeafForPty,
@@ -69,7 +70,7 @@ type Callbacks = {
   onSearchReady?: (addon: TerminalSearch) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
-  onOpenFileLink?: (path: string) => void;
+  onOpenFileLink?: (path: string, location?: TerminalFileLocation) => void;
 };
 
 type Session = {
@@ -477,7 +478,8 @@ configureRendererPool({
           home: s.fileLinkHome,
           stat: (path) => statFileLink(s, path),
         }),
-      openFileLink: (path) => s.callbacks.onOpenFileLink?.(path),
+      openFileLink: (path, location) =>
+        s.callbacks.onOpenFileLink?.(path, location),
       kickPty: (cols, rows) => {
         const pty = s.pty;
         if (!pty || cols <= 0 || rows <= 0) return;
@@ -959,7 +961,7 @@ type Options = {
   onSearchReady?: (addon: TerminalSearch) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
-  onOpenFileLink?: (path: string) => void;
+  onOpenFileLink?: (path: string, location?: TerminalFileLocation) => void;
 };
 
 export function useTerminalSession({
@@ -1000,7 +1002,8 @@ export function useTerminalSession({
         onSearchReady: (a) => cbRef.current.onSearchReady?.(a),
         onExit: (c) => cbRef.current.onExit?.(c),
         onCwd: (c) => cbRef.current.onCwd?.(c),
-        onOpenFileLink: (path) => cbRef.current.onOpenFileLink?.(path),
+        onOpenFileLink: (path, location) =>
+          cbRef.current.onOpenFileLink?.(path, location),
       });
       if (s.visibleNow && s.focusedNow && !s.blocks) focusSlot(leafId);
     });

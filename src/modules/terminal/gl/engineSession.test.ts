@@ -20,6 +20,7 @@ const ipc = vi.hoisted(() => ({
   encoded: null as Promise<unknown> | null,
   selection: null as Promise<unknown> | null,
   search: null as Promise<unknown> | null,
+  link: null as Promise<unknown> | null,
   closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
@@ -42,6 +43,8 @@ vi.mock("@tauri-apps/api/core", () => {
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
       if (command === "pty_close" && ipc.closing) return ipc.closing;
+      if (command === "gterm_link_context")
+        return ipc.link ?? Promise.resolve(null);
       if (command === "gterm_search")
         return ipc.search ?? Promise.resolve(true);
       if (command === "gterm_selection")
@@ -142,6 +145,7 @@ beforeEach(() => {
   ipc.encoded = null;
   ipc.selection = null;
   ipc.search = null;
+  ipc.link = null;
   ipc.closing = null;
 });
 
@@ -1111,4 +1115,58 @@ it("searches through the native core and rejects stale or malformed replies", as
   expect((await settled)[0].status).toBe("rejected");
   await expect(session.search(command)).rejects.toThrow("unavailable");
   expect(commands("gterm_search")).toHaveLength(3);
+});
+
+it("queries links in the drawn sequence and rejects a late result after close", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  channelOf(0).onmessage(frameBuffer(1));
+  expect(session.drawnSeq).toBeNull();
+  expect(session.drawnGrid).toBeNull();
+  await expect(session.linkContext(1, 1, 0)).resolves.toBeNull();
+  expect(commands("gterm_link_context")).toHaveLength(0);
+  renderer.drawFrame();
+  expect(session.drawnSeq).toBe(1);
+  expect(session.drawnGrid).toEqual({ seq: 1, cols: 4, rows: 2 });
+  const reply = {
+    seq: 1,
+    cols: 4,
+    viewportRows: 2,
+    text: "ok",
+    offset: 1,
+    startClipped: false,
+    endClipped: false,
+    rows: [
+      {
+        row: 0,
+        startCol: 0,
+        cells: [
+          [0, 1],
+          [1, 2],
+        ],
+      },
+    ],
+    osc8: null,
+  };
+  ipc.link = Promise.resolve(reply);
+  channelOf(0).onmessage(frameBuffer(2));
+  expect(session.drawnSeq).toBe(1);
+  await expect(session.linkContext(1, 1, 0)).resolves.toEqual(reply);
+  expect(commands("gterm_link_context")[0].args).toEqual({
+    id: 9,
+    seq: 1,
+    col: 1,
+    row: 0,
+  });
+  renderer.drawFrame();
+  expect(session.drawnSeq).toBe(2);
+  let finish!: (value: unknown) => void;
+  ipc.link = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const pending = session.linkContext(2, 1, 0);
+  const settled = Promise.allSettled([pending]);
+  await session.close();
+  finish({ ...reply, seq: 2 });
+  expect((await settled)[0].status).toBe("rejected");
 });

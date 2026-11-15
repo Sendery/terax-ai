@@ -308,6 +308,7 @@ export function bindNativeInput(
   }
   const onPointerDown = (event: PointerEvent) => {
     if (isSecondaryClick(event, IS_MAC) || event.button !== 0) return;
+    event.preventDefault();
     focus();
     pointer = event.pointerId;
     try {

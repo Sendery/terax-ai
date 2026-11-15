@@ -180,6 +180,37 @@ pub async fn gterm_search(
     }
 }
 
+#[cfg(feature = "ghostty-engine")]
+type LinkContext = super::engine::links::LinkContext;
+#[cfg(not(feature = "ghostty-engine"))]
+type LinkContext = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_link_context(
+    state: State<'_, PtyState>,
+    id: u32,
+    seq: u32,
+    col: u16,
+    row: u16,
+) -> Result<Option<LinkContext>, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.link_context(seq, col, row)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal link query failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal link task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, seq, col, row);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
 #[tauri::command]
 pub fn gterm_set_colors(
     state: State<'_, PtyState>,

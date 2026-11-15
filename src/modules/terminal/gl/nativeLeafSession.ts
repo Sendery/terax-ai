@@ -1,3 +1,4 @@
+import type { DecodedFrame } from "@/modules/terminal/gl/frameCodec";
 import { createNativeSearch } from "@/modules/terminal/gl/nativeSearch";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
@@ -25,7 +26,8 @@ export type NativeLeafConfig = {
 };
 export type NativeLeafView = {
   onSession: (session: EngineSession | null) => void;
-  onFrame: () => void;
+  onFrame: (frame?: DecodedFrame | null) => void;
+  onDrawn?: (seq: number | null) => void;
   onError: (error: unknown) => void;
   onExit: (code: number) => void;
   onCwd?: (cwd: string) => void;
@@ -291,10 +293,18 @@ export class NativeLeafSession implements NativeLeaf {
             },
             onError: observer.onError,
             onExit: observer.onExit,
-            onFrame: () => {
+            onDrawn: (_at, seq) => {
               if (generation !== this.generation || this.disposed) return;
               try {
-                this.view?.onFrame();
+                this.view?.onDrawn?.(seq);
+              } catch (error) {
+                this.report(error);
+              }
+            },
+            onFrame: (event) => {
+              if (generation !== this.generation || this.disposed) return;
+              try {
+                this.view?.onFrame(event.frame);
               } catch (error) {
                 this.report(error);
               }

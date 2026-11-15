@@ -43,7 +43,7 @@ to close a row; an alternative must deliver the same or better user behavior.
 | T08 | Resize, scrollback and viewport: FitAddon, `terminalScrollback`, `useTerminalSession.ts` | Kernel/core resize and native scroll exist; the lab checks a 10000-row history. The core budget is bytes, while the current preference describes rows. | Resize/reflow preserves text and cursor; wheel/page/history navigation and configured retention have an explicit equivalent meaning with bounded memory. |
 | T09 | Fonts, live themes, zoom, spacing, cursor and image-background contrast: `termOptions`, `apply*` in `rendererPool.ts` | Lab colors/font/metrics have partial coverage. Normal preference wiring and equivalent minimum-contrast behavior are unverified. | Change each existing terminal setting live across multiple new-engine panes; verify colors, cursor focus/blink, dimensions, theme switching and background readability. |
 | T10 | WebGL preference, fallback, context recovery and manual redraw: `rendererPool.ts`, `atlasRepaint.ts`, `terminal.redraw` | The new renderer requires WebGL2 and handles context restoration, but has no demonstrated equivalent for disabling/unavailable WebGL. | Terminals remain usable with the supported GPU preference/fallback and after context loss/display wake; redraw restores every visible pane without atlas corruption. |
-| T11 | URL/OSC 8 and file links: `terminalLinks.ts`, `fileLinks.ts`, renderer link providers | No engine link-query/activation integration exists. | Modified-click opens a permitted URL or the correct local file/line, respects cwd/home/workspace and restores focus; invalid or forbidden targets remain rejected. |
+| T11 | URL/OSC 8 and file links: `terminalLinks.ts`, `fileLinks.ts`, renderer link providers | Bounded immutable metadata for actually drawn frames now supports native URL/OSC 8/file links. M2 proves plain/OSC 8/wrapped URL opening, quoted files with line/column, new/reused editor focus, selection/menu preservation and first inactive-pane click after divider movement. See the native-links report. Other-platform runtime and hover/capture-overlay proof remain open. | Modified-click opens a permitted URL or the correct local file/line, respects cwd/home/workspace and restores focus; invalid or forbidden targets remain rejected. |
 | T12 | File drops: `useTerminalFileDrop.ts`, `quoteShellPath.ts` | The drop path calls xterm `pasteIntoLeaf`. | Dropping files on a new-engine split targets that split, preserves quoted paths with spaces/shell characters, paste semantics and physical/logical coordinate handling. |
 
 ## Shell, application and agent integration
@@ -148,3 +148,8 @@ real zsh/bash script and ordered native state tests. Native opening is not shell
 readiness; generation/exit/failure regressions reject stale ready signals. A08
 and A09 still require complete agent restore/task scenarios, and A01 remains
 open for other supported shells/platforms. Search, links and blocks are next.
+
+
+## Native links update (2026-11-15)
+
+See [the native-links report](2026-11-15-terminal-native-links.md). T11 now has ordinary M2 interaction evidence and bounded native/client regressions. It remains open for platform and hover/capture proof: the app rasterizer currently paints native canvas crops after DOM overlays. The full migration and default rollout remain incomplete. No new performance lab was run.

@@ -1,4 +1,8 @@
 import {
+  bindNativeLinks,
+  type NativeLinkBinding,
+} from "@/modules/terminal/gl/nativeLinkBinding";
+import {
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -44,6 +48,8 @@ export const NativeTerminalPane = forwardRef<
   const engine = useRef<EngineSession | null>(null);
   const controller = useRef<NativeLeafSession | null>(null);
   const input = useRef<NativeInputBinding | null>(null);
+  const links = useRef<NativeLinkBinding | null>(null);
+  const lastHomePath = useRef(props.homePath);
   const adapter = useRef<NativeLeafSession | null>(null);
   const selectedForMenu = useRef<string | null>(null);
   const preClickSelection = useRef<string | null>(null);
@@ -58,6 +64,7 @@ export const NativeTerminalPane = forwardRef<
     if (!renderer || !model || !element) return;
     let disposed = false;
     let binding: NativeInputBinding | null = null;
+    let linkBinding: NativeLinkBinding | null = null;
     let native: EngineSession | null = null;
     let layoutFrame = 0;
     const report = (cause: unknown) => {
@@ -117,6 +124,7 @@ export const NativeTerminalPane = forwardRef<
             : { ...layout.rect, width: 0, height: 0 },
         );
       binding?.updateCursor();
+      linkBinding?.updateLayout();
     };
     const scheduleLayout = () => {
       if (!layoutFrame && !disposed)
@@ -143,6 +151,9 @@ export const NativeTerminalPane = forwardRef<
         onSession: (session) => {
           if (input.current === binding) input.current = null;
           binding?.dispose();
+          linkBinding?.dispose();
+          if (links.current === linkBinding) links.current = null;
+          linkBinding = null;
           binding = null;
           native = session;
           engine.current = session;
@@ -157,15 +168,36 @@ export const NativeTerminalPane = forwardRef<
             onError: report,
           });
           input.current = binding;
+          linkBinding = bindNativeLinks(session, renderer, element, {
+            available: () =>
+              !disposed && latest.current.visible && engine.current === session,
+            active: () =>
+              latest.current.visible && Boolean(latest.current.focused ?? true),
+            cwd: () => owner.cwd ?? latest.current.initialCwd,
+            home: () => latest.current.homePath,
+            foreground: () =>
+              (surfaceRef.current ?? model).colors.engine.foreground,
+            openFile: (path, location) =>
+              latest.current.onOpenFileLink?.(path, location),
+            focus: () => binding?.focus(),
+          });
+          links.current = linkBinding;
           latest.current.onSearchReady?.(leafId, owner.search);
           measure();
           if (latest.current.visible && (latest.current.focused ?? true))
             binding.focus();
         },
-        onFrame: () => binding?.updateCursor(),
+        onFrame: (frame) => {
+          binding?.updateCursor();
+          linkBinding?.onFrame(frame);
+        },
+        onDrawn: () => linkBinding?.onDrawn(),
         onError: report,
         onExit: (code) => latest.current.onExit?.(leafId, code),
-        onCwd: (cwd) => latest.current.onCwd?.(leafId, cwd),
+        onCwd: (cwd) => {
+          linkBinding?.invalidate();
+          latest.current.onCwd?.(leafId, cwd);
+        },
         focus: () => binding?.focus(),
         focused: () =>
           latest.current.visible &&
@@ -213,8 +245,17 @@ export const NativeTerminalPane = forwardRef<
     if (visible && focused) input.current?.focus();
   }, [visible, focused, renderer]);
   useEffect(() => {
+    if (!visible || !focused) links.current?.invalidate();
+  }, [visible, focused]);
+  useEffect(() => {
+    if (lastHomePath.current === props.homePath) return;
+    lastHomePath.current = props.homePath;
+    links.current?.invalidate();
+  }, [props.homePath]);
+  useEffect(() => {
     if (!surface) return;
     engine.current?.setColors(surface.colors.engine);
+    links.current?.updateLayout();
     input.current?.updateAppearance({
       font: surface.font,
       foreground: surface.colors.engine.foreground,

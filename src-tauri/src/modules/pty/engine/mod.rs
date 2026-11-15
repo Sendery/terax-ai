@@ -20,6 +20,8 @@ pub mod input;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod keyboard_modes;
 #[cfg(feature = "ghostty-engine")]
+pub mod links;
+#[cfg(feature = "ghostty-engine")]
 pub mod search;
 #[cfg(feature = "ghostty-engine")]
 pub mod selection;
@@ -242,6 +244,14 @@ mod runtime {
         command: super::search::SearchCommand,
         reply: SyncSender<SearchReply>,
     }
+    pub type LinkReply = Result<Option<super::links::LinkContext>, String>;
+    pub type LinkReceiver = Receiver<LinkReply>;
+    struct LinkRequest {
+        seq: u32,
+        col: u16,
+        row: u16,
+        reply: SyncSender<LinkReply>,
+    }
     const MAX_TEXT_REQUESTS: usize = 32;
 
     struct TextRequest {
@@ -265,6 +275,7 @@ mod runtime {
         text_requests: Vec<TextRequest>,
         selection_requests: Vec<SelectionRequest>,
         search_requests: Vec<SearchRequest>,
+        link_requests: Vec<LinkRequest>,
         text_pending: usize,
         text_closed: bool,
     }
@@ -287,6 +298,7 @@ mod runtime {
                 std::mem::take(&mut control.text_requests),
                 std::mem::take(&mut control.selection_requests),
                 std::mem::take(&mut control.search_requests),
+                std::mem::take(&mut control.link_requests),
             )
         };
         for request in pending.0 {
@@ -296,6 +308,9 @@ mod runtime {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
         for request in pending.2 {
+            let _ = request.reply.try_send(Err("terminal engine closed".into()));
+        }
+        for request in pending.3 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
     }
@@ -405,6 +420,36 @@ mod runtime {
                 control
                     .search_requests
                     .push(SearchRequest { command, reply });
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
+        }
+
+        pub fn link_context(&self, seq: u32, col: u16, row: u16) -> Result<LinkReceiver, String> {
+            if seq == 0 || col >= super::MAX_COLS || row >= super::MAX_ROWS {
+                return Err("invalid terminal link coordinates".into());
+            }
+            let (reply, receiver) = sync_channel(1);
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal queries".into());
+                }
+                control.text_pending += 1;
+                control.link_requests.push(LinkRequest {
+                    seq,
+                    col,
+                    row,
+                    reply,
+                });
             }
             if matches!(
                 self.wake.try_send(Input::Wake),
@@ -761,6 +806,9 @@ mod runtime {
                 for request in c.search_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
                 }
+                for request in c.link_requests {
+                    let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                }
                 reject_text_requests(&self.control);
                 self.reply_sink.take();
                 *self.replies.borrow_mut() = Vec::new();
@@ -829,6 +877,17 @@ mod runtime {
                     let result = self.search.apply(&mut self.term, &request.command);
                     self.pump.request_full();
                     result
+                };
+                let _ = request.reply.try_send(result);
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                control.text_pending = control.text_pending.saturating_sub(1);
+            }
+            for request in c.link_requests {
+                let result = if self.health.failure().is_some() {
+                    Err("terminal engine is unavailable".into())
+                } else {
+                    self.snapshot
+                        .link_context(request.seq, request.col, request.row)
                 };
                 let _ = request.reply.try_send(result);
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
@@ -1693,7 +1752,7 @@ mod engine_tests {
         began.recv_timeout(WAIT).unwrap();
         assert!(engine.handle.read_text(0).is_err());
         assert!(engine.handle.read_text(1001).is_err());
-        let queries: Vec<_> = (0..30)
+        let queries: Vec<_> = (0..29)
             .map(|_| engine.handle.read_text(2).unwrap())
             .collect();
         let search = engine
@@ -1704,6 +1763,8 @@ mod engine_tests {
             .handle
             .selection(super::selection::SelectionCommand::Read)
             .unwrap();
+        let link = engine.handle.link_context(1, 0, 0).unwrap();
+        assert!(engine.handle.link_context(1, 0, 0).is_err());
         assert!(engine
             .handle
             .search(super::search::SearchCommand::Clear)
@@ -1721,6 +1782,7 @@ mod engine_tests {
         }
         assert!(!search.recv_timeout(WAIT).unwrap().unwrap());
         assert_eq!(selection.recv_timeout(WAIT).unwrap().unwrap(), None);
+        assert!(link.recv_timeout(WAIT).unwrap().unwrap().is_none());
         engine.input.shutdown();
         engine.thread.join().unwrap();
         assert!(engine.handle.read_text(2).is_err());

@@ -637,3 +637,36 @@ change, and restores terminal focus on Escape. No search text or terminal text
 is added to app snapshots, the Pi bridge or logs. Functional M2 evidence and
 remaining scope are recorded in the native-search report; this does not close
 the full migration or prove Windows/Linux runtime acceptance.
+
+### Native URL, OSC 8 and file links in ordinary panes
+
+The app queries gterm_link_context for the actually drawn sequence and cell,
+not the newest applied frame. Snapshotter owns immutable link metadata for
+three frames, sharing unchanged rows. Grapheme text and OSC 8 URIs are captured
+during the existing dirty-row traversal; no idle polling or frame ABI change is
+introduced. Link queries share the 32-request text/selection/search admission
+and a two-second receipt timeout. Accepted work is not cancelled by that timeout.
+
+Logical context includes soft wraps and bounded adjacent history. Native gaps
+and clipped edges remain explicit, so a truncated path cannot become another
+valid file. UTF-16 cell spans preserve wide tails and combining clusters. OSC 8
+takes precedence over label detection; an unsupported or unavailable URI does
+not fall back to the visible label. HTTP(S), mailto and tel use the existing
+external opener. Local/localhost file URIs and plain file paths use the existing
+human editor route, with CWD/home resolution and optional one-based line/column.
+fs_stat establishes existence/type, not authorization. AI filesystem and command
+authorization remain separate and unchanged.
+
+Hover and activation bind to process, workspace, CWD/home and geometry. Pointer
+down retains the drawn destination across later output; drag, secondary clicks,
+replacement owners and changed scope cannot activate it. Geometry-only changes
+request a draw notification before hit testing resumes. Primary pointer default
+is prevented to preserve textarea focus; secondary/context-menu behavior stays
+available. File activation waits for a committed active editor and a created,
+ready CodeMirror view before consuming the pending location.
+
+No terminal text, URI, shell token or new command is exposed through Pi snapshots.
+M2 functional proof and capture limits are in the
+[native links report](../plans/2026-11-15-terminal-native-links.md).
+This does not establish full grapheme rendering, other-platform runtime parity,
+or captured DOM hover overlays.
