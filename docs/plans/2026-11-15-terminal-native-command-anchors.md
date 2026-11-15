@@ -88,3 +88,31 @@ Remaining work includes Bash, fish/PowerShell runtime acceptance, full grapheme
 rendering, inline images, Retina/mixed-DPI, TUI/mouse/readline, settings,
 notification/clipboard protocols, AI/agent/task/restore consumers and rollout.
 60 FPS is optional and does not gate that functional work.
+
+
+## Follow-up: concurrent shell profile publication
+
+The first real startup of checkpoint261bc65 exposed an existing installer race:
+two restored panes used the same .zshrc.__terax_tmp__ filename, and one failed
+rename with ENOENT, disabling its zsh integration. The candidate was stopped
+and this failure corrected before final handoff.
+
+Unix and Windows now share a changed-only installer using one unique temporary
+per writer in the destination directory, complete write_all before atomic
+persist, and RAII cleanup on error. The source reviewer confirmed the installed
+Windows implementation uses MoveFileExW with replacement; Windows runtime/WSL
+acceptance is still unrun.
+
+Regression tests run192 concurrent publications and require every observed
+destination to be a complete known profile, with no temporary left behind.
+They also cover unchanged-file preservation and cleanup after failed
+publication. Shell-init suites passed7 tests in each plain/native configuration;
+strict clippy passed both configurations. The previous client/build tests were
+not repeated because this corrective patch changes only the Rust installer
+and documentation. Independent source review found no blocker.
+
+Additional exact passing test commands:
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml --target-dir /Users/andres.rojo/Workspaces/terax-ai/src-tauri/target --locked modules::pty::shell_init
+.terax/pi-development/m2/with-ghostty cargo test --manifest-path src-tauri/Cargo.toml --target-dir /Users/andres.rojo/Workspaces/terax-ai/src-tauri/target --locked --features ghostty-engine modules::pty::shell_init
+```

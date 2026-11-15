@@ -49,6 +49,30 @@ fn fish_init_script() -> &'static str {
     FISH_INIT_SCRIPT
 }
 
+fn write_if_changed(path: &std::path::Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    if std::fs::read_to_string(path).is_ok_and(|existing| existing == content) {
+        return Ok(());
+    }
+    let parent = path
+        .parent()
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    // Each concurrent installer owns its temporary file until atomic publication.
+    let mut temporary = tempfile::Builder::new()
+        .prefix(".terax-profile-")
+        .tempfile_in(parent)
+        .map_err(|error| format!("create profile temporary: {error}"))?;
+    temporary
+        .as_file_mut()
+        .write_all(content.as_bytes())
+        .map_err(|error| format!("write profile temporary: {error}"))?;
+    temporary
+        .persist(path)
+        .map(|_| ())
+        .map_err(|error| format!("replace {}: {}", path.display(), error.error))
+}
+
 pub fn build_command(
     cwd: Option<String>,
     workspace: WorkspaceEnv,
@@ -180,7 +204,7 @@ fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
 
 #[cfg(unix)]
 mod unix {
-    use std::ffi::OsString;
+    use super::write_if_changed;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -331,23 +355,6 @@ mod unix {
         Ok(())
     }
 
-    fn write_if_changed(path: &Path, content: &str) -> Result<(), String> {
-        if let Ok(existing) = fs::read_to_string(path) {
-            if existing == content {
-                return Ok(());
-            }
-        }
-        // Atomic replace: a parallel shell startup must never source a half-written file.
-        let mut tmp: OsString = path.as_os_str().to_owned();
-        tmp.push(".__terax_tmp__");
-        let tmp = PathBuf::from(tmp);
-        fs::write(&tmp, content).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-        fs::rename(&tmp, path).map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            format!("rename {} -> {}: {e}", tmp.display(), path.display())
-        })
-    }
-
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -376,10 +383,10 @@ mod unix {
 
 #[cfg(windows)]
 mod windows {
+    use super::write_if_changed;
     use super::SHELL_MARKER_ENV;
-    use std::ffi::OsString;
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use crate::modules::workspace::WorkspaceEnv;
     use portable_pty::CommandBuilder;
@@ -679,22 +686,6 @@ mod windows {
         Ok(file)
     }
 
-    fn write_if_changed(path: &Path, content: &str) -> Result<(), String> {
-        if let Ok(existing) = fs::read_to_string(path) {
-            if existing == content {
-                return Ok(());
-            }
-        }
-        let mut tmp: OsString = path.as_os_str().to_owned();
-        tmp.push(".__terax_tmp__");
-        let tmp = PathBuf::from(tmp);
-        fs::write(&tmp, content).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-        fs::rename(&tmp, path).map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            format!("rename {} -> {}: {e}", tmp.display(), path.display())
-        })
-    }
-
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -954,5 +945,81 @@ mod term_program_tests {
         cmd.env("WSLENV", "TERAX_BLOCKS/u");
         apply_blocks_environment(&mut cmd, false, true);
         assert_eq!(cmd.get_env("WSLENV"), None);
+    }
+}
+
+#[cfg(test)]
+mod profile_install_tests {
+    use super::write_if_changed;
+    use std::collections::HashSet;
+    use std::sync::{Arc, Barrier};
+    #[test]
+    fn concurrent_profile_updates_publish_only_complete_files_without_shared_temporaries() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("profile");
+        let workers = 12;
+        let rounds = 16;
+        let payloads: Vec<Vec<String>> = (0..workers)
+            .map(|worker| {
+                (0..rounds)
+                    .map(|round| format!("worker {worker} round {round}\n{}", "x".repeat(4096)))
+                    .collect()
+            })
+            .collect();
+        let complete: HashSet<String> = payloads
+            .iter()
+            .flatten()
+            .cloned()
+            .chain(["initial".to_string()])
+            .collect();
+        std::fs::write(&path, "initial").unwrap();
+        let barrier = Arc::new(Barrier::new(workers));
+        let outcomes = std::thread::scope(|scope| {
+            let handles: Vec<_> = payloads
+                .iter()
+                .map(|payloads| {
+                    let path = &path;
+                    let complete = &complete;
+                    let barrier = barrier.clone();
+                    scope.spawn(move || {
+                        let mut errors = Vec::new();
+                        for payload in payloads {
+                            barrier.wait();
+                            if let Err(error) = write_if_changed(path, payload) {
+                                errors.push(error);
+                            }
+                            match std::fs::read_to_string(path) {
+                                Ok(value) if complete.contains(&value) => {}
+                                _ => errors.push("observed incomplete profile".into()),
+                            }
+                        }
+                        errors
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        assert!(outcomes.is_empty(), "{outcomes:?}");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+    #[test]
+    fn unchanged_profile_is_not_replaced_and_failed_publication_cleans_its_temporary() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("profile");
+        std::fs::write(&path, "same").unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        write_if_changed(&path, "same").unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            modified
+        );
+        let target = directory.path().join("directory");
+        std::fs::create_dir(&target).unwrap();
+        assert!(write_if_changed(&target, "new").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "same");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 2);
     }
 }

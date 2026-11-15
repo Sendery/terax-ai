@@ -850,3 +850,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** positioning a toolbar at a fixed distance above output overlays a wrapped command. A tracked header reference can also survive after the program writes text into its reserved row, while the output integrity stamp remains valid.
 - **Prevention:** capture the native reserved row at authenticated prompt-end, invalidate pending anchors at prompt-start and transfer ownership at authenticated command-start. Retain nullable anchors with each presented snapshot and let native reflow/collection decide their lifetime. Check visible reserved rows for native text before publishing; suppress only an overwritten or unavailable header, without moving it to a guessed row or rejecting intact output.
 - **Verification:** native wrapped echo/reflow, missing/unsigned/invalidated prompt and CUP overwrite regressions; client rejects invalid anchors and preserves long multiline metadata. Directly invoking preexec verifies encoding only; exercise an interactive PTY to prove how the shell actually delivers the accepted command.
+
+
+### Atomic profile replacement needs a unique temporary per writer
+
+- **Trigger:** several panes start while a cached shell profile needs updating.
+- **Failure mode:** a shared destination.tmp lets one rename consume another writer's temporary, producing ENOENT and silently disabling shell integration for a pane; overlapping open/write operations can also expose partial contents.
+- **Prevention:** share one write-if-changed installer across platform paths. Create a unique temporary in the destination directory, finish writing before atomic persist, and retain RAII cleanup on failure. Preserve the unchanged-file fast path.
+- **Verification:** actual two-pane startup exposed the failed rename; concurrent publishers assert every observed target is a complete known profile and no temporary remains. Check failed-publication cleanup and unchanged-file identity. Native Windows path acceptance remains separate from common helper tests.
