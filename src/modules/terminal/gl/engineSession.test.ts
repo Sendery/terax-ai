@@ -332,7 +332,10 @@ describe("EngineSession commands", () => {
     session.scroll(0);
     await session.write("ls\r");
     expect(commands("gterm_resize")).toEqual([
-      { command: "gterm_resize", args: { id: 9, cols: 80, rows: 24 } },
+      {
+        command: "gterm_resize",
+        args: { id: 9, cols: 80, rows: 24, cellWidth: 8, cellHeight: 16 },
+      },
     ]);
     expect(commands("gterm_scroll")).toEqual([
       { command: "gterm_scroll", args: { id: 9, delta: -3 } },
@@ -400,8 +403,61 @@ describe("EngineSession opening synchronization", () => {
     ipc.open?.resolve(12);
     await pending;
     expect(commands("gterm_resize")).toEqual([
-      { command: "gterm_resize", args: { id: 12, cols: 100, rows: 30 } },
+      {
+        command: "gterm_resize",
+        args: { id: 12, cols: 100, rows: 30, cellWidth: 8, cellHeight: 16 },
+      },
     ]);
+  });
+
+  it("retains physical metrics changed during opening even when the grid is unchanged", async () => {
+    const { session, pending } = deferredSession();
+    session.setCellPixels(16, 32);
+    expect(commands("gterm_resize")).toEqual([]);
+    ipc.open?.resolve(12);
+    await pending;
+    expect(commands("gterm_resize")).toEqual([
+      {
+        command: "gterm_resize",
+        args: { id: 12, cols: 4, rows: 2, cellWidth: 16, cellHeight: 32 },
+      },
+    ]);
+    session.setCellPixels(20, 40);
+    expect(
+      commands("gterm_resize")[commands("gterm_resize").length - 1],
+    ).toEqual({
+      command: "gterm_resize",
+      args: {
+        id: 12,
+        cols: 4,
+        rows: 2,
+        cellWidth: 20,
+        cellHeight: 40,
+        metricsOnly: true,
+      },
+    });
+  });
+
+  it("sends the first measured pixel size even when it matches core defaults", async () => {
+    const { session, pending } = deferredSession();
+    ipc.open?.resolve(12);
+    await pending;
+    session.setCellPixels(8, 16);
+    expect(commands("gterm_resize")).toEqual([
+      {
+        command: "gterm_resize",
+        args: {
+          id: 12,
+          cols: 4,
+          rows: 2,
+          cellWidth: 8,
+          cellHeight: 16,
+          metricsOnly: true,
+        },
+      },
+    ]);
+    session.setCellPixels(8, 16);
+    expect(commands("gterm_resize")).toHaveLength(1);
   });
 
   it("skips a resize when the latest size matches the opening size", async () => {
@@ -738,8 +794,8 @@ it("the real ghostty adapter awaits native resize completion", async () => {
   finish();
   await settled;
   expect(commands("gterm_resize").map((c) => c.args)).toEqual([
-    { id: 9, cols: 80, rows: 24 },
-    { id: 9, cols: 100, rows: 30 },
+    { id: 9, cols: 80, rows: 24, cellWidth: 8, cellHeight: 16 },
+    { id: 9, cols: 100, rows: 30, cellWidth: 8, cellHeight: 16 },
   ]);
   await owner.close();
 });
@@ -809,7 +865,10 @@ it("keeps retained presentation and text available after exit without writing to
   expect(commands("pty_write")).toEqual([]);
   await session.resizeAndWait(80, 24);
   expect(commands("gterm_resize")).toEqual([
-    { command: "gterm_resize", args: { id: 9, cols: 80, rows: 24 } },
+    {
+      command: "gterm_resize",
+      args: { id: 9, cols: 80, rows: 24, cellWidth: 8, cellHeight: 16 },
+    },
   ]);
   await expect(session.readText()).resolves.toBe("native text");
   await session.close();

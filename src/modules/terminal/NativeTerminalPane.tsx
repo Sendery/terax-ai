@@ -145,6 +145,11 @@ export const NativeTerminalPane = forwardRef<
       );
       owner.resize(layout.grid.cols, layout.grid.rows);
       if (native)
+        native.setCellPixels(
+          renderer.cellPixels.width,
+          renderer.cellPixels.height,
+        );
+      if (native)
         renderer.setPaneRect(
           native.pane,
           latest.current.visible

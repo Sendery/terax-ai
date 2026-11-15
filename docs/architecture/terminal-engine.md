@@ -145,6 +145,52 @@ Native cluster boundaries and cell widths follow the core's negotiated mode. Com
 
 Snapshotter reads the complete cluster, including the base scalar, from the pinned render-cell graphemes_utf8 API. IDs belong only to that frame. The renderer resolves text before discarding the frame and keys the atlas by full cluster, face and native width, never by frame-local ID. The GPU grid retains only glyph slots and colors; bounded glyph keys are not a JS terminal-history cache. Optional table strings are decoded once per unique entry, while row/style views still alias the received buffer.
 
+
+Header flag bit 4 appends a native graphics packet after rows and the optional
+grapheme table. Its u32 header is version 1, native cell width/height in pixels,
+image upload count and visible placement count. Each upload is u32 image ID,
+u64 generation, u32 width, height and RGBA byte length, followed by exact RGBA8
+pixels. Each placement is u32 image ID, u64 generation, i32 z, i32 viewport
+column/row, u32 pixel offsets x/y, u32 source x/y/width/height and u32 rendered
+pixel width/height. All fields are little endian and four-byte aligned.
+
+Generations retain all 64 bits and are process-wide native content identities.
+Every packet replaces the complete visible placement set; an empty set clears
+images. Partial frames upload only newly visible or replaced image generations.
+Full frames include every referenced pixel payload, allowing reconstruction
+after hiding, detaching, or losing the context. Scrolling/resizing recomputes
+geometry even when image content generation is unchanged. CPU cache entries own
+pixel slices and compact placement metadata, without retaining complete IPC
+buffers. Same-size replacement uses a new generation, not a dimension heuristic.
+
+Native screen storage is limited to 16 MiB; PNG decode and frame uploads to
+32 MiB, image dimensions to 8192 and visible placements to 4096. Cell dimensions
+are 1..512 device pixels. The shared window image cache is bounded to 128 MiB
+of CPU pixels with corresponding GPU textures, allocated only when used.
+File, temporary-file and shared-memory image media are refused. Ghostty can
+restore default storage quotas when initializing or resetting a screen, so the
+shared native feed enforces policies before/after input and immediately after
+APC introducers, before image data can be processed. It preserves exact input
+bytes and the native parser state across fragments. Both ordinary and blocks
+paths use this feed.
+
+The existing shared WebGL2 context draws images with native source crops,
+signed viewport positions, pane scissoring and three z layers: below
+non-default cell backgrounds, below text and above text, with alpha blending.
+Equal z values use image ID order. Default text-only panes retain one grid draw.
+No JavaScript VT/image parser, filesystem loader or additional GL context is
+introduced. Hidden image panes drop their graphic cache and require full
+reconstruction on reveal. Context loss defers all glyph/image work and
+invalidates affected image geometry; full frames reconstruct afterward.
+Shader/texture capacity errors use the existing bounded visible-error path.
+
+Physical cell metrics reach both core and PTY through gterm_resize; metric-only
+updates preserve the actual kernel grid. Coalesced native grid/pixel updates
+preserve admission order, including metrics changed before opening resolves.
+Direct Kitty RGB/RGBA/PNG placements are implemented. Unicode virtual placements,
+Sixel, iTerm images and terminal-driven image animation are not claimed by this
+slice. See docs/plans/2026-11-15-terminal-native-images.md for evidence and scope.
+
 The extended renderer has an 8 MiB bound for retained UTF-16 cluster keys in addition to existing mono/color texture bounds. Capacity exhaustion never silently returns an empty glyph. One automatic cache reset is allowed per participating visible pane within a recovery epoch; the epoch renews only after all visible panes rebuild full frames. A working set that still cannot fit blocks the affected view with a visible error. Credits and native terminal state continue, presented geometry is invalidated, and blocked views do not request endless full frames. Explicit Redraw or a font/DPR rebuild starts a new attempt. Hidden panes do no glyph work, retain a full-rebuild requirement and reconstruct when shown; they cannot participate in a hidden retry cycle.
 
 Both producer and decoder ship in the same application build. Legacy decoders reject the optional table as trailing bytes; do not mix old assets with an extended producer.

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import { decodeFrame } from "@/modules/terminal/gl/frameCodec";
 import { encodeFrame, textRow } from "@/modules/terminal/gl/frameCodec.testing";
@@ -183,7 +184,9 @@ function capacityRenderer() {
   const renderer = Object.assign(Object.create(GridRenderer.prototype), {
     panes: [a, b],
     atlas: { lookup, reset },
-    lost: true,
+    lost: false,
+    upload: vi.fn(),
+    uploadWhole: vi.fn(),
     disposed: false,
     stats: { atlasResets: 0 },
     updateBlink: vi.fn(),
@@ -242,4 +245,50 @@ it("defers hidden panes without atlas work and requests a complete frame on reve
   expect(b.callbacks.onNeedFullFrame).toHaveBeenCalledOnce();
   expect(renderer.applyFrame(b, frame)).toBe("applied");
   expect(lookup).toHaveBeenCalledTimes(before + 1);
+});
+
+it("defers graphic frames during context loss and accepts the recovered full frame", () => {
+  const target = pane({ x: 0, y: 0, width: 40, height: 40 });
+  const lookup = vi.fn((): number => {
+    throw new Error("lost atlas must not be touched");
+  });
+  const graphics = {
+    apply: vi.fn((): void => {
+      throw new Error("lost graphics must not be touched");
+    }),
+  };
+  const renderer = Object.assign(Object.create(GridRenderer.prototype), {
+    lost: true,
+    atlas: { lookup },
+    graphics,
+    panes: [target],
+    upload: vi.fn(),
+    updateBlink: vi.fn(),
+    requestDraw: vi.fn(),
+  }) as GridRenderer;
+  const bytes = readFileSync(
+    new URL(
+      "../../../../tests/fixtures/terminal-graphics/direct-rgba.frame",
+      import.meta.url,
+    ),
+  );
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  const frame = decodeFrame(copy.buffer);
+  expect(renderer.applyFrame(target, frame)).toBe("needs-full");
+  expect(renderer.applyFrame(target, frame)).toBe("needs-full");
+  expect(lookup).not.toHaveBeenCalled();
+  expect(graphics.apply).not.toHaveBeenCalled();
+  expect(target.grid).toBe(null);
+  expect(target.header).toBe(null);
+  expect(target.undrawn).toBe(true);
+  Reflect.set(renderer, "lost", false);
+  lookup.mockReturnValue(1);
+  graphics.apply.mockImplementation(() => {});
+  expect(renderer.applyFrame(target, frame)).toBe("applied");
+  expect(graphics.apply).toHaveBeenCalledExactlyOnceWith(
+    target,
+    frame.graphics,
+  );
+  expect(target.grid?.cols).toBe(frame.cols);
 });

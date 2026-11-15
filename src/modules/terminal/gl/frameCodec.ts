@@ -1,3 +1,7 @@
+import {
+  decodeGraphics,
+  type DecodedGraphics,
+} from "@/modules/terminal/gl/graphicsCodec";
 export const FRAME_MAGIC = 0x31465854;
 export const HEADER_BYTES = 36;
 export const STYLE_BYTES = 16;
@@ -7,6 +11,7 @@ export const FRAME_FLAG_FULL = 1;
 export const FRAME_FLAG_CURSOR_BLINK = 2;
 export const FRAME_FLAG_SCROLLED_BACK = 4;
 export const FRAME_FLAG_GRAPHEMES = 8;
+export const FRAME_FLAG_GRAPHICS = 16;
 export const CELL_GRAPHEME = 1 << 29;
 export const MAX_GRAPHEME_BYTES = 1024 * 1024;
 export const MAX_GRAPHEME_TABLE_BYTES = 8 * 1024 * 1024;
@@ -49,6 +54,7 @@ export type FrameErrorCode =
   | "bad-style-table"
   | "bad-row"
   | "bad-graphemes"
+  | "bad-graphics"
   | "trailing-bytes";
 
 export class FrameDecodeError extends Error {
@@ -86,6 +92,7 @@ export type DecodedFrame = {
   /** u32 index of each row record, in frame order. */
   readonly rowWords: Uint32Array;
   readonly graphemes: readonly string[];
+  readonly graphics?: DecodedGraphics;
   readonly u16: Uint16Array;
   readonly u32: Uint32Array;
 };
@@ -316,6 +323,19 @@ export function decodeFrame(
       );
     graphemes = decoded;
   }
+  let graphics: DecodedGraphics | undefined;
+  if (flags & FRAME_FLAG_GRAPHICS) {
+    try {
+      const result = decodeGraphics(u32, word, (flags & FRAME_FLAG_FULL) !== 0);
+      graphics = result.graphics;
+      word = result.word;
+    } catch {
+      throw new FrameDecodeError(
+        "bad-graphics",
+        "invalid native graphics table",
+      );
+    }
+  }
   if (word !== totalWords) {
     throw new FrameDecodeError(
       "trailing-bytes",
@@ -341,6 +361,7 @@ export function decodeFrame(
     styleWord,
     rowWords,
     graphemes,
+    ...(graphics ? { graphics } : {}),
     u16,
     u32,
   };

@@ -55,7 +55,7 @@ notify = "8.2.0"
 sha2 = "0.10"
 getrandom = "0.3"
 which = "8.0.4"
-libghostty-vt = { version = "=0.2.2", default-features = false, optional = true }
+libghostty-vt = { version = "=0.2.2", default-features = false, features = ["kitty-graphics"], optional = true }
 libghostty-vt-sys = { version = "=0.2.2", default-features = false, features = ["pkg-config"], optional = true }
 
 [dev-dependencies]

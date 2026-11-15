@@ -873,3 +873,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** returning glyph0 hides text, and unrestricted reset/full requests can loop. Tracking only visible panes while hidden panes still populate the atlas lets a hidden failure obtain a new first attempt after every visible success.
 - **Prevention:** report capacity explicitly, allow bounded automatic recovery per visible participant and renew only after all rebuild fully. A blocked view returns credits without requesting repeated full frames; invalidate presented IDs until actual rendering resumes. Defer hidden glyph work entirely and request full reconstruction on reveal. Explicit Redraw/font changes retry after the working set changes.
 - **Verification:** shared text-key exhaustion, two-pane bounded retries, successful epoch renewal, hidden frame/visible rebuild/hidden frame/reveal, and credit/geometry tests. Never treat pure tests as hardware or user-led visual QA.
+
+### Native graphics policy must survive screen initialization and reset
+
+- **Trigger:** a program initializes an alternate screen or sends RIS, then sends Kitty graphics in the same PTY chunk.
+- **Failure mode:** the pinned core restores its default screen storage quota after initial configuration. Enforcing a quota only at spawn, or after a whole chunk, leaves an image-processing interval using defaults.
+- **Prevention:** use one shared feed for ordinary and blocks terminals. Enforce storage/media/APC limits before and after feeding, and split conservatively after possible APC introducer-final bytes so limits are restored before the native decoder sees image data, including C0/DEL interleaving. Preserve every byte and parser state, including introducers split across calls. Refuse file, temporary-file and shared-memory media.
+- **Verification:** query limits and media after primary/alternate/RIS transitions, then send reset plus inline RGBA at every byte boundary and query quota within the native image reply, before final restoration. Preserve the complete engine regression suite. Keep image generations distinct from geometry, and rebuild full pixels after a client loses its cache.
+
+### Native image pixels belong to a bounded cache, not retained frame metadata
+
+- **Trigger:** binary frames carry RGBA uploads and the renderer makes owned copies for context-independent storage.
+- **Failure mode:** retaining frame.images also retains the complete incoming IPC buffer, doubling resident pixel memory outside the cache counter. Initializing shaders from rAF can also throw before onDrawn returns credits.
+- **Prevention:** validate bounds before copying; retain owned pixel slices and compact placements without upload views. Initialize resources within the guarded frame-apply path. Defer all GPU work during context loss and reconstruct from full native frames; hidden panes release graphic caches.
+- **Verification:** mutate an input upload after applying it; retain exact raster pixels, reuse stable generations, replace changed generations, and cover shader failure, hidden/reveal and loss/full recovery. Real WebKit pixels remain a separate acceptance step.

@@ -1,3 +1,4 @@
+import { GraphicsRenderer } from "@/modules/terminal/gl/graphicsRenderer";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
   type ApplyResult,
@@ -144,6 +145,8 @@ uniform vec2 uCellPx;
 uniform vec4 uLines;
 uniform int uCursorStyle;
 uniform vec3 uCursorColor;
+uniform int uPass;
+uniform vec3 uDefaultBg;
 in vec2 vLocal;
 in float vAbsX;
 flat in vec3 vFg;
@@ -175,31 +178,41 @@ void main() {
     fg = vBg;
     bg = uCursorColor;
   }
+  if (uPass == 1) {
+    if (all(equal(bg,uDefaultBg)) && !(cursor && uCursorStyle == 1)) discard;
+    outColor = vec4(bg,1.0);
+    return;
+  }
+  bool opaque = uPass == 0 || (cursor && uCursorStyle == 1);
+  float opacity = opaque ? 1.0 : 0.0;
   vec3 color = bg;
   if ((vBits & 0xFFFFFFu) != 0u) {
     ivec3 texel = ivec3(vAtlas.xy + ivec2(vLocal), vAtlas.z);
     if ((vBits & 0x4000000u) != 0u) {
       vec4 c = texelFetch(uColor, texel, 0);
-      color = mix(color, c.rgb, c.a);
+      color = opaque ? mix(color,c.rgb,c.a) : c.rgb;
+      opacity = opaque ? 1.0 : c.a;
     } else {
-      color = mix(color, fg, texelFetch(uMono, texel, 0).r);
+      float coverage = texelFetch(uMono, texel, 0).r;
+      color = opaque ? mix(color,fg,coverage) : fg;
+      opacity = opaque ? 1.0 : coverage;
     }
   }
   float x = vLocal.x;
   float y = vLocal.y;
   uint kind = (vBits >> 27) & 7u;
-  if (kind != 0u && underlineHit(kind, vAbsX, y)) color = vUl;
-  if ((vBits & 0x40000000u) != 0u && y >= uLines.z && y < uLines.z + uLines.y) color = fg;
-  if ((vBits & 0x80000000u) != 0u && y < uLines.y) color = fg;
+  if (kind != 0u && underlineHit(kind, vAbsX, y)) { color = vUl; opacity = 1.0; }
+  if ((vBits & 0x40000000u) != 0u && y >= uLines.z && y < uLines.z + uLines.y) { color = fg; opacity = 1.0; }
+  if ((vBits & 0x80000000u) != 0u && y < uLines.y) { color = fg; opacity = 1.0; }
   if (cursor) {
     float b = uLines.w;
     bool hit = false;
     if (uCursorStyle == 2) hit = x < b;
     else if (uCursorStyle == 3) hit = y >= uCellPx.y - max(b, uLines.y * 2.0);
     else if (uCursorStyle == 4) hit = x < b || x >= vSpanW - b || y < b || y >= uCellPx.y - b;
-    if (hit) color = uCursorColor;
+    if (hit) { color = uCursorColor; opacity = 1.0; }
   }
-  outColor = vec4(color, 1.0);
+  outColor = vec4(color,opacity);
 }`;
 
 const UNIFORMS = [
@@ -214,6 +227,8 @@ const UNIFORMS = [
   "uLines",
   "uCursorStyle",
   "uCursorColor",
+  "uPass",
+  "uDefaultBg",
 ] as const;
 
 type Uniforms = Record<(typeof UNIFORMS)[number], WebGLUniformLocation | null>;
@@ -252,6 +267,7 @@ export class GridRenderer {
   private program: WebGLProgram | null = null;
   private uniforms: Uniforms | null = null;
   private atlas: GlyphAtlas;
+  private graphics?: GraphicsRenderer;
   private font: RendererFont;
   private dpr: number;
   private background: number;
@@ -317,6 +333,13 @@ export class GridRenderer {
     return { width: m.width / this.dpr, height: m.height / this.dpr };
   }
 
+  get cellPixels(): { width: number; height: number } {
+    return {
+      width: this.atlas.metrics.width,
+      height: this.atlas.metrics.height,
+    };
+  }
+
   get atlasInfo(): { glyphs: number; textureBytes: number } {
     return {
       glyphs: this.atlas.glyphCount,
@@ -350,6 +373,7 @@ export class GridRenderer {
     this.capacityPending?.delete(pane);
     this.completeCapacityRecovery();
     this.deletePaneBuffers(pane);
+    this.graphics?.remove(pane);
     pane.grid = null;
     this.updateBlink();
     this.requestDraw();
@@ -359,6 +383,12 @@ export class GridRenderer {
     const wasVisible = pane.rect.width > 0 && pane.rect.height > 0;
     pane.rect = rect;
     if (rect.width <= 0 || rect.height <= 0) {
+      if (this.graphics?.has(pane)) {
+        this.graphics.remove(pane);
+        pane.grid = null;
+        pane.header = null;
+        pane.needsVisibleFull = true;
+      }
       this.capacityPending?.delete(pane);
       if (wasVisible && this.capacityBlocked?.size) this.retryCapacity();
       this.completeCapacityRecovery();
@@ -404,6 +434,12 @@ export class GridRenderer {
 
   applyFrame(pane: RenderPane, frame: DecodedFrame): ApplyResult {
     if (this.disposed) return "applied";
+    if (this.lost) {
+      pane.grid = null;
+      pane.header = null;
+      pane.undrawn = true;
+      return "needs-full";
+    }
     if (pane.rect.width <= 0 || pane.rect.height <= 0) {
       pane.grid = null;
       pane.header = null;
@@ -415,7 +451,13 @@ export class GridRenderer {
     let applied: ReturnType<typeof applyFrame>;
     try {
       applied = applyFrame(previous, frame, this.atlas.lookup);
+      if (applied.result !== "needs-full") {
+        if (frame.graphics?.placements.length)
+          this.graphics ??= new GraphicsRenderer(this.gl);
+        this.graphics?.apply(pane, frame.graphics);
+      }
     } catch (error) {
+      this.graphics?.remove(pane);
       if (!(error instanceof RenderCapacityError)) throw error;
       pane.grid = null;
       pane.header = null;
@@ -590,8 +632,38 @@ export class GridRenderer {
       gl.uniform2i(u.uGrid, grid.cols, grid.rows);
       gl.uniform2f(u.uViewPx, gridW, gridH);
       this.setCursorUniforms(u, pane, header, grid);
+      const images = this.graphics?.has(pane) ?? false;
+      if (images) {
+        this.graphics?.draw(pane, 0, m.width, m.height, gridW, gridH);
+        // biome-ignore lint/correctness/useHookAtTopLevel: a WebGL call, not a React hook
+        gl.useProgram(this.program);
+        gl.uniform3f(
+          u.uDefaultBg,
+          channel(header.defaultBg, 0),
+          channel(header.defaultBg, 8),
+          channel(header.defaultBg, 16),
+        );
+        gl.uniform1i(u.uPass, 1);
+        gl.bindVertexArray(pane.vao);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, grid.cols * grid.rows);
+        this.graphics?.draw(pane, 1, m.width, m.height, gridW, gridH);
+        // biome-ignore lint/correctness/useHookAtTopLevel: a WebGL call, not a React hook
+        gl.useProgram(this.program);
+        gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(
+          gl.SRC_ALPHA,
+          gl.ONE_MINUS_SRC_ALPHA,
+          gl.ONE,
+          gl.ONE_MINUS_SRC_ALPHA,
+        );
+      }
+      gl.uniform1i(u.uPass, images ? 2 : 0);
       gl.bindVertexArray(pane.vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, grid.cols * grid.rows);
+      gl.disable(gl.BLEND);
+      if (images) this.graphics?.draw(pane, 2, m.width, m.height, gridW, gridH);
+      // biome-ignore lint/correctness/useHookAtTopLevel: a WebGL call, not a React hook
+      gl.useProgram(this.program);
       this.drawnPanes.set(pane, true);
     }
     gl.bindVertexArray(null);
@@ -742,6 +814,12 @@ export class GridRenderer {
     this.program = null;
     this.uniforms = null;
     this.atlas.dropContext();
+    for (const pane of this.panes)
+      if (this.graphics?.has(pane)) {
+        pane.grid = null;
+        pane.header = null;
+      }
+    this.graphics?.dropContext();
     for (const pane of this.panes) {
       pane.vao = null;
       pane.vbo = null;
@@ -865,6 +943,7 @@ export class GridRenderer {
       if (this.program) this.gl.deleteProgram(this.program);
     }
     this.atlas.release();
+    this.graphics?.dispose();
     this.program = null;
     this.uniforms = null;
     // WebKit caps live contexts per page and frees a dropped one only on GC.

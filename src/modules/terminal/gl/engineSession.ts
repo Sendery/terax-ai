@@ -357,11 +357,18 @@ export class EngineSession {
     }
     if (
       !this.isBench &&
-      (this.size.cols !== args.cols || this.size.rows !== args.rows)
+      (this.size.cols !== args.cols ||
+        this.size.rows !== args.rows ||
+        this.cellPixelsKnown ||
+        this.cellPixels.width !== 8 ||
+        this.cellPixels.height !== 16)
     ) {
-      invoke("gterm_resize", { id: this.id, ...this.size }).catch(
-        this.reportError,
-      );
+      invoke("gterm_resize", {
+        id: this.id,
+        ...this.size,
+        cellWidth: this.cellPixels.width,
+        cellHeight: this.cellPixels.height,
+      }).catch(this.reportError);
     }
     if (this.pendingColors) this.setColors(this.pendingColors);
     this.flushCredits();
@@ -695,6 +702,31 @@ export class EngineSession {
     invoke("gterm_set_colors", { id: this.id, colors }).catch(this.reportError);
   }
 
+  private cellPixels = { width: 8, height: 16 };
+  private cellPixelsKnown = false;
+
+  setCellPixels(width: number, height: number): void {
+    if (
+      this.closed ||
+      this.failed ||
+      this.isBench ||
+      (this.cellPixelsKnown &&
+        width === this.cellPixels.width &&
+        height === this.cellPixels.height)
+    )
+      return;
+    this.cellPixelsKnown = true;
+    this.cellPixels = { width, height };
+    if (this.id === null) return;
+    invoke("gterm_resize", {
+      id: this.id,
+      ...this.size,
+      cellWidth: width,
+      cellHeight: height,
+      metricsOnly: true,
+    }).catch(this.reportError);
+  }
+
   resize(cols: number, rows: number): void {
     if (
       this.isBench ||
@@ -720,7 +752,13 @@ export class EngineSession {
     if (cols === this.size.cols && rows === this.size.rows)
       return Promise.resolve();
     this.size = { cols, rows };
-    return invoke("gterm_resize", { id, cols, rows });
+    return invoke("gterm_resize", {
+      id,
+      cols,
+      rows,
+      cellWidth: this.cellPixels.width,
+      cellHeight: this.cellPixels.height,
+    });
   }
 
   scroll(delta: number): void {

@@ -199,7 +199,7 @@ impl BlockStore {
     ) -> Result<(), String> {
         let mut failure = None;
         shell.ingest_segments(bytes, |segment, event| {
-            term.vt_write(segment);
+            super::graphics::write(term, segment).map_err(|error| error.to_string())?;
             if failure.is_none() {
                 if let Some(event) = event {
                     let result = match event {

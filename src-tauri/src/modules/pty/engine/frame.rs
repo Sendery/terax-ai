@@ -320,6 +320,16 @@ impl FrameEncoder {
         self.row_count += 1;
     }
 
+    #[cfg(feature = "ghostty-engine")]
+    pub fn finish_graphics(&mut self, header: &FrameHeader, graphics: Option<&[u8]>) -> &[u8] {
+        self.finish(header);
+        if let Some(graphics) = graphics {
+            self.out[17] |= 16;
+            self.out.extend_from_slice(graphics);
+        }
+        &self.out
+    }
+
     pub fn finish(&mut self, header: &FrameHeader) -> &[u8] {
         let out = &mut self.out;
         out.clear();

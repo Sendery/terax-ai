@@ -20,6 +20,8 @@ pub mod block_actions;
 #[cfg(feature = "ghostty-engine")]
 pub mod blocks;
 #[cfg(feature = "ghostty-engine")]
+mod graphics;
+#[cfg(feature = "ghostty-engine")]
 pub mod input;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod keyboard_modes;
@@ -320,7 +322,8 @@ mod runtime {
     #[derive(Default)]
     struct Control {
         ack: Option<u32>,
-        resize: Option<(u16, u16)>,
+        resize: Option<(u16, u16, u32, u32)>,
+        cell_pixels: Option<(u32, u32)>,
         colors: Option<Colors>,
         scroll: i64,
         full: bool,
@@ -600,7 +603,15 @@ mod runtime {
         }
 
         pub fn resize(&self, cols: u16, rows: u16) {
-            self.update(|c| c.resize = Some((cols, rows)));
+            self.resize_pixels(cols, rows, 8, 16);
+        }
+
+        pub fn resize_pixels(&self, cols: u16, rows: u16, width: u32, height: u32) {
+            self.update(|c| c.queue_resize(cols, rows, width, height));
+        }
+
+        pub fn set_cell_pixels(&self, width: u32, height: u32) {
+            self.update(|c| c.queue_cell_pixels(width, height));
         }
 
         pub fn scroll(&self, delta: i32) {
@@ -839,6 +850,21 @@ mod runtime {
         })
     }
 
+    impl Control {
+        fn queue_resize(&mut self, cols: u16, rows: u16, width: u32, height: u32) {
+            self.resize = Some((cols, rows, width, height));
+            self.cell_pixels = None;
+        }
+        fn queue_cell_pixels(&mut self, width: u32, height: u32) {
+            if let Some((cols, rows, _, _)) = self.resize {
+                self.resize = Some((cols, rows, width, height));
+                self.cell_pixels = None;
+            } else {
+                self.cell_pixels = Some((width, height));
+            }
+        }
+    }
+
     fn block_time() -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -852,6 +878,7 @@ mod runtime {
         snapshot: Snapshotter,
         pump: Pump,
         size: (u16, u16),
+        cell_pixels: (u32, u32),
         frames: FrameSink,
         sink_open: bool,
         health: Arc<EngineHealth>,
@@ -882,7 +909,10 @@ mod runtime {
                 }
             } else {
                 self.shell.ingest(bytes);
-                self.term.vt_write(bytes);
+                if let Err(error) = super::graphics::write(&mut self.term, bytes) {
+                    log::warn!("terminal graphics policy failed: {error}");
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                }
             }
             self.search.invalidate();
             self.update_input_state();
@@ -962,17 +992,34 @@ mod runtime {
                 *self.replies.borrow_mut() = Vec::new();
                 return;
             }
-            if let Some((cols, rows)) = c.resize {
-                if (cols, rows) != self.size && validate_size(cols, rows).is_ok() {
-                    match self.term.resize(cols, rows, 0, 0) {
+            if let Some((cols, rows, width, height)) = c.resize {
+                if ((cols, rows) != self.size || (width, height) != self.cell_pixels)
+                    && validate_size(cols, rows).is_ok()
+                {
+                    match self.term.resize(cols, rows, width, height) {
                         Ok(()) => {
                             self.size = (cols, rows);
+                            self.cell_pixels = (width, height);
+                            self.snapshot.set_cell_pixels(width, height);
                             self.search.invalidate();
                             self.update_scrollback_rows();
                             self.pump.request_full();
                             self.flush_replies();
                         }
                         Err(e) => log::warn!("terminal engine resize to {cols}x{rows} failed: {e}"),
+                    }
+                }
+            }
+            if let Some((width, height)) = c.cell_pixels {
+                if (width, height) != self.cell_pixels {
+                    match self.term.resize(self.size.0, self.size.1, width, height) {
+                        Ok(()) => {
+                            self.cell_pixels = (width, height);
+                            self.snapshot.set_cell_pixels(width, height);
+                            self.pump.request_full();
+                            self.flush_replies();
+                        }
+                        Err(error) => log::warn!("terminal cell pixels failed: {error}"),
                     }
                 }
             }
@@ -1321,6 +1368,8 @@ mod runtime {
                 rows,
                 max_scrollback: SCROLLBACK_BYTES,
             })?;
+            term.resize(cols, rows, 8, 16)?;
+            super::graphics::configure(&mut term)?;
             if let Some(colors) = &colors {
                 colors.apply(&mut term)?;
             }
@@ -1340,6 +1389,7 @@ mod runtime {
             snapshot,
             pump: Pump::new(),
             size: (cols, rows),
+            cell_pixels: (8, 16),
             frames,
             sink_open: true,
             health,
@@ -1400,6 +1450,21 @@ mod runtime {
                     return;
                 }
             }
+        }
+    }
+    #[cfg(test)]
+    mod pixel_control_tests {
+        use super::Control;
+        #[test]
+        fn pending_grid_and_pixel_updates_preserve_admission_order() {
+            let mut state = Control::default();
+            state.queue_cell_pixels(10, 20);
+            state.queue_resize(80, 24, 12, 24);
+            assert_eq!(state.resize, Some((80, 24, 12, 24)));
+            assert_eq!(state.cell_pixels, None);
+            state.queue_cell_pixels(16, 32);
+            assert_eq!(state.resize, Some((80, 24, 16, 32)));
+            assert_eq!(state.cell_pixels, None);
         }
     }
 }

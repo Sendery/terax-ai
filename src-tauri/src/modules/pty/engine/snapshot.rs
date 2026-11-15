@@ -20,6 +20,7 @@ pub struct Snapshotter {
     links: super::links::LinkCache,
     link_scratch: super::links::LinkScratch,
     grapheme_scratch: String,
+    graphics: super::graphics::GraphicsSnapshot,
 }
 
 fn pack(c: RgbColor) -> u32 {
@@ -60,7 +61,12 @@ impl Snapshotter {
             links: super::links::LinkCache::default(),
             link_scratch: super::links::LinkScratch::default(),
             grapheme_scratch: String::new(),
+            graphics: super::graphics::GraphicsSnapshot::new()?,
         })
+    }
+
+    pub fn set_cell_pixels(&mut self, width: u32, height: u32) {
+        self.graphics.set_cell_pixels(width, height);
     }
 
     pub fn link_context(
@@ -96,7 +102,7 @@ impl Snapshotter {
 
         let snapshot = self.render.update(term)?;
         let dirty = snapshot.dirty()?;
-        if dirty == Dirty::Clean && !force_full {
+        if dirty == Dirty::Clean && !force_full && !self.graphics.changed(term)? {
             return Ok(None);
         }
         let full = force_full || dirty == Dirty::Full;
@@ -247,7 +253,8 @@ impl Snapshotter {
         }
         snapshot.set_dirty(Dirty::Clean)?;
         self.links.commit(term, seq)?;
-        Ok(Some(self.encoder.finish(&header)))
+        let graphics = self.graphics.capture(term, full)?;
+        Ok(Some(self.encoder.finish_graphics(&header, graphics)))
     }
 }
 

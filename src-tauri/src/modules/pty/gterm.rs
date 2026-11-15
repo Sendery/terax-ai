@@ -340,26 +340,38 @@ pub fn gterm_resize(
     id: u32,
     cols: u16,
     rows: u16,
+    cell_width: Option<u32>,
+    cell_height: Option<u32>,
+    metrics_only: Option<bool>,
 ) -> Result<(), String> {
     #[cfg(feature = "ghostty-engine")]
     {
         use std::sync::atomic::Ordering;
         super::engine::validate_size(cols, rows)?;
+        let width = cell_width.unwrap_or(8);
+        let height = cell_height.unwrap_or(16);
+        if width == 0 || height == 0 || width > 512 || height > 512 {
+            return Err("invalid terminal cell pixels".into());
+        }
+        let metrics_only = metrics_only.unwrap_or(false);
         let slot = state.core(id).ok_or("no terminal core")?;
         let engine = slot.handle()?;
         let session = state.sessions.read().unwrap().get(&id).cloned();
         if let Some(session) = session {
             if !session.exited.load(Ordering::Acquire) {
-                let result = session
-                    .master
-                    .lock()
-                    .unwrap()
-                    .resize(portable_pty::PtySize {
-                        rows,
-                        cols,
-                        pixel_width: 0,
-                        pixel_height: 0,
-                    });
+                let master = session.master.lock().unwrap();
+                let grid = if metrics_only {
+                    let current = master.get_size().map_err(|error| error.to_string())?;
+                    (current.cols, current.rows)
+                } else {
+                    (cols, rows)
+                };
+                let result = master.resize(portable_pty::PtySize {
+                    rows: grid.1,
+                    cols: grid.0,
+                    pixel_width: (u32::from(grid.0) * width).min(u32::from(u16::MAX)) as u16,
+                    pixel_height: (u32::from(grid.1) * height).min(u32::from(u16::MAX)) as u16,
+                });
                 if let Err(error) = result {
                     if !session.exited.load(Ordering::Acquire) {
                         return Err(error.to_string());
@@ -369,12 +381,16 @@ pub fn gterm_resize(
         }
         // Revalidate after the kernel operation; close must not revive a core.
         slot.handle()?;
-        engine.resize(cols, rows);
+        if metrics_only {
+            engine.set_cell_pixels(width, height);
+        } else {
+            engine.resize_pixels(cols, rows, width, height);
+        }
         Ok(())
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
-        let _ = (state, id, cols, rows);
+        let _ = (state, id, cols, rows, cell_width, cell_height, metrics_only);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
