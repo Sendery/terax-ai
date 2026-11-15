@@ -57,7 +57,7 @@ A change to a core subsystem (terminal/shell spawn, workspace auth, git, fs, IPC
 
 ### Terminal engine
 
-The experimental `libghostty-vt` engine and shared WebGL2 renderer are behind the `ghostty-engine` feature, off by default and reachable only from Terminal Lab. The production xterm.js terminal path is unchanged. See [the terminal engine contract](docs/architecture/terminal-engine.md) for IPC, frame format, prebuilt-core setup and measurement rules. Validate only through the sandbox identity.
+The experimental `libghostty-vt` engine and shared WebGL2 renderer are behind the `ghostty-engine` feature, off by default. `VITE_TERAX_TERMINAL_ENGINE=ghostty` opts ordinary non-block terminal panes into the native path for sandbox development; normal builds still use xterm.js. `NativeLeafSession` owns the process independently of React views, and `NativeTerminalSurface` owns one canvas/context/atlas per window. Search, shell lifecycle/CWD and blocks migration remain incomplete; see `docs/plans/2026-11-15-terminal-normal-pane-integration.md`. See [the terminal engine contract](docs/architecture/terminal-engine.md) for IPC, frame format, prebuilt-core setup and measurement rules. Validate only through the sandbox identity.
 
 ### PTY shell integration
 

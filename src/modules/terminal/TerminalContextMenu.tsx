@@ -59,6 +59,8 @@ type Props = {
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   onRestoreFocus?: () => void;
+  onPaste?: () => void;
+  onRedraw?: () => void;
   selectionActions?: TerminalSelectionActions;
   /** Private terminals are hidden from the AI and from snapshots; reading them
    *  aloud keeps the same signal and is not offered. */
@@ -76,6 +78,8 @@ export function TerminalContextMenu({
   onReadAloud,
   onStopReading,
   onRestoreFocus,
+  onPaste,
+  onRedraw,
   selectionActions,
   privateTerminal = false,
 }: Props) {
@@ -92,6 +96,8 @@ export function TerminalContextMenu({
         <MenuBody
           leafId={leafId}
           readSelection={readSelection}
+          onPaste={onPaste}
+          onRedraw={onRedraw}
           onReadAloud={onReadAloud}
           onStopReading={onStopReading}
           selectionActions={selectionActions}
@@ -105,6 +111,8 @@ export function TerminalContextMenu({
 function MenuBody({
   leafId,
   readSelection,
+  onPaste,
+  onRedraw,
   onReadAloud,
   onStopReading,
   selectionActions,
@@ -138,6 +146,10 @@ function MenuBody({
       </ContextMenuItem>
       <ContextMenuItem
         onSelect={() => {
+          if (onPaste) {
+            onPaste();
+            return;
+          }
           void readTerminalClipboard().then((text) => {
             if (text) pasteIntoLeaf(leafId, text);
           });
@@ -147,7 +159,9 @@ function MenuBody({
         <span className="flex-1">Paste</span>
       </ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem onSelect={() => repaintLeaf(leafId)}>
+      <ContextMenuItem
+        onSelect={() => (onRedraw ? onRedraw() : repaintLeaf(leafId))}
+      >
         <HugeiconsIcon icon={Refresh01Icon} size={14} strokeWidth={1.75} />
         <span className="flex-1">Redraw</span>
       </ContextMenuItem>

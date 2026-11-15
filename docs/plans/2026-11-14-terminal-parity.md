@@ -19,7 +19,7 @@ This source audit uses the normal terminal at `0c573d8` on the M2 feature
 branch. The original checkout's `e485e59` commit is an ancestor; the M2 source
 contains its functionality plus subsequent fixes. This audit does not copy or
 reset the original working tree. The normal xterm frontend remains unchanged
-from `ad27cf6`; the experimental engine is still feature gated and lab only.
+from `ad27cf6`; the experimental engine remains feature gated. The 2026-11-15 ordinary-pane integration is an explicit sandbox opt-in, with evidence and gaps recorded below.
 
 Status below describes implementation evidence, not delivered parity. Every
 row remains open until its observable result is exercised through ordinary
@@ -123,3 +123,17 @@ Independent Astra review required notification before teardown scheduling and
 explicit rejection of an unconfirmed drain. Those corrections were applied.
 No new graphical/60-fps, Windows runtime, release-panic or soak acceptance is
 inferred from these checks. No Actions or protected-host native build ran.
+
+
+## Ordinary-pane integration update (2026-11-15)
+
+See [the integration report](2026-11-15-terminal-normal-pane-integration.md).
+T01 now has actual normal-window startup, split, mouse focus, tab hide/show and
+surviving-pane close evidence on M2, using native gterm sessions and the real
+shell PIDs. A fixed renderer hot reload conserves the logical process and
+recovers its displayed content. T02 through T06 and A04/A06/A07/A09/A10/A13 now
+have ordinary-pane adapters and native state/selection/input foundations;
+their full product scenarios remain unverified. No capability row is closed by
+this update. Inactive native-pane capture rejects clearly until offscreen
+capture is implemented. Shell CWD/readiness, blocks, search and links remain
+priority gaps. No further lab or FPS measurement was run.

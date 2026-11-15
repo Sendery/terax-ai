@@ -24,6 +24,7 @@ pub struct KeyEvent {
     mods: u16,
     consumed_mods: u16,
     unshifted: Option<char>,
+    legacy_shift_enter: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
@@ -76,7 +77,11 @@ fn modifiers(bits: u16) -> Mods {
     result
 }
 
-pub fn encode(term: &Terminal<'_, '_>, input: &InputEvent) -> Result<Vec<u8>, String> {
+pub fn encode(
+    term: &Terminal<'_, '_>,
+    input: &InputEvent,
+    modify_other_keys: u32,
+) -> Result<Vec<u8>, String> {
     input.validate()?;
     match input {
         InputEvent::Key { event } => {
@@ -114,6 +119,18 @@ pub fn encode(term: &Terminal<'_, '_>, input: &InputEvent) -> Result<Vec<u8>, St
                 return Err("invalid terminal key output size".into());
             }
             output.truncate(written);
+            if event.legacy_shift_enter
+                && matches!(event.code, KeyCode::Enter | KeyCode::NumpadEnter)
+                && event.mods & 15 == 1
+                && !matches!(event.action, KeyAction::Release)
+                && modify_other_keys == 0
+                && term
+                    .kitty_keyboard_flags()
+                    .map_err(|error| error.to_string())?
+                    .is_empty()
+            {
+                output = b"\x1b\r".to_vec();
+            }
             Ok(output)
         }
         InputEvent::Paste { text } => {
@@ -543,6 +560,10 @@ mod tests {
     use super::*;
     use libghostty_vt::{Terminal, TerminalOptions};
 
+    fn encode(term: &Terminal<'_, '_>, event: &InputEvent) -> Result<Vec<u8>, String> {
+        super::encode(term, event, 0)
+    }
+
     fn terminal() -> Terminal<'static, 'static> {
         Terminal::new(TerminalOptions {
             cols: 80,
@@ -655,6 +676,31 @@ mod tests {
             .unwrap();
             assert_eq!(encode(&term, &event).unwrap(), text.as_bytes());
         }
+    }
+
+    #[test]
+    fn product_shift_enter_fallback_preserves_negotiated_native_sequences() {
+        use std::time::Duration;
+        let engine = super::super::start(40, 3, Box::new(|_| true), Box::new(|_| {})).unwrap();
+        let event = || {
+            serde_json::from_value(serde_json::json!({"kind":"key","event":{"code":"Enter","mods":1,"legacyShiftEnter":true}})).unwrap()
+        };
+        let encoded = || {
+            engine
+                .input
+                .encode_input(event())
+                .unwrap()
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap()
+        };
+        assert_eq!(encoded(), b"\x1b\r");
+        assert!(engine.input.feed(b"\x1b[>4;2m".to_vec()));
+        assert_eq!(encoded(), b"\x1b[27;2;13~");
+        assert!(engine.input.feed(b"\x1b[>1u".to_vec()));
+        assert_eq!(encoded(), b"\x1b[13;2u");
+        engine.handle.request_stop();
+        engine.thread.join().unwrap();
     }
 
     #[test]

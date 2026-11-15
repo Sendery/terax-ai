@@ -15,8 +15,14 @@ pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 pub mod bench;
 #[cfg(feature = "ghostty-engine")]
 pub mod input;
+#[cfg(any(test, feature = "ghostty-engine"))]
+mod keyboard_modes;
+#[cfg(feature = "ghostty-engine")]
+pub mod selection;
 #[cfg(feature = "ghostty-engine")]
 mod snapshot;
+#[cfg(feature = "ghostty-engine")]
+pub mod state;
 #[cfg(feature = "ghostty-engine")]
 mod text;
 
@@ -224,11 +230,18 @@ mod runtime {
     // coalesced, and a non-blocking wake makes the engine look.
     pub type TextReply = Result<String, String>;
     pub type TextReceiver = Receiver<TextReply>;
+    pub type SelectionReply = Result<Option<String>, String>;
+    pub type SelectionReceiver = Receiver<SelectionReply>;
     const MAX_TEXT_REQUESTS: usize = 32;
 
     struct TextRequest {
         lines: u16,
         reply: SyncSender<TextReply>,
+    }
+
+    struct SelectionRequest {
+        command: super::selection::SelectionCommand,
+        reply: SyncSender<SelectionReply>,
     }
 
     #[derive(Default)]
@@ -240,6 +253,7 @@ mod runtime {
         full: bool,
         stop: bool,
         text_requests: Vec<TextRequest>,
+        selection_requests: Vec<SelectionRequest>,
         text_pending: usize,
         text_closed: bool,
     }
@@ -258,15 +272,22 @@ mod runtime {
             let mut control = control.lock().unwrap_or_else(PoisonError::into_inner);
             control.text_closed = true;
             control.text_pending = 0;
-            std::mem::take(&mut control.text_requests)
+            (
+                std::mem::take(&mut control.text_requests),
+                std::mem::take(&mut control.selection_requests),
+            )
         };
-        for request in pending {
+        for request in pending.0 {
+            let _ = request.reply.try_send(Err("terminal engine closed".into()));
+        }
+        for request in pending.1 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
     }
 
     #[derive(Default)]
     struct Stats {
+        input_state: super::state::StateStore,
         bytes_fed: AtomicU64,
         frames: AtomicU64,
         frame_bytes: AtomicU64,
@@ -321,6 +342,46 @@ mod runtime {
                 return Err("terminal engine closed".into());
             }
             Ok(receiver)
+        }
+
+        pub fn selection(
+            &self,
+            command: super::selection::SelectionCommand,
+        ) -> Result<SelectionReceiver, String> {
+            command.validate()?;
+            let (reply, receiver) = sync_channel(1);
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal queries".into());
+                }
+                control.text_pending += 1;
+                control
+                    .selection_requests
+                    .push(SelectionRequest { command, reply });
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
+        }
+
+        pub fn input_state(&self) -> super::state::EngineState {
+            self.stats.input_state.snapshot()
+        }
+        pub fn on_state(
+            &self,
+            listener: impl Fn(super::state::EngineState) -> bool + Send + Sync + 'static,
+        ) {
+            if !self.stats.input_state.subscribe(Arc::new(listener)) {
+                self.health.fail(EngineFailure::StateChannelClosed);
+            }
         }
 
         pub fn failure(&self) -> Option<EngineFailure> {
@@ -548,19 +609,40 @@ mod runtime {
         reply_sink: Option<ReplySink>,
         input_finished: bool,
         stop_requested: bool,
+        selection: super::selection::SelectionState,
+        keyboard_modes: super::keyboard_modes::KeyboardModes,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
 
     impl Session<'_> {
         fn feed(&mut self, bytes: &[u8]) {
+            self.keyboard_modes.ingest(bytes);
             self.term.vt_write(bytes);
+            self.update_input_state();
             self.update_scrollback_rows();
             self.flush_replies();
             self.stats
                 .bytes_fed
                 .fetch_add(bytes.len() as u64, Ordering::Relaxed);
             self.pump.output();
+        }
+
+        fn update_input_state(&self) {
+            if self.health.failure().is_some() {
+                return;
+            }
+            match super::state::Modes::read(&self.term, self.keyboard_modes.modify_other_keys()) {
+                Ok(modes) => {
+                    if !self.stats.input_state.publish(modes) {
+                        self.health.fail(EngineFailure::StateChannelClosed);
+                    }
+                }
+                Err(error) => {
+                    log::error!("terminal input state query failed: {error}");
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                }
+            }
         }
 
         fn update_scrollback_rows(&self) {
@@ -594,6 +676,9 @@ mod runtime {
             if c.stop {
                 self.stop_requested = true;
                 for request in c.text_requests {
+                    let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                }
+                for request in c.selection_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
                 }
                 reject_text_requests(&self.control);
@@ -637,6 +722,20 @@ mod runtime {
                     Err("terminal engine is unavailable".into())
                 } else {
                     super::text::read_text(&self.term, request.lines)
+                };
+                let _ = request.reply.try_send(result);
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                control.text_pending = control.text_pending.saturating_sub(1);
+            }
+            for request in c.selection_requests {
+                let result = if self.health.failure().is_some() {
+                    Err("terminal engine is unavailable".into())
+                } else {
+                    let update = self.selection.update(&self.term, &request.command);
+                    if update.redraw {
+                        self.pump.request_full();
+                    }
+                    update.text
                 };
                 let _ = request.reply.try_send(result);
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
@@ -736,6 +835,12 @@ mod runtime {
         }
     }
 
+    impl Drop for Session<'_> {
+        fn drop(&mut self) {
+            self.selection.reset(&self.term);
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn run(
         cols: u16,
@@ -782,10 +887,13 @@ mod runtime {
             reply_sink: Some(reply_sink),
             input_finished: false,
             stop_requested: false,
+            selection: super::selection::SelectionState::default(),
+            keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
             control,
             stats,
         };
         session.update_scrollback_rows();
+        session.update_input_state();
         let _ = ready.send(Ok(()));
         loop {
             let waiting = session.tick();
@@ -810,7 +918,11 @@ mod runtime {
                     let result = if session.input_finished || session.health.failure().is_some() {
                         Err("terminal engine input is unavailable".into())
                     } else {
-                        super::input::encode(&session.term, &event)
+                        super::input::encode(
+                            &session.term,
+                            &event,
+                            session.keyboard_modes.modify_other_keys(),
+                        )
                     };
                     let _ = reply.try_send(result);
                 }

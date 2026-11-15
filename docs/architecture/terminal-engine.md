@@ -1,6 +1,6 @@
 # Terminal engine (libghostty-vt + WebGL2)
 
-Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-webgl2.md`. This file is the single source of truth for the Rust and the TypeScript side; when the two disagree, this file wins and gets fixed first. It covers phases 0 and 1: the engine exists behind a cargo feature, is reachable only from the Terminal Lab window, and never replaces xterm.js in a terminal tab.
+Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-webgl2.md`. This file is the single source of truth for the Rust and the TypeScript side; when the two disagree, this file wins and gets fixed first. The engine remains behind an off-by-default cargo feature. The initial phases 0 and 1 use Terminal Lab; ordinary native terminal panes now have an explicit sandbox development opt-in, described below. Production defaults and the full parity/rollout requirements have not changed.
 
 ## Invariants
 
@@ -462,8 +462,8 @@ closed cores reject queries. Actor-side failure observers use weak ownership
 and nonblocking stop requests; pane close joins the actor outside locks. OS
 session disposal remains asynchronous, especially for ConPTY, and its completion
 is not established by the core join alone. Windows runtime validation remains
-pending. These foundations do not yet connect the native renderer to ordinary
-terminal panes or establish full terminal parity.
+pending. Ordinary native-pane integration is described below; these lifecycle tests
+alone do not establish full terminal parity.
 
 ### Asynchronous terminal text consumers
 
@@ -477,8 +477,8 @@ closed pane. Managed-agent output additionally revalidates the chat/agent
 association and returns its current status. Task confirmation awaits both the
 baseline and subsequent buffers; missing or rejected text is never evidence
 that a turn started. App task readers reject a response from a replaced handle.
-The native ordinary-pane renderer is still pending; these consumer contracts
-prepare its real bounded query without using viewport projection as history.
+Ordinary native panes now use this real bounded query. Consumer scenarios
+still require the complete parity verification; viewport projection is not history.
 
 ### Negotiated native input surface
 
@@ -504,5 +504,63 @@ native receipt timeout is two seconds after ordered enqueue; it is not an
 end-to-end deadline and does not cancel queued work. An abandoned encoding
 cannot independently write to the PTY. The pinned `encode_to_vec` growth helper
 is avoided in favor of a bounded explicit buffer and required-size retry.
-These APIs prepare ordinary-pane input; the existing lab input binding remains
-Phase 1 and normal-pane UI/IME/clipboard integration is still pending.
+Ordinary-pane input uses these APIs as described below. The existing lab input
+binding remains Phase 1; its checks do not establish product input parity.
+
+
+### Ordinary native pane integration (experimental)
+
+Build `ghostty-engine` and set `VITE_TERAX_TERMINAL_ENGINE=ghostty` to route
+ordinary non-block panes to `NativeTerminalPane`. This is an explicit sandbox
+development switch, not the production default or a claim of full parity.
+Existing registered native or legacy owners determine the engine after a view
+remount, even if the blocks preference changed. Initial block terminals retain
+the legacy path until native blocks are implemented.
+
+`NativeLeafSession` lives in the leaf registry independently of React mounts.
+Splitting, moving or hiding a pane detaches its input/view without terminating
+the process. Explicit leaf disposal closes the native core and controller;
+respawn waits for the shared retirement promise and preserves close failure.
+Callbacks target the current view, survive observer exceptions, and preserve
+pending exit/error information. Deferred clipboard reads cannot target a new
+process after respawn. Native facade helpers route writes, paste, submit,
+interrupt, PTY identity, selection, repaint, foreground queries and respawn.
+
+`NativeTerminalSurface` shares one GPU context and glyph atlas across ordinary
+panes. Every renderer acquisition creates its own canvas: renderer disposal
+intentionally loses the context, so the old canvas cannot be reused during hot
+reload. Context/hook exports live outside the component refresh boundary.
+Reattaching a live engine to another renderer preserves its core ID and input
+state, requests a full frame, and recovers outstanding display credit only
+through the next display attempt. Failed renderer migration explicitly
+invalidates the session instead of leaving an apparently live removed pane.
+
+`gterm_state` and the `onState` channel publish versioned actual native modes,
+including alternate screen and negotiated keyboard/paste/focus settings. The
+client validates their fields and version order. Shell readiness is not inferred
+from opening or from these modes. A bounded native XTMODKEYS observer preserves
+the product's legacy Shift+Enter when no foreground keyboard protocol was
+requested; encoding itself remains native and ordered behind accepted output.
+
+`gterm_selection` runs closed typed gestures on the actor and returns bounded,
+UTF-8 checked native selection text. Queries share bounded admission with text
+reads and are available after healthy process exit. Mutations request repaint
+even if text formatting fails; the frontend invalidates stale cached selections
+and publishes only the latest acknowledged query. Selection highlighting uses
+native selected cells. The ordinary DOM binding uses the existing composition
+commit policy, the negotiated native encoder, real clipboard APIs, focus
+reports, wheel/page navigation and per-pane pointer coordinates.
+
+Capture uses required per-pane crop providers, with pixels frozen before font
+and image awaits. The shared source canvas is excluded from DOM compositing so
+it cannot cover dividers and other chrome. A required provider cannot silently
+fall back to a transparent canvas. A pane hidden during capture preparation is
+rejected. Explicit inactive native-pane capture currently requires focusing its
+tab first; offscreen capture remains an open integration capability. Existing
+private-terminal capture guards still apply.
+
+The real M2 normal sandbox now proves startup, text input, split, tab
+hide/show, mouse focus, surviving-pane close, renderer replacement and scoped
+capture. This is narrower than terminal parity. Search, links, blocks, native
+shell lifecycle/CWD, remaining settings, TUI mouse reporting, full graphemes,
+platform validation and rollout remain open in the parity inventory.

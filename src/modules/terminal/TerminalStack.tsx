@@ -1,3 +1,4 @@
+import { NativeTerminalSurface } from "@/modules/terminal/NativeTerminalSurface";
 import type { Tab } from "@/modules/tabs";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useEffect, useMemo, useRef } from "react";
@@ -91,7 +92,7 @@ export function TerminalStack({
   }, [terminals]);
 
   return (
-    <div className="relative h-full w-full">
+    <NativeTerminalSurface>
       {terminals.map((t) => {
         const tabVisible = t.id === activeId;
         return (
@@ -124,6 +125,6 @@ export function TerminalStack({
           </div>
         );
       })}
-    </div>
+    </NativeTerminalSurface>
   );
 }

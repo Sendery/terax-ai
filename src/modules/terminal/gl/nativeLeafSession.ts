@@ -1,0 +1,338 @@
+import {
+  EngineSession,
+  type EngineColors,
+  type SessionObserver,
+} from "@/modules/terminal/gl/engineSession";
+import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
+import type { NativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
+import { adaptGhosttyEngine } from "@/modules/terminal/lib/ghosttyEngine";
+import { TerminalRetirement } from "@/modules/terminal/lib/terminalRetirement";
+import {
+  TerminalSessionController,
+  type TerminalSize,
+} from "@/modules/terminal/lib/terminalEngine";
+
+export type NativeLeafConfig = {
+  renderer: GridRenderer;
+  size: TerminalSize;
+  colors: EngineColors;
+  cwd?: string;
+};
+export type NativeLeafView = {
+  onSession: (session: EngineSession | null) => void;
+  onFrame: () => void;
+  onError: (error: unknown) => void;
+  onExit: (code: number) => void;
+  focused: () => boolean;
+  focus: () => void;
+};
+type OpenNative = (
+  renderer: GridRenderer,
+  options: TerminalSize & {
+    cwd?: string;
+    colors: EngineColors;
+    observer: SessionObserver;
+  },
+) => Promise<EngineSession>;
+
+/** A leaf owns its process independently of React's pane layout. */
+export class NativeLeafSession implements NativeLeaf {
+  private config: NativeLeafConfig;
+  private owner!: TerminalSessionController;
+  private native: EngineSession | null = null;
+  private view: NativeLeafView | null = null;
+  private readonly retirement = new TerminalRetirement();
+  private closing: Promise<void> | null = null;
+  private restarting: Promise<void> | null = null;
+  private disposed = false;
+  private generation = 0;
+  private error: unknown = null;
+  private pendingExit: number | null = null;
+  private selectionRefresh = false;
+
+  constructor(
+    config: NativeLeafConfig,
+    private readonly open: OpenNative = (renderer, options) =>
+      EngineSession.open(renderer, options),
+  ) {
+    this.config = config;
+    this.start();
+  }
+
+  get opened(): Promise<void> {
+    return this.owner.opened;
+  }
+  get id(): number | null {
+    return this.disposed ? null : this.owner.id;
+  }
+  get exited(): boolean {
+    return (
+      this.disposed ||
+      this.owner.exitCode !== null ||
+      this.owner.failure !== null
+    );
+  }
+  get focused(): boolean {
+    return this.view?.focused() ?? false;
+  }
+  get tuiReady(): boolean {
+    const state = this.native?.inputState;
+    return (
+      this.id !== null &&
+      !this.exited &&
+      Boolean(state && (state.modifyOtherKeys >= 1 || state.kittyFlags !== 0))
+    );
+  }
+  get alternateScreen(): boolean {
+    return this.native?.inputState?.alternateScreen ?? false;
+  }
+  getSelection(): string | null {
+    return this.id !== null ? (this.native?.getSelection() ?? null) : null;
+  }
+
+  attach(view: NativeLeafView, config: NativeLeafConfig): () => void {
+    if (this.disposed) throw new Error("Terminal is closed.");
+    this.notifySession(null);
+    this.view = view;
+    this.configure(config);
+    if (this.native && this.owner.id !== null) this.notifySession(this.native);
+    if (this.error !== null) this.report(this.error);
+    this.deliverExit();
+    return () => {
+      if (this.view !== view) return;
+      this.notifySession(null);
+      this.view = null;
+      this.hide();
+    };
+  }
+
+  configure(config: NativeLeafConfig): void {
+    this.config = config;
+    this.owner.resize(config.size.cols, config.size.rows);
+    if (!this.native || this.owner.id === null || this.closing) return;
+    try {
+      this.native.attachRenderer(config.renderer);
+      this.native.setColors(config.colors);
+    } catch (error) {
+      this.report(error);
+      void this.closeCurrent().catch(this.report);
+    }
+  }
+  resize(cols: number, rows: number): void {
+    this.config = { ...this.config, size: { cols, rows } };
+    this.owner.resize(cols, rows);
+  }
+  write(text: string): boolean {
+    return !this.disposed && this.owner.write(text);
+  }
+  focus(): void {
+    this.view?.focus();
+  }
+  repaint(): void {
+    this.native?.requestFull();
+  }
+
+  async readText(maxLines?: number): Promise<string | null> {
+    const owner = this.owner;
+    await owner.opened;
+    await owner.settled();
+    const native = this.native;
+    if (!native || this.owner !== owner || this.id === null) return null;
+    const text = await native.readText(maxLines);
+    return this.owner === owner && this.id !== null ? text : null;
+  }
+  async encodeShiftEnter(): Promise<string> {
+    const native = await this.requireNative();
+    const sequence = await native.encodeKey({
+      code: "Enter",
+      mods: 1,
+      legacyShiftEnter: true,
+    });
+    if (native !== this.native || this.id === null)
+      throw new Error("Terminal is no longer available.");
+    return sequence;
+  }
+  async pasteFromClipboard(
+    read: () => Promise<string | null>,
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
+    const owner = this.owner;
+    const native = this.native;
+    const text = await read();
+    if (
+      !text ||
+      !isCurrent() ||
+      this.owner !== owner ||
+      this.native !== native ||
+      this.id === null ||
+      this.exited
+    )
+      return;
+    await this.paste(text);
+  }
+  async paste(text: string): Promise<void> {
+    const native = await this.requireNative();
+    native.scroll(2_147_483_647);
+    await native.paste(text);
+  }
+  async submit(text: string): Promise<void> {
+    const native = await this.requireNative();
+    native.scroll(2_147_483_647);
+    await native.submit(text);
+  }
+  dispose(): Promise<void> {
+    this.disposed = true;
+    this.notifySession(null);
+    this.view = null;
+    return this.closeCurrent();
+  }
+  respawn(cwd?: string): Promise<void> {
+    if (this.disposed) return Promise.reject(new Error("Terminal is closed."));
+    if (this.restarting) return this.restarting;
+    this.restarting = this.closeCurrent()
+      .then(async () => {
+        if (this.disposed) throw new Error("Terminal closed while restarting.");
+        this.config = { ...this.config, cwd: cwd ?? this.config.cwd };
+        this.start();
+        await this.opened;
+      })
+      .finally(() => {
+        this.restarting = null;
+      });
+    return this.restarting;
+  }
+
+  private start(): void {
+    const generation = ++this.generation;
+    const prerequisite = this.retirement.beforeOpen();
+    this.native = null;
+    this.closing = null;
+    this.error = null;
+    this.pendingExit = null;
+    const owner = new TerminalSessionController(
+      async (size, observer) => {
+        await prerequisite;
+        if (this.disposed || generation !== this.generation)
+          throw new Error("Terminal closed while opening.");
+        const native = await this.open(this.config.renderer, {
+          ...size,
+          cwd: this.config.cwd,
+          colors: this.config.colors,
+          observer: {
+            onError: observer.onError,
+            onExit: observer.onExit,
+            onFrame: () => {
+              if (generation !== this.generation || this.disposed) return;
+              try {
+                this.view?.onFrame();
+              } catch (error) {
+                this.report(error);
+              }
+              const session = this.native;
+              if (
+                !session ||
+                session.getSelection() === null ||
+                this.selectionRefresh
+              )
+                return;
+              this.selectionRefresh = true;
+              void session
+                .select({ kind: "read" })
+                .catch(this.report)
+                .finally(() => {
+                  this.selectionRefresh = false;
+                });
+            },
+          },
+        });
+        this.native = native;
+        this.config.renderer.setPaneFocused(native.pane, false);
+        try {
+          if (native.inputState === null) await native.readState();
+          if (this.disposed || generation !== this.generation)
+            throw new Error("Terminal closed while opening.");
+          native.attachRenderer(this.config.renderer);
+          native.setColors(this.config.colors);
+        } catch (error) {
+          await native.close();
+          throw error;
+        }
+        return adaptGhosttyEngine(native);
+      },
+      this.config.size,
+      {
+        onError: this.report,
+        onExit: (code) => {
+          if (generation !== this.generation || this.disposed) return;
+          this.pendingExit = code;
+          this.deliverExit();
+        },
+      },
+    );
+    this.owner = owner;
+    void owner.opened
+      .then(() => {
+        if (this.owner === owner && !this.disposed)
+          this.notifySession(this.native);
+      })
+      .catch(() => {});
+  }
+  private readonly report = (error: unknown): void => {
+    this.error = error;
+    if (!this.disposed) {
+      try {
+        this.view?.onError(error);
+      } catch {
+        console.error("native terminal view error observer failed");
+      }
+    }
+  };
+  private deliverExit(): void {
+    if (!this.view || this.pendingExit === null) return;
+    const code = this.pendingExit;
+    this.pendingExit = null;
+    try {
+      this.view.onExit(code);
+    } catch (error) {
+      this.report(error);
+    }
+  }
+  private notifySession(session: EngineSession | null): void {
+    try {
+      this.view?.onSession(session);
+    } catch (error) {
+      this.report(error);
+      if (session) void this.closeCurrent().catch(this.report);
+    }
+  }
+  private hide(): void {
+    if (!this.native) return;
+    this.config.renderer.setPaneFocused(this.native.pane, false);
+    this.config.renderer.setPaneRect(this.native.pane, {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    });
+  }
+  private closeCurrent(): Promise<void> {
+    if (this.closing) return this.closing;
+    this.notifySession(null);
+    this.hide();
+    const native = this.native;
+    this.closing = this.retirement.track(
+      Promise.all([
+        native?.close() ?? Promise.resolve(),
+        this.owner.close(),
+      ]).then(() => {}),
+    );
+    return this.closing;
+  }
+  private async requireNative(): Promise<EngineSession> {
+    const owner = this.owner;
+    await owner.opened;
+    if (this.owner !== owner || this.id === null || !this.native || this.exited)
+      throw new Error("Terminal is no longer available.");
+    return this.native;
+  }
+}

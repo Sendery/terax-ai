@@ -73,10 +73,29 @@ export async function captureSurface(
     throw new Error(`Capture target "${request.target}" is not visible`);
   }
 
+  if (
+    request.target === "pane" &&
+    request.tabId !== activeTabId &&
+    element.querySelector('[data-terminal-engine="ghostty"]')
+  ) {
+    throw new Error("Focus this terminal tab before capturing it.");
+  }
+
   window.dispatchEvent(
     new CustomEvent(CAPTURE_PREPARE_EVENT, { detail: request }),
   );
   await nextFrame();
+  const native = element.querySelector<HTMLElement>(
+    '[data-terminal-engine="ghostty"]',
+  );
+  if (
+    (request.target === "pane" || request.target === "active-pane") &&
+    native &&
+    (!element.isConnected ||
+      window.getComputedStyle(native).visibility === "hidden")
+  ) {
+    throw new Error("Focus this terminal tab before capturing it.");
+  }
 
   const image = await rasterizeElement(element);
   const bytes = new Uint8Array(await image.blob.arrayBuffer());

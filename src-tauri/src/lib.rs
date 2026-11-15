@@ -332,6 +332,8 @@ pub fn run() {
             pty::gterm::gterm_set_colors,
             pty::gterm::gterm_resize,
             pty::gterm::gterm_encode_input,
+            pty::gterm::gterm_selection,
+            pty::gterm::gterm_state,
             pty::gterm::gterm_bench_open,
             pty::gterm::gterm_bench_stats,
             pty::gterm::gterm_lab_autorun,

@@ -107,12 +107,12 @@ async function pressEnterAndWatch(io: HandoffIo): Promise<boolean> {
  */
 export async function handOffPrompt(
   io: HandoffIo,
-  keystrokes: () => string,
+  keystrokes: () => string | Promise<string>,
 ): Promise<HandoffResult> {
   const ready = await waitForReady(io);
   if (ready) await io.sleep(HANDOFF_TIMING.readySettleMs);
 
-  const keys = keystrokes();
+  const keys = await keystrokes();
   if (keys !== "") io.write(keys);
   await io.sleep(HANDOFF_TIMING.typeSettleMs);
 

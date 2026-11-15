@@ -39,6 +39,24 @@ type Stats = super::engine::EngineStats;
 #[cfg(not(feature = "ghostty-engine"))]
 type Stats = ();
 
+#[cfg(feature = "ghostty-engine")]
+type InputState = super::engine::state::EngineState;
+#[cfg(not(feature = "ghostty-engine"))]
+type InputState = ();
+
+#[tauri::command]
+pub fn gterm_state(state: State<'_, PtyState>, id: u32) -> Result<InputState, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        imp::engine(&state, id).map(|engine| engine.input_state())
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
 #[tauri::command]
 pub fn gterm_available() -> bool {
     cfg!(feature = "ghostty-engine")
@@ -58,19 +76,21 @@ pub async fn gterm_open(
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
     on_failure: Channel<String>,
+    on_state: Channel<InputState>,
 ) -> Result<u32, String> {
     #[cfg(feature = "ghostty-engine")]
     {
         imp::open(
             app, &state, &registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
-            on_failure,
+            on_failure, on_state,
         )
         .await
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (
-            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit, on_failure,
+            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
+            on_failure, on_state,
         );
         Err(ENGINE_UNAVAILABLE.into())
     }
@@ -98,6 +118,35 @@ pub async fn gterm_encode_input(
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, event);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[cfg(feature = "ghostty-engine")]
+type SelectionCommand = super::engine::selection::SelectionCommand;
+#[cfg(not(feature = "ghostty-engine"))]
+type SelectionCommand = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_selection(
+    state: State<'_, PtyState>,
+    id: u32,
+    command: SelectionCommand,
+) -> Result<Option<String>, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.selection(command)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal selection query failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal selection task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, command);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -490,7 +539,7 @@ mod imp {
     use super::super::engine::{self, bench, EngineHandle};
     use super::super::session::{self, OutputSink};
     use super::super::PtyState;
-    use super::TerminalColors;
+    use super::{InputState, TerminalColors};
     use crate::modules::workspace::{user_spawn_cwd_or_home, WorkspaceEnv, WorkspaceRegistry};
 
     pub struct BenchSession {
@@ -538,6 +587,7 @@ mod imp {
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
         on_failure: Channel<String>,
+        on_state: Channel<InputState>,
     ) -> Result<u32, String> {
         engine::validate_size(cols, rows)?;
         let workspace = WorkspaceEnv::from_option(workspace);
@@ -552,6 +602,7 @@ mod imp {
             colors,
             slot: slot.clone(),
             on_failure,
+            on_state,
         };
         let spawned = tauri::async_runtime::spawn_blocking(move || {
             session::spawn(id, app, cols, rows, cwd, workspace, false, sink, on_exit)

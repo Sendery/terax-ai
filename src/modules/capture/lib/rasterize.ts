@@ -76,10 +76,9 @@ async function drawOverlay(
   context: CanvasRenderingContext2D,
   overlay: CanvasOverlay,
 ): Promise<void> {
-  const provider = canvasProviders.get(overlay.canvas);
-  if (provider) {
+  if (overlay.snapshot) {
     try {
-      const url = provider();
+      const url = overlay.snapshot;
       if (url) {
         const image = new Image();
         await new Promise<void>((resolve, reject) => {
@@ -96,7 +95,8 @@ async function drawOverlay(
         );
         return;
       }
-    } catch {
+    } catch (error) {
+      if (overlay.required) throw error;
       // fall through to the direct read
     }
   }
@@ -115,6 +115,8 @@ async function drawOverlay(
 
 export type CanvasOverlay = {
   canvas: HTMLCanvasElement;
+  snapshot?: string | null;
+  required?: boolean;
   x: number;
   y: number;
   width: number;
@@ -123,18 +125,36 @@ export type CanvasOverlay = {
 
 // WebKit rasterizes foreignObject before nested data-URL images load, so
 // canvas pixels are composited directly onto the output instead.
-function collectCanvasOverlays(
+export function collectCanvasOverlays(
   root: HTMLElement,
   rootRect: DOMRect,
 ): CanvasOverlay[] {
   const overlays: CanvasOverlay[] = [];
   for (const canvas of Array.from(root.querySelectorAll("canvas"))) {
+    if (canvas.hasAttribute("data-terax-capture-proxy-source")) continue;
     // visibility:hidden canvases keep layout and pixels (hidden tabs stay
     // mounted), so only zero-layout canvases (display:none) are skipped.
+    const required = canvas.hasAttribute("data-terax-capture-required");
+    if (
+      required &&
+      canvas.closest<HTMLElement>("[data-terminal-engine]")?.style
+        .visibility === "hidden"
+    )
+      continue;
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) continue;
+    let snapshot: string | null = null;
+    try {
+      snapshot = canvasProviders.get(canvas)?.() ?? null;
+    } catch (error) {
+      if (required) throw error;
+    }
+    if (required && !snapshot)
+      throw new Error("Terminal capture is no longer available.");
     overlays.push({
       canvas,
+      snapshot,
+      required,
       x: rect.left - rootRect.left,
       y: rect.top - rootRect.top,
       width: rect.width,
@@ -281,8 +301,7 @@ export async function rasterizeElement(
 
   const overlays = collectCanvasOverlays(element, rect);
   const clone = element.cloneNode(true) as HTMLElement;
-  const forceVisible =
-    window.getComputedStyle(element).visibility === "hidden";
+  const forceVisible = window.getComputedStyle(element).visibility === "hidden";
   inlineComputedStyles(element, clone, forceVisible);
   stripCanvases(clone);
   syncInputState(element, clone);

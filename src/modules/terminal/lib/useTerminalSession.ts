@@ -1,3 +1,8 @@
+import {
+  getNativeLeaf,
+  nativeLeafForPty,
+  takeNativeLeaf,
+} from "@/modules/terminal/gl/nativeLeafRegistry";
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
 import { IS_MAC } from "@/lib/platform";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -143,6 +148,10 @@ function markSessionReady(leafId: number): void {
   }
 }
 
+export function hasLegacyLeaf(leafId: number): boolean {
+  return sessions.has(leafId);
+}
+
 export function whenSessionReady(
   leafId: number,
   timeoutMs = 4000,
@@ -171,6 +180,8 @@ function queuePendingInput(s: Session, data: string): void {
 }
 
 export function writeToSession(leafId: number, data: string): boolean {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.write(data);
   const s = sessions.get(leafId);
   if (!s || s.shellExited) return false;
   if (s.pty) {
@@ -182,6 +193,16 @@ export function writeToSession(leafId: number, data: string): boolean {
 }
 
 export function submitToLeaf(leafId: number, text: string): void {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    if (!native.exited)
+      void native
+        .submit(text)
+        .catch((error) =>
+          console.error("native terminal submit failed", error),
+        );
+    return;
+  }
   const s = sessions.get(leafId);
   if (!s || s.shellExited) return;
   s.everSubmitted = true;
@@ -194,6 +215,11 @@ export function submitToLeaf(leafId: number, text: string): void {
 }
 
 export function interruptLeaf(leafId: number): void {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    native.write("\x03");
+    return;
+  }
   sessions.get(leafId)?.pty?.write("\x03");
 }
 
@@ -207,6 +233,8 @@ export function interruptLeaf(leafId: number): void {
  * disappears with the rest of the burst.
  */
 export function isLeafTuiReady(leafId: number): boolean {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.tuiReady;
   const s = sessions.get(leafId);
   if (!s || s.shellExited) return false;
   return s.keyboardProtocol.modifyOtherKeys >= 1;
@@ -230,6 +258,8 @@ export function clearLeafBlockSelection(leafId: number): boolean {
 }
 
 export function leafGridSelection(leafId: number): string | null {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.getSelection();
   const sel = getSlotForLeaf(leafId)?.term.getSelection() ?? "";
   return sel.length > 0 ? sel : null;
 }
@@ -259,6 +289,11 @@ export function setLeafInputFocus(
 }
 
 export function focusLeafInput(leafId: number): void {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    native.focus();
+    return;
+  }
   sessions.get(leafId)?.inputFocus?.();
 }
 
@@ -320,6 +355,8 @@ export function clearFocusedTerminal(): boolean {
 }
 
 export function leafIdForPty(ptyId: number): number | null {
+  const native = nativeLeafForPty(ptyId);
+  if (native !== null) return native;
   for (const [leafId, s] of sessions) {
     if (s.pty?.id === ptyId) return leafId;
   }
@@ -327,6 +364,8 @@ export function leafIdForPty(ptyId: number): number | null {
 }
 
 export function ptyIdForLeaf(leafId: number): number | null {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.id;
   return sessions.get(leafId)?.pty?.id ?? null;
 }
 
@@ -796,6 +835,11 @@ export async function respawnSession(
   leafId: number,
   cwd?: string,
 ): Promise<void> {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    await native.respawn(cwd);
+    return;
+  }
   const s = sessions.get(leafId);
   if (!s || s.disposed) return;
   s.pty?.close();
@@ -845,6 +889,13 @@ export async function respawnSession(
 export async function leafHasForegroundProcess(
   leafId: number,
 ): Promise<boolean> {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    if (native.id === null || native.exited) return false;
+    return invoke<boolean>("pty_has_foreground_process", {
+      id: native.id,
+    }).catch(() => false);
+  }
   const s = sessions.get(leafId);
   if (!s?.pty || s.shellExited) return false;
   try {
@@ -863,6 +914,20 @@ export async function leafHasForegroundProcess(
 }
 
 export function disposeSession(leafId: number): void {
+  const native = takeNativeLeaf(leafId);
+  if (native)
+    void native
+      .dispose()
+      .catch((error) => console.error("native terminal close failed", error));
+  readyLeaves.delete(leafId);
+  const waiters = readyWaiters.get(leafId);
+  if (waiters) {
+    readyWaiters.delete(leafId);
+    for (const w of waiters) {
+      clearTimeout(w.timer);
+      w.resolve();
+    }
+  }
   const s = sessions.get(leafId);
   if (!s) return;
   s.disposed = true;
@@ -875,15 +940,6 @@ export function disposeSession(leafId: number): void {
   s.pendingInput = "";
   sessions.delete(leafId);
   blockViewportListeners.delete(leafId);
-  readyLeaves.delete(leafId);
-  const waiters = readyWaiters.get(leafId);
-  if (waiters) {
-    readyWaiters.delete(leafId);
-    for (const w of waiters) {
-      clearTimeout(w.timer);
-      w.resolve();
-    }
-  }
 }
 
 type Options = {

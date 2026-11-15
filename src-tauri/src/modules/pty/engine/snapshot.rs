@@ -133,6 +133,7 @@ impl Snapshotter {
                 // Style ids are page local and a row never spans pages, so the
                 // resolved style is cached per row.
                 let mut cached: Option<(StyleId, CellStyle)> = None;
+                let selected_row = row.selection()?.is_some();
                 let mut cell_iter = self.cells.update(row)?;
                 while let Some(cell) = cell_iter.next() {
                     let raw_cell = cell.raw_cell()?;
@@ -156,6 +157,9 @@ impl Snapshotter {
                         CellStyle::DEFAULT
                     };
                     style.bg = cell.bg_color()?.map_or(0, pack);
+                    if selected_row && cell.is_selected()? {
+                        style.attrs ^= ATTR_INVERSE;
+                    }
                     encoder.push_cell(codepoint, width, style);
                 }
                 encoder.end_row();

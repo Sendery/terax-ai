@@ -40,7 +40,7 @@ export type DispatcherDeps = {
   /** Focuses or creates the terminal tab that owns this task. */
   ensureTab: (task: ScheduledTask) => Promise<TabTarget | null>;
   writeToLeaf: (leafId: number, data: string) => void;
-  shiftEnterFor: (leafId: number) => string;
+  shiftEnterFor: (leafId: number) => string | Promise<string>;
   /** True once an agent TUI in this leaf has the terminal in raw mode. */
   isLeafTuiReady: (leafId: number) => boolean;
   /** Visible terminal text of this leaf, or null when it has no live buffer. */
@@ -63,7 +63,9 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
   const attemptsRef = useRef(new Map<string, number>());
   const timersRef = useRef(new Set<number>());
   // `settle` needs to re-dispatch a retry, but `run` is defined after it.
-  const runRef = useRef<(taskId: string, trigger: RunTrigger) => void>(() => {});
+  const runRef = useRef<(taskId: string, trigger: RunTrigger) => void>(
+    () => {},
+  );
 
   useEffect(() => {
     const timers = timersRef.current;
@@ -265,10 +267,10 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
           },
           // Resolved late: the line-break encoding depends on the keyboard
           // protocol the agent only negotiates once its TUI is up.
-          () =>
+          async () =>
             promptKeystrokes(
               task.prompt,
-              depsRef.current.shiftEnterFor(target.leafId),
+              await depsRef.current.shiftEnterFor(target.leafId),
             ),
         );
         // An interactive run stays live in the tab; the card reports the agent

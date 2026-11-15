@@ -18,6 +18,8 @@ const ipc = vi.hoisted(() => ({
   resize: null as Promise<unknown> | null,
   text: null as Promise<unknown> | null,
   encoded: null as Promise<unknown> | null,
+  selection: null as Promise<unknown> | null,
+  closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
     reject: (error: unknown) => void;
@@ -38,6 +40,9 @@ vi.mock("@tauri-apps/api/core", () => {
         });
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
+      if (command === "pty_close" && ipc.closing) return ipc.closing;
+      if (command === "gterm_selection")
+        return ipc.selection ?? Promise.resolve("native selection");
       if (command === "gterm_encode_input")
         return ipc.encoded ?? Promise.resolve([13]);
       if (command === "gterm_read_text")
@@ -67,6 +72,7 @@ class FakeRenderer {
     this.panes.push({ pane: pane as unknown as RenderPane, callbacks });
     return pane as unknown as RenderPane;
   }
+  setPaneFocused(_pane: RenderPane, _focused: boolean) {}
   removePane(pane: RenderPane) {
     this.panes = this.panes.filter((p) => p.pane !== pane);
   }
@@ -131,6 +137,8 @@ beforeEach(() => {
   ipc.resize = null;
   ipc.text = null;
   ipc.encoded = null;
+  ipc.selection = null;
+  ipc.closing = null;
 });
 
 describe("EngineSession credits", () => {
@@ -877,4 +885,194 @@ it("does not write an encoded key after a process exit during the query", async 
   expect((await result)[0].status).toBe("rejected");
   expect(commands("pty_write")).toEqual([]);
   await session.close();
+});
+
+it("keeps an acknowledged native selection snapshot available after normal process exit", async () => {
+  const session = await openSession(new FakeRenderer());
+  expect(session.getSelection()).toBeNull();
+  channelOf(1).onmessage(0);
+  await expect(session.select({ kind: "all" })).resolves.toBe(
+    "native selection",
+  );
+  expect(session.getSelection()).toBe("native selection");
+  ipc.selection = Promise.resolve(null);
+  await session.select({ kind: "clear" });
+  expect(session.getSelection()).toBeNull();
+  await session.close();
+});
+it("serializes native selection commands instead of applying stale gesture replies", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (text: string) => void;
+  ipc.selection = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const first = session.select({ kind: "all" });
+  const next = session.select({ kind: "clear" });
+  await Promise.resolve();
+  expect(commands("gterm_selection")).toHaveLength(1);
+  finish("selected");
+  await first;
+  ipc.selection = Promise.resolve(null);
+  await next;
+  expect(session.getSelection()).toBeNull();
+  await session.close();
+});
+it("does not resurrect selection text after the panel closes", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: (text: string) => void;
+  ipc.selection = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const query = session.select({ kind: "all" });
+  const result = Promise.allSettled([query]);
+  await Promise.resolve();
+  await session.close();
+  finish("late private text");
+  expect((await result)[0].status).toBe("rejected");
+  expect(session.getSelection()).toBeNull();
+});
+it("rejects malformed selection replies", async () => {
+  const session = await openSession(new FakeRenderer());
+  ipc.selection = Promise.resolve({ text: "wrong protocol" });
+  await expect(session.select({ kind: "read" })).rejects.toThrow("invalid");
+  expect(session.getSelection()).toBeNull();
+  await session.close();
+});
+
+it("invalidates the old selection snapshot if native mutation formatting fails", async () => {
+  const session = await openSession(new FakeRenderer());
+  await session.select({ kind: "word", col: 0, row: 0 });
+  expect(session.getSelection()).toBe("native selection");
+  ipc.selection = Promise.reject(new Error("selection exceeds output limit"));
+  await expect(session.select({ kind: "all" })).rejects.toThrow("exceeds");
+  expect(session.getSelection()).toBeNull();
+  await session.close();
+});
+
+it("accepts versioned mode events before and after open while rejecting stale state", async () => {
+  const renderer = new FakeRenderer();
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+  });
+  const args = commands("gterm_open")[0].args as {
+    onState: { onmessage: (state: unknown) => void };
+  };
+  const state = {
+    version: 1,
+    alternateScreen: true,
+    mouseTracking: false,
+    bracketedPaste: true,
+    focusTracking: false,
+    modifyOtherKeys: 2,
+    kittyFlags: 0,
+  };
+  args.onState.onmessage(state);
+  ipc.open!.resolve(9);
+  const session = await opening;
+  expect(session.inputState).toEqual(state);
+  args.onState.onmessage({ ...state, version: 0, modifyOtherKeys: 0 });
+  expect(session.inputState).toEqual(state);
+  args.onState.onmessage({ ...state, version: 2, kittyFlags: 3 });
+  expect(session.inputState?.kittyFlags).toBe(3);
+  await session.close();
+  args.onState.onmessage({ ...state, version: 3 });
+  expect(session.inputState).toBeNull();
+});
+
+it("shares actual native close completion across repeated callers", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish!: () => void;
+  ipc.closing = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const first = session.close();
+  let closed = false;
+  const second = session.close().then(() => {
+    closed = true;
+  });
+  await Promise.resolve();
+  expect(closed).toBe(false);
+  expect(commands("pty_close")).toHaveLength(1);
+  finish();
+  await Promise.all([first, second]);
+  expect(closed).toBe(true);
+});
+it("submits text using negotiated paste plus one final carriage return in one write", async () => {
+  const session = await openSession(new FakeRenderer());
+  ipc.encoded = Promise.resolve([112]);
+  await session.submit("command");
+  expect(
+    new TextDecoder().decode(commands("pty_write")[0].args as Uint8Array),
+  ).toBe("p\r");
+  expect(commands("gterm_encode_input")[0].args).toEqual({
+    id: 9,
+    event: { kind: "paste", text: "command" },
+  });
+  await session.close();
+});
+
+it("does not republish an earlier selection while a new selection awaits acknowledgement", async () => {
+  const session = await openSession(new FakeRenderer());
+  let firstDone!: (text: string) => void;
+  ipc.selection = new Promise((resolve) => {
+    firstDone = resolve;
+  });
+  const first = session.select({ kind: "read" });
+  const second = session.select({ kind: "all" });
+  firstDone("stale text");
+  await first;
+  expect(session.getSelection()).toBeNull();
+  let secondDone!: (text: string) => void;
+  ipc.selection = new Promise((resolve) => {
+    secondDone = resolve;
+  });
+  await Promise.resolve();
+  secondDone("new selected text");
+  await second;
+  expect(session.getSelection()).toBe("new selected text");
+  await session.close();
+});
+
+it("reattaches a live core to a new window renderer and recovers pending frame credit", async () => {
+  const first = new FakeRenderer();
+  const session = await openSession(first);
+  const oldPane = session.pane;
+  channelOf(0).onmessage(frameBuffer(70));
+  const next = new FakeRenderer();
+  session.attachRenderer(next as unknown as GridRenderer);
+  expect(session.id).toBe(9);
+  expect(first.panes).toHaveLength(0);
+  expect(next.panes).toHaveLength(1);
+  expect(session.pane).not.toBe(oldPane);
+  expect(commands("pty_close")).toHaveLength(0);
+  expect(credits()).toHaveLength(0);
+  next.drawFrame();
+  expect(credits().map((call) => call.args)).toEqual([{ id: 9, seq: 70 }]);
+  expect(commands("gterm_request_full")).toHaveLength(1);
+  channelOf(0).onmessage(frameBuffer(71));
+  next.drawFrame();
+  expect(next.applied).toHaveLength(1);
+  session.attachRenderer(next as unknown as GridRenderer);
+  expect(next.panes).toHaveLength(1);
+  await session.close();
+});
+
+it("invalidates a failed renderer migration while keeping its original pane available for cleanup", async () => {
+  const first = new FakeRenderer();
+  const session = await openSession(first);
+  const old = session.pane;
+  const next = new FakeRenderer();
+  vi.spyOn(next, "addPane").mockImplementation(() => {
+    throw new Error("GPU allocation failed");
+  });
+  expect(() => session.attachRenderer(next as unknown as GridRenderer)).toThrow(
+    "GPU allocation failed",
+  );
+  expect(first.panes.map((item) => item.pane)).toContain(old);
+  await expect(
+    session.write("must not reach broken presentation"),
+  ).rejects.toThrow();
+  await session.close();
+  expect(first.panes).toHaveLength(0);
 });

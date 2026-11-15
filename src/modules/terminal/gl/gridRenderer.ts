@@ -416,6 +416,36 @@ export class GridRenderer {
     this.requestDraw();
   }
 
+  snapshot(pane?: RenderPane): string | null {
+    if (this.disposed || this.lost) return null;
+    if (
+      pane &&
+      (!this.panes.includes(pane) ||
+        pane.rect.width <= 0 ||
+        pane.rect.height <= 0)
+    )
+      return null;
+    this.draw();
+    if (!pane) return this.canvas.toDataURL("image/png");
+    const image = document.createElement("canvas");
+    image.width = Math.max(1, Math.round(pane.rect.width * this.dpr));
+    image.height = Math.max(1, Math.round(pane.rect.height * this.dpr));
+    const context = image.getContext("2d");
+    if (!context) return null;
+    context.drawImage(
+      this.canvas,
+      Math.round(pane.rect.x * this.dpr),
+      Math.round(pane.rect.y * this.dpr),
+      image.width,
+      image.height,
+      0,
+      0,
+      image.width,
+      image.height,
+    );
+    return image.toDataURL("image/png");
+  }
+
   requestDraw(): void {
     if (this.rafId || this.disposed) return;
     this.rafId = requestAnimationFrame(this.frame);

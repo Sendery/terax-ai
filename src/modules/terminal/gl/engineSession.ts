@@ -1,3 +1,7 @@
+import {
+  decodeNativeState,
+  type NativeState,
+} from "@/modules/terminal/gl/nativeState";
 import { labJson, awaitLabWrite } from "@/terminal-lab/lib/labReport";
 import {
   type DecodedFrame,
@@ -27,7 +31,31 @@ export type NativeKeyEvent = {
   mods?: number;
   consumedMods?: number;
   unshifted?: string;
+  legacyShiftEnter?: boolean;
 };
+
+export type NativeSelectionCommand =
+  | {
+      kind: "press";
+      col: number;
+      row: number;
+      x: number;
+      y: number;
+      atMs: number;
+    }
+  | {
+      kind: "drag";
+      col: number;
+      row: number;
+      x: number;
+      y: number;
+      cellWidth: number;
+      paddingLeft: number;
+      screenHeight: number;
+      rectangle: boolean;
+    }
+  | { kind: "word"; col: number; row: number }
+  | { kind: "all" | "clear" | "read" | "release" };
 
 type NativeInputEvent =
   | { kind: "key"; event: NativeKeyEvent }
@@ -152,14 +180,16 @@ const noop = () => {};
  * then is its credit returned.
  */
 export class EngineSession {
-  readonly pane: RenderPane;
+  private renderPane: RenderPane;
   id: number | null = null;
   exitCode: number | null = null;
-  private readonly renderer: GridRenderer;
+  private renderer: GridRenderer;
   private readonly observer: SessionObserver;
   private readonly frames = new Channel<ArrayBuffer>();
   private readonly exits = new Channel<number>();
   private readonly failures = new Channel<string>();
+  private readonly states = new Channel<unknown>();
+  private inputStateValue: NativeState | null = null;
   private readonly isBench: boolean;
   private awaitingDraw: number[] = [];
   private latestAppliedSeq: number | null = null;
@@ -172,6 +202,12 @@ export class EngineSession {
   private pendingColors: EngineColors | null = null;
   private inputWrites: Promise<void> = Promise.resolve();
   private queuedInputBytes = 0;
+  private closing: Promise<void> | null = null;
+  private selectionVersion = 0;
+  private selectionSnapshotVersion = 0;
+  private selectionQueries: Promise<void> = Promise.resolve();
+  private selectionPending = 0;
+  private selectionSnapshot: string | null = null;
 
   private constructor(
     renderer: GridRenderer,
@@ -184,12 +220,20 @@ export class EngineSession {
     this.observer = observer;
     this.size = size;
     this.isBench = isBench;
-    this.pane = renderer.addPane({
+    this.renderPane = renderer.addPane({
       onNeedFullFrame: () => this.requestFull(),
       onDrawn: (rendered) => this.handleDrawn(rendered),
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
     this.failures.onmessage = (message) => this.failCore(message);
+    this.states.onmessage = (value) => {
+      if (this.closed || this.failed) return;
+      try {
+        this.acceptState(value);
+      } catch {
+        this.failCore("invalid native terminal state");
+      }
+    };
     this.exits.onmessage = (code) => {
       if (this.exitCode !== null) return;
       this.exitCode = code;
@@ -265,6 +309,7 @@ export class EngineSession {
         onFrame: this.frames,
         onExit: this.exits,
         onFailure: this.failures,
+        onState: this.states,
       });
     } catch (error) {
       this.release();
@@ -289,6 +334,35 @@ export class EngineSession {
     if (this.pendingColors) this.setColors(this.pendingColors);
     this.flushCredits();
     return this;
+  }
+
+  get pane(): RenderPane {
+    return this.renderPane;
+  }
+
+  attachRenderer(renderer: GridRenderer): void {
+    if (this.closed || this.failed)
+      throw new Error("Terminal is no longer available.");
+    if (renderer === this.renderer) return;
+    let pane: RenderPane;
+    try {
+      pane = renderer.addPane({
+        onNeedFullFrame: () => this.requestFull(),
+        onDrawn: (rendered) => this.handleDrawn(rendered),
+      });
+    } catch (error) {
+      this.failCore("terminal renderer migration failed");
+      throw error;
+    }
+    this.renderer.removePane(this.renderPane);
+    this.renderer = renderer;
+    this.renderPane = pane;
+    renderer.setPaneFocused(pane, false);
+    this.latestAppliedSeq = null;
+    this.lastDrawnSeq = null;
+    this.fullRequested = false;
+    this.requestFull();
+    if (this.awaitingDraw.length > 0) renderer.markUndrawn(this.renderPane);
   }
 
   get cursor(): { x: number; y: number } | null {
@@ -406,6 +480,8 @@ export class EngineSession {
   private failCore(message: string): void {
     if (this.closed || this.failed) return;
     this.failed = true;
+    this.selectionSnapshot = null;
+    this.inputStateValue = null;
     this.awaitingDraw = [];
     this.drawnUnsent = [];
     try {
@@ -448,6 +524,20 @@ export class EngineSession {
     return this.sendNativeInput(
       { kind: "paste", text },
       textEncoder.encode(text).byteLength,
+    );
+  }
+
+  submit(text: string): Promise<void> {
+    if (!text) return this.write("\r");
+    return this.enqueueInput(
+      textEncoder.encode(text).byteLength + 1,
+      async (id) => {
+        const paste = await this.encodeNativeInput(id, { kind: "paste", text });
+        const bytes = new Uint8Array(paste.length + 1);
+        bytes.set(paste);
+        bytes[paste.length] = 13;
+        await this.writeBytes(id, bytes);
+      },
     );
   }
 
@@ -584,6 +674,92 @@ export class EngineSession {
     invoke("gterm_scroll", { id, delta }).catch(this.reportError);
   }
 
+  get inputState(): NativeState | null {
+    return this.closed || this.failed ? null : this.inputStateValue;
+  }
+
+  private acceptState(value: unknown): NativeState {
+    const state = decodeNativeState(value);
+    if (this.inputStateValue && state.version < this.inputStateValue.version)
+      return this.inputStateValue;
+    if (
+      this.inputStateValue &&
+      state.version === this.inputStateValue.version &&
+      JSON.stringify(state) !== JSON.stringify(this.inputStateValue)
+    )
+      throw new Error("invalid native terminal state version");
+    this.inputStateValue = state;
+    return state;
+  }
+
+  async readState(): Promise<NativeState> {
+    const id = this.id;
+    if (id === null || this.closed || this.failed)
+      throw new Error("terminal engine is unavailable");
+    const state = await invoke<unknown>("gterm_state", { id });
+    if (this.id !== id || this.closed || this.failed)
+      throw new Error("terminal engine is unavailable");
+    return this.acceptState(state);
+  }
+
+  getSelection(): string | null {
+    return this.closed || this.failed ? null : this.selectionSnapshot;
+  }
+
+  select(command: NativeSelectionCommand): Promise<string | null> {
+    if (this.closed || this.failed || this.id === null)
+      return Promise.reject(new Error("terminal engine is unavailable"));
+    if (this.selectionPending >= 32)
+      return Promise.reject(
+        new Error("too many pending terminal selection requests"),
+      );
+    const snapshot = { ...command };
+    const version = ++this.selectionVersion;
+    if (command.kind !== "read" && command.kind !== "release")
+      this.selectionSnapshot = null;
+    this.selectionPending++;
+    const task = this.selectionQueries
+      .then(async () => {
+        const id = this.id;
+        if (this.closed || this.failed || id === null)
+          throw new Error("terminal engine is unavailable");
+        try {
+          const text = await invoke<unknown>("gterm_selection", {
+            id,
+            command: snapshot,
+          });
+          if (this.closed || this.failed || this.id !== id)
+            throw new Error("terminal engine is unavailable");
+          if (
+            text !== null &&
+            (typeof text !== "string" ||
+              textEncoder.encode(text).byteLength > 16 * 1024 * 1024)
+          )
+            throw new Error("invalid terminal selection reply");
+          if (version === this.selectionVersion) {
+            this.selectionSnapshot =
+              typeof text === "string" && text.length > 0 ? text : null;
+            this.selectionSnapshotVersion = version;
+          }
+          return text;
+        } catch (error) {
+          // A native mutation can succeed before formatting fails. Never copy
+          // text from the previous selection after an unsuccessful query.
+          if (this.selectionSnapshotVersion <= version)
+            this.selectionSnapshot = null;
+          throw error;
+        }
+      })
+      .finally(() => {
+        this.selectionPending--;
+      });
+    this.selectionQueries = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
+  }
+
   readText(maxLines = 200): Promise<string> {
     if (!Number.isInteger(maxLines) || maxLines < 1 || maxLines > 1000)
       return Promise.reject(
@@ -606,11 +782,12 @@ export class EngineSession {
     return invoke<BenchStats>("gterm_bench_stats", { id: this.id });
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return;
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
     const id = this.id;
     this.release();
-    if (id !== null) await this.closeById(id);
+    this.closing = id === null ? Promise.resolve() : this.closeById(id);
+    return this.closing;
   }
 
   private async closeById(id: number): Promise<void> {
@@ -624,9 +801,12 @@ export class EngineSession {
 
   private release(): void {
     this.closed = true;
+    this.selectionSnapshot = null;
     this.frames.onmessage = noop;
     this.exits.onmessage = noop;
     this.failures.onmessage = noop;
+    this.states.onmessage = noop;
+    this.inputStateValue = null;
     this.awaitingDraw = [];
     this.drawnUnsent = [];
     this.renderer.removePane(this.pane);

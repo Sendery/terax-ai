@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSvgMarkup,
+  collectCanvasOverlays,
+  registerCanvasSnapshotProvider,
   captureScaleFor,
   MAX_CAPTURE_HEIGHT,
   MAX_CAPTURE_PIXELS,
@@ -63,4 +65,58 @@ describe("buildSvgMarkup", () => {
     const svg = buildSvgMarkup(10, 10, "<div/>", "@font-face{}");
     expect(svg).toContain("<style>@font-face{}</style>");
   });
+});
+
+it("composites only pane proxies so a shared source cannot cover DOM split handles", () => {
+  const rect = { left: 10, top: 20, width: 100, height: 80 };
+  const shared = {
+    hasAttribute: (key: string) => key === "data-terax-capture-proxy-source",
+    getBoundingClientRect: () => rect,
+  };
+  const proxy = {
+    hasAttribute: () => false,
+    getBoundingClientRect: () => rect,
+  };
+  const root = {
+    querySelectorAll: () => [shared, proxy],
+  } as unknown as HTMLElement;
+  const overlays = collectCanvasOverlays(root, { left: 0, top: 0 } as DOMRect);
+  expect(overlays.map((item) => item.canvas)).toEqual([proxy]);
+});
+
+it("freezes required pane pixels before asynchronous capture work or a tab switch", () => {
+  const host = { style: { visibility: "visible" } };
+  const canvas = {
+    hasAttribute: (key: string) => key === "data-terax-capture-required",
+    closest: () => host,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 80 }),
+  } as unknown as HTMLCanvasElement;
+  const unregister = registerCanvasSnapshotProvider(canvas, () =>
+    host.style.visibility === "visible" ? "data:image/png;base64,frozen" : null,
+  );
+  const root = { querySelectorAll: () => [canvas] } as unknown as HTMLElement;
+  try {
+    const [overlay] = collectCanvasOverlays(root, {
+      left: 0,
+      top: 0,
+    } as DOMRect);
+    host.style.visibility = "hidden";
+    expect(overlay.snapshot).toBe("data:image/png;base64,frozen");
+    expect(collectCanvasOverlays(root, { left: 0, top: 0 } as DOMRect)).toEqual(
+      [],
+    );
+  } finally {
+    unregister();
+  }
+});
+it("rejects a visible required pane whose snapshot provider is unavailable", () => {
+  const canvas = {
+    hasAttribute: (key: string) => key === "data-terax-capture-required",
+    closest: () => ({ style: { visibility: "visible" } }),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 80 }),
+  } as unknown as HTMLCanvasElement;
+  const root = { querySelectorAll: () => [canvas] } as unknown as HTMLElement;
+  expect(() =>
+    collectCanvasOverlays(root, { left: 0, top: 0 } as DOMRect),
+  ).toThrow("Terminal capture is no longer available.");
 });

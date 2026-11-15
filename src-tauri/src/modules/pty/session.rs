@@ -114,6 +114,7 @@ pub enum OutputSink {
         colors: Option<super::colors::Colors>,
         slot: Arc<CoreSlot>,
         on_failure: Channel<String>,
+        on_state: Channel<engine::state::EngineState>,
     },
 }
 
@@ -162,8 +163,8 @@ pub fn spawn(
     let pipeline = match sink {
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
-        OutputSink::Engine { on_frame, colors, slot, on_failure } => {
-            let engine = start_engine(cols, rows, colors, on_frame, writer.clone())?;
+        OutputSink::Engine { on_frame, colors, slot, on_failure, on_state } => {
+            let engine = start_engine(cols, rows, colors, on_frame, on_state, writer.clone())?;
             Pipeline::Engine(EnginePipeline {
                 core: slot.install(engine)?,
                 slot,
@@ -383,11 +384,14 @@ fn start_engine(
     rows: u16,
     colors: Option<super::colors::Colors>,
     on_frame: Channel<Response>,
+    on_state: Channel<engine::state::EngineState>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
 ) -> Result<engine::Engine, String> {
     let frames: engine::FrameSink =
         Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok());
-    engine::start_with_colors(cols, rows, colors, frames, reply_sink(writer))
+    let engine = engine::start_with_colors(cols, rows, colors, frames, reply_sink(writer))?;
+    engine.handle.on_state(move |state| on_state.send(state).is_ok());
+    Ok(engine)
 }
 
 // Terminal replies (device attributes, cursor reports) go back to the child.

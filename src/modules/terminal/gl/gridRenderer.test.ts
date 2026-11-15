@@ -117,3 +117,55 @@ it("releases the WebGL context when glyph atlas construction fails", async () =>
     vi.unstubAllGlobals();
   }
 });
+
+it("snapshots only the requested live pane rectangle after a synchronous redraw", () => {
+  const target = pane({ x: 10, y: 20, width: 30, height: 40 });
+  const drawImage = vi.fn();
+  const image = {
+    width: 0,
+    height: 0,
+    getContext: () => ({ drawImage }),
+    toDataURL: () => "data:image/png;base64,isolated",
+  };
+  vi.stubGlobal("document", { createElement: () => image });
+  const canvas = {
+    width: 200,
+    height: 160,
+    toDataURL: vi.fn(() => "data:image/png;base64,window"),
+  };
+  const draw = vi.fn();
+  const renderer = Object.assign(Object.create(GridRenderer.prototype), {
+    canvas,
+    panes: [target],
+    dpr: 2,
+    disposed: false,
+    lost: false,
+    draw,
+  }) as GridRenderer;
+  try {
+    expect(renderer.snapshot(target)).toBe("data:image/png;base64,isolated");
+    expect(draw).toHaveBeenCalledOnce();
+    expect(drawImage).toHaveBeenCalledWith(
+      canvas,
+      20,
+      40,
+      60,
+      80,
+      0,
+      0,
+      60,
+      80,
+    );
+    expect(image.width).toBe(60);
+    expect(image.height).toBe(80);
+    target.rect.width = 0;
+    expect(renderer.snapshot(target)).toBeNull();
+    expect(
+      renderer.snapshot(pane({ x: 0, y: 0, width: 10, height: 10 })),
+    ).toBeNull();
+    expect(draw).toHaveBeenCalledOnce();
+    expect(renderer.snapshot()).toBe("data:image/png;base64,window");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

@@ -289,6 +289,48 @@ mod tests {
     }
 
     #[test]
+    fn finished_process_keeps_selection_readable_and_mutable_until_pane_close() {
+        let slot = CoreSlot::new();
+        let process = slot.install(engine()).unwrap();
+        assert!(process.input.feed(b"hello world".to_vec()));
+        process.finish().unwrap();
+        slot.finish_process(true);
+        let handle = slot.handle().unwrap();
+        use super::super::engine::selection::SelectionCommand;
+        assert_eq!(
+            handle
+                .selection(SelectionCommand::All)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap()
+                .as_deref(),
+            Some("hello world")
+        );
+        assert_eq!(
+            handle
+                .selection(SelectionCommand::Read)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap()
+                .as_deref(),
+            Some("hello world")
+        );
+        assert_eq!(
+            handle
+                .selection(SelectionCommand::Clear)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            None
+        );
+        slot.close().unwrap().join().unwrap();
+        assert!(handle.selection(SelectionCommand::Read).is_err());
+    }
+
+    #[test]
     fn input_admission_is_bounded_before_worker_spawn_and_released_on_drop_or_error() {
         let slot = CoreSlot::new();
         let process = slot.install(engine()).unwrap();

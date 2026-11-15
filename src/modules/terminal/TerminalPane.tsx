@@ -1,3 +1,8 @@
+import { initialLeafEngine } from "@/modules/terminal/gl/nativeSurface";
+import { getNativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
+import { hasLegacyLeaf } from "@/modules/terminal/lib/useTerminalSession";
+import { NativeTerminalPane } from "@/modules/terminal/NativeTerminalPane";
+import { nativeTerminalRequested } from "@/modules/terminal/gl/nativeSurfaceContext";
 import { IS_MAC } from "@/lib/platform";
 import { useTheme } from "@/modules/theme";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -27,12 +32,12 @@ export type TerminalPaneHandle = {
   focus: () => void;
   /** Newline encoding the foreground program negotiated, for synthesized
    *  multiline input that must not submit early. */
-  shiftEnter: () => string;
+  shiftEnter: () => string | Promise<string>;
   getBuffer: (maxLines?: number) => string | null | Promise<string | null>;
   getSelection: () => string | null;
 };
 
-type Props = {
+export type TerminalPaneProps = {
   /** Stable identifier for this leaf (passed back through callbacks). */
   leafId: number;
   /** Tab containing this pane is on screen. */
@@ -55,8 +60,8 @@ type Props = {
   privateTerminal?: boolean;
 };
 
-export const TerminalPane = memo(
-  forwardRef<TerminalPaneHandle, Props>(function TerminalPane(
+const LegacyTerminalPane = memo(
+  forwardRef<TerminalPaneHandle, TerminalPaneProps>(function TerminalPane(
     {
       leafId,
       visible,
@@ -221,4 +226,29 @@ export const TerminalPane = memo(
       </TerminalContextMenu>
     );
   }),
+);
+
+export const TerminalPane = memo(
+  forwardRef<TerminalPaneHandle, TerminalPaneProps>(
+    function TerminalPaneRouter(props, ref) {
+      // Keep a live leaf on its original engine when display preferences change.
+      // Native blocks remain on the existing path until their migration is complete.
+      const native = useRef(
+        initialLeafEngine(
+          nativeTerminalRequested,
+          Boolean(props.blocks),
+          getNativeLeaf(props.leafId)
+            ? "ghostty"
+            : hasLegacyLeaf(props.leafId)
+              ? "xterm"
+              : undefined,
+        ) === "ghostty",
+      ).current;
+      return native ? (
+        <NativeTerminalPane {...props} ref={ref} />
+      ) : (
+        <LegacyTerminalPane {...props} ref={ref} />
+      );
+    },
+  ),
 );

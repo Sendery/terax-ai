@@ -14,6 +14,7 @@ pub fn final_exit_code(child: i32, reader_drained: bool, engine_healthy: bool) -
 pub enum EngineFailure {
     Cancelled,
     FrameChannelClosed,
+    StateChannelClosed,
     SnapshotFailed,
     Panicked,
 }

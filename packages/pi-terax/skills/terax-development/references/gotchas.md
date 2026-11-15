@@ -681,3 +681,25 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** its encode_to_vec helper reserves relative to length using a remaining-capacity calculation, so valid text can still fail OutOfSpace. A bounded actor queue alone also leaves an unbounded number of blocking workers waiting to enqueue.
 - **Prevention:** use explicit encode, validate the required byte count and resize/retry within a fixed output cap. Reserve per-core RAII admission before worker spawn and keep it through the receipt. Include encode-only requests in the frontend budget and queue. Keep stop independent from the producer gate, and describe receipt timeout scope precisely.
 - **Verification:** literal ASCII and Unicode above 128 bytes; FIFO mode negotiation; admission at capacity with drop/error release; encode-only budget, invalid reply and close/exit races. Kitty Enter/Backspace/Tab releases need REPORT_ALL as well as REPORT_EVENTS; empty output is valid and must not trigger fallback input.
+
+
+### Terminal process ownership must outlive a React pane view
+
+- **Trigger:** splitting, moving or reparenting a terminal leaf, or changing a display preference before a remount.
+- **Failure mode:** a mount-owned controller closes a running shell during layout changes; a mount-only engine choice can create both native and legacy owners for one leaf. A persistent owner identity alone also fails to detect a delayed clipboard read crossing respawn.
+- **Prevention:** keep process/controller ownership in the logical leaf registry; view cleanup only detaches input and geometry. Consult existing owners before engine choice on remount. Explicit disposal removes the owner; respawn awaits shared sticky retirement. Guard delayed input with process generation/session identity as well as leaf identity. View observer exceptions must not prevent resource cleanup.
+- **Verification:** test detach/reattach identity, replacement view cleanup, failed retirement, throwing callbacks and delayed clipboard across respawn. Exercise split/hide/show/close in the real normal window and compare native IDs and live shell PIDs.
+
+### A disposed WebGL context cannot back a replacement renderer
+
+- **Trigger:** hot-reloading a component that owns a renderer whose destructor intentionally loses its GPU context.
+- **Failure mode:** React reuses the canvas element, and the replacement renderer reports shader compilation failure on its lost context. Mixing context/hook exports with components also invalidates the refresh boundary and can strand consumers.
+- **Prevention:** keep the context/hook in a non-component module and acquire a fresh canvas DOM element with each renderer; cleanup frees GPU resources and removes only that owned canvas. Reattach persistent terminal cores to the new renderer and request full state. Clear prior initialization errors when retrying.
+- **Verification:** refresh only the surface component without adding dependencies that force a full webview reload; inspect actual content and unchanged shell PIDs, not just a successful screenshot response.
+
+### Shared-canvas capture needs frozen pane crops
+
+- **Trigger:** rasterizing a pane whose canvas lives outside its DOM subtree, or changing tabs during asynchronous font/image work.
+- **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels.
+- **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards.
+- **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider.

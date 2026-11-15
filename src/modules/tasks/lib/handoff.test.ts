@@ -204,3 +204,13 @@ it("does not confirm a turn from a rejected native query", async () => {
   const result = await handOffPrompt(terminal.io, () => "run the tests");
   expect(result.confirmed).toBe(false);
 });
+
+it("resolves native multiline key encoding after actual TUI readiness", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 3000 });
+  const result = await handOffPrompt(terminal.io, async () => {
+    expect(terminal.clockAt()).toBeGreaterThanOrEqual(3000);
+    return "one\x1b[13;2utwo";
+  });
+  expect(result.confirmed).toBe(true);
+  expect(terminal.state.typed).toEqual(["one\x1b[13;2utwo"]);
+});

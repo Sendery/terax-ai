@@ -1,3 +1,7 @@
+import {
+  focusedNativeLeaf,
+  getNativeLeaf,
+} from "@/modules/terminal/gl/nativeLeafRegistry";
 import { resolveFontFamily } from "@/lib/fonts";
 import { openExternalUrl } from "@/lib/external-link";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -125,9 +129,7 @@ function setWindowActive(active: boolean): void {
     windowInactiveSince === null ? 0 : performance.now() - windowInactiveSince;
   windowInactiveSince = active ? null : performance.now();
   if (active && away > SLOT_STALE_MS) {
-    repaintSlots(
-      slots.filter((s) => s.currentLeafId !== null && !s.parked),
-    );
+    repaintSlots(slots.filter((s) => s.currentLeafId !== null && !s.parked));
   }
   for (const slot of slots) {
     if (slot.currentLeafId === null) continue;
@@ -184,6 +186,11 @@ export function poolSlotStats(): PoolSlotStat[] {
  * rather than having to select the damaged text to repair it.
  */
 export function repaintLeaf(leafId: number | null): void {
+  const native = leafId === null ? focusedNativeLeaf() : getNativeLeaf(leafId);
+  if (native) {
+    native.repaint();
+    return;
+  }
   repaintSlots(
     slots.filter(
       (s) =>
@@ -197,6 +204,14 @@ export function repaintLeaf(leafId: number | null): void {
 // Bracketed paste via xterm, so an app that enabled it (Claude Code) treats a
 // dropped path as a real paste while a plain shell gets the literal text.
 export function pasteIntoLeaf(leafId: number, text: string): boolean {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    if (native.exited) return false;
+    void native
+      .paste(text)
+      .catch((error) => console.error("native terminal paste failed", error));
+    return true;
+  }
   const slot = slots.find((s) => s.currentLeafId === leafId);
   if (!slot) return false;
   slot.term.paste(text);
@@ -367,7 +382,8 @@ function createSlot(): Slot {
       if (event.type === "keydown") {
         const targetLeafId = slot.currentLeafId;
         void readTerminalClipboard().then((text) => {
-          if (text && slot.currentLeafId === targetLeafId) slot.term.paste(text);
+          if (text && slot.currentLeafId === targetLeafId)
+            slot.term.paste(text);
         });
       }
       event.preventDefault();
@@ -412,7 +428,11 @@ function createFileLinkProvider(getSlot: () => Slot): ILinkProvider {
             callback(undefined);
             return;
           }
-          callback(links.map((link) => toXtermFileLink(link, bufferLineNumber, bridge)));
+          callback(
+            links.map((link) =>
+              toXtermFileLink(link, bufferLineNumber, bridge),
+            ),
+          );
         })
         .catch(() => callback(undefined));
     },
@@ -1262,6 +1282,8 @@ export function getSlotForLeaf(leafId: number): Slot | null {
 }
 
 export function isLeafAltScreen(leafId: number): boolean {
+  const native = getNativeLeaf(leafId);
+  if (native) return native.alternateScreen;
   const slot = slots.find((s) => s.currentLeafId === leafId);
   return slot ? isAltScreen(slot) : false;
 }
