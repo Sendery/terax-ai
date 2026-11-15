@@ -1,8 +1,10 @@
 # Native full-grapheme rendering
 
 The native terminal now carries the complete cluster from libghostty-vt to
-the canvas atlas. Combining marks, variation/ZWJ sequences, skin tones and
-regional flags keep their full text and native cell width. Before this change,
+the canvas atlas. Native clusters keep their full text and cell width.
+Compatibility mode stays the default; programs can negotiate DEC mode 2027
+for complete ZWJ, skin-tone and regional-indicator emoji clusters. The renderer
+does not merge neighboring cells. Before this change,
 the core and explicit copies retained that text but frame pixels used only
 the first scalar.
 
@@ -118,3 +120,36 @@ it, and resize/change font or move between displays.
 
 Primary pinned core reference:
 [Ghostty page/grapheme storage](https://raw.githubusercontent.com/ghostty-org/ghostty/a887df42c56f6de86c0fe6da9c4eeca37931e083/src/terminal/page.zig).
+
+## Focused runtime acceptance and negotiated cluster boundaries
+
+The standalone debug candidate from commit 03a3994 was built with the embedded
+native frontend, copied independently of the shared Cargo target and exercised
+through the authenticated bridge. A public fixture emitted output while its
+tab was hidden, then was revealed and captured through app.capture. The owned
+fixture tab was closed and the original active tab restored.
+
+The first capture in default compatibility mode showed complete accents but
+separate emoji components. Inspecting the actual native frame showed that the
+core supplied those boundaries. A second fixture requested mode 2027 before
+printing, reset it afterward, and visibly rendered a composed woman-technologist,
+a skin-tone thumbs-up and the Spanish flag in WebKit on M2. Accents and CJK were
+also visible. This is focused real pixel evidence, not a full terminal walkthrough.
+
+The additional Rust-generated graphemes-clustered fixture asserts the exact five
+cluster entries and native cursor column 12 after mode reset. Concatenated row
+text alone cannot prove grouping. The TypeScript fixture decoder consumes the
+same binary. Focused follow-up checks passed: 12 native fixture tests plus one existing ignored, and
+18 TypeScript fixtures plus the existing fixture-absence skip. These additions
+change tests/documentation only; the verified
+runtime remains production commit 03a3994.
+
+Evidence is retained privately under .terax/visual-qa/ and recorded with exact
+build provenance in .terax/pi-development/m2/grapheme-qa-result.json.
+
+Focused follow-up commands, all passed without fixture regeneration:
+```sh
+pnpm exec vitest run src/modules/terminal/gl/frameFixtures.test.ts
+.terax/pi-development/m2/with-ghostty cargo test --manifest-path src-tauri/Cargo.toml --target-dir /Users/andres.rojo/Workspaces/terax-ai/src-tauri/target --locked --features ghostty-engine --lib modules::pty::engine::fixtures
+git diff --check
+```

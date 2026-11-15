@@ -461,3 +461,30 @@ fn full_grapheme_frame_fixtures() {
     assert!(!partial.full());
     assert_eq!(partial.row(0).unwrap().text(), "e\u{308}");
 }
+
+#[test]
+fn negotiated_grapheme_mode_fixture_preserves_complete_cluster_boundaries() {
+    let mut term = terminal(30, 3);
+    let mut snapshot = Snapshotter::new().unwrap();
+    term.vt_write(b"\x1b[?2027h");
+    term.vt_write(
+        "e\u{301} e\u{300} \u{1f469}\u{200d}\u{1f4bb} \u{1f44d}\u{1f3fd} \u{1f1ea}\u{1f1f8}"
+            .as_bytes(),
+    );
+    term.vt_write(b"\x1b[?2027l");
+    let frame = check(
+        "graphemes-clustered",
+        &frame_of(&term, &mut snapshot, 1, true),
+    );
+    assert_eq!(
+        &*frame.graphemes,
+        &[
+            "e\u{301}",
+            "e\u{300}",
+            "\u{1f469}\u{200d}\u{1f4bb}",
+            "\u{1f44d}\u{1f3fd}",
+            "\u{1f1ea}\u{1f1f8}"
+        ]
+    );
+    assert_eq!(frame.cursor_x, 12);
+}

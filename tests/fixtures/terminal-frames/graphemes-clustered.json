@@ -1,0 +1,49 @@
+{
+  "seq": 1,
+  "cols": 30,
+  "viewportRows": 3,
+  "full": true,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 12,
+    "y": 0,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "é è 👩‍💻 👍🏽 🇪🇸",
+      "runs": [
+        {
+          "start": 0,
+          "len": 12,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    },
+    {
+      "y": 1,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    },
+    {
+      "y": 2,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "",
+      "runs": []
+    }
+  ]
+}
