@@ -1,20 +1,13 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect } from "react";
-import { useTerminalDropStore } from "./dropStore";
-import { formatDroppedPaths } from "./quoteShellPath";
-import { pasteIntoLeaf } from "./rendererPool";
+import { useTerminalDropStore } from "@/modules/terminal/lib/dropStore";
+import { formatDroppedPaths } from "@/modules/terminal/lib/quoteShellPath";
+import { pasteIntoLeaf } from "@/modules/terminal/lib/rendererPool";
 
-// Tauri reports the drop point in physical pixels on some platforms and logical
-// on others; only scale down when it overflows the logical viewport.
+// Tauri positions are physical pixels; DOM hit testing uses CSS pixels.
 function leafIdAt(x: number, y: number): number | null {
-  let lx = x;
-  let ly = y;
-  if (x > window.innerWidth || y > window.innerHeight) {
-    const dpr = window.devicePixelRatio || 1;
-    lx = x / dpr;
-    ly = y / dpr;
-  }
-  const el = document.elementFromPoint(lx, ly);
+  const dpr = window.devicePixelRatio || 1;
+  const el = document.elementFromPoint(x / dpr, y / dpr);
   const leafEl = el?.closest<HTMLElement>("[data-pane-leaf]");
   if (!leafEl) return null;
   const id = Number(leafEl.dataset.paneLeaf);
@@ -32,6 +25,7 @@ export function useTerminalFileDrop(): void {
 
     void getCurrentWebview()
       .onDragDropEvent((e) => {
+        if (disposed) return;
         const p = e.payload;
         if (p.type === "enter" || p.type === "over") {
           setTarget(leafIdAt(p.position.x, p.position.y));
