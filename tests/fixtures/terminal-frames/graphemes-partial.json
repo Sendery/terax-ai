@@ -1,0 +1,35 @@
+{
+  "seq": 2,
+  "cols": 30,
+  "viewportRows": 3,
+  "full": false,
+  "viewportScrolled": false,
+  "cursor": {
+    "x": 1,
+    "y": 0,
+    "style": "block",
+    "blink": false,
+    "color": null
+  },
+  "defaultFg": "#ffffff",
+  "defaultBg": "#000000",
+  "rows": [
+    {
+      "y": 0,
+      "wrapped": false,
+      "prompt": "none",
+      "text": "ë",
+      "runs": [
+        {
+          "start": 0,
+          "len": 1,
+          "fg": null,
+          "bg": null,
+          "underlineColor": null,
+          "attrs": [],
+          "underline": "none"
+        }
+      ]
+    }
+  ]
+}

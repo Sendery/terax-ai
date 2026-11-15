@@ -1,3 +1,4 @@
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import type { ApplyResult } from "@/modules/terminal/gl/cellBuffer";
 import {
   type DecodedFrame,
@@ -1390,4 +1391,41 @@ it("rejects delayed block-action replies after its engine is closed", async () =
   await session.close();
   resolve({ kind: "matches", version: 1, matches: [] });
   await rejected;
+});
+
+it("acknowledges capacity-blocked frames without resync loops or stale presented geometry", async () => {
+  const renderer = new FakeRenderer();
+  const retry = vi.fn();
+  Object.assign(renderer, { retryCapacity: retry });
+  const errors: unknown[] = [];
+  const pending = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+    observer: { onError: (error) => errors.push(error) },
+  });
+  ipc.open?.resolve(9);
+  const session = await pending;
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  expect(session.drawnSeq).toBe(1);
+  vi.spyOn(renderer, "applyFrame").mockImplementationOnce(() => {
+    throw new RenderCapacityError();
+  });
+  channelOf(0).onmessage(frameBuffer(2));
+  renderer.drawFrame();
+  expect(errors).toHaveLength(1);
+  expect(session.drawnSeq).toBeNull();
+  renderer.nextResult = "blocked";
+  channelOf(0).onmessage(frameBuffer(3));
+  renderer.drawFrame();
+  expect(commands("gterm_request_full")).toHaveLength(0);
+  expect(credits()).toHaveLength(3);
+  session.requestFull(true);
+  expect(retry).toHaveBeenCalledOnce();
+  expect(commands("gterm_request_full")).toHaveLength(1);
+  renderer.nextResult = "applied";
+  channelOf(0).onmessage(frameBuffer(4));
+  renderer.drawFrame();
+  expect(session.drawnSeq).toBe(4);
+  await session.close();
 });

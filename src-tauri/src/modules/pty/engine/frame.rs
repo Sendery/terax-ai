@@ -3,6 +3,7 @@
 //! types here, so the codec builds and is tested without the engine feature.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub const MAGIC: u32 = 0x3146_5854;
 pub const HEADER_LEN: usize = 36;
@@ -12,6 +13,16 @@ pub const ROW_HEADER_LEN: usize = 8;
 pub const FLAG_FULL: u8 = 1;
 pub const FLAG_CURSOR_BLINK: u8 = 1 << 1;
 pub const FLAG_VIEWPORT_SCROLLED: u8 = 1 << 2;
+pub const FLAG_GRAPHEMES: u8 = 1 << 3;
+pub const CELL_GRAPHEME: u32 = 1 << 29;
+pub const MAX_GRAPHEME_BYTES: usize = 1024 * 1024;
+pub const MAX_GRAPHEME_TABLE_BYTES: usize = 8 * 1024 * 1024;
+pub const MAX_GRAPHEMES: usize = 500 * 500;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GraphemeLimit {
+    pub required: usize,
+}
 
 /// Marks a colour as explicit; without it the renderer uses the default.
 pub const COLOR_SET: u32 = 1 << 24;
@@ -132,8 +143,8 @@ pub struct FrameHeader {
     pub cursor_color: Option<u32>,
 }
 
-/// Builds one frame at a time. Every buffer is kept across frames, so steady
-/// state encoding does not allocate.
+/// Reuses row, style and output buffers. Complex text is interned once within
+/// each frame and charged to the bounded grapheme table.
 pub struct FrameEncoder {
     out: Vec<u8>,
     rows: Vec<u8>,
@@ -146,6 +157,9 @@ pub struct FrameEncoder {
     row_flags: RowFlags,
     row_cells: Vec<u32>,
     row_styles: Vec<u16>,
+    graphemes: Vec<Arc<str>>,
+    grapheme_ids: HashMap<Arc<str>, u32>,
+    grapheme_bytes: usize,
 }
 
 impl Default for FrameEncoder {
@@ -168,6 +182,9 @@ impl FrameEncoder {
             row_flags: RowFlags::default(),
             row_cells: Vec::new(),
             row_styles: Vec::new(),
+            graphemes: Vec::new(),
+            grapheme_ids: HashMap::new(),
+            grapheme_bytes: 4,
         };
         encoder.begin();
         encoder
@@ -176,6 +193,9 @@ impl FrameEncoder {
     pub fn begin(&mut self) {
         self.rows.clear();
         self.row_count = 0;
+        self.graphemes.clear();
+        self.grapheme_ids.clear();
+        self.grapheme_bytes = 4;
         self.styles.clear();
         self.styles.push(CellStyle::DEFAULT);
         self.style_ids.clear();
@@ -193,6 +213,43 @@ impl FrameEncoder {
 
     #[inline]
     pub fn push_cell(&mut self, codepoint: u32, width: CellWidth, style: CellStyle) {
+        self.push_value(codepoint & CODEPOINT_MASK, width, style);
+    }
+
+    pub fn push_grapheme(
+        &mut self,
+        text: &str,
+        width: CellWidth,
+        style: CellStyle,
+    ) -> Result<(), GraphemeLimit> {
+        let mut chars = text.chars();
+        let first = chars.next().unwrap_or('\0') as u32;
+        if chars.next().is_none() || width == CellWidth::SpacerTail {
+            self.push_cell(first, width, style);
+            return Ok(());
+        }
+        let id = if let Some(&id) = self.grapheme_ids.get(text) {
+            id
+        } else {
+            let bytes = self.grapheme_bytes + 4 + text.len().next_multiple_of(4);
+            if text.len() > MAX_GRAPHEME_BYTES
+                || bytes > MAX_GRAPHEME_TABLE_BYTES
+                || self.graphemes.len() >= MAX_GRAPHEMES
+            {
+                return Err(GraphemeLimit { required: bytes });
+            }
+            let id = self.graphemes.len() as u32;
+            let text: Arc<str> = Arc::from(text);
+            self.grapheme_ids.insert(text.clone(), id);
+            self.graphemes.push(text);
+            self.grapheme_bytes = bytes;
+            id
+        };
+        self.push_value(CELL_GRAPHEME | id, width, style);
+        Ok(())
+    }
+
+    fn push_value(&mut self, value: u32, width: CellWidth, style: CellStyle) {
         let id = if style == self.last_style {
             self.last_id
         } else {
@@ -202,8 +259,8 @@ impl FrameEncoder {
             id
         };
         let cell = match width {
-            CellWidth::Narrow => codepoint & CODEPOINT_MASK,
-            CellWidth::WideHead => (codepoint & CODEPOINT_MASK) | CELL_WIDE_HEAD,
+            CellWidth::Narrow => value,
+            CellWidth::WideHead => value | CELL_WIDE_HEAD,
             CellWidth::SpacerTail => CELL_SPACER_TAIL,
         };
         self.row_cells.push(cell);
@@ -266,7 +323,9 @@ impl FrameEncoder {
     pub fn finish(&mut self, header: &FrameHeader) -> &[u8] {
         let out = &mut self.out;
         out.clear();
-        out.reserve(HEADER_LEN + self.styles.len() * STYLE_LEN + self.rows.len());
+        out.reserve(
+            HEADER_LEN + self.styles.len() * STYLE_LEN + self.rows.len() + self.grapheme_bytes,
+        );
 
         let mut flags = 0u8;
         if header.full {
@@ -277,6 +336,9 @@ impl FrameEncoder {
         }
         if header.viewport_scrolled {
             flags |= FLAG_VIEWPORT_SCROLLED;
+        }
+        if !self.graphemes.is_empty() {
+            flags |= FLAG_GRAPHEMES;
         }
         put_u32(out, MAGIC);
         put_u32(out, header.seq);
@@ -301,6 +363,14 @@ impl FrameEncoder {
             put_u16(out, 0);
         }
         out.extend_from_slice(&self.rows);
+        if !self.graphemes.is_empty() {
+            put_u32(out, self.graphemes.len() as u32);
+            for text in &self.graphemes {
+                put_u32(out, text.len() as u32);
+                out.extend_from_slice(text.as_bytes());
+                out.resize(out.len().next_multiple_of(4), 0);
+            }
+        }
         &self.out
     }
 }
@@ -334,6 +404,7 @@ pub(crate) mod decode {
         pub cursor_color: u32,
         pub styles: Vec<CellStyle>,
         pub row_records: Vec<Row>,
+        pub graphemes: Arc<[String]>,
     }
 
     #[derive(Debug, Clone, PartialEq)]
@@ -342,6 +413,7 @@ pub(crate) mod decode {
         pub flags: u16,
         pub runs: Vec<(u16, u16)>,
         pub cells: Vec<u32>,
+        pub graphemes: Arc<[String]>,
     }
 
     impl Frame {
@@ -361,6 +433,10 @@ pub(crate) mod decode {
             let mut s = String::new();
             for &cell in &self.cells {
                 if cell & CELL_SPACER_TAIL != 0 {
+                    continue;
+                }
+                if cell & CELL_GRAPHEME != 0 {
+                    s.push_str(&self.graphemes[(cell & CODEPOINT_MASK) as usize]);
                     continue;
                 }
                 let cp = cell & CODEPOINT_MASK;
@@ -456,7 +532,24 @@ pub(crate) mod decode {
                 flags,
                 runs,
                 cells,
+                graphemes: Arc::from([]),
             });
+        }
+        let mut graphemes = Vec::new();
+        if flags & FLAG_GRAPHEMES != 0 {
+            for _ in 0..r.u32() {
+                let len = r.u32() as usize;
+                graphemes.push(
+                    std::str::from_utf8(&bytes[r.at..r.at + len])
+                        .unwrap()
+                        .to_owned(),
+                );
+                r.at += len.next_multiple_of(4);
+            }
+        }
+        let graphemes: Arc<[String]> = Arc::from(graphemes);
+        for row in &mut row_records {
+            row.graphemes = graphemes.clone();
         }
         assert_eq!(r.at, bytes.len(), "no trailing bytes");
         Frame {
@@ -472,6 +565,7 @@ pub(crate) mod decode {
             cursor_color,
             styles,
             row_records,
+            graphemes,
         }
     }
 }
@@ -747,7 +841,8 @@ mod tests {
                 y: 5,
                 flags: 0,
                 runs: vec![],
-                cells: vec![]
+                cells: vec![],
+                graphemes: Arc::from([]),
             }]
         );
     }
@@ -892,5 +987,111 @@ mod tests {
             )
         );
         assert_eq!(len, enc.out.len());
+    }
+}
+
+#[cfg(test)]
+mod grapheme_tests {
+    use super::*;
+    #[test]
+    fn full_text_is_interned_per_frame_and_native_width_is_independent_of_text() {
+        let mut encoder = FrameEncoder::new();
+        encoder.begin_row(0, RowFlags::default());
+        for (text, width) in [
+            ("e\u{301}", CellWidth::Narrow),
+            ("e\u{301}", CellWidth::Narrow),
+            ("e\u{300}", CellWidth::Narrow),
+            ("\u{1f469}\u{200d}\u{1f4bb}", CellWidth::WideHead),
+            ("", CellWidth::SpacerTail),
+            (" \u{301}", CellWidth::Narrow),
+        ] {
+            encoder
+                .push_grapheme(text, width, CellStyle::DEFAULT)
+                .unwrap();
+        }
+        encoder.end_row();
+        let header = FrameHeader {
+            seq: 1,
+            cols: 6,
+            rows: 1,
+            cursor_x: 0,
+            cursor_y: 0,
+            cursor_style: CursorStyle::Hidden,
+            cursor_blink: false,
+            viewport_scrolled: false,
+            full: true,
+            default_fg: 0,
+            default_bg: 0,
+            cursor_color: None,
+        };
+        let frame = decode::decode(encoder.finish(&header));
+        assert_eq!(
+            &*frame.graphemes,
+            &[
+                "e\u{301}",
+                "e\u{300}",
+                "\u{1f469}\u{200d}\u{1f4bb}",
+                " \u{301}"
+            ]
+        );
+        assert_eq!(
+            frame.row(0).unwrap().text(),
+            "e\u{301}e\u{301}e\u{300}\u{1f469}\u{200d}\u{1f4bb} \u{301}"
+        );
+        assert_eq!(
+            frame.row(0).unwrap().cells[0],
+            frame.row(0).unwrap().cells[1]
+        );
+        assert_ne!(frame.row(0).unwrap().cells[3] & CELL_WIDE_HEAD, 0);
+        encoder.begin();
+        encoder.begin_row(0, RowFlags::default());
+        encoder.push_cell('e' as u32, CellWidth::Narrow, CellStyle::DEFAULT);
+        encoder.end_row();
+        let plain = decode::decode(encoder.finish(&header));
+        assert_eq!(plain.flags & FLAG_GRAPHEMES, 0);
+        assert!(plain.graphemes.is_empty());
+        assert_eq!(plain.row(0).unwrap().text(), "e");
+    }
+    #[test]
+    fn aggregate_table_budget_is_atomic_and_existing_entries_can_still_be_reused() {
+        let mut encoder = FrameEncoder::new();
+        encoder.begin_row(0, RowFlags::default());
+        let base = format!("e{}", "\u{301}".repeat((MAX_GRAPHEME_BYTES - 4) / 2));
+        for index in 0..7 {
+            let text = format!("{base}{}", char::from_u32(0x300 + index).unwrap());
+            encoder
+                .push_grapheme(&text, CellWidth::Narrow, CellStyle::DEFAULT)
+                .unwrap();
+        }
+        let bytes = encoder.grapheme_bytes;
+        let cells = encoder.row_cells.len();
+        let overflow = format!("{base}\u{308}");
+        assert!(encoder
+            .push_grapheme(&overflow, CellWidth::Narrow, CellStyle::DEFAULT)
+            .is_err());
+        assert_eq!(encoder.grapheme_bytes, bytes);
+        assert_eq!(encoder.row_cells.len(), cells);
+        assert!(bytes <= MAX_GRAPHEME_TABLE_BYTES);
+        let repeated = format!("{base}\u{300}");
+        encoder
+            .push_grapheme(&repeated, CellWidth::Narrow, CellStyle::DEFAULT)
+            .unwrap();
+        assert_eq!(encoder.grapheme_bytes, bytes);
+        assert_eq!(encoder.graphemes.len(), 7);
+    }
+    #[test]
+    fn oversized_cluster_is_rejected_without_publishing_a_prefix_or_partial_cell() {
+        let mut encoder = FrameEncoder::new();
+        encoder.begin_row(0, RowFlags::default());
+        let text = format!("e{}", "\u{301}".repeat(MAX_GRAPHEME_BYTES));
+        assert!(encoder
+            .push_grapheme(&text, CellWidth::Narrow, CellStyle::DEFAULT)
+            .is_err());
+        encoder
+            .push_grapheme("ok", CellWidth::Narrow, CellStyle::DEFAULT)
+            .unwrap();
+        assert_eq!(encoder.row_cells, vec![CELL_GRAPHEME]);
+        assert_eq!(encoder.graphemes.len(), 1);
+        assert_eq!(&*encoder.graphemes[0], "ok");
     }
 }

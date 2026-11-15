@@ -13,6 +13,8 @@ import {
   FRAME_FLAG_FULL,
   FRAME_FLAG_SCROLLED_BACK,
   FRAME_MAGIC,
+  FRAME_FLAG_GRAPHEMES,
+  CELL_GRAPHEME,
   HEADER_BYTES,
   ROW_FLAG_WRAPPED,
   ROW_PROMPT_MASK,
@@ -52,6 +54,7 @@ export type FrameSpec = {
   cursorColor?: number;
   styles?: StyleSpec[];
   rowRecords: RowSpec[];
+  graphemes?: string[];
 };
 
 export function explicit(color: number): number {
@@ -95,6 +98,12 @@ export function encodeFrame(spec: FrameSpec): ArrayBuffer {
   for (const row of spec.rowRecords) {
     words += 2 + row.runs.length + row.cells.length;
   }
+  const graphemes =
+    spec.graphemes?.map((text) => new TextEncoder().encode(text)) ?? [];
+  if (graphemes.length)
+    words +=
+      1 +
+      graphemes.reduce((sum, text) => sum + 1 + Math.ceil(text.length / 4), 0);
   const buffer = new ArrayBuffer(words * 4);
   const u32 = new Uint32Array(buffer);
   const u16 = new Uint16Array(buffer);
@@ -104,7 +113,11 @@ export function encodeFrame(spec: FrameSpec): ArrayBuffer {
   u16[5] = spec.rows;
   u16[6] = spec.cursorX ?? 0;
   u16[7] = spec.cursorY ?? 0;
-  u16[8] = ((spec.flags ?? FRAME_FLAG_FULL) << 8) | (spec.cursorStyle ?? 1);
+  u16[8] =
+    (((spec.flags ?? FRAME_FLAG_FULL) |
+      (graphemes.length ? FRAME_FLAG_GRAPHEMES : 0)) <<
+      8) |
+    (spec.cursorStyle ?? 1);
   u16[9] = spec.rowRecords.length;
   u32[5] = spec.defaultFg ?? 0xcccccc;
   u32[6] = spec.defaultBg ?? 0x111111;
@@ -132,6 +145,15 @@ export function encodeFrame(spec: FrameSpec): ArrayBuffer {
     for (const cell of row.cells) {
       u32[word] = cell;
       word += 1;
+    }
+  }
+  if (graphemes.length) {
+    u32[word++] = graphemes.length;
+    const bytes = new Uint8Array(buffer);
+    for (const text of graphemes) {
+      u32[word++] = text.length;
+      bytes.set(text, word * 4);
+      word += Math.ceil(text.length / 4);
     }
   }
   return buffer;
@@ -189,6 +211,10 @@ export function describeFrame(frame: DecodedFrame) {
     for (let c = 0; c < row.cellCount; c++) {
       const cell = frame.u32[row.cellsAt + c];
       if (cell & CELL_SPACER_TAIL) continue;
+      if (frame.flags & FRAME_FLAG_GRAPHEMES && cell & CELL_GRAPHEME) {
+        text += frame.graphemes[cell & CELL_CODEPOINT_MASK];
+        continue;
+      }
       const cp = cell & CELL_CODEPOINT_MASK;
       text += cp === 0 ? " " : String.fromCodePoint(cp);
     }

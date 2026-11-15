@@ -104,7 +104,7 @@ Little endian. Every section starts on a 4 byte boundary and the frame length is
 | 12 | u16 | `cursor_x` |
 | 14 | u16 | `cursor_y` |
 | 16 | u8 | `cursor_style`: 0 hidden, 1 block, 2 bar, 3 underline, 4 hollow block |
-| 17 | u8 | `flags`: bit 0 full frame, bit 1 cursor blinks, bit 2 viewport is not at the bottom |
+| 17 | u8 | `flags`: bit 0 full frame, bit 1 cursor blinks, bit 2 viewport is not at the bottom, bit 3 grapheme table follows rows |
 | 18 | u16 | `row_count`, number of row records |
 | 20 | u32 | `default_fg` |
 | 24 | u32 | `default_bg` |
@@ -135,9 +135,17 @@ Entry 0 is always the default style (all zero). The table is per frame; ids are 
 | u16 | `cell_count`, cells encoded from column 0. Columns from `cell_count` to `cols - 1` are empty cells in the default style |
 | u16 | `row_flags`: bit 0 soft wrapped; bits 1 to 2 semantic prompt: 0 none, 1 prompt, 2 continuation |
 | `run_count` x (u16 `style_id`, u16 `len`) | style runs, lengths sum to `cell_count` |
-| `cell_count` x u32 | cells: bits 0 to 20 codepoint (0 is an empty cell), bit 30 spacer tail of a wide cell, bit 31 wide cell head. Bit 29 is reserved for the grapheme side table |
+| `cell_count` x u32 | cells: bits 0 to 20 codepoint (0 is empty), or frame-local table index when bit 29 is set; bit 30 spacer tail, bit 31 wide head |
 
-Trailing cells that are empty and in the default style are not encoded. Rows appear in increasing `y`. A multi-codepoint grapheme sends its first codepoint only in v1.
+Trailing cells that are empty and in the default style are not encoded. Rows appear in increasing `y`. Simple scalar frames remain byte-for-byte identical to the original v1 format.
+
+When header flag bit 3 is set, rows are followed by a frame-local UTF-8 grapheme table: u32 entry count, then each entry as u32 byte length, exact UTF-8 bytes and zero padding to four-byte alignment. Cell bit 29 selects a table entry using bits 0 to 20; the native wide-head bit remains independent. Spacer tails cannot reference text. The decoder rejects a tag without its table flag, invalid indices, truncated/oversized entries, invalid UTF-8, nonzero padding and entries with fewer than two scalars. Leading U+FEFF is preserved, with no normalization. Bounds are 250000 entries, 1 MiB per entry and 8 MiB for the complete table including lengths/padding. Encoding over a limit fails explicitly rather than publishing a prefix.
+
+Snapshotter reads the complete cluster, including the base scalar, from the pinned render-cell graphemes_utf8 API. IDs belong only to that frame. The renderer resolves text before discarding the frame and keys the atlas by full cluster, face and native width, never by frame-local ID. The GPU grid retains only glyph slots and colors; bounded glyph keys are not a JS terminal-history cache. Optional table strings are decoded once per unique entry, while row/style views still alias the received buffer.
+
+The extended renderer has an 8 MiB bound for retained UTF-16 cluster keys in addition to existing mono/color texture bounds. Capacity exhaustion never silently returns an empty glyph. One automatic cache reset is allowed per participating visible pane within a recovery epoch; the epoch renews only after all visible panes rebuild full frames. A working set that still cannot fit blocks the affected view with a visible error. Credits and native terminal state continue, presented geometry is invalidated, and blocked views do not request endless full frames. Explicit Redraw or a font/DPR rebuild starts a new attempt. Hidden panes do no glyph work, retain a full-rebuild requirement and reconstruct when shown; they cannot participate in a hidden retry cycle.
+
+Both producer and decoder ship in the same application build. Legacy decoders reject the optional table as trailing bytes; do not mix old assets with an extended producer.
 
 ## Webview layout
 

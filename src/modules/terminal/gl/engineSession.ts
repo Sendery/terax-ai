@@ -1,3 +1,4 @@
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
   blockActionSelects,
   decodeNativeBlockAction,
@@ -247,7 +248,10 @@ export class EngineSession {
     this.size = size;
     this.isBench = isBench;
     this.renderPane = renderer.addPane({
-      onNeedFullFrame: () => this.requestFull(),
+      onNeedFullFrame: () => {
+        this.invalidatePresented();
+        this.requestFull();
+      },
       onDrawn: (rendered) => this.handleDrawn(rendered),
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
@@ -375,7 +379,10 @@ export class EngineSession {
     let pane: RenderPane;
     try {
       pane = renderer.addPane({
-        onNeedFullFrame: () => this.requestFull(),
+        onNeedFullFrame: () => {
+          this.invalidatePresented();
+          this.requestFull();
+        },
         onDrawn: (rendered) => this.handleDrawn(rendered),
       });
     } catch (error) {
@@ -403,6 +410,13 @@ export class EngineSession {
     return this.size;
   }
 
+  private invalidatePresented(): void {
+    this.latestAppliedSeq = null;
+    this.lastDrawnSeq = null;
+    this.latestAppliedSize = null;
+    this.lastDrawnSize = null;
+  }
+
   private receive(buffer: ArrayBuffer): void {
     if (this.closed || this.failed) return;
     const receivedAt = performance.now();
@@ -419,24 +433,29 @@ export class EngineSession {
       ? performance.now()
       : receivedAt;
     let applied = false;
+    let capacityBlocked = false;
     if (frame) {
       if (frame.full) this.fullRequested = false;
       try {
-        applied = this.renderer.applyFrame(this.pane, frame) === "applied";
+        const result = this.renderer.applyFrame(this.pane, frame);
+        applied = result === "applied";
+        capacityBlocked = result === "blocked";
         if (applied) {
           this.latestAppliedSeq = seq;
           this.latestAppliedSize = { cols: frame.cols, rows: frame.rows };
         }
       } catch (error) {
+        capacityBlocked = error instanceof RenderCapacityError;
         this.observer.onError?.(error);
       }
     }
     const readyAt = this.observer.onFrameTiming ? performance.now() : decodedAt;
     this.awaitingDraw.push(seq);
     if (!applied) {
-      // The frame still holds the session's only credit: it goes back after
-      // the next display frame like any other, and a full frame follows.
-      this.requestFull();
+      // Return credit after a display turn. Blocked capacity awaits explicit
+      // recovery instead of scheduling another full frame.
+      this.invalidatePresented();
+      if (!capacityBlocked) this.requestFull();
       this.renderer.markUndrawn(this.pane);
     }
     this.observer.onFrame?.({
@@ -530,7 +549,8 @@ export class EngineSession {
     if (!this.closed) this.observer.onError?.(error);
   };
 
-  requestFull(): void {
+  requestFull(retryCapacity = false): void {
+    if (retryCapacity) this.renderer.retryCapacity?.();
     const id = this.id;
     if (id === null || this.closed || this.failed || this.fullRequested) return;
     this.fullRequested = true;

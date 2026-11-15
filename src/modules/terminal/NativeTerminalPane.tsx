@@ -1,3 +1,7 @@
+import {
+  RenderCapacityError,
+  RENDER_CAPACITY_MESSAGE,
+} from "@/modules/terminal/gl/renderCapacity";
 import { NativeBlockView } from "@/modules/terminal/gl/nativeBlockView";
 import { BlockOverlay } from "@/modules/terminal/block/BlockOverlay";
 import { BlockWatermark } from "@/modules/terminal/block/BlockWatermark";
@@ -62,6 +66,7 @@ export const NativeTerminalPane = forwardRef<
   const preClickSelection = useRef<string | null>(null);
   const replayContextMenu = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const capacityError = useRef(false);
   const [blocksView, setBlocksView] = useState<{
     view: NativeBlockView;
     session: EngineSession;
@@ -87,10 +92,13 @@ export const NativeTerminalPane = forwardRef<
     let blockView: NativeBlockView | null = null;
     let layoutFrame = 0;
     const report = (cause: unknown) => {
+      if (!disposed && cause instanceof RenderCapacityError)
+        capacityError.current = true;
       if (!disposed)
         setError(cause instanceof Error ? cause.message : String(cause));
     };
     setError(null);
+    capacityError.current = false;
     const initialBox = element.getBoundingClientRect();
     const rootBox = model.root.current?.getBoundingClientRect() ?? initialBox;
     const initial =
@@ -251,6 +259,12 @@ export const NativeTerminalPane = forwardRef<
           linkBinding?.onFrame(frame);
         },
         onDrawn: (seq) => {
+          if (seq !== null && capacityError.current) {
+            capacityError.current = false;
+            setError((value) =>
+              value === RENDER_CAPACITY_MESSAGE ? null : value,
+            );
+          }
           linkBinding?.onDrawn();
           blockView?.present(seq);
         },

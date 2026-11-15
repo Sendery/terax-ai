@@ -6,6 +6,11 @@ const ROW_HEADER_BYTES = 8;
 export const FRAME_FLAG_FULL = 1;
 export const FRAME_FLAG_CURSOR_BLINK = 2;
 export const FRAME_FLAG_SCROLLED_BACK = 4;
+export const FRAME_FLAG_GRAPHEMES = 8;
+export const CELL_GRAPHEME = 1 << 29;
+export const MAX_GRAPHEME_BYTES = 1024 * 1024;
+export const MAX_GRAPHEME_TABLE_BYTES = 8 * 1024 * 1024;
+export const MAX_GRAPHEMES = 500 * 500;
 
 export const CURSOR_HIDDEN = 0;
 export const CURSOR_BLOCK = 1;
@@ -43,6 +48,7 @@ export type FrameErrorCode =
   | "bad-header"
   | "bad-style-table"
   | "bad-row"
+  | "bad-graphemes"
   | "trailing-bytes";
 
 export class FrameDecodeError extends Error {
@@ -57,7 +63,8 @@ export class FrameDecodeError extends Error {
 
 /**
  * A validated frame. Every field past the header is read lazily through the
- * typed views, which alias the received buffer: nothing is copied.
+ * typed views, which alias the received buffer. Optional grapheme strings are
+ * decoded once per unique frame-local entry.
  */
 export type DecodedFrame = {
   readonly byteLength: number;
@@ -78,6 +85,7 @@ export type DecodedFrame = {
   readonly styleWord: number;
   /** u32 index of each row record, in frame order. */
   readonly rowWords: Uint32Array;
+  readonly graphemes: readonly string[];
   readonly u16: Uint16Array;
   readonly u32: Uint32Array;
 };
@@ -98,6 +106,8 @@ export function createRowView(): RowView {
   return { y: 0, runCount: 0, cellCount: 0, flags: 0, runsAt: 0, cellsAt: 0 };
 }
 
+const EMPTY_GRAPHEMES: readonly string[] = [];
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const IS_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 export function decodeFrame(
@@ -186,6 +196,7 @@ export function decodeFrame(
 
   const rowWords = new Uint32Array(rowCount);
   let previousY = -1;
+  let maxGrapheme = -1;
   for (let i = 0; i < rowCount; i++) {
     if (word + ROW_HEADER_BYTES / 4 > totalWords) {
       throw new FrameDecodeError("truncated", `row ${i} header`);
@@ -226,9 +237,84 @@ export function decodeFrame(
         `row ${y} runs cover ${covered} of ${cellCount} cells`,
       );
     }
+    for (let cell = cellsWord; cell < end; cell++) {
+      const value = u32[cell];
+      if (value & CELL_GRAPHEME) {
+        if (!(flags & FRAME_FLAG_GRAPHEMES) || value & CELL_SPACER_TAIL)
+          throw new FrameDecodeError(
+            "bad-graphemes",
+            "invalid grapheme cell tag",
+          );
+        maxGrapheme = Math.max(maxGrapheme, value & CELL_CODEPOINT_MASK);
+      }
+    }
     rowWords[i] = word;
     previousY = y;
     word = end;
+  }
+  let graphemes = EMPTY_GRAPHEMES;
+  if (flags & FRAME_FLAG_GRAPHEMES) {
+    const tableStart = word;
+    if (
+      word >= totalWords ||
+      (totalWords - word) * 4 > MAX_GRAPHEME_TABLE_BYTES
+    )
+      throw new FrameDecodeError(
+        "bad-graphemes",
+        "invalid grapheme table extent",
+      );
+    const count = u32[word++];
+    if (
+      count < 1 ||
+      count > MAX_GRAPHEMES ||
+      maxGrapheme < 0 ||
+      maxGrapheme >= count ||
+      count > (totalWords - word) / 2
+    )
+      throw new FrameDecodeError(
+        "bad-graphemes",
+        "invalid grapheme references",
+      );
+    const decoded: string[] = [];
+    const bytes = new Uint8Array(buffer, byteOffset, byteLength);
+    for (let index = 0; index < count; index++) {
+      if (word >= totalWords)
+        throw new FrameDecodeError("bad-graphemes", "missing grapheme length");
+      const length = u32[word++];
+      const words = Math.ceil(length / 4);
+      if (
+        length < 2 ||
+        length > MAX_GRAPHEME_BYTES ||
+        words > totalWords - word
+      )
+        throw new FrameDecodeError("bad-graphemes", "invalid grapheme length");
+      let text: string;
+      try {
+        text = UTF8.decode(bytes.subarray(word * 4, word * 4 + length));
+      } catch {
+        throw new FrameDecodeError("bad-graphemes", "invalid grapheme UTF-8");
+      }
+      if (text.length <= ((text.codePointAt(0) ?? 0) > 0xffff ? 2 : 1))
+        throw new FrameDecodeError(
+          "bad-graphemes",
+          "grapheme must contain multiple scalars",
+        );
+      for (let pad = length; pad < words * 4; pad++) {
+        if (bytes[word * 4 + pad] !== 0)
+          throw new FrameDecodeError(
+            "bad-graphemes",
+            "nonzero grapheme padding",
+          );
+      }
+      decoded.push(text);
+      word += words;
+    }
+    if ((word - tableStart) * 4 > MAX_GRAPHEME_TABLE_BYTES)
+      throw new FrameDecodeError(
+        "bad-graphemes",
+        "grapheme table exceeds its limit",
+      );
+    graphemes = decoded;
   }
   if (word !== totalWords) {
     throw new FrameDecodeError(
@@ -254,9 +340,19 @@ export function decodeFrame(
     styleCount,
     styleWord,
     rowWords,
+    graphemes,
     u16,
     u32,
   };
+}
+
+export function cellGrapheme(
+  frame: DecodedFrame,
+  value: number,
+): string | undefined {
+  return frame.flags & FRAME_FLAG_GRAPHEMES && value & CELL_GRAPHEME
+    ? frame.graphemes[value & CELL_CODEPOINT_MASK]
+    : undefined;
 }
 
 export function readRow(

@@ -14,6 +14,7 @@ import {
   COLOR_EXPLICIT,
   COLOR_MASK,
   createRowView,
+  cellGrapheme,
   type DecodedFrame,
   readRow,
   styleWordOf,
@@ -46,11 +47,11 @@ export const FONT_ITALIC = 2;
 const REPLACEMENT = 0xfffd;
 
 /**
- * Resolves a codepoint to the glyph bits of an instance: the slot plus
+ * Resolves a scalar or full grapheme to the glyph bits of an instance: the slot plus
  * `GLYPH_COLOR` when the glyph lives on the colour page. 0 draws nothing.
  */
 export type GlyphLookup = (
-  codepoint: number,
+  codepoint: number | string,
   font: number,
   wide: boolean,
 ) => number;
@@ -61,7 +62,7 @@ export type CellGrid = {
   cells: Uint32Array;
 };
 
-export type ApplyResult = "applied" | "needs-full";
+export type ApplyResult = "applied" | "needs-full" | "blocked";
 
 function createGrid(cols: number, rows: number): CellGrid {
   return { cols, rows, cells: new Uint32Array(cols * rows * CELL_WORDS) };
@@ -205,7 +206,14 @@ export function applyFrame(
         } else {
           const isWide = (value & CELL_WIDE_HEAD) !== 0;
           const cp = value & CELL_CODEPOINT_MASK;
-          bits = cp > 32 && !invisible ? glyph(sanitize(cp), font, isWide) : 0;
+          const cluster = cellGrapheme(frame, value);
+          bits = invisible
+            ? 0
+            : cluster !== undefined
+              ? glyph(cluster, font, isWide)
+              : cp > 32
+                ? glyph(sanitize(cp), font, isWide)
+                : 0;
           if (isWide) bits |= GLYPH_WIDE;
         }
         cells[dst] = (bits & ~DECORATION_MASK) | decorations;

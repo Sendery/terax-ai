@@ -1,6 +1,7 @@
 import { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
 import {
   CELL_CODEPOINT_MASK,
+  cellGrapheme,
   createRowView,
   readRow,
   type DecodedFrame,
@@ -165,7 +166,7 @@ export class NativeLeafSession implements NativeLeaf {
     if (!this.blockInput?.focus()) this.view?.focus();
   }
   repaint(): void {
-    this.native?.requestFull();
+    this.native?.requestFull(true);
   }
 
   async navigateBlocks(direction: -1 | 1): Promise<void> {
@@ -365,9 +366,12 @@ export class NativeLeafSession implements NativeLeaf {
                 outer: for (let index = 0; index < frame.rowCount; index++) {
                   readRow(frame, index, row);
                   for (let col = 0; col < row.cellCount; col++) {
-                    const value =
-                      frame.u32[row.cellsAt + col] & CELL_CODEPOINT_MASK;
-                    if (value !== 0 && value !== 32) {
+                    const cell = frame.u32[row.cellsAt + col];
+                    const value = cell & CELL_CODEPOINT_MASK;
+                    if (
+                      cellGrapheme(frame, cell) !== undefined ||
+                      (value !== 0 && value !== 32)
+                    ) {
                       this.blockInput.markContent();
                       break outer;
                     }

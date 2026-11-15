@@ -1,3 +1,4 @@
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
   FONT_BOLD,
   FONT_ITALIC,
@@ -23,6 +24,7 @@ const ATLAS_PAGE_PX = 1024;
 const MAX_MONO_PAGES = 16;
 const MAX_COLOR_PAGES = 4;
 const CHROMA_THRESHOLD = 24;
+const MAX_CLUSTER_KEY_BYTES = 8 * 1024 * 1024;
 
 /**
  * Hands out cell-sized slots on fixed-size pages, row-major. A wide glyph
@@ -154,12 +156,13 @@ class PageSet {
  */
 export class GlyphAtlas {
   metrics: CellMetrics;
-  /** Set when a glyph found no room; the owner resets and asks for full frames. */
+  /** The owner bounds reset attempts and reports an active set that cannot fit. */
   exhausted = false;
   private font: AtlasFont;
   private mono: PageSet;
   private color: PageSet;
-  private slots = new Map<number, number>();
+  private slots = new Map<number | string, number>();
+  private clusterKeyBytes = 0;
   private scratch: CanvasRenderingContext2D;
   private placeholder: WebGLTexture | null = null;
 
@@ -193,6 +196,7 @@ export class GlyphAtlas {
     this.mono = new PageSet(1, this.metrics, MAX_MONO_PAGES);
     this.color = new PageSet(4, this.metrics, MAX_COLOR_PAGES);
     this.slots.clear();
+    this.clusterKeyBytes = 0;
     this.exhausted = false;
     this.sizeScratch();
   }
@@ -202,24 +206,33 @@ export class GlyphAtlas {
     this.mono.clear();
     this.color.clear();
     this.slots.clear();
+    this.clusterKeyBytes = 0;
     this.exhausted = false;
   }
 
   readonly lookup = (
-    codepoint: number,
+    codepoint: number | string,
     face: number,
     wide: boolean,
   ): number => {
-    const key = codepoint + face * 0x200000 + (wide ? 0x800000 : 0);
+    const key = typeof codepoint === "number"
+      ? codepoint + face * 0x200000 + (wide ? 0x800000 : 0)
+      : `${face}:${wide ? 1 : 0}:${codepoint}`;
     const known = this.slots.get(key);
     if (known !== undefined) return known;
-    if (this.exhausted) return 0;
+    if (this.exhausted) throw new RenderCapacityError();
+    const keyBytes = typeof key === "string" ? key.length * 2 : 0;
+    if (this.clusterKeyBytes + keyBytes > MAX_CLUSTER_KEY_BYTES) {
+      this.exhausted = true;
+      throw new RenderCapacityError();
+    }
     const bits = this.rasterize(codepoint, face, wide);
     if (bits < 0) {
       this.exhausted = true;
-      return 0;
+      throw new RenderCapacityError();
     }
     this.slots.set(key, bits);
+    this.clusterKeyBytes += keyBytes;
     return bits;
   };
 
@@ -229,7 +242,11 @@ export class GlyphAtlas {
     canvas.height = this.metrics.height;
   }
 
-  private rasterize(codepoint: number, face: number, wide: boolean): number {
+  private rasterize(
+    codepoint: number | string,
+    face: number,
+    wide: boolean,
+  ): number {
     const span = wide ? 2 : 1;
     const { width, height, baseline } = this.metrics;
     const w = width * span;
@@ -242,7 +259,13 @@ export class GlyphAtlas {
     ctx.font = fontString(this.font, face);
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "#fff";
-    ctx.fillText(String.fromCodePoint(codepoint), 0, baseline);
+    ctx.fillText(
+      typeof codepoint === "string"
+        ? codepoint
+        : String.fromCodePoint(codepoint),
+      0,
+      baseline,
+    );
     ctx.restore();
     const rgba = ctx.getImageData(0, 0, w, height).data;
     const colored = isColorGlyph(rgba);
@@ -377,6 +400,7 @@ export class GlyphAtlas {
     this.mono.clear();
     this.color.clear();
     this.slots.clear();
+    this.clusterKeyBytes = 0;
   }
 
   get textureBytes(): number {

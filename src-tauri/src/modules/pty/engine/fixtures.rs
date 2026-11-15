@@ -12,8 +12,9 @@ use serde::Serialize;
 use super::frame::decode::{decode, Frame};
 use super::frame::{
     CellStyle, ATTR_BLINK, ATTR_BOLD, ATTR_FAINT, ATTR_INVERSE, ATTR_INVISIBLE, ATTR_ITALIC,
-    ATTR_OVERLINE, ATTR_STRIKETHROUGH, CELL_SPACER_TAIL, CELL_WIDE_HEAD, CODEPOINT_MASK, COLOR_SET,
-    FLAG_CURSOR_BLINK, FLAG_FULL, FLAG_VIEWPORT_SCROLLED, NO_CURSOR_COLOR,
+    ATTR_OVERLINE, ATTR_STRIKETHROUGH, CELL_GRAPHEME, CELL_SPACER_TAIL, CELL_WIDE_HEAD,
+    CODEPOINT_MASK, COLOR_SET, FLAG_CURSOR_BLINK, FLAG_FULL, FLAG_VIEWPORT_SCROLLED,
+    NO_CURSOR_COLOR,
 };
 use super::snapshot::Snapshotter;
 
@@ -288,12 +289,9 @@ fn wide_and_combining() {
     assert_eq!(row0.cells[0], 0x4e2d | CELL_WIDE_HEAD);
     assert_eq!(row0.cells[1], CELL_SPACER_TAIL);
     let row1 = f.row(1).unwrap();
-    assert_eq!(
-        row1.cells[0] & CODEPOINT_MASK,
-        u32::from('e'),
-        "first codepoint only"
-    );
-    assert_eq!(row1.text(), "ex \u{1f680}!");
+    assert_ne!(row1.cells[0] & CELL_GRAPHEME, 0);
+    assert_eq!(&frame_cluster(&f, row1.cells[0]), "e\u{301}");
+    assert_eq!(row1.text(), "e\u{301}x \u{1f680}!");
     let row2 = f.row(2).unwrap();
     assert_eq!(
         row2.flags & 1,
@@ -437,4 +435,29 @@ fn full_frame_encode_time() {
         let micros = started.elapsed().as_secs_f64() * 1e6 / f64::from(REPS);
         println!("full 200x60 frame, {kind:?}: {micros:.1} us, {len} bytes");
     }
+}
+
+fn frame_cluster(frame: &Frame, cell: u32) -> String {
+    frame.graphemes[(cell & CODEPOINT_MASK) as usize].clone()
+}
+#[test]
+fn full_grapheme_frame_fixtures() {
+    let mut term = terminal(30, 3);
+    let mut snapshot = Snapshotter::new().unwrap();
+    term.vt_write(
+        "e\u{301} e\u{300} \u{1f469}\u{200d}\u{1f4bb} \u{1f44d}\u{1f3fd} \u{1f1ea}\u{1f1f8}"
+            .as_bytes(),
+    );
+    let full = check("graphemes-full", &frame_of(&term, &mut snapshot, 1, true));
+    assert_eq!(
+        full.row(0).unwrap().text(),
+        "e\u{301} e\u{300} \u{1f469}\u{200d}\u{1f4bb} \u{1f44d}\u{1f3fd} \u{1f1ea}\u{1f1f8}"
+    );
+    term.vt_write("\r\x1b[2Ke\u{308}".as_bytes());
+    let partial = check(
+        "graphemes-partial",
+        &frame_of(&term, &mut snapshot, 2, false),
+    );
+    assert!(!partial.full());
+    assert_eq!(partial.row(0).unwrap().text(), "e\u{308}");
 }

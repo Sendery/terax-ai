@@ -3,6 +3,10 @@ import {
   ATTR_UNDERLINE_SHIFT,
   CURSOR_BAR,
   createRowView,
+  CELL_GRAPHEME,
+  MAX_GRAPHEMES,
+  MAX_GRAPHEME_BYTES,
+  MAX_GRAPHEME_TABLE_BYTES,
   decodeFrame,
   FRAME_FLAG_CURSOR_BLINK,
   FRAME_FLAG_FULL,
@@ -350,4 +354,76 @@ it("rejects invalid frame regions with codec errors before constructing typed vi
   ]) {
     expect(() => decodeFrame(buffer, offset, length)).toThrow(FrameDecodeError);
   }
+});
+
+describe("frame-local full graphemes", () => {
+  const spec = (): FrameSpec => ({
+    cols: 1,
+    rows: 1,
+    styles: [{}],
+    rowRecords: [{ y: 0, runs: [[0, 1]], cells: [CELL_GRAPHEME] }],
+    graphemes: ["e\u0301"],
+  });
+  it("decodes exact UTF-8 including leading BOM and reuses only frame-local indices", () => {
+    const first = decodeFrame(encodeFrame(spec()));
+    expect(first.graphemes).toEqual(["e\u0301"]);
+    expect(
+      decodeFrame(encodeFrame({ ...spec(), graphemes: ["e\u0300"] })).graphemes,
+    ).toEqual(["e\u0300"]);
+    expect(
+      decodeFrame(encodeFrame({ ...spec(), graphemes: ["\ufeff\u0301"] }))
+        .graphemes,
+    ).toEqual(["\ufeff\u0301"]);
+    expect(decodeFrame(encodeFrame(base())).graphemes).toEqual([]);
+  });
+  it("rejects a table exceeding its total byte budget before decoding strings", () => {
+    const valid = encodeFrame(spec());
+    const oversized = new Uint8Array(
+      valid.byteLength + MAX_GRAPHEME_TABLE_BYTES,
+    );
+    oversized.set(new Uint8Array(valid));
+    expectError(oversized.buffer, "bad-graphemes");
+  });
+  it("rejects a grapheme cell tag without the required table flag", () => {
+    const value = spec();
+    delete value.graphemes;
+    expectError(encodeFrame(value), "bad-graphemes");
+  });
+  it("rejects invalid lengths, IDs, UTF-8, scalar count and nonzero alignment padding", () => {
+    const mutations: Array<(buffer: ArrayBuffer) => void> = [
+      (buffer) =>
+        new DataView(buffer).setUint32(buffer.byteLength - 12, 0, true),
+      (buffer) =>
+        new DataView(buffer).setUint32(
+          buffer.byteLength - 12,
+          MAX_GRAPHEMES + 1,
+          true,
+        ),
+      (buffer) =>
+        new DataView(buffer).setUint32(
+          buffer.byteLength - 8,
+          MAX_GRAPHEME_BYTES + 1,
+          true,
+        ),
+      (buffer) => {
+        new Uint8Array(buffer)[buffer.byteLength - 4] = 0xff;
+      },
+      (buffer) => {
+        new Uint8Array(buffer)[buffer.byteLength - 1] = 1;
+      },
+    ];
+    for (const mutate of mutations) {
+      const buffer = encodeFrame(spec());
+      mutate(buffer);
+      expectError(buffer, "bad-graphemes");
+    }
+    const value = spec();
+    value.rowRecords[0].cells[0] = CELL_GRAPHEME | 1;
+    expectError(encodeFrame(value), "bad-graphemes");
+    value.rowRecords[0].cells[0] = CELL_GRAPHEME | TAIL;
+    expectError(encodeFrame(value), "bad-graphemes");
+    expectError(encodeFrame({ ...spec(), graphemes: ["e"] }), "bad-graphemes");
+    const valid = encodeFrame(spec());
+    expectError(valid.slice(0, valid.byteLength - 4), "bad-graphemes");
+  });
 });

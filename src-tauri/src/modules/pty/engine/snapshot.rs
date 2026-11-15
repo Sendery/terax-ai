@@ -2,7 +2,7 @@
 //! iterators, so it lives on the engine thread with the terminal.
 
 use libghostty_vt::render::{CellIterator, CursorVisualStyle, Dirty, RowIterator};
-use libghostty_vt::screen::{CellWide, RowSemanticPrompt};
+use libghostty_vt::screen::{CellContentTag, CellWide, RowSemanticPrompt};
 use libghostty_vt::style::{Id as StyleId, RgbColor, StyleColor, Underline};
 use libghostty_vt::{RenderState, Terminal};
 
@@ -19,6 +19,7 @@ pub struct Snapshotter {
     encoder: FrameEncoder,
     links: super::links::LinkCache,
     link_scratch: super::links::LinkScratch,
+    grapheme_scratch: String,
 }
 
 fn pack(c: RgbColor) -> u32 {
@@ -58,6 +59,7 @@ impl Snapshotter {
             encoder: FrameEncoder::new(),
             links: super::links::LinkCache::default(),
             link_scratch: super::links::LinkScratch::default(),
+            grapheme_scratch: String::new(),
         })
     }
 
@@ -217,7 +219,24 @@ impl Snapshotter {
                     if selected_row && cell.is_selected()? {
                         style.attrs ^= ATTR_INVERSE;
                     }
-                    encoder.push_cell(codepoint, width, style);
+                    if has_link_graphemes
+                        && raw_cell.content_tag()? == CellContentTag::CodepointGrapheme
+                        && width != CellWidth::SpacerTail
+                    {
+                        let count = cell.graphemes_len()?;
+                        if count > super::frame::MAX_GRAPHEME_BYTES {
+                            return Err(libghostty_vt::Error::OutOfSpace { required: count });
+                        }
+                        self.grapheme_scratch.clear();
+                        cell.graphemes_utf8(&mut self.grapheme_scratch)?;
+                        encoder
+                            .push_grapheme(&self.grapheme_scratch, width, style)
+                            .map_err(|limit| libghostty_vt::Error::OutOfSpace {
+                                required: limit.required,
+                            })?;
+                    } else {
+                        encoder.push_cell(codepoint, width, style);
+                    }
                     x += 1;
                 }
                 encoder.end_row();
@@ -264,4 +283,33 @@ fn resolve_style(
     };
     style.set_underline(underline_kind(s.underline));
     Ok(style)
+}
+
+#[cfg(test)]
+mod grapheme_tests {
+    use super::*;
+    use crate::modules::pty::engine::frame::{decode, CELL_SPACER_TAIL, CELL_WIDE_HEAD};
+    use libghostty_vt::TerminalOptions;
+    #[test]
+    fn actual_native_cells_preserve_combining_marks_zwj_and_frame_local_replacements() {
+        let mut term = Terminal::new(TerminalOptions {
+            cols: 20,
+            rows: 3,
+            max_scrollback: 0,
+        })
+        .unwrap();
+        let mut snapshot = Snapshotter::new().unwrap();
+        term.vt_write("e\u{301}e\u{300}\u{1f469}\u{200d}\u{1f4bb}".as_bytes());
+        let frame = decode::decode(snapshot.build(&term, 1, true).unwrap().unwrap());
+        assert_eq!(
+            frame.row(0).unwrap().text(),
+            "e\u{301}e\u{300}\u{1f469}\u{200d}\u{1f4bb}"
+        );
+        assert_ne!(frame.row(0).unwrap().cells[2] & CELL_WIDE_HEAD, 0);
+        assert_ne!(frame.row(0).unwrap().cells[3] & CELL_SPACER_TAIL, 0);
+        term.vt_write("\r\x1b[2Ke\u{308}".as_bytes());
+        let changed = decode::decode(snapshot.build(&term, 2, false).unwrap().unwrap());
+        assert_eq!(changed.row(0).unwrap().text(), "e\u{308}");
+        assert_eq!(&*changed.graphemes, &["e\u{308}"]);
+    }
 }

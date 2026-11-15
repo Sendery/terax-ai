@@ -1,3 +1,6 @@
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
+import { decodeFrame } from "@/modules/terminal/gl/frameCodec";
+import { encodeFrame, textRow } from "@/modules/terminal/gl/frameCodec.testing";
 import {
   GridRenderer,
   type RenderPane,
@@ -168,4 +171,75 @@ it("snapshots only the requested live pane rectangle after a synchronous redraw"
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+function capacityRenderer() {
+  const a = pane({ x: 0, y: 0, width: 40, height: 40 });
+  const b = pane({ x: 40, y: 0, width: 40, height: 40 });
+  const lookup = vi.fn((): number => {
+    throw new RenderCapacityError();
+  });
+  const reset = vi.fn();
+  const renderer = Object.assign(Object.create(GridRenderer.prototype), {
+    panes: [a, b],
+    atlas: { lookup, reset },
+    lost: true,
+    disposed: false,
+    stats: { atlasResets: 0 },
+    updateBlink: vi.fn(),
+    requestDraw: vi.fn(),
+  }) as GridRenderer;
+  const frame = decodeFrame(
+    encodeFrame({ cols: 1, rows: 1, rowRecords: [textRow(0, "x")] }),
+  );
+  return { renderer, a, b, frame, lookup, reset };
+}
+it("bounds shared-capacity recovery and rejects invisible partial grids until explicit retry", () => {
+  const { renderer, a, b, frame, lookup, reset } = capacityRenderer();
+  expect(renderer.applyFrame(a, frame)).toBe("needs-full");
+  expect(renderer.applyFrame(b, frame)).toBe("needs-full");
+  expect(() => renderer.applyFrame(a, frame)).toThrow(RenderCapacityError);
+  expect(a.grid).toBeNull();
+  expect(a.header).toBeNull();
+  expect(() => renderer.applyFrame(b, frame)).toThrow(RenderCapacityError);
+  const attempts = lookup.mock.calls.length;
+  expect(renderer.applyFrame(a, frame)).toBe("blocked");
+  expect(renderer.applyFrame(b, frame)).toBe("blocked");
+  expect(lookup).toHaveBeenCalledTimes(attempts);
+  expect(reset).toHaveBeenCalledTimes(2);
+  renderer.retryCapacity();
+  lookup.mockReturnValue(1);
+  expect(renderer.applyFrame(a, frame)).toBe("applied");
+  expect(renderer.applyFrame(b, frame)).toBe("applied");
+});
+it("allows later cache recovery only after every visible pane has rebuilt successfully", () => {
+  const { renderer, a, b, frame, lookup, reset } = capacityRenderer();
+  expect(renderer.applyFrame(a, frame)).toBe("needs-full");
+  lookup.mockReturnValue(1);
+  expect(renderer.applyFrame(a, frame)).toBe("applied");
+  expect(renderer.applyFrame(b, frame)).toBe("applied");
+  lookup.mockImplementation(() => {
+    throw new RenderCapacityError();
+  });
+  expect(renderer.applyFrame(a, frame)).toBe("needs-full");
+  expect(reset).toHaveBeenCalledTimes(2);
+});
+
+it("defers hidden panes without atlas work and requests a complete frame on reveal", () => {
+  const { renderer, a, b, frame, lookup, reset } = capacityRenderer();
+  renderer.setPaneRect(b, { x: 40, y: 0, width: 0, height: 40 });
+  expect(renderer.applyFrame(b, frame)).toBe("needs-full");
+  expect(lookup).not.toHaveBeenCalled();
+  expect(b.grid).toBeNull();
+  expect(renderer.applyFrame(a, frame)).toBe("needs-full");
+  expect(b.callbacks.onNeedFullFrame).not.toHaveBeenCalled();
+  lookup.mockReturnValue(1);
+  expect(renderer.applyFrame(a, frame)).toBe("applied");
+  expect(renderer.applyFrame(b, frame)).toBe("needs-full");
+  expect(reset).toHaveBeenCalledOnce();
+  const before = lookup.mock.calls.length;
+  renderer.setPaneRect(b, { x: 40, y: 0, width: 40, height: 40 });
+  expect(b.callbacks.onNeedFullFrame).toHaveBeenCalledOnce();
+  expect(renderer.applyFrame(b, frame)).toBe("applied");
+  expect(lookup).toHaveBeenCalledTimes(before + 1);
 });

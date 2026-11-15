@@ -21,6 +21,7 @@ import {
   ATTR_STRIKETHROUGH,
   ATTR_UNDERLINE_SHIFT,
   decodeFrame,
+  CELL_GRAPHEME,
   FRAME_FLAG_FULL,
 } from "@/modules/terminal/gl/frameCodec";
 import {
@@ -36,7 +37,7 @@ import { describe, expect, it } from "vitest";
 const FG = 0x00c0c0c0;
 const BG = 0x00101010;
 
-type Lookup = { cp: number; font: number; wide: boolean };
+type Lookup = { cp: number | string; font: number; wide: boolean };
 
 function recordingLookup(): { lookup: GlyphLookup; calls: Lookup[] } {
   const calls: Lookup[] = [];
@@ -44,7 +45,11 @@ function recordingLookup(): { lookup: GlyphLookup; calls: Lookup[] } {
     calls,
     lookup: (cp, font, isWide) => {
       calls.push({ cp, font, wide: isWide });
-      return cp === 0x1f600 ? 900 | GLYPH_COLOR : cp;
+      return typeof cp === "string"
+        ? 700
+        : cp === 0x1f600
+          ? 900 | GLYPH_COLOR
+          : cp;
     },
   };
 }
@@ -307,5 +312,45 @@ describe("applyFrame", () => {
     });
     expect(cell(g, 1, 0).skip).toBe(true);
     expect(cell(g, 2, 0).slot).toBe(0);
+  });
+});
+
+it("uses complete cluster text across full and partial frames without retaining frame IDs", () => {
+  const { lookup, calls } = recordingLookup();
+  const first = frame({
+    cols: 4,
+    rows: 1,
+    graphemes: ["e\u0301", "\u{1f469}\u200d\u{1f4bb}", " \u0301"],
+    rowRecords: [
+      {
+        y: 0,
+        runs: [[0, 4]],
+        cells: [
+          CELL_GRAPHEME,
+          CELL_GRAPHEME | 1 | 0x80000000,
+          TAIL,
+          CELL_GRAPHEME | 2,
+        ],
+      },
+    ],
+  });
+  const initial = applyFrame(null, first, lookup);
+  expect(calls).toEqual([
+    { cp: "e\u0301", font: 0, wide: false },
+    { cp: "\u{1f469}\u200d\u{1f4bb}", font: 0, wide: true },
+    { cp: " \u0301", font: 0, wide: false },
+  ]);
+  const partial = frame({
+    cols: 4,
+    rows: 1,
+    flags: 0,
+    graphemes: ["e\u0300"],
+    rowRecords: [{ y: 0, runs: [[0, 1]], cells: [CELL_GRAPHEME] }],
+  });
+  applyFrame(initial.grid, partial, lookup);
+  expect(calls[calls.length - 1]).toEqual({
+    cp: "e\u0300",
+    font: 0,
+    wide: false,
   });
 });

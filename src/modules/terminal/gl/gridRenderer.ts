@@ -1,3 +1,4 @@
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
   type ApplyResult,
   applyFrame,
@@ -66,6 +67,7 @@ type PaneHeader = {
 };
 
 export type RenderPane = {
+  needsVisibleFull?: boolean;
   readonly callbacks: PaneCallbacks;
   rect: PaneRect;
   grid: CellGrid | null;
@@ -217,7 +219,6 @@ const UNIFORMS = [
 type Uniforms = Record<(typeof UNIFORMS)[number], WebGLUniformLocation | null>;
 
 const BLINK_MS = 600;
-const ATLAS_RESET_MIN_MS = 2000;
 
 function compile(
   gl: WebGL2RenderingContext,
@@ -264,10 +265,11 @@ export class GridRenderer {
   private rafId = 0;
   private blinkTimer: ReturnType<typeof setInterval> | null = null;
   private blinkOn = true;
-  private lastAtlasReset = Number.NEGATIVE_INFINITY;
-  private atlasResetTimer: ReturnType<typeof setTimeout> | null = null;
   private dprQuery: MediaQueryList | null = null;
   private readonly rowScratch = createRowView();
+  private capacityRetried?: Set<RenderPane>;
+  private capacityBlocked?: Set<RenderPane>;
+  private capacityPending?: Set<RenderPane>;
   readonly stats = {
     draws: 0,
     lastDrawMs: 0,
@@ -343,6 +345,10 @@ export class GridRenderer {
     const index = this.panes.indexOf(pane);
     if (index < 0) return;
     this.panes.splice(index, 1);
+    this.capacityRetried?.delete(pane);
+    this.capacityBlocked?.delete(pane);
+    this.capacityPending?.delete(pane);
+    this.completeCapacityRecovery();
     this.deletePaneBuffers(pane);
     pane.grid = null;
     this.updateBlink();
@@ -350,7 +356,17 @@ export class GridRenderer {
   }
 
   setPaneRect(pane: RenderPane, rect: PaneRect): void {
+    const wasVisible = pane.rect.width > 0 && pane.rect.height > 0;
     pane.rect = rect;
+    if (rect.width <= 0 || rect.height <= 0) {
+      this.capacityPending?.delete(pane);
+      if (wasVisible && this.capacityBlocked?.size) this.retryCapacity();
+      this.completeCapacityRecovery();
+    } else if (pane.needsVisibleFull) {
+      pane.needsVisibleFull = false;
+      pane.undrawn = true;
+      pane.callbacks.onNeedFullFrame();
+    }
     this.requestDraw();
   }
 
@@ -388,8 +404,42 @@ export class GridRenderer {
 
   applyFrame(pane: RenderPane, frame: DecodedFrame): ApplyResult {
     if (this.disposed) return "applied";
+    if (pane.rect.width <= 0 || pane.rect.height <= 0) {
+      pane.grid = null;
+      pane.header = null;
+      pane.needsVisibleFull = true;
+      return "needs-full";
+    }
+    if (this.capacityBlocked?.has(pane)) return "blocked";
     const previous = pane.grid;
-    const { grid, result } = applyFrame(previous, frame, this.atlas.lookup);
+    let applied: ReturnType<typeof applyFrame>;
+    try {
+      applied = applyFrame(previous, frame, this.atlas.lookup);
+    } catch (error) {
+      if (!(error instanceof RenderCapacityError)) throw error;
+      pane.grid = null;
+      pane.header = null;
+      pane.undrawn = true;
+      if (!this.capacityRetried?.has(pane)) {
+        this.capacityRetried ??= new Set();
+        this.capacityRetried.add(pane);
+        this.capacityPending = new Set(
+          this.panes.filter(
+            (item) => item.rect.width > 0 && item.rect.height > 0,
+          ),
+        );
+        this.atlas.reset();
+        this.stats.atlasResets++;
+        this.invalidateGlyphs();
+        return "needs-full";
+      }
+      this.capacityBlocked ??= new Set();
+      this.capacityBlocked.add(pane);
+      this.updateBlink();
+      this.requestDraw();
+      throw error;
+    }
+    const { grid, result } = applied;
     if (result === "needs-full") return result;
     pane.grid = grid;
     pane.header = {
@@ -405,7 +455,8 @@ export class GridRenderer {
     pane.undrawn = true;
     if (!this.lost) this.upload(pane, frame, grid !== previous);
     this.updateBlink();
-    if (this.atlas.exhausted) this.scheduleAtlasReset();
+    if (frame.full) this.capacityPending?.delete(pane);
+    this.completeCapacityRecovery();
     this.requestDraw();
     return result;
   }
@@ -719,7 +770,27 @@ export class GridRenderer {
     };
   }
 
+  private completeCapacityRecovery(): void {
+    if (this.capacityPending?.size === 0 && !this.capacityBlocked?.size) {
+      this.capacityPending = undefined;
+      this.capacityRetried?.clear();
+    }
+  }
+
+  retryCapacity(): void {
+    if (!this.capacityRetried?.size && !this.capacityBlocked?.size) return;
+    this.capacityRetried?.clear();
+    this.capacityBlocked?.clear();
+    this.capacityPending = undefined;
+    this.atlas.reset();
+    this.stats.atlasResets++;
+    this.invalidateGlyphs();
+  }
+
   private rebuildAtlas(): void {
+    this.capacityRetried?.clear();
+    this.capacityBlocked?.clear();
+    this.capacityPending = undefined;
     if (!this.lost) this.atlas.disposeTextures(this.gl);
     this.atlas.setFont(this.atlasFont());
     this.invalidateGlyphs();
@@ -732,27 +803,13 @@ export class GridRenderer {
         clearGlyphs(pane.grid);
         if (!this.lost) this.uploadWhole(pane);
       }
-      pane.callbacks.onNeedFullFrame();
+      if (pane.rect.width > 0 && pane.rect.height > 0) {
+        pane.callbacks.onNeedFullFrame();
+      } else {
+        pane.needsVisibleFull = true;
+      }
     }
     this.requestDraw();
-  }
-
-  private scheduleAtlasReset(): void {
-    if (this.atlasResetTimer) return;
-    const wait = this.lastAtlasReset + ATLAS_RESET_MIN_MS - performance.now();
-    const run = () => {
-      this.atlasResetTimer = null;
-      if (this.disposed) return;
-      this.lastAtlasReset = performance.now();
-      this.stats.atlasResets += 1;
-      this.atlas.reset();
-      this.invalidateGlyphs();
-    };
-    if (wait <= 0) {
-      run();
-      return;
-    }
-    this.atlasResetTimer = setTimeout(run, wait);
   }
 
   private updateBlink(): void {
@@ -795,7 +852,6 @@ export class GridRenderer {
     this.disposed = true;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.blinkTimer) clearInterval(this.blinkTimer);
-    if (this.atlasResetTimer) clearTimeout(this.atlasResetTimer);
     this.dprQuery?.removeEventListener("change", this.handleDprChange);
     this.canvas.removeEventListener("webglcontextlost", this.handleLost);
     this.canvas.removeEventListener(

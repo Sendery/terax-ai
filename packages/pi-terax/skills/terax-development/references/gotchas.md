@@ -858,3 +858,18 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a shared destination.tmp lets one rename consume another writer's temporary, producing ENOENT and silently disabling shell integration for a pane; overlapping open/write operations can also expose partial contents.
 - **Prevention:** share one write-if-changed installer across platform paths. Create a unique temporary in the destination directory, finish writing before atomic persist, and retain RAII cleanup on failure. Preserve the unchanged-file fast path.
 - **Verification:** actual two-pane startup exposed the failed rename; concurrent publishers assert every observed target is a complete known profile and no temporary remains. Check failed-publication cleanup and unchanged-file identity. Native Windows path acceptance remains separate from common helper tests.
+
+
+### Full graphemes need text identity across the frame and atlas
+
+- **Trigger:** the core retains combining marks, variation selectors or ZWJ sequences but the renderer sends only a base scalar.
+- **Failure mode:** copied text remains correct while pixels lose accents/emoji composition; caching by a frame-local ID or the first scalar draws another cluster after a partial update. A default UTF-8 decoder can also strip leading U+FEFF.
+- **Prevention:** encode exact full clusters in an optional bounded frame-local UTF-8 table, retain native width and distinguish table tags from scalar cells. Validate flag/ID/padding/scalars and use fatal UTF-8 with BOM preservation. Key the bounded atlas by complete text, face and width; rasterize the full string. Keep ordinary scalar frames identical.
+- **Verification:** real-core full/partial fixtures decoded by TypeScript, exact accent/ZWJ/skin-tone/flag text, invalid flag/ID/UTF-8/padding regressions, distinct accent cache keys and device-font rebuild. Mock fillText checks arguments, not real WebKit font pixels; record actual visual acceptance separately.
+
+### Shared atlas capacity recovery must include every active participant
+
+- **Trigger:** valid frames from several panes exceed the shared atlas text or texture budget.
+- **Failure mode:** returning glyph0 hides text, and unrestricted reset/full requests can loop. Tracking only visible panes while hidden panes still populate the atlas lets a hidden failure obtain a new first attempt after every visible success.
+- **Prevention:** report capacity explicitly, allow bounded automatic recovery per visible participant and renew only after all rebuild fully. A blocked view returns credits without requesting repeated full frames; invalidate presented IDs until actual rendering resumes. Defer hidden glyph work entirely and request full reconstruction on reveal. Explicit Redraw/font changes retry after the working set changes.
+- **Verification:** shared text-key exhaustion, two-pane bounded retries, successful epoch renewal, hidden frame/visible rebuild/hidden frame/reveal, and credit/geometry tests. Never treat pure tests as hardware or user-led visual QA.
