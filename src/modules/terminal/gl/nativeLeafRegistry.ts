@@ -14,8 +14,15 @@ export type NativeLeaf = {
   navigateBlocks?: (direction: -1 | 1) => Promise<void>;
   clearBlockSelection?: () => boolean;
   write: (text: string) => boolean;
+  writeOwned?: (text: string, current?: () => boolean) => Promise<void>;
+  encodeShiftEnter?: () => Promise<string>;
+  readText?: (maxLines?: number) => Promise<string | null>;
   paste: (text: string) => Promise<void>;
-  submit: (text: string, current?: () => boolean) => Promise<void>;
+  submit: (
+    text: string,
+    current?: () => boolean,
+    onWriteAttempt?: () => void,
+  ) => Promise<void>;
   focus: () => void;
   repaint: () => void;
   dispose: () => Promise<void>;

@@ -183,6 +183,21 @@ export class NativeLeafSession implements NativeLeaf {
   write(text: string): boolean {
     return !this.disposed && this.owner.write(text);
   }
+  async writeOwned(
+    text: string,
+    current: () => boolean = () => true,
+  ): Promise<void> {
+    const owner = this.owner;
+    const native = await this.requireNative();
+    const valid = () =>
+      current() &&
+      this.owner === owner &&
+      this.native === native &&
+      !this.exited;
+    if (!valid()) throw new Error("Terminal is no longer available.");
+    await native.write(text, valid);
+    if (!valid()) throw new Error("Terminal is no longer available.");
+  }
   focus(): void {
     if (!this.blockInput?.focus()) this.view?.focus();
   }
@@ -276,6 +291,7 @@ export class NativeLeafSession implements NativeLeaf {
   async submit(
     text: string,
     current: () => boolean = () => true,
+    onWriteAttempt?: () => void,
   ): Promise<void> {
     if (this.blockInput && !text.trim()) return;
     const native = await this.requireNative();
@@ -294,6 +310,7 @@ export class NativeLeafSession implements NativeLeaf {
           this.native === native &&
           !this.exited &&
           this.id !== null,
+        onWriteAttempt,
       );
       if (
         this.owner !== owner ||

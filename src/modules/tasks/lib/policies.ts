@@ -1,5 +1,10 @@
 import { countMissedOccurrences } from "./recurrence";
-import { isExhausted, remainingRuns, RUN_TIMEOUT_MS, type ScheduledTask } from "./task";
+import {
+  isExhausted,
+  remainingRuns,
+  RUN_TIMEOUT_MS,
+  type ScheduledTask,
+} from "./task";
 
 /** A queued occurrence beyond this depth is dropped and the drop is notified. */
 export const MAX_QUEUE_DEPTH = 1;
@@ -8,6 +13,7 @@ const RETRY_MAX_MS = 3_600_000;
 const MISSED_SCAN_LIMIT = 500;
 
 export type RunSlot = {
+  runId?: string;
   taskId: string;
   startedAt: number;
 };
@@ -31,10 +37,7 @@ export type MissedOutcome = {
  * resumes the normal cadence, so an hourly watcher that lost three slots wakes
  * once instead of three times.
  */
-export function resolveMissed(
-  task: ScheduledTask,
-  now: number,
-): MissedOutcome {
+export function resolveMissed(task: ScheduledTask, now: number): MissedOutcome {
   const idle: MissedOutcome = {
     missed: 0,
     dispatch: 0,

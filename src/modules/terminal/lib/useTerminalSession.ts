@@ -1,3 +1,4 @@
+import type { TerminalInput } from "@/modules/terminal/lib/terminalInput";
 import {
   createTerminalSubmission,
   type TerminalSubmission,
@@ -182,6 +183,93 @@ export function whenSessionReady(
   });
 }
 
+export function captureLeafInput(leafId: number): TerminalInput | null {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    if (!native.writeOwned || !native.encodeShiftEnter || !native.readText)
+      return null;
+    const identity = native.submissionIdentity ?? native;
+    const id = native.id;
+    const current = () =>
+      getNativeLeaf(leafId) === native &&
+      (native.submissionIdentity ?? native) === identity &&
+      (id === null || native.id === id) &&
+      !native.exited;
+    return {
+      current,
+      cwd: () => (current() ? native.cwd : null),
+      isReady: () => current() && native.tuiReady,
+      write: async (text, caller = () => true) => {
+        const valid = () => current() && caller();
+        if (!valid()) throw new Error("Terminal is no longer available.");
+        await native.writeOwned?.(text, valid);
+        if (!valid()) throw new Error("Terminal is no longer available.");
+      },
+      shiftEnter: async () => {
+        if (!current()) throw new Error("Terminal is no longer available.");
+        const value = await native.encodeShiftEnter?.();
+        if (!current() || value === undefined)
+          throw new Error("Terminal is no longer available.");
+        return value;
+      },
+      readBuffer: async (maxLines, caller = () => true) => {
+        if (!current() || !caller()) return null;
+        const value = await native.readText?.(maxLines);
+        return current() && caller() ? (value ?? null) : null;
+      },
+    };
+  }
+  const session = sessions.get(leafId);
+  if (!session || session.disposed) return null;
+  const identity = session.submissionIdentity;
+  const current = () =>
+    sessions.get(leafId) === session &&
+    session.submissionIdentity === identity &&
+    !session.disposed &&
+    !session.shellExited;
+  return {
+    current,
+    cwd: () =>
+      current() ? (session.lastCwd ?? session.initialCwd ?? null) : null,
+    isReady: () => current() && session.keyboardProtocol.modifyOtherKeys >= 1,
+    write: async (text, caller = () => true) => {
+      if (!current() || !caller() || !session.pty)
+        throw new Error("Terminal is no longer available.");
+      await session.pty.write(text);
+      if (!current() || !caller())
+        throw new Error("Terminal is no longer available.");
+    },
+    shiftEnter: async () => {
+      if (!current()) throw new Error("Terminal is no longer available.");
+      return shiftEnterSequence(session.keyboardProtocol.modifyOtherKeys);
+    },
+    readBuffer: async (maxLines, caller = () => true) =>
+      current() && caller() ? readLegacyBuffer(leafId, maxLines) : null,
+  };
+}
+
+function readLegacyBuffer(leafId: number, maxLines: number): string | null {
+  const session = sessions.get(leafId);
+  if (!session) return null;
+  const slot = getLiveSlotForLeaf(leafId);
+  if (slot) {
+    const buffer = slot.term.buffer.active;
+    const lines: string[] = [];
+    for (
+      let index = Math.max(0, buffer.length - maxLines);
+      index < buffer.length;
+      index++
+    )
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? "");
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n");
+  }
+  if (!session.snapshot) return "";
+  const lines = stripAnsi(session.snapshot).split(/\r?\n/).slice(-maxLines);
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines.join("\n");
+}
+
 export function captureLeafSubmission(
   leafId: number,
 ): TerminalSubmission | null {
@@ -201,7 +289,8 @@ export function captureLeafSubmission(
         !native.commandRunning &&
         !native.alternateScreen,
       wait: (timeout) => whenSessionReady(leafId, timeout),
-      submit: (text, current) => native.submit(text, current),
+      submit: (text, current, onWriteAttempt) =>
+        native.submit(text, current, onWriteAttempt),
     });
   }
   const session = sessions.get(leafId);
@@ -219,13 +308,14 @@ export function captureLeafSubmission(
       !session.commandRunning &&
       !isLeafAltScreen(leafId),
     wait: (timeout) => whenSessionReady(leafId, timeout),
-    submit: async (text) => {
+    submit: async (text, _current, onWriteAttempt) => {
       const pty = session.pty;
       if (!pty) throw new Error("Terminal is no longer available.");
       session.everSubmitted = true;
       const data = text.includes("\n")
         ? `\x1b[200~${text}\x1b[201~\r`
         : `${text}\r`;
+      onWriteAttempt?.();
       await pty.write(data);
     },
   });
@@ -1243,28 +1333,7 @@ export function useTerminalSession({
   }, [leafId]);
 
   const getBuffer = useCallback(
-    (maxLines = 200): string | null => {
-      const s = sessions.get(leafId);
-      if (!s) return null;
-      const slot = getLiveSlotForLeaf(leafId);
-      if (slot) {
-        const buf = slot.term.buffer.active;
-        const total = buf.length;
-        const lines: string[] = [];
-        const start = Math.max(0, total - maxLines);
-        for (let i = start; i < total; i++) {
-          lines.push(buf.getLine(i)?.translateToString(true) ?? "");
-        }
-        while (lines.length && lines[lines.length - 1] === "") lines.pop();
-        return lines.join("\n");
-      }
-      if (!s.snapshot) return "";
-      const plain = stripAnsi(s.snapshot);
-      const lines = plain.split(/\r?\n/);
-      const tail = lines.slice(-maxLines);
-      while (tail.length && tail[tail.length - 1] === "") tail.pop();
-      return tail.join("\n");
-    },
+    (maxLines = 200): string | null => readLegacyBuffer(leafId, maxLines),
     [leafId],
   );
 

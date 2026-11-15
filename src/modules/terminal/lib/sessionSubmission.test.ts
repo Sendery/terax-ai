@@ -61,6 +61,7 @@ it("submits only once and waits for the actual write", async () => {
   expect(submit).toHaveBeenCalledExactlyOnceWith(
     "resume",
     expect.any(Function),
+    undefined,
   );
   expect(settled).toBe(false);
   write.resolve();

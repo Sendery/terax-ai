@@ -624,3 +624,18 @@ it("replays a preference changed during opening without resetting unchanged star
   expect(native.setCursorBlink).toHaveBeenCalledExactlyOnceWith(false);
   await session.dispose();
 });
+
+it("rejects owned raw task input retired during requireNative", async () => {
+  const native = driver(9);
+  const session = new NativeLeafSession(
+    config(),
+    async () => native as unknown as EngineSession,
+  );
+  await session.opened;
+  let current = true;
+  const result = session.writeOwned("prompt", () => current);
+  current = false;
+  await expect(result).rejects.toThrow("available");
+  expect(native.write).not.toHaveBeenCalled();
+  await session.dispose();
+});

@@ -1677,3 +1677,50 @@ describe("EngineSession native cursor preference", () => {
     await session.close();
   });
 });
+
+it("does not write queued raw task input after its caller is retired", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish = (_value: number[]) => {};
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const first = session.sendKey({ code: "Enter" });
+  let current = true;
+  const stale = session.write("stale task prompt", () => current);
+  const results = Promise.allSettled([first, stale]);
+  await Promise.resolve();
+  current = false;
+  finish([13]);
+  const settled = await results;
+  expect(settled[1].status).toBe("rejected");
+  expect(commands("pty_write")).toHaveLength(1);
+  await session.close();
+});
+it("marks a launch attempt only at the final native write boundary", async () => {
+  const session = await openSession(new FakeRenderer());
+  const attempted = vi.fn(() => {
+    expect(commands("pty_write")).toHaveLength(0);
+  });
+  await session.submit("pi --session-id public", () => true, attempted);
+  expect(attempted).toHaveBeenCalledOnce();
+  expect(commands("pty_write")).toHaveLength(1);
+  await session.close();
+});
+it("does not mark a launch as attempted when ownership changes during encoding", async () => {
+  const session = await openSession(new FakeRenderer());
+  let finish = (_value: number[]) => {};
+  ipc.encoded = new Promise((resolve) => {
+    finish = resolve;
+  });
+  let current = true;
+  const attempted = vi.fn();
+  const result = session.submit("pi", () => current, attempted);
+  const rejected = expect(result).rejects.toThrow("unavailable");
+  await Promise.resolve();
+  current = false;
+  finish([65]);
+  await rejected;
+  expect(attempted).not.toHaveBeenCalled();
+  expect(commands("pty_write")).toEqual([]);
+  await session.close();
+});

@@ -120,7 +120,7 @@ describe("handOffPrompt", () => {
     });
   });
 
-  it("still types as a last resort when the TUI never announces itself", async () => {
+  it("reports no readiness when the TUI never announces itself", async () => {
     const t = fakeTerminal({ readyAtMs: Number.POSITIVE_INFINITY });
     const result = await handOffPrompt(t.io, () => "run the tests");
 
@@ -213,4 +213,109 @@ it("resolves native multiline key encoding after actual TUI readiness", async ()
   });
   expect(result.confirmed).toBe(true);
   expect(terminal.state.typed).toEqual(["one\x1b[13;2utwo"]);
+});
+
+it("does not confirm unrelated output that retains an old busy marker", () => {
+  expect(
+    turnStarted(
+      "old\n\u283b Working...\nidle",
+      "old\n\u283b Working...\nidle\nbackground log",
+    ),
+  ).toBe(false);
+  expect(turnStarted("\u283b Working...", "\u2839 Working...\nnoise")).toBe(
+    false,
+  );
+});
+it("does not confuse the prompt's own busy wording with agent activity", () => {
+  expect(turnStarted("idle", "idle\nThinking...", "Thinking...")).toBe(false);
+});
+it("does not write blind input when readiness times out", async () => {
+  const terminal = fakeTerminal({ readyAtMs: Number.POSITIVE_INFINITY });
+  const result = await handOffPrompt(terminal.io, () => "prompt");
+  expect(terminal.state.lost).toEqual([]);
+  expect(result).toEqual({ ready: false, attempts: 0, confirmed: false });
+});
+it("awaits the prompt write before beginning the Enter settle window", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  const original = terminal.io.write;
+  let finish = () => {};
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  terminal.io.write = async (data) => {
+    if (data !== SUBMIT_KEY) await gate;
+    original(data);
+  };
+  const result = handOffPrompt(terminal.io, () => "prompt");
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(terminal.state.submits).toBe(0);
+  finish();
+  expect((await result).confirmed).toBe(true);
+});
+it("does not send stale encoded keystrokes after ownership changes", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  let current = true;
+  Object.assign(terminal.io, { isCurrent: () => current });
+  let finish = (_value: string) => {};
+  const encoded = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  const result = handOffPrompt(terminal.io, () => encoded);
+  const rejected = expect(result).rejects.toThrow("available");
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  current = false;
+  finish("stale prompt");
+  await rejected;
+  expect(terminal.state.typed).toEqual([]);
+  expect(terminal.state.submits).toBe(0);
+});
+it("does not press Enter after a delayed baseline belongs to a retired target", async () => {
+  const terminal = fakeTerminal({ readyAtMs: 0 });
+  let current = true;
+  Object.assign(terminal.io, { isCurrent: () => current });
+  let finish = (_value: string | null) => {};
+  terminal.io.readBuffer = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const result = handOffPrompt(terminal.io, () => "prompt");
+  const rejected = expect(result).rejects.toThrow("available");
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  current = false;
+  finish("idle");
+  await rejected;
+  expect(terminal.state.submits).toBe(0);
+});
+
+it("does not attribute an existing busy row's changing detail to a new prompt", () => {
+  expect(
+    turnStarted("\u283b Reading old-file", "\u2839 Reading other-file"),
+  ).toBe(false);
+});
+it("can recognize an additional busy row while an older one remains in history", () => {
+  expect(
+    turnStarted("Thinking...\nidle", "Thinking...\nidle\nThinking..."),
+  ).toBe(true);
+});
+
+it("does not confirm an old spinner's changing timer", () => {
+  expect(turnStarted("\u280b Thinking (1s)", "\u2819 Thinking (2s)")).toBe(
+    false,
+  );
+});
+it("ignores busy wording in prefixed and soft-wrapped prompt echoes", () => {
+  expect(
+    turnStarted(
+      "idle",
+      "> Explain esc to interrupt",
+      "Explain esc to interrupt",
+    ),
+  ).toBe(false);
+  expect(
+    turnStarted(
+      "idle",
+      "> Explain\nesc to interrupt",
+      "Explain esc to interrupt",
+    ),
+  ).toBe(false);
 });

@@ -67,6 +67,7 @@ vi.mock("@/modules/terminal/lib/agentActivity", () => ({
   isAgentActivePty: () => false,
 }));
 import {
+  captureLeafInput,
   captureLeafSubmission,
   disposeSession,
   markSessionReady,
@@ -175,4 +176,88 @@ it("invalidates legacy captures before respawn while retaining the same leaf and
   expect(harness.pty.write).toHaveBeenCalledExactlyOnceWith(
     "\x1b[200~first\nsecond\x1b[201~\r",
   );
+});
+
+it("guards owned native input while its raw write is pending", async () => {
+  const native = nativeLeaf();
+  let finish = () => {};
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const written = vi.fn();
+  Object.assign(native, {
+    writeOwned: async (text: string, current: () => boolean) => {
+      await gate;
+      if (!current()) throw new Error("retired");
+      written(text);
+    },
+    encodeShiftEnter: async () => "\x1b[13;2u",
+    readText: async () => "public",
+  });
+  registerNativeLeaf(leafId, native);
+  const input = captureLeafInput(leafId);
+  let caller = true;
+  const result = input?.write("task", () => caller);
+  const rejected = expect(result).rejects.toThrow("retired");
+  caller = false;
+  finish();
+  await rejected;
+  expect(written).not.toHaveBeenCalled();
+});
+it("discards a native buffer after caller privacy is invalidated", async () => {
+  const native = nativeLeaf();
+  let finish = (_value: string) => {};
+  const buffer = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  Object.assign(native, {
+    writeOwned: async () => {},
+    encodeShiftEnter: async () => "\x1b\r",
+    readText: () => buffer,
+  });
+  registerNativeLeaf(leafId, native);
+  const input = captureLeafInput(leafId);
+  let caller = true;
+  const read = input?.readBuffer(60, () => caller);
+  caller = false;
+  finish("late private content");
+  expect(await read).toBeNull();
+});
+it("rejects native key encoding from an owner replaced under the same leaf id", async () => {
+  const native = nativeLeaf();
+  let finish = (_value: string) => {};
+  const encoded = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  Object.assign(native, {
+    writeOwned: async () => {},
+    encodeShiftEnter: () => encoded,
+    readText: async () => "public",
+  });
+  registerNativeLeaf(leafId, native);
+  const input = captureLeafInput(leafId);
+  const keys = input?.shiftEnter();
+  const rejected = expect(keys).rejects.toThrow("available");
+  native.submissionIdentity = {};
+  native.id = 10;
+  finish("\x1b[13;2u");
+  await rejected;
+});
+it("marks a legacy command write at its final PTY call", async () => {
+  LegacyHarness();
+  harness.effects[0]();
+  await respawnSession(leafId, "/repo");
+  markSessionReady(leafId);
+  const attempted = vi.fn(() => {
+    expect(harness.pty.write).not.toHaveBeenCalled();
+  });
+  const result = await captureLeafSubmission(leafId)?.submitWhenReady(
+    "pi",
+    100,
+    () => true,
+    attempted,
+  );
+  expect(result).toBe(true);
+  expect(attempted).toHaveBeenCalledOnce();
+  expect(harness.pty.write).toHaveBeenCalledExactlyOnceWith("pi\r");
 });

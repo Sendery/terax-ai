@@ -1,3 +1,4 @@
+import type { TaskTerminal } from "@/modules/tasks/lib/taskTerminal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { native } from "@/modules/ai/lib/native";
@@ -21,6 +22,7 @@ const POLL_MS = 2_000;
 export type TabTarget = {
   tabId: number;
   leafId: number;
+  spaceId?: string;
   /** True when this task's agent is already running in the leaf and only needs
    *  the prompt. */
   agentRunning: boolean;
@@ -28,23 +30,26 @@ export type TabTarget = {
 
 export type DispatcherDeps = {
   tasks: readonly ScheduledTask[];
+  readTasks?: () => readonly ScheduledTask[];
   paused: boolean;
   shellFlavor: ShellFlavor;
   recordRun: (run: TaskRun) => void;
-  /** Records the run against the task. The session id is passed so the task can
-   *  remember the session it owns, which is what tells the next run whether to
-   *  create or resume it. */
-  markDispatched: (taskId: string, at: number, sessionId: string) => void;
+  markDispatched: (taskId: string, at: number) => void;
+  markSessionCreated: (
+    taskId: string,
+    sessionId: string,
+    cwd: string,
+    expectedSeed: string | undefined,
+  ) => void;
   disableTask: (taskId: string) => void;
   notify: (message: string, tone: "info" | "warning" | "error") => void;
   /** Focuses or creates the terminal tab that owns this task. */
   ensureTab: (task: ScheduledTask) => Promise<TabTarget | null>;
-  writeToLeaf: (leafId: number, data: string) => void;
-  shiftEnterFor: (leafId: number) => string | Promise<string>;
-  /** True once an agent TUI in this leaf has the terminal in raw mode. */
-  isLeafTuiReady: (leafId: number) => boolean;
-  /** Visible terminal text of this leaf, or null when it has no live buffer. */
-  readLeafBuffer: (leafId: number) => string | null | Promise<string | null>;
+  captureTarget: (
+    target: TabTarget,
+    task: ScheduledTask,
+    current: () => boolean,
+  ) => Promise<TaskTerminal | null>;
   /** Opens a throwaway terminal on a command line, for the recover action. */
   openTerminalWith: (cwd: string, commandLine: string) => void;
 };
@@ -58,9 +63,25 @@ export type TaskDispatcherApi = {
 
 export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
   const [queue, setQueue] = useState<QueueState>({ running: [], pending: [] });
+  const queueRef = useRef(queue);
+  const updateQueue = useCallback(
+    (update: (current: QueueState) => QueueState) => {
+      const next = update(queueRef.current);
+      queueRef.current = next;
+      setQueue(next);
+    },
+    [],
+  );
   const depsRef = useRef(deps);
   depsRef.current = deps;
+  const readTask = useCallback((taskId: string) => {
+    const d = depsRef.current;
+    return (d.readTasks?.() ?? d.tasks).find((task) => task.id === taskId);
+  }, []);
   const attemptsRef = useRef(new Map<string, number>());
+  const active = useRef(true);
+  const lifetime = useRef(0);
+  const sleepers = useRef(new Map<number, () => void>());
   const timersRef = useRef(new Set<number>());
   // `settle` needs to re-dispatch a retry, but `run` is defined after it.
   const runRef = useRef<(taskId: string, trigger: RunTrigger) => void>(
@@ -69,41 +90,69 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
 
   useEffect(() => {
     const timers = timersRef.current;
+    active.current = true;
     return () => {
+      active.current = false;
+      lifetime.current++;
       for (const handle of timers) window.clearTimeout(handle);
       timers.clear();
+      for (const resolve of sleepers.current.values()) resolve();
+      sleepers.current.clear();
     };
   }, []);
 
   const later = useCallback((fn: () => void, ms: number) => {
+    if (!active.current) return null;
+    const generation = lifetime.current;
     const handle = window.setTimeout(() => {
       timersRef.current.delete(handle);
-      fn();
+      sleepers.current.delete(handle);
+      if (active.current && lifetime.current === generation) fn();
     }, ms);
     timersRef.current.add(handle);
+    return handle;
   }, []);
 
   // Same bookkeeping as `later`, for the awaited waits of a prompt hand-off:
   // unmounting the dispatcher cancels them instead of leaving them pending.
   const sleep = useCallback(
-    (ms: number) => new Promise<void>((resolve) => later(resolve, ms)),
+    (ms: number) =>
+      new Promise<void>((resolve) => {
+        const handle = later(resolve, ms);
+        if (handle === null) resolve();
+        else sleepers.current.set(handle, resolve);
+      }),
     [later],
   );
 
-  const release = useCallback((taskId: string) => {
-    setQueue((current) => ({
-      running: current.running.filter((slot) => slot.taskId !== taskId),
-      pending: current.pending.filter((id) => id !== taskId),
-    }));
-  }, []);
+  const release = useCallback(
+    (taskId: string, runId: string) => {
+      updateQueue((current) => ({
+        running: current.running.filter(
+          (slot) => slot.taskId !== taskId || slot.runId !== runId,
+        ),
+        pending: current.pending,
+      }));
+    },
+    [updateQueue],
+  );
 
   const settle = useCallback(
-    (task: ScheduledTask, run: TaskRun, ok: boolean) => {
+    (task: ScheduledTask, run: TaskRun, ok: boolean, retryable = true) => {
+      if (!active.current) return;
       const d = depsRef.current;
       d.recordRun(run);
-      release(task.id);
+      release(task.id, run.id);
       if (ok) {
         attemptsRef.current.delete(task.id);
+        return;
+      }
+      if (!retryable) {
+        attemptsRef.current.delete(task.id);
+        d.notify(
+          `${task.name}: delivery could not be confirmed; automatic retry skipped`,
+          "warning",
+        );
         return;
       }
       const attempt = (attemptsRef.current.get(task.id) ?? 0) + 1;
@@ -114,7 +163,12 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
           `${task.name} failed, retrying in ${Math.round(outcome.delayMs / 1000)}s`,
           "warning",
         );
-        later(() => runRef.current(task.id, "recovery"), outcome.delayMs);
+        const retrySeed = task.seed;
+        later(() => {
+          const latest = readTask(task.id);
+          if (!latest || latest.seed !== retrySeed) return;
+          runRef.current(task.id, "recovery");
+        }, outcome.delayMs);
         return;
       }
       attemptsRef.current.delete(task.id);
@@ -125,7 +179,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
         d.notify(`${task.name} failed`, "error");
       }
     },
-    [release, later],
+    [release, later, readTask],
   );
 
   const runHeadless = useCallback(
@@ -136,6 +190,11 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
       resume: boolean,
     ) => {
       const d = depsRef.current;
+      const seed = task.seed;
+      const currentConversation = () => {
+        const latest = readTask(task.id);
+        return latest !== undefined && latest.seed === seed;
+      };
       const argv = buildAgentArgv(task, sessionId, { headless: true, resume });
       const commandLine = formatCommandLine(argv, d.shellFlavor);
       try {
@@ -147,6 +206,8 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
           .piSessionOffset(sessionId)
           .catch(() => 0);
         const handle = await native.shellBgSpawn(commandLine, task.cwd);
+        if (currentConversation())
+          d.markSessionCreated(task.id, sessionId, task.cwd, seed);
         let offset = 0;
         let output = "";
         const poll = async () => {
@@ -179,6 +240,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
                   : {}),
               }),
               ok,
+              currentConversation(),
             );
             return;
           }
@@ -192,6 +254,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
                 message: "Killed after the 30 minute run timeout.",
               }),
               false,
+              currentConversation(),
             );
             return;
           }
@@ -207,10 +270,11 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
             message: String(error),
           }),
           false,
+          currentConversation(),
         );
       }
     },
-    [later, settle],
+    [later, settle, readTask],
   );
 
   const runInTab = useCallback(
@@ -221,85 +285,117 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
       resume: boolean,
     ) => {
       const d = depsRef.current;
+      const seed = task.seed;
+      const generation = lifetime.current;
+      const alive = () => active.current && lifetime.current === generation;
+      const current = () => {
+        const latest = readTask(task.id);
+        return alive() && latest !== undefined && latest.seed === seed;
+      };
+      let effectiveRun = run;
+      let remembered: string | null = null;
+      const remember = (known: string) => {
+        if (remembered === known || !current()) return;
+        d.markSessionCreated(task.id, known, task.cwd, seed);
+        effectiveRun = { ...run, sessionId: known };
+        remembered = known;
+      };
+      let promptAttempted = false;
+      let launchAttempted = false;
+      let launchConfirmed = false;
+      const uncertain = () =>
+        promptAttempted || (launchAttempted && !launchConfirmed);
       try {
         const target = await d.ensureTab(task);
-        if (!target) {
-          settle(
-            task,
-            finishRun(run, {
-              status: "failed",
-              endedAt: Date.now(),
-              message: "Could not open a terminal tab for this task.",
-            }),
-            false,
-          );
-          return;
-        }
-        if (task.prompt.trim() === "") {
-          settle(
-            task,
-            finishRun(run, {
-              status: "failed",
-              endedAt: Date.now(),
-              message: "The prompt is empty, so nothing was sent.",
-            }),
-            false,
-          );
-          return;
-        }
+        if (!current())
+          throw new Error("Task terminal is no longer available.");
+        if (!target)
+          throw new Error("Could not open a terminal tab for this task.");
+        if (task.prompt.trim() === "")
+          throw new Error("The prompt is empty, so nothing was sent.");
+        const terminal = await d.captureTarget(target, task, current);
+        if (!current() || !terminal)
+          throw new Error("Task terminal is no longer available.");
         if (!target.agentRunning) {
           const argv = buildAgentArgv(task, sessionId, {
             headless: false,
             resume,
           });
-          d.writeToLeaf(
-            target.leafId,
-            `${formatCommandLine(argv, d.shellFlavor)}\r`,
+          await terminal.launch(
+            formatCommandLine(argv, d.shellFlavor),
+            current,
+            () => {
+              launchAttempted = true;
+            },
           );
+          launchConfirmed = true;
+          remember(sessionId);
+        } else {
+          const known = terminal.sessionId();
+          if (known !== null) remember(known);
+          else if (task.agent === "codex") remember(sessionId);
         }
         const result = await handOffPrompt(
           {
-            write: (data) => depsRef.current.writeToLeaf(target.leafId, data),
-            isReady: () => depsRef.current.isLeafTuiReady(target.leafId),
-            readBuffer: () => depsRef.current.readLeafBuffer(target.leafId),
+            write: async (data) => {
+              if (!current() || !terminal.current())
+                throw new Error("Task terminal is no longer available.");
+              promptAttempted = true;
+              await terminal.write(data, current);
+            },
+            isCurrent: () => current() && terminal.current(),
+            isReady: terminal.isReady,
+            prompt: task.prompt,
+            readBuffer: () => terminal.readBuffer(current),
             sleep,
             now: Date.now,
           },
-          // Resolved late: the line-break encoding depends on the keyboard
-          // protocol the agent only negotiates once its TUI is up.
           async () =>
-            promptKeystrokes(
-              task.prompt,
-              await depsRef.current.shiftEnterFor(target.leafId),
-            ),
+            promptKeystrokes(task.prompt, await terminal.shiftEnter()),
         );
-        // An interactive run stays live in the tab; the card reports the agent
-        // state from the terminal signal rather than an exit code.
+        if (!current())
+          throw new Error("Task terminal is no longer available.");
+        if (target.agentRunning) {
+          const known = terminal.sessionId();
+          if (known !== null) remember(known);
+        }
+        const ok = result.ready && result.confirmed;
         settle(
           task,
-          finishRun(run, {
-            status: "ok",
+          finishRun(effectiveRun, {
+            status: ok ? "ok" : "failed",
             endedAt: Date.now(),
-            message: handoffMessage(result, {
-              tabId: target.tabId,
-              reused: target.agentRunning,
-            }),
+            message:
+              handoffMessage(result, {
+                tabId: target.tabId,
+                reused: target.agentRunning,
+              }) +
+              (!ok && uncertain()
+                ? " Automatic retry skipped because delivery is uncertain."
+                : ""),
           }),
-          true,
+          ok,
+          !promptAttempted,
         );
       } catch (error) {
+        if (!alive()) return;
         settle(
           task,
-          finishRun(run, {
+          finishRun(effectiveRun, {
             status: "failed",
             endedAt: Date.now(),
-            message: String(error),
+            message:
+              String(error) +
+              (uncertain()
+                ? " Automatic retry skipped because delivery is uncertain."
+                : ""),
           }),
           false,
+          !uncertain() && current(),
         );
       }
     },
-    [sleep, settle],
+    [sleep, settle, readTask],
   );
 
   const start = useCallback(
@@ -321,9 +417,12 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
         now,
       );
       depsRef.current.recordRun(run);
-      depsRef.current.markDispatched(task.id, now, sessionId);
-      setQueue((current) => ({
-        running: [...current.running, { taskId: task.id, startedAt: now }],
+      depsRef.current.markDispatched(task.id, now);
+      updateQueue((current) => ({
+        running: [
+          ...current.running,
+          { taskId: task.id, runId: run.id, startedAt: now },
+        ],
         pending: current.pending.filter((id) => id !== task.id),
       }));
       if (task.target === "headless") {
@@ -332,16 +431,17 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
         void runInTab(task, run, sessionId, resume);
       }
     },
-    [runHeadless, runInTab],
+    [runHeadless, runInTab, updateQueue],
   );
 
   const run = useCallback(
     (taskId: string, trigger: RunTrigger) => {
+      if (!active.current) return;
       const d = depsRef.current;
-      const task = d.tasks.find((entry) => entry.id === taskId);
+      const task = readTask(taskId);
       if (!task) return;
       if (d.paused && trigger !== "manual") return;
-      const outcome = admitOccurrence(task, queue);
+      const outcome = admitOccurrence(task, queueRef.current);
       if (outcome.decision === "skip") {
         if (outcome.notify) {
           d.notify(`${task.name} skipped: ${outcome.reason}`, "warning");
@@ -349,7 +449,7 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
         return;
       }
       if (outcome.decision === "queue") {
-        setQueue((current) => ({
+        updateQueue((current) => ({
           ...current,
           pending: [...current.pending, task.id],
         }));
@@ -357,27 +457,29 @@ export function useTaskDispatcher(deps: DispatcherDeps): TaskDispatcherApi {
       }
       start(task, trigger);
     },
-    [queue, start],
+    [start, updateQueue, readTask],
   );
   runRef.current = run;
 
   // Drain the queue as soon as a slot frees up.
   useEffect(() => {
     if (queue.pending.length === 0) return;
-    const next = queue.pending.find(
-      (id) => !queue.running.some((slot) => slot.taskId === id),
+    const current = queueRef.current;
+    if (current.pending.length === 0) return;
+    const next = current.pending.find(
+      (id) => !current.running.some((slot) => slot.taskId === id),
     );
     if (next === undefined) return;
-    const task = depsRef.current.tasks.find((entry) => entry.id === next);
+    const task = readTask(next);
     if (!task) {
-      setQueue((current) => ({
+      updateQueue((current) => ({
         ...current,
         pending: current.pending.filter((id) => id !== next),
       }));
       return;
     }
     start(task, "schedule");
-  }, [queue, start]);
+  }, [queue, start, updateQueue, readTask]);
 
   const recover = useCallback((run: TaskRun) => {
     const d = depsRef.current;

@@ -95,6 +95,9 @@ import {
   useTabNotes,
 } from "@/modules/notes";
 import {
+  createTaskTerminal,
+  createdTaskSessionPatch,
+  dispatchedTaskPatch,
   type ScheduledTask,
   type TabTarget,
   TASKS_MAX_WIDTH,
@@ -135,11 +138,12 @@ import {
   type TabColor,
 } from "@/modules/tabs";
 import {
+  captureLeafInput,
+  captureLeafSubmission,
   clearFocusedTerminal,
   disposeSession,
   findLeafCwd,
   hasLeaf,
-  isLeafTuiReady,
   leafIds,
   navigateFocusedBlocks,
   respawnSession,
@@ -846,12 +850,14 @@ export default function App() {
               (t) => t.id === task.tabId && t.kind === "terminal",
             );
       if (linked && linked.kind === "terminal") {
+        if (linked.private) return Promise.resolve(null);
         setActiveId(linked.id);
         const leafId = linked.activeLeafId;
         const agent = useAgentStore.getState().sessions[leafId];
         return Promise.resolve({
           tabId: linked.id,
           leafId,
+          spaceId: linked.spaceId,
           agentRunning: agent?.agent === task.agent,
         });
       }
@@ -862,40 +868,42 @@ export default function App() {
         // registers its handle.
         setTimeout(() => {
           const tab = tabsRef.current.find((x) => x.id === tabId);
-          if (tab?.kind !== "terminal") {
+          if (tab?.kind !== "terminal" || tab.private) {
             resolve(null);
             return;
           }
-          resolve({ tabId, leafId: tab.activeLeafId, agentRunning: false });
+          resolve({ tabId, leafId: tab.activeLeafId, spaceId: tab.spaceId, agentRunning: false });
         }, 120);
       });
     },
     [newTab, updateTab, setActiveId],
   );
 
-  const writeToLeaf = useCallback((leafId: number, data: string) => {
-    const term = terminalRefs.current.get(leafId);
-    if (!term) return;
-    term.write(data);
-  }, []);
-
-  const shiftEnterFor = useCallback((leafId: number) => {
-    return terminalRefs.current.get(leafId)?.shiftEnter() ?? "\x1b\r";
-  }, []);
-
-  const isTaskLeafReady = useCallback(
-    (leafId: number) => isLeafTuiReady(leafId),
-    [],
-  );
-
-  // Enough of the screen to see an agent start a turn, without paying for the
-  // whole scrollback on every poll.
-  const readTaskLeafBuffer = useCallback(
-    async (leafId: number) => {
-      const handle = terminalRefs.current.get(leafId);
-      if (!handle) return null;
-      const text = await handle.getBuffer(60);
-      return terminalRefs.current.get(leafId) === handle ? text : null;
+  const captureTaskTarget = useCallback(
+    async (target: TabTarget, task: ScheduledTask, current: () => boolean) => {
+      const deadline = Date.now() + 3000;
+      while (current() && Date.now() < deadline) {
+        const tab = tabsRef.current.find((value) => value.id === target.tabId);
+        if (
+          tab?.kind !== "terminal" ||
+          tab.private ||
+          (target.spaceId !== undefined && tab.spaceId !== target.spaceId) ||
+          !hasLeaf(tab.paneTree, target.leafId)
+        )
+          return null;
+        const input = captureLeafInput(target.leafId);
+        if (input)
+          return createTaskTerminal({
+            target,
+            task,
+            input,
+            submission: captureLeafSubmission(target.leafId),
+            getTabs: () => tabsRef.current,
+            getAgent: () => useAgentStore.getState().sessions[target.leafId],
+          });
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      return null;
     },
     [],
   );
@@ -946,41 +954,36 @@ export default function App() {
     [],
   );
   const markTaskDispatched = useCallback(
-    (taskId: string, at: number, sessionId: string) => {
-      const task = scheduled.tasks.find((t) => t.id === taskId);
-      if (!task) return;
-      // A task that accumulates context remembers the session this run created,
-      // so the next run knows to resume it instead of creating it again.
-      const owns =
-        task.mode === "task" &&
-        !task.sessions.some((session) => session.id === sessionId);
-      scheduled.update(taskId, {
-        lastRunAt: at,
-        runCount: task.runCount + 1,
-        ...(owns
-          ? { sessions: [{ id: sessionId, cwd: task.cwd }, ...task.sessions] }
-          : {}),
-      });
-    },
-    [scheduled],
+    (taskId: string, at: number) => {
+      const task = scheduledRef.current.readTasks().find((value) => value.id === taskId);
+      if (task) scheduledRef.current.update(taskId, dispatchedTaskPatch(task, at));
+    }, [],
   );
+  const markTaskSessionCreated = useCallback(
+    (taskId: string, sessionId: string, cwd: string, expectedSeed: string | undefined) => {
+      const task = scheduledRef.current.readTasks().find((value) => value.id === taskId);
+      if (!task) return;
+      const patch = createdTaskSessionPatch(task, sessionId, cwd, expectedSeed);
+      if (patch) scheduledRef.current.update(taskId, patch);
+    }, [],
+  );
+
   const disableTaskAfterFailures = useCallback(
     (taskId: string) => scheduled.setEnabled(taskId, false),
     [scheduled],
   );
   const dispatcher = useTaskDispatcher({
     tasks: scheduled.tasks,
+    readTasks: scheduled.readTasks,
     paused: scheduled.paused,
     shellFlavor: IS_WINDOWS ? "windows" : "posix",
     recordRun: scheduled.recordRun,
     markDispatched: markTaskDispatched,
+    markSessionCreated: markTaskSessionCreated,
     disableTask: disableTaskAfterFailures,
     notify: notifyTask,
     ensureTab: ensureTaskTab,
-    writeToLeaf,
-    shiftEnterFor,
-    isLeafTuiReady: isTaskLeafReady,
-    readLeafBuffer: readTaskLeafBuffer,
+    captureTarget: captureTaskTarget,
     openTerminalWith,
   });
   const dispatcherRef = useRef(dispatcher);

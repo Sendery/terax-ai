@@ -1,23 +1,11 @@
-/**
- * Handing a prompt to an interactive agent session is the fragile half of a
- * terminal run. Keystrokes only land once the agent's TUI has taken the
- * terminal into raw mode: type a moment too early and the text is still
- * buffered by the line discipline, the submitting Enter is folded into that
- * same burst, and the prompt sits in the composer unsent — the run looks fine
- * while nothing was ever asked.
- *
- * So this module never guesses with a fixed delay. It waits for the TUI to
- * announce itself, types, presses Enter, and then checks the terminal for
- * evidence that the turn actually started, pressing Enter again if it did not.
- * A redundant Enter is harmless: it lands on an empty composer.
- */
+/** Delivers a prompt once to a captured TUI and verifies new turn activity. */
 
 import { SUBMIT_KEY } from "./dispatch";
 
 export const HANDOFF_TIMING = {
   /** How often the TUI readiness signal is sampled. */
   readyPollMs: 150,
-  /** Beyond this the agent is assumed broken and we type as a last resort. */
+  /** A TUI that never becomes ready receives no prompt. */
   readyTimeoutMs: 45_000,
   /** Breathing room between the TUI appearing and the first keystroke. */
   readySettleMs: 300,
@@ -33,7 +21,9 @@ export const HANDOFF_TIMING = {
 
 export type HandoffIo = {
   /** Writes raw bytes to the terminal the agent is reading. */
-  write: (data: string) => void;
+  write: (data: string) => void | Promise<void>;
+  isCurrent?: () => boolean;
+  prompt?: string;
   /** True once a full-screen TUI has the terminal in raw mode. */
   isReady: () => boolean;
   /** Visible terminal text, or null when this leaf has no live buffer. */
@@ -51,75 +41,103 @@ export type HandoffResult = {
   confirmed: boolean;
 };
 
-// Braille spinner frames every TUI agent animates while it is busy.
-const SPINNER = /[\u2800-\u28ff]/;
-const BUSY_WORDS = /working|thinking|esc to interrupt/i;
-
-/**
- * Whether the terminal shows an agent that has taken a turn. The baseline is
- * the screen captured just before Enter: an idle agent repaints nothing, so a
- * change plus a busy marker is the pair that distinguishes a submitted prompt
- * from one that only grew a line in the composer.
- */
+const SPINNER = /[\u2801-\u28ff]/;
+const SPINNERS = /[\u2800-\u28ff]/g;
+const BUSY_WORDS = /^(?:working|thinking)(?:\b|\u2026)|\besc to interrupt\b/i;
+function marker(line: string): string {
+  return line
+    .trim()
+    .replace(SPINNERS, "<spinner>")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 export function turnStarted(
   baseline: string | null,
   current: string | null,
+  prompt = "",
 ): boolean {
-  if (baseline === null || current === null) return false;
-  if (current === baseline) return false;
-  return SPINNER.test(current) || BUSY_WORDS.test(current);
-}
+  if (baseline === null || current === null || current === baseline)
+    return false;
 
+  const promptText = marker(prompt).replace(/\s+/g, "");
+  const count = (text: string) =>
+    text.split(/\r?\n/).filter((line) => {
+      const key = marker(line)
+        .replace(/^(?:[>\u203a\u276f|\u2502]\s*)+/, "")
+        .replace(/\s+/g, "");
+      if (key !== "" && promptText.includes(key)) return false;
+      return SPINNER.test(line) || BUSY_WORDS.test(line.trim());
+    }).length;
+  return count(current) > count(baseline);
+}
+function assertCurrent(io: HandoffIo): void {
+  if (io.isCurrent && !io.isCurrent())
+    throw new Error("Task terminal is no longer available.");
+}
+function assertReady(io: HandoffIo): void {
+  assertCurrent(io);
+  if (!io.isReady()) throw new Error("Agent terminal is no longer ready.");
+}
 async function waitForReady(io: HandoffIo): Promise<boolean> {
   const deadline = io.now() + HANDOFF_TIMING.readyTimeoutMs;
   while (io.now() < deadline) {
+    assertCurrent(io);
     if (io.isReady()) return true;
     await io.sleep(HANDOFF_TIMING.readyPollMs);
   }
+  assertCurrent(io);
   return io.isReady();
 }
-
 async function readBuffer(io: HandoffIo): Promise<string | null> {
+  assertCurrent(io);
+  let value: string | null = null;
   try {
-    return await io.readBuffer();
-  } catch {
-    return null;
-  }
+    value = await io.readBuffer();
+  } catch {}
+  assertCurrent(io);
+  return value;
 }
-
-async function pressEnterAndWatch(io: HandoffIo): Promise<boolean> {
-  const baseline = await readBuffer(io);
-  io.write(SUBMIT_KEY);
+async function write(io: HandoffIo, data: string): Promise<void> {
+  assertReady(io);
+  await io.write(data);
+  assertCurrent(io);
+}
+async function pressEnterAndWatch(
+  io: HandoffIo,
+  prompt: string,
+  baseline: string | null,
+): Promise<boolean> {
+  await write(io, SUBMIT_KEY);
   const deadline = io.now() + HANDOFF_TIMING.verifyWindowMs;
   while (io.now() < deadline) {
     await io.sleep(HANDOFF_TIMING.verifyPollMs);
-    if (turnStarted(baseline, await readBuffer(io))) return true;
+    assertCurrent(io);
+    if (turnStarted(baseline, await readBuffer(io), prompt)) return true;
   }
   return false;
 }
-
-/**
- * Types a prompt into a live agent session and submits it.
- *
- * `keystrokes` is a callback rather than a string because the encoding of a
- * line break depends on the keyboard protocol the agent negotiates while it
- * boots: it can only be resolved once the TUI is up.
- */
 export async function handOffPrompt(
   io: HandoffIo,
   keystrokes: () => string | Promise<string>,
 ): Promise<HandoffResult> {
   const ready = await waitForReady(io);
-  if (ready) await io.sleep(HANDOFF_TIMING.readySettleMs);
-
+  if (!ready) return { ready: false, attempts: 0, confirmed: false };
+  await io.sleep(HANDOFF_TIMING.readySettleMs);
+  assertReady(io);
   const keys = await keystrokes();
-  if (keys !== "") io.write(keys);
+  assertReady(io);
+  if (keys !== "") await write(io, keys);
   await io.sleep(HANDOFF_TIMING.typeSettleMs);
-
+  assertReady(io);
+  const baseline = await readBuffer(io);
   for (let attempt = 1; attempt <= HANDOFF_TIMING.maxSubmits; attempt++) {
-    if (await pressEnterAndWatch(io)) {
+    if (
+      attempt > 1 &&
+      turnStarted(baseline, await readBuffer(io), io.prompt ?? keys)
+    )
+      return { ready, attempts: attempt - 1, confirmed: true };
+    if (await pressEnterAndWatch(io, io.prompt ?? keys, baseline))
       return { ready, attempts: attempt, confirmed: true };
-    }
   }
   return { ready, attempts: HANDOFF_TIMING.maxSubmits, confirmed: false };
 }
@@ -131,7 +149,7 @@ export function handoffMessage(
 ): string {
   const session = where.reused ? "the running session" : "a new session";
   if (!result.ready) {
-    return `Prompt typed into ${session} in tab ${where.tabId}, but the agent never signalled it was ready.`;
+    return `No prompt sent to ${session} in tab ${where.tabId}, but the agent never signalled it was ready.`;
   }
   if (!result.confirmed) {
     return `Prompt sent to ${session} in tab ${where.tabId}; the session did not visibly start a turn.`;

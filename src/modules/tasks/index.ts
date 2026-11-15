@@ -173,3 +173,8 @@ export {
   type WakerStatus,
   writeWakeState,
 } from "./lib/waker";
+export { createTaskTerminal, type TaskTerminal } from "./lib/taskTerminal";
+export {
+  createdTaskSessionPatch,
+  dispatchedTaskPatch,
+} from "./lib/deliveryState";

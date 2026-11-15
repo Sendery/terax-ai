@@ -603,14 +603,14 @@ export class EngineSession {
     invoke("gterm_request_full", { id }).catch(this.reportError);
   }
 
-  write(text: string): Promise<void> {
+  write(text: string, current: () => boolean = () => true): Promise<void> {
     if (!text)
       return this.failed
         ? Promise.reject(new Error("terminal engine failed"))
         : Promise.resolve();
     const bytes = textEncoder.encode(text);
     return this.enqueueInput(bytes.byteLength, (id) =>
-      this.writeBytes(id, bytes),
+      this.writeBytes(id, bytes, current),
     );
   }
 
@@ -628,10 +628,14 @@ export class EngineSession {
     );
   }
 
-  submit(text: string, current: () => boolean = () => true): Promise<void> {
+  submit(
+    text: string,
+    current: () => boolean = () => true,
+    onWriteAttempt?: () => void,
+  ): Promise<void> {
     if (!text)
       return this.enqueueInput(1, (id) =>
-        this.writeBytes(id, Uint8Array.of(13), current),
+        this.writeBytes(id, Uint8Array.of(13), current, onWriteAttempt),
       );
     return this.enqueueInput(
       textEncoder.encode(text).byteLength + 1,
@@ -641,7 +645,7 @@ export class EngineSession {
         const bytes = new Uint8Array(paste.length + 1);
         bytes.set(paste);
         bytes[paste.length] = 13;
-        await this.writeBytes(id, bytes, current);
+        await this.writeBytes(id, bytes, current, onWriteAttempt);
       },
     );
   }
@@ -734,12 +738,14 @@ export class EngineSession {
     id: number,
     bytes: Uint8Array,
     current: () => boolean = () => true,
+    onWriteAttempt?: () => void,
   ): Promise<void> {
     if (this.failed) return Promise.reject(new Error("terminal engine failed"));
     if (this.id !== id || this.closed || this.exitCode !== null)
       return Promise.resolve();
     if (!current())
       return Promise.reject(new Error("terminal input is unavailable"));
+    onWriteAttempt?.();
     return invoke("pty_write", bytes, { headers: { "x-pty-id": String(id) } });
   }
 
