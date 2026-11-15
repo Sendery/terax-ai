@@ -670,3 +670,39 @@ M2 functional proof and capture limits are in the
 [native links report](../plans/2026-11-15-terminal-native-links.md).
 This does not establish full grapheme rendering, other-platform runtime parity,
 or captured DOM hover overlays.
+
+
+### Native command-block core (opt-in, UI pending)
+
+gterm_open accepts optional blocks, default false, and passes one explicit
+value to the shell profile and actor. Child setup clears inherited TERAX_BLOCKS
+and its WSLENV variants; only explicit WSL blocks sessions forward that flag.
+Ordinary blocks panes remain on the legacy route until their consumers are
+integrated.
+
+The shell observer emits authenticated C/D events exactly at marker byte
+terminators. The actor feeds every original VT segment before observing its
+event; a metadata failure still feeds the rest of the batch, then enters the
+existing visible failure path. Non-block sessions allocate no BlockStore and
+retain the existing feed path. Command metadata remains outside public state.
+
+BlockStore retains bounded metadata and native tracked endpoints, not output
+copies: at most 1000 completed entries plus one live entry and 4 MiB allocated
+metadata. Reflow resolves through the native references; reclamation/reset
+returns unavailable rather than retargeting offsets. Empty/CRLF ranges exclude
+the next prompt. Completed output reads cap at 1 MiB and do not mutate the
+user selection. EOF finalizes live metadata once with unknown exit status;
+healthy post-exit queries remain possible until explicit close.
+
+gterm_blocks and gterm_read_block are internal Tauri queries sharing the
+32-request text/selection/search/link admission. IDs validate before admission.
+The receipt timeout is two seconds; it does not cancel accepted work. Disabled
+sessions fail explicitly. State carries only blocksEnabled and
+blocksMetadataVersion; the revision covers metadata, not geometry. Viewport,
+reflow, alternate screen and live endpoints require frame/resize projection.
+
+Native row-reference lifetime does not establish immutable completed-cell
+content. Cell overwrite/erase damage, full submitted command capture and the
+existing blocks UI/drafts/actions remain prerequisites for ordinary native
+blocks rollout. See the [native block-core report](../plans/2026-11-15-terminal-native-block-core.md)
+for real-PTY evidence, gates and the remaining parity scope.

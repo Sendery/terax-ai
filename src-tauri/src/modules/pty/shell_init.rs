@@ -109,8 +109,38 @@ fn ensure_utf8_locale(cmd: &mut CommandBuilder) {
 const TERM_PROGRAM: &str = "Terax";
 pub const SHELL_MARKER_ENV: &str = "TERAX_SHELL_INTEGRATION_TOKEN";
 
+fn apply_blocks_environment(cmd: &mut CommandBuilder, blocks: bool, wsl: bool) {
+    cmd.env_remove("TERAX_BLOCKS");
+    if blocks {
+        cmd.env("TERAX_BLOCKS", "1");
+    }
+    let inherited = cmd
+        .get_env("WSLENV")
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let mut names: Vec<&str> = inherited
+        .split(':')
+        .filter(|entry| {
+            !entry.is_empty()
+                && !entry
+                    .split('/')
+                    .next()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("TERAX_BLOCKS"))
+        })
+        .collect();
+    if blocks && wsl {
+        names.push("TERAX_BLOCKS");
+    }
+    if names.is_empty() {
+        cmd.env_remove("WSLENV");
+    } else {
+        cmd.env("WSLENV", names.join(":"));
+    }
+}
+
 fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     cmd.env_remove(SHELL_MARKER_ENV);
+    apply_blocks_environment(cmd, blocks, false);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", TERM_PROGRAM);
@@ -120,9 +150,6 @@ fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     // whichever instance last wrote the shared discovery file.
     if let Ok(discovery) = crate::modules::pi::cache_file_path() {
         cmd.env("TERAX_PI_DISCOVERY", discovery);
-    }
-    if blocks {
-        cmd.env("TERAX_BLOCKS", "1");
     }
     for (key, value) in workspace::appimage_env_overrides() {
         match value {
@@ -402,8 +429,7 @@ mod windows {
         blocks: bool,
     ) -> Result<CommandBuilder, String> {
         if let WorkspaceEnv::Wsl { distro } = workspace {
-            let _ = blocks;
-            return build_wsl(cwd, distro);
+            return build_wsl(cwd, distro, blocks);
         }
         let shell_path = super::windows_shell_path();
         let shell_name = shell_path
@@ -438,7 +464,11 @@ mod windows {
         Ok(cmd)
     }
 
-    fn build_wsl(cwd: Option<String>, distro: String) -> Result<CommandBuilder, String> {
+    fn build_wsl(
+        cwd: Option<String>,
+        distro: String,
+        blocks: bool,
+    ) -> Result<CommandBuilder, String> {
         crate::modules::workspace::validate_wsl_distro_name(&distro)?;
         let shell_path = crate::modules::workspace::wsl_login_shell(distro.clone())?;
         let shell_kind = ShellKind::from_path(&shell_path);
@@ -497,6 +527,7 @@ mod windows {
             cmd.arg(arg);
         }
         cmd.env_remove(SHELL_MARKER_ENV);
+        super::apply_blocks_environment(&mut cmd, blocks, true);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", super::TERM_PROGRAM);
@@ -887,5 +918,41 @@ mod term_program_tests {
         cmd.env("TERM_PROGRAM", "Apple_Terminal");
         apply_common(&mut cmd, None, false);
         assert_eq!(cmd.get_env("TERM_PROGRAM"), Some(OsStr::new("Terax")));
+    }
+    #[test]
+    fn explicit_blocks_option_overrides_inherited_environment() {
+        for enabled in [false, true] {
+            let mut cmd = CommandBuilder::new("sh");
+            cmd.env("TERAX_BLOCKS", "inherited");
+            apply_common(&mut cmd, None, enabled);
+            assert_eq!(
+                cmd.get_env("TERAX_BLOCKS"),
+                enabled.then_some(OsStr::new("1"))
+            );
+        }
+    }
+
+    #[test]
+    fn blocks_wsl_forwarding_is_explicit_and_preserves_unrelated_flags() {
+        for (enabled, wsl) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut cmd = CommandBuilder::new("sh");
+            cmd.env("TERAX_BLOCKS", "inherited");
+            cmd.env("WSLENV", "PATH/l:TERAX_BLOCKS/p:OTHER/u:terax_blocks/w");
+            apply_blocks_environment(&mut cmd, enabled, wsl);
+            assert_eq!(
+                cmd.get_env("TERAX_BLOCKS"),
+                enabled.then_some(OsStr::new("1"))
+            );
+            let expected = if enabled && wsl {
+                "PATH/l:OTHER/u:TERAX_BLOCKS"
+            } else {
+                "PATH/l:OTHER/u"
+            };
+            assert_eq!(cmd.get_env("WSLENV"), Some(OsStr::new(expected)));
+        }
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env("WSLENV", "TERAX_BLOCKS/u");
+        apply_blocks_environment(&mut cmd, false, true);
+        assert_eq!(cmd.get_env("WSLENV"), None);
     }
 }

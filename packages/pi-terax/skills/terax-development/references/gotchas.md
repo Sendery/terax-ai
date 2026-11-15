@@ -709,8 +709,8 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** native terminals need CWD/readiness or a process is replaced while state delivery is pending.
 - **Failure mode:** accepting bare OSC 7 or trusting any printed A/D allows untrusted output to change app CWD. Treating engine open as ready loses restoration input. A late ready message can re-arm global readiness after retirement reset.
-- **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
-- **Verification:** fragment/cancel/oversize/opaque-string tests, real shell script output and actor ordering, deferred open/respawn and post-exit state tests, and actual two-pane CWD plus forged-output rejection. Check native target cfg branches; M2 gates do not compile Windows. Canonicalize temporary directory fixtures before comparing physical shell PWD, per the existing macOS path lesson.
+- **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Block boundaries need the exact authenticated marker terminator within each PTY batch, not its final cursor; preserve all remaining bytes even after metadata failure, then report that failure. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
+- **Verification:** fragment/cancel/oversize/opaque-string tests, multiple C/D markers in one batch, tail bytes after metadata failure, real shell script output and actor ordering, deferred open/respawn and post-exit state tests, and actual two-pane CWD plus forged-output rejection. Check native target cfg branches; M2 gates do not compile Windows. Canonicalize temporary directory fixtures before comparing physical shell PWD, per the existing macOS path lesson.
 
 
 ### Native search normalization and overlays must share cell meaning
@@ -739,7 +739,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** pane position or sub-cell dimensions change without new PTY output.
 - **Failure mode:** hit testing is disabled until another frame arrives, even though the renderer already redrew the pane.
-- **Prevention:** request markUndrawn with geometry changes and resume hit testing only on onDrawn; preserve the last real frame sequence on a content-free redraw.
+- **Prevention:** request markUndrawn with geometry changes and resume hit testing only on onDrawn; preserve the last real frame sequence on a content-free redraw. Block metadata revisions do not version viewport, reflow, alternate-screen state or live endpoints; update their projection on relevant frame/resize changes.
 - **Verification:** move a pane with a constant drawn sequence and verify hover/activation resumes. Exercise a small divider move with a static program in the real app.
 
 ### React tab mutations cannot depend on eager state updaters
@@ -762,3 +762,25 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** subsequent browser default processing focuses the non-focusable host/body, so clicks appear to work but typing is lost.
 - **Prevention:** prevent only the primary pointer default and retain native selection/pointer capture. Keep focus bubbling to the leaf owner and preserve secondary/context-menu handling.
 - **Verification:** simulate browser default processing after pointerdown, assert textarea focus and untouched secondary default, then click and type in the real app.
+
+
+### Native block endpoints and row lifetime need separate evidence
+
+- **Trigger:** saving completed output ranges using native tracked references.
+- **Failure mode:** an inclusive column-zero endpoint reads the following prompt; empty output reads a prompt as output; a prune fixture assumes requested history bytes imply actual reclamation. Stable row references alone do not guarantee completed cells were never overwritten.
+- **Prevention:** distinguish empty output and anchor the last output cell before the prompt. Preserve carriage-return overwrite semantics. Test actual history reclamation, accounting for the native minimum page count, and reject unavailable references without offset fallback. Verify cell overwrite/erase damage before exposing completed output as stable.
+- **Verification:** immediate prompt after CRLF and empty output, carriage-return overwrite, reflow, actual reclamation, reset, alternate screen and post-exit reads. Inspect pinned native reference garbage semantics before changing the library or inventing a hash workaround.
+
+### Metadata limits must charge retained allocations
+
+- **Trigger:** bounding native metadata stored in owned strings.
+- **Failure mode:** charging only string length accepts short strings with large retained allocations, exceeding the claimed memory bound.
+- **Prevention:** charge allocated capacity and entry storage, evict bounded completed entries and reject an oversized live entry. Bound output formatting before allocation and keep it independent from user selection.
+- **Verification:** pass a short string with excess reserved capacity, exceed entry/output budgets, and verify no selection mutation.
+
+### Explicit shell modes must override inherited environment
+
+- **Trigger:** spawning a normal or blocks PTY from an environment that already contains mode flags.
+- **Failure mode:** the shell hides its prompt while the actor disables blocks; a WSL launch silently loses its explicit mode or inherits a stale forwarded value.
+- **Prevention:** clear inherited mode values before applying the explicit option, pass that option to both profile and actor, and remove case/flag variants of the corresponding WSLENV key while preserving unrelated entries. Forward only for an explicit WSL mode.
+- **Verification:** builder-only fixtures cover both options without process-global environment mutation, all mode/WSL combinations, mixed-case forwarding flags and empty WSLENV; exercise the actual profile/PTY path on each target OS.

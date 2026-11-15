@@ -51,7 +51,7 @@ to close a row; an alternative must deliver the same or better user behavior.
 | ID | Existing capability and primary source | Current new-engine evidence/gap | Observable completion evidence |
 |---|---|---|---|
 | A01 | Local cwd and readiness: OSC 7/133 handlers, shell init scripts, `markSessionReady` | A bounded actor-side observer and correlated OSC 133 markers now publish versioned CWD/readiness/running state. M2 ordinary zsh splits preserve independent Unicode/space CWD across focus/tab changes and ignore forged unsigned D/A plus OSC 7. Actual zsh/bash script bytes and native ordering are tested. Fish/PowerShell/WSL runtime and complete consumer scenarios remain open. | `cd` updates the correct pane and downstream cwd consumers; command output cannot spoof local cwd; readiness follows the shell rather than a guessed delay. |
-| A02 | Blocks mode: `blockController.ts`, `BlockDecorations`, `BlockOverlay`, `ShellInput` | `gterm_open` currently passes `blocks=false`; decorators and prompt/command markers depend on xterm objects. | Prompt/running/alternate-screen transitions, command text, exit status/duration, navigation, output selection, rerun, block search and input drafts work through stable Rust row anchors. |
+| A02 | Blocks mode: `blockController.ts`, `BlockDecorations`, `BlockOverlay`, `ShellInput` | Opt-in native core tracks authenticated C/D boundaries with bounded native references, output reads, status/duration and EOF. Default false; ordinary blocks panes and their UI/actions remain legacy. Full commands, cell damage and frame-driven projection still need integration. See the native-block-core report. | Prompt/running/alternate-screen transitions, command text, exit status/duration, navigation, output selection, rerun, block search and input drafts work through stable Rust row anchors. |
 | A03 | Header search: `SearchInline.tsx`, App's SearchAddon maps | The minimal shared search contract and native actor now drive the normal header. M2 proves incremental/full retained history, both directions, active/all highlights, clear, compact focus, split/reflow and original shell identity; Unicode, retained exit and stale-response invariants have native/client tests. See the 2026-11-15 native-search report. Other-platform runtime acceptance remains open. | Incremental search, next/previous, highlights, clearing and focus restoration work across live/history text and survive pane changes and reflow. |
 | A04 | Selection actions: `TerminalContextMenu.tsx`, selection popup, notes/Mermaid/TTS actions | Text selection APIs still read xterm; engine selection is missing. | Copy, Ask Terax, Add to Note, Open Mermaid and Read Aloud receive the same captured selection and never switch to a different pane or post-click selection. |
 | A05 | OSC 52 clipboard writes: `osc-handlers.ts` and tests | No clipboard callback/event bridge is installed on the engine path. | Preserve clipboard-only targets, bounded valid UTF-8 decoding, ignored queries/unsupported selections and nonblocking writes; do not add clipboard-read exposure. |
@@ -153,3 +153,13 @@ open for other supported shells/platforms. Search, links and blocks are next.
 ## Native links update (2026-11-15)
 
 See [the native-links report](2026-11-15-terminal-native-links.md). T11 now has ordinary M2 interaction evidence and bounded native/client regressions. It remains open for platform and hover/capture proof: the app rasterizer currently paints native canvas crops after DOM overlays. The full migration and default rollout remain incomplete. No new performance lab was run.
+
+
+## Native block-core update (2026-11-15)
+
+See [the native-block-core report](2026-11-15-terminal-native-block-core.md).
+The actor and real macOS zsh/PTY path now have bounded tracked-block evidence;
+A02 remains open until native UI, drafts, actions, command completeness and
+damage/projection behavior are integrated and exercised. All complete gates
+passed on M2. This backend change does not establish other-platform runtime
+acceptance, native blocks UI parity or default rollout.

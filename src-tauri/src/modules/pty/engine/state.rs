@@ -38,6 +38,8 @@ pub struct EngineState {
     pub modes: Modes,
     #[serde(flatten)]
     pub shell: ShellState,
+    pub blocks_enabled: bool,
+    pub blocks_metadata_version: u64,
 }
 type Listener = Arc<dyn Fn(EngineState) -> bool + Send + Sync>;
 #[derive(Default)]
@@ -68,16 +70,24 @@ impl StateStore {
         };
         notify(Some(listener), state)
     }
-    pub fn publish(&self, modes: Modes, shell: &ShellState) -> bool {
+    pub fn publish(&self, modes: Modes, shell: &ShellState, blocks_version: Option<u64>) -> bool {
+        let blocks_enabled = blocks_version.is_some();
+        let blocks_metadata_version = blocks_version.unwrap_or_default();
         let (listener, state) = {
             let mut inner = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-            if inner.state.modes == modes && &inner.state.shell == shell {
+            if inner.state.modes == modes
+                && &inner.state.shell == shell
+                && inner.state.blocks_enabled == blocks_enabled
+                && inner.state.blocks_metadata_version == blocks_metadata_version
+            {
                 return true;
             }
             inner.state = EngineState {
                 version: inner.state.version.saturating_add(1),
                 modes,
                 shell: shell.clone(),
+                blocks_enabled,
+                blocks_metadata_version,
             };
             (inner.listener.clone(), inner.state.clone())
         };
@@ -102,8 +112,8 @@ mod tests {
             modify_other_keys: 2,
             ..Modes::default()
         };
-        assert!(store.publish(modes, &ShellState::default()));
-        assert!(store.publish(modes, &ShellState::default()));
+        assert!(store.publish(modes, &ShellState::default(), None));
+        assert!(store.publish(modes, &ShellState::default(), None));
         assert_eq!(*values.lock().unwrap(), [0, 1]);
     }
     #[test]

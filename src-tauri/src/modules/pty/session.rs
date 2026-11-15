@@ -181,7 +181,7 @@ pub fn spawn(
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
         OutputSink::Engine { on_frame, colors, slot, on_failure, on_state } => {
-            let engine = start_engine(cols, rows, colors, shell_token.take().ok_or("native shell marker is missing")?, on_frame, on_state, writer.clone())?;
+            let engine = start_engine(cols, rows, colors, engine::ShellConfig { token: shell_token.take().ok_or("native shell marker is missing")?, blocks }, on_frame, on_state, writer.clone())?;
             Pipeline::Engine(EnginePipeline {
                 core: slot.install(engine)?,
                 slot,
@@ -400,14 +400,14 @@ fn start_engine(
     cols: u16,
     rows: u16,
     colors: Option<super::colors::Colors>,
-    shell_token: engine::shell::ShellToken,
+    shell_config: engine::ShellConfig,
     on_frame: Channel<Response>,
     on_state: Channel<engine::state::EngineState>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
 ) -> Result<engine::Engine, String> {
     let frames: engine::FrameSink =
         Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok());
-    let engine = engine::start_with_shell(cols, rows, colors, shell_token, frames, reply_sink(writer))?;
+    let engine = engine::start_with_shell(cols, rows, colors, shell_config, frames, reply_sink(writer))?;
     engine.handle.on_state(move |state| on_state.send(state).is_ok());
     Ok(engine)
 }
@@ -719,6 +719,97 @@ mod engine_pipeline_tests {
         EnginePipeline { core: slot.install(engine).unwrap(), slot, on_failure: Arc::new(|_| {}) }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn real_zsh_block_profile_retains_exact_outputs_and_status_after_pty_exit() {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().canonicalize().unwrap();
+        let profile = root.join("zshrc");
+        std::fs::write(&profile, include_str!("scripts/zshrc.zsh")).unwrap();
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 8,
+                cols: 60,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/zsh");
+        cmd.args(["-f","-c",r#"source "$1"; print -P -n -- "$PS1"; _terax_preexec 'printf first'; printf 'first\n'; _terax_precmd; print -P -n -- "$PS1"; _terax_preexec 'false'; printf 'second\n'; (exit 7); _terax_precmd; print -P -n -- "$PS1"; exit 0"#,"terax-test",profile.to_str().unwrap()]);
+        cmd.cwd(&root);
+        cmd.env("HOME", &root);
+        cmd.env("TERAX_USER_ZDOTDIR", &root);
+        cmd.env("TERAX_BLOCKS", "1");
+        cmd.env(
+            shell_init::SHELL_MARKER_ENV,
+            "1234567890abcdef1234567890abcdef",
+        );
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let reader = pair.master.try_clone_reader().unwrap();
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(pair.master.take_writer().unwrap()));
+        let (tx, rx) = mpsc::channel();
+        let frames = tx.clone();
+        let native = engine::start_with_shell(
+            60,
+            8,
+            None,
+            engine::ShellConfig {
+                token: engine::shell::ShellToken::for_test(),
+                blocks: true,
+            },
+            Box::new(move |frame| frames.send(Event::Frame(frame)).is_ok()),
+            reply_sink(writer),
+        )
+        .unwrap();
+        let pipeline = pipeline(native);
+        let retained = pipeline.slot.clone();
+        run_engine_pipeline(
+            2,
+            reader,
+            pipeline,
+            child,
+            Arc::new(AtomicBool::new(false)),
+            |_| {},
+            move |code| {
+                let _ = tx.send(Event::Exit(code));
+            },
+        )
+        .join()
+        .unwrap();
+        drop(pair.master);
+        let handle = retained.handle().unwrap();
+        let blocks = handle
+            .blocks()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        assert_eq!(blocks.blocks.len(), 2);
+        assert_eq!(
+            blocks
+                .blocks
+                .iter()
+                .map(|b| (b.command.as_str(), b.exit_code))
+                .collect::<Vec<_>>(),
+            [("printf first", Some(0)), ("false", Some(7))]
+        );
+        for (id, expected) in [("b1", "first"), ("b2", "second")] {
+            let block = handle
+                .read_block(id.into())
+                .unwrap()
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(block.output, expected);
+            assert_eq!(block.cwd, root.to_str().unwrap());
+        }
+        retained.close().unwrap().join().unwrap();
+        assert!(handle.blocks().is_err());
+        assert!(matches!(rx.try_iter().last(), Some(Event::Exit(0))));
+    }
     // A real shell on a real PTY: its output reaches the terminal, the
     // terminal's answer to a device query reaches the shell through the PTY
     // writer, and the last frame arrives before the exit code.

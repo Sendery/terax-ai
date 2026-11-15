@@ -73,6 +73,7 @@ pub async fn gterm_open(
     cwd: Option<String>,
     workspace: Option<WorkspaceEnv>,
     colors: Option<TerminalColors>,
+    blocks: Option<bool>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
     on_failure: Channel<String>,
@@ -81,15 +82,26 @@ pub async fn gterm_open(
     #[cfg(feature = "ghostty-engine")]
     {
         imp::open(
-            app, &state, &registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
-            on_failure, on_state,
+            app,
+            &state,
+            &registry,
+            cols,
+            rows,
+            cwd,
+            workspace,
+            colors,
+            blocks.unwrap_or(false),
+            on_frame,
+            on_exit,
+            on_failure,
+            on_state,
         )
         .await
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (
-            app, state, registry, cols, rows, cwd, workspace, colors, on_frame, on_exit,
+            app, state, registry, cols, rows, cwd, workspace, colors, blocks, on_frame, on_exit,
             on_failure, on_state,
         );
         Err(ENGINE_UNAVAILABLE.into())
@@ -176,6 +188,58 @@ pub async fn gterm_search(
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, command);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[cfg(feature = "ghostty-engine")]
+type BlockSnapshot = super::engine::blocks::BlockSnapshot;
+#[cfg(not(feature = "ghostty-engine"))]
+type BlockSnapshot = serde_json::Value;
+#[cfg(feature = "ghostty-engine")]
+type BlockOutput = super::engine::blocks::BlockOutput;
+#[cfg(not(feature = "ghostty-engine"))]
+type BlockOutput = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_blocks(state: State<'_, PtyState>, id: u32) -> Result<BlockSnapshot, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.blocks()?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal blocks query failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal blocks task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+#[tauri::command]
+pub async fn gterm_read_block(
+    state: State<'_, PtyState>,
+    id: u32,
+    block_id: String,
+) -> Result<Option<BlockOutput>, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.read_block(block_id)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal block read failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal block read task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, block_id);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -644,6 +708,7 @@ mod imp {
         cwd: Option<String>,
         workspace: Option<WorkspaceEnv>,
         colors: Option<TerminalColors>,
+        blocks: bool,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
         on_failure: Channel<String>,
@@ -665,7 +730,7 @@ mod imp {
             on_state,
         };
         let spawned = tauri::async_runtime::spawn_blocking(move || {
-            session::spawn(id, app, cols, rows, cwd, workspace, false, sink, on_exit)
+            session::spawn(id, app, cols, rows, cwd, workspace, blocks, sink, on_exit)
                 .map(|(s, _)| s)
         })
         .await

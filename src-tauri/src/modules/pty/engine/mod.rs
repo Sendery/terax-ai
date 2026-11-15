@@ -16,6 +16,8 @@ pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 #[cfg(feature = "ghostty-engine")]
 pub mod bench;
 #[cfg(feature = "ghostty-engine")]
+pub mod blocks;
+#[cfg(feature = "ghostty-engine")]
 pub mod input;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod keyboard_modes;
@@ -252,6 +254,27 @@ mod runtime {
         row: u16,
         reply: SyncSender<LinkReply>,
     }
+    pub type BlockSnapshotReceiver = Receiver<Result<super::blocks::BlockSnapshot, String>>;
+    pub type BlockOutputReceiver = Receiver<Result<Option<super::blocks::BlockOutput>, String>>;
+    enum BlockRequest {
+        Snapshot(SyncSender<Result<super::blocks::BlockSnapshot, String>>),
+        Read {
+            id: String,
+            reply: SyncSender<Result<Option<super::blocks::BlockOutput>, String>>,
+        },
+    }
+    impl BlockRequest {
+        fn reject(self, error: &str) {
+            match self {
+                Self::Snapshot(reply) => {
+                    let _ = reply.try_send(Err(error.into()));
+                }
+                Self::Read { reply, .. } => {
+                    let _ = reply.try_send(Err(error.into()));
+                }
+            }
+        }
+    }
     const MAX_TEXT_REQUESTS: usize = 32;
 
     struct TextRequest {
@@ -276,6 +299,7 @@ mod runtime {
         selection_requests: Vec<SelectionRequest>,
         search_requests: Vec<SearchRequest>,
         link_requests: Vec<LinkRequest>,
+        block_requests: Vec<BlockRequest>,
         text_pending: usize,
         text_closed: bool,
     }
@@ -299,6 +323,7 @@ mod runtime {
                 std::mem::take(&mut control.selection_requests),
                 std::mem::take(&mut control.search_requests),
                 std::mem::take(&mut control.link_requests),
+                std::mem::take(&mut control.block_requests),
             )
         };
         for request in pending.0 {
@@ -312,6 +337,9 @@ mod runtime {
         }
         for request in pending.3 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
+        }
+        for request in pending.4 {
+            request.reject("terminal engine closed");
         }
     }
 
@@ -460,6 +488,37 @@ mod runtime {
             Ok(receiver)
         }
 
+        pub fn blocks(&self) -> Result<BlockSnapshotReceiver, String> {
+            let (reply, receiver) = sync_channel(1);
+            self.queue_block(BlockRequest::Snapshot(reply))?;
+            Ok(receiver)
+        }
+        pub fn read_block(&self, id: String) -> Result<BlockOutputReceiver, String> {
+            super::blocks::validate_id(&id)?;
+            let (reply, receiver) = sync_channel(1);
+            self.queue_block(BlockRequest::Read { id, reply })?;
+            Ok(receiver)
+        }
+        fn queue_block(&self, request: BlockRequest) -> Result<(), String> {
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal queries".into());
+                }
+                control.text_pending += 1;
+                control.block_requests.push(request);
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(())
+        }
         pub fn input_state(&self) -> super::state::EngineState {
             self.stats.input_state.snapshot()
         }
@@ -625,22 +684,37 @@ mod runtime {
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
-        start_config(cols, rows, colors, None, frames, replies)
+        start_config(cols, rows, colors, None, false, frames, replies)
+    }
+
+    pub struct ShellConfig {
+        pub token: super::shell::ShellToken,
+        pub blocks: bool,
+    }
+    impl From<super::shell::ShellToken> for ShellConfig {
+        fn from(token: super::shell::ShellToken) -> Self {
+            Self {
+                token,
+                blocks: false,
+            }
+        }
     }
 
     pub fn start_with_shell(
         cols: u16,
         rows: u16,
         colors: Option<Colors>,
-        token: super::shell::ShellToken,
+        config: impl Into<ShellConfig>,
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
+        let config = config.into();
         start_config(
             cols,
             rows,
             colors,
-            Some(token.into_string()),
+            Some(config.token.into_string()),
+            config.blocks,
             frames,
             replies,
         )
@@ -651,6 +725,7 @@ mod runtime {
         rows: u16,
         colors: Option<Colors>,
         shell_token: Option<String>,
+        blocks_enabled: bool,
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
@@ -673,6 +748,7 @@ mod runtime {
                             rows,
                             colors,
                             shell_token,
+                            blocks_enabled,
                             &rx,
                             control.clone(),
                             stats,
@@ -715,6 +791,14 @@ mod runtime {
         })
     }
 
+    fn block_time() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
     struct Session<'cb> {
         term: Terminal<'static, 'cb>,
         snapshot: Snapshotter,
@@ -731,6 +815,7 @@ mod runtime {
         search: super::search::SearchState,
         keyboard_modes: super::keyboard_modes::KeyboardModes,
         shell: super::shell::ShellIntegration,
+        blocks: Option<super::blocks::BlockStore>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -738,8 +823,17 @@ mod runtime {
     impl Session<'_> {
         fn feed(&mut self, bytes: &[u8]) {
             self.keyboard_modes.ingest(bytes);
-            self.shell.ingest(bytes);
-            self.term.vt_write(bytes);
+            if let Some(blocks) = &mut self.blocks {
+                if let Err(error) =
+                    blocks.feed(&mut self.term, &mut self.shell, bytes, block_time())
+                {
+                    log::warn!("terminal block tracking failed: {error}");
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                }
+            } else {
+                self.shell.ingest(bytes);
+                self.term.vt_write(bytes);
+            }
             self.search.invalidate();
             self.update_input_state();
             self.update_scrollback_rows();
@@ -756,7 +850,11 @@ mod runtime {
             }
             match super::state::Modes::read(&self.term, self.keyboard_modes.modify_other_keys()) {
                 Ok(modes) => {
-                    if !self.stats.input_state.publish(modes, self.shell.state()) {
+                    if !self.stats.input_state.publish(
+                        modes,
+                        self.shell.state(),
+                        self.blocks.as_ref().map(|blocks| blocks.metadata_version()),
+                    ) {
                         self.health.fail(EngineFailure::StateChannelClosed);
                     }
                 }
@@ -808,6 +906,9 @@ mod runtime {
                 }
                 for request in c.link_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                }
+                for request in c.block_requests {
+                    request.reject("terminal engine closed");
                 }
                 reject_text_requests(&self.control);
                 self.reply_sink.take();
@@ -890,6 +991,34 @@ mod runtime {
                         .link_context(request.seq, request.col, request.row)
                 };
                 let _ = request.reply.try_send(result);
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                control.text_pending = control.text_pending.saturating_sub(1);
+            }
+            for request in c.block_requests {
+                match request {
+                    BlockRequest::Snapshot(reply) => {
+                        let result = if self.health.failure().is_some() {
+                            Err("terminal engine is unavailable".into())
+                        } else {
+                            self.blocks
+                                .as_ref()
+                                .ok_or_else(|| "native blocks are not enabled".into())
+                                .and_then(|blocks| blocks.snapshot(&self.term))
+                        };
+                        let _ = reply.try_send(result);
+                    }
+                    BlockRequest::Read { id, reply } => {
+                        let result = if self.health.failure().is_some() {
+                            Err("terminal engine is unavailable".into())
+                        } else {
+                            self.blocks
+                                .as_ref()
+                                .ok_or_else(|| "native blocks are not enabled".into())
+                                .and_then(|blocks| blocks.read(&self.term, &id))
+                        };
+                        let _ = reply.try_send(result);
+                    }
+                }
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
                 control.text_pending = control.text_pending.saturating_sub(1);
             }
@@ -985,6 +1114,17 @@ mod runtime {
 
         fn finish_input(&mut self) -> Result<(), EngineFailure> {
             if !self.input_finished {
+                if let Some(blocks) = &mut self.blocks {
+                    let previous = blocks.metadata_version();
+                    if let Err(error) = blocks.finish_input(&self.term, block_time()) {
+                        log::warn!("terminal block finalization failed: {error}");
+                        self.health.fail(EngineFailure::SnapshotFailed);
+                    }
+                    if blocks.metadata_version() != previous {
+                        self.pump.request_full();
+                    }
+                }
+                self.update_input_state();
                 self.finish();
                 self.input_finished = true;
                 self.reply_sink.take();
@@ -1009,6 +1149,7 @@ mod runtime {
         rows: u16,
         colors: Option<Colors>,
         shell_token: Option<String>,
+        blocks_enabled: bool,
         rx: &Receiver<Input>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
@@ -1054,6 +1195,7 @@ mod runtime {
             search: super::search::SearchState::default(),
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
             shell: super::shell::ShellIntegration::new(shell_token),
+            blocks: blocks_enabled.then(super::blocks::BlockStore::default),
             control,
             stats,
         };
@@ -1752,7 +1894,7 @@ mod engine_tests {
         began.recv_timeout(WAIT).unwrap();
         assert!(engine.handle.read_text(0).is_err());
         assert!(engine.handle.read_text(1001).is_err());
-        let queries: Vec<_> = (0..29)
+        let queries: Vec<_> = (0..27)
             .map(|_| engine.handle.read_text(2).unwrap())
             .collect();
         let search = engine
@@ -1764,6 +1906,11 @@ mod engine_tests {
             .selection(super::selection::SelectionCommand::Read)
             .unwrap();
         let link = engine.handle.link_context(1, 0, 0).unwrap();
+        assert!(engine.handle.read_block("b0".into()).is_err());
+        let blocks = engine.handle.blocks().unwrap();
+        let block_read = engine.handle.read_block("b1".into()).unwrap();
+        assert!(engine.handle.blocks().is_err());
+        assert!(engine.handle.read_block("b1".into()).is_err());
         assert!(engine.handle.link_context(1, 0, 0).is_err());
         assert!(engine
             .handle
@@ -1783,6 +1930,16 @@ mod engine_tests {
         assert!(!search.recv_timeout(WAIT).unwrap().unwrap());
         assert_eq!(selection.recv_timeout(WAIT).unwrap().unwrap(), None);
         assert!(link.recv_timeout(WAIT).unwrap().unwrap().is_none());
+        assert!(blocks
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap_err()
+            .contains("not enabled"));
+        assert!(block_read
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap_err()
+            .contains("not enabled"));
         engine.input.shutdown();
         engine.thread.join().unwrap();
         assert!(engine.handle.read_text(2).is_err());
@@ -2038,6 +2195,142 @@ mod shell_actor_tests {
         assert_eq!(state.shell.cwd.as_deref(), Some("/tmp/native"));
         assert!(state.shell.shell_ready);
         assert!(!state.shell.command_running);
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod block_actor_tests {
+    use super::*;
+    const WAIT: Duration = Duration::from_secs(3);
+    const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+    fn engine(blocks: bool) -> Engine {
+        start_with_shell(
+            30,
+            5,
+            None,
+            ShellConfig {
+                token: shell::ShellToken::for_test(),
+                blocks,
+            },
+            Box::new(|_| true),
+            Box::new(|_| {}),
+        )
+        .unwrap()
+    }
+    fn end_input(engine: &Engine) {
+        engine
+            .input
+            .finish()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+    }
+    #[test]
+    fn one_message_preserves_each_block_boundary_and_post_exit_reads() {
+        let engine = engine(true);
+        let input=format!("\x1b]133;A;aid={TOKEN}\x07\x1b]7;file://host/tmp/native\x07cmd1\r\n\x1b]133;C;aid={TOKEN};cmdline_url=cmd1\x07one\r\n\x1b]133;D;0;aid={TOKEN}\x07cmd2\r\n\x1b]133;C;aid={TOKEN};cmdline_url=cmd2\x07two\r\n\x1b]133;D;2;aid={TOKEN}\x07PROMPT");
+        let bytes = input.len();
+        assert!(engine.input.feed(input.into_bytes()));
+        end_input(&engine);
+        let snapshot = engine
+            .handle
+            .blocks()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.blocks.len(), 2);
+        assert_eq!(snapshot.metadata_version, 4);
+        assert_eq!(
+            engine
+                .handle
+                .read_block("b1".into())
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .output,
+            "one"
+        );
+        let second = engine
+            .handle
+            .read_block("b2".into())
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (
+                second.output.as_str(),
+                second.cwd.as_str(),
+                second.exit_code
+            ),
+            ("two", "/tmp/native", Some(2))
+        );
+        let state = engine.handle.input_state();
+        assert!(state.blocks_enabled);
+        assert_eq!(state.blocks_metadata_version, 4);
+        assert_eq!(engine.handle.stats().bytes_fed, bytes as u64);
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+        assert!(engine.handle.blocks().is_err());
+        assert!(engine.handle.read_block("b1".into()).is_err());
+    }
+    #[test]
+    fn block_tracking_is_opt_in_and_disabled_queries_fail_explicitly() {
+        let engine = engine(false);
+        assert!(engine.input.feed(
+            format!("\x1b]133;C;aid={TOKEN}\x07out\x1b]133;D;0;aid={TOKEN}\x07").into_bytes()
+        ));
+        end_input(&engine);
+        let error = engine
+            .handle
+            .blocks()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap_err();
+        assert!(error.contains("not enabled"));
+        assert!(!engine.handle.input_state().blocks_enabled);
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+    #[test]
+    fn eof_finishes_a_live_block_once_without_inventing_an_exit_code() {
+        let engine = engine(true);
+        assert!(engine
+            .input
+            .feed(format!("\x1b]133;C;aid={TOKEN}\x07last\r\n").into_bytes()));
+        end_input(&engine);
+        assert!(engine.input.finish().is_err());
+        let snapshot = engine
+            .handle
+            .blocks()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.metadata_version, 2);
+        let meta = &snapshot.blocks[0];
+        assert!(!meta.running);
+        assert_eq!(meta.exit_code, None);
+        assert_eq!(
+            engine
+                .handle
+                .read_block(meta.id.clone())
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .output,
+            "last"
+        );
         engine.input.shutdown();
         engine.thread.join().unwrap();
     }

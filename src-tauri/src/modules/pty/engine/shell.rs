@@ -12,6 +12,17 @@ pub struct ShellState {
     pub command_running: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ShellEvent {
+    CommandStart {
+        command: String,
+        cwd: Option<String>,
+    },
+    CommandEnd {
+        exit_code: i32,
+    },
+}
+
 #[cfg(feature = "ghostty-engine")]
 pub struct ShellToken(String);
 #[cfg(feature = "ghostty-engine")]
@@ -55,6 +66,8 @@ pub struct ShellIntegration {
     discard: bool,
     allow_cwd: bool,
     utf8_remaining: u8,
+    capture_events: bool,
+    event: Option<ShellEvent>,
 }
 impl ShellIntegration {
     pub fn new(token: Option<String>) -> Self {
@@ -66,6 +79,8 @@ impl ShellIntegration {
             discard: false,
             allow_cwd: false,
             utf8_remaining: 0,
+            capture_events: false,
+            event: None,
         }
     }
     pub fn state(&self) -> &ShellState {
@@ -83,6 +98,35 @@ impl ShellIntegration {
             self.byte(byte);
         }
     }
+    pub fn ingest_segments(
+        &mut self,
+        bytes: &[u8],
+        mut consume: impl FnMut(&[u8], Option<ShellEvent>) -> Result<(), String>,
+    ) -> Result<(), String> {
+        if self.token.is_none() {
+            return consume(bytes, None);
+        }
+        self.capture_events = true;
+        let result = (|| {
+            let mut start = 0;
+            for (index, &byte) in bytes.iter().enumerate() {
+                self.byte(byte);
+                if let Some(event) = self.event.take() {
+                    let end = index + 1;
+                    consume(&bytes[start..end], Some(event))?;
+                    start = end;
+                }
+            }
+            if start < bytes.len() {
+                consume(&bytes[start..], None)?;
+            }
+            Ok(())
+        })();
+        self.capture_events = false;
+        self.event = None;
+        result
+    }
+
     fn byte(&mut self, byte: u8) {
         let continuation = self.utf8_remaining > 0 && (0x80..=0xbf).contains(&byte);
         self.utf8_remaining = if continuation {
@@ -193,13 +237,16 @@ impl ShellIntegration {
                             self.allow_cwd = true;
                             self.state.command_running = false;
                         }
-                        "D" if parts
-                            .next()
-                            .and_then(|value| value.parse::<i32>().ok())
-                            .is_some() =>
-                        {
-                            self.allow_cwd = true;
-                            self.state.command_running = false;
+                        "D" => {
+                            if let Some(exit_code) =
+                                parts.next().and_then(|value| value.parse::<i32>().ok())
+                            {
+                                self.allow_cwd = true;
+                                self.state.command_running = false;
+                                if self.capture_events {
+                                    self.event = Some(ShellEvent::CommandEnd { exit_code });
+                                }
+                            }
                         }
                         "B" => {
                             self.allow_cwd = false;
@@ -209,6 +256,12 @@ impl ShellIntegration {
                         "C" => {
                             self.allow_cwd = false;
                             self.state.command_running = true;
+                            if self.capture_events {
+                                self.event = Some(ShellEvent::CommandStart {
+                                    command: parse_command(parts),
+                                    cwd: self.state.cwd.clone(),
+                                });
+                            }
                         }
                         _ => {}
                     }
@@ -226,6 +279,40 @@ impl ShellIntegration {
         self.buffer.clear();
     }
 }
+fn parse_command<'a>(parts: impl Iterator<Item = &'a str>) -> String {
+    let mut commands = parts.filter_map(|part| part.strip_prefix("cmdline_url="));
+    let Some(encoded) = commands.next() else {
+        return String::new();
+    };
+    if commands.next().is_some() {
+        return String::new();
+    }
+    let decode = || -> Option<String> {
+        let mut bytes = encoded.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        while let Some((&byte, rest)) = bytes.split_first() {
+            if byte == b'%' {
+                let high = (*rest.first()? as char).to_digit(16)? as u8;
+                let low = (*rest.get(1)? as char).to_digit(16)? as u8;
+                decoded.push((high << 4) | low);
+                bytes = &rest[2..];
+            } else {
+                decoded.push(byte);
+                bytes = rest;
+            }
+        }
+        let command = String::from_utf8(decoded).ok()?;
+        if command
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+        {
+            return None;
+        }
+        Some(command)
+    };
+    decode().unwrap_or_default()
+}
+
 fn parse_cwd(data: &[u8]) -> Option<String> {
     let uri = std::str::from_utf8(data).ok()?.strip_prefix("file://")?;
     if uri.chars().any(char::is_control) || uri.contains(['?', '#']) {
@@ -421,6 +508,107 @@ mod script_tests {
                         .any(|bytes| bytes == TOKEN.as_bytes()));
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod block_event_tests {
+    use super::*;
+    const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+    fn collect(parts: &[&[u8]]) -> (Vec<u8>, Vec<ShellEvent>) {
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut copied = Vec::new();
+        let mut events = Vec::new();
+        for bytes in parts {
+            shell
+                .ingest_segments(bytes, |segment, event| {
+                    copied.extend_from_slice(segment);
+                    if let Some(event) = event {
+                        events.push(event);
+                    }
+                    Ok(())
+                })
+                .unwrap();
+        }
+        (copied, events)
+    }
+    #[test]
+    fn signed_block_events_split_original_bytes_at_the_marker_not_the_batch_end() {
+        let input = format!("\x1b]133;A;aid={TOKEN}\x07\x1b]7;file://host/tmp/na%C3%AFve\x07prompt\r\n\x1b]133;C;aid={TOKEN};cmdline_url=echo%20%E9%9B%AA%0Anext\x1b\\first\r\nsecond\x1b]133;D;7;aid={TOKEN}\x07tail");
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut segments = Vec::new();
+        shell
+            .ingest_segments(input.as_bytes(), |bytes, event| {
+                segments.push((bytes.to_vec(), event));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            segments
+                .iter()
+                .flat_map(|(b, _)| b.iter().copied())
+                .collect::<Vec<_>>(),
+            input.as_bytes()
+        );
+        let start = segments
+            .iter()
+            .find(|(_, event)| matches!(event, Some(ShellEvent::CommandStart { .. })))
+            .unwrap();
+        assert!(start.0.ends_with(b"\x1b\\"));
+        assert!(!start.0.windows(5).any(|b| b == b"first"));
+        assert_eq!(
+            start.1,
+            Some(ShellEvent::CommandStart {
+                command: "echo 雪\nnext".into(),
+                cwd: Some("/tmp/naïve".into())
+            })
+        );
+        let end = segments
+            .iter()
+            .find(|(_, event)| matches!(event, Some(ShellEvent::CommandEnd { .. })))
+            .unwrap();
+        assert!(end.0.starts_with(b"first\r\nsecond"));
+        assert_eq!(end.1, Some(ShellEvent::CommandEnd { exit_code: 7 }));
+        assert_eq!(segments.last().unwrap().0, b"tail");
+    }
+    #[test]
+    fn every_fragment_boundary_preserves_bytes_and_authenticated_metadata() {
+        let input=format!("before\x1b]133;C;cmdline_url=printf%20ok;aid={TOKEN}\x07output\x1b]133;D;0;aid={TOKEN}\x1b\\after").into_bytes();
+        let expected = collect(&[&input]);
+        for cut in 0..=input.len() {
+            assert_eq!(
+                collect(&[&input[..cut], &input[cut..]]),
+                expected,
+                "cut {cut}"
+            );
+        }
+    }
+    #[test]
+    fn unsigned_duplicate_aid_and_opaque_markers_cannot_create_blocks() {
+        let input=format!("\x1b]133;C;evil\x07\x1b]133;D;0\x07\x1b]133;C;aid={TOKEN};aid={TOKEN}\x07\x1bP\x1b]133;C;aid={TOKEN}\x07\x1b\\");
+        let (bytes, events) = collect(&[input.as_bytes()]);
+        assert_eq!(bytes, input.as_bytes());
+        assert!(events.is_empty());
+    }
+    #[test]
+    fn malformed_command_metadata_is_empty_and_never_changes_the_bytes() {
+        for command in [
+            "cmdline_url=%GG",
+            "cmdline_url=%FF",
+            "cmdline_url=%00",
+            "cmdline_url=one;cmdline_url=two",
+        ] {
+            let input = format!("\x1b]133;C;aid={TOKEN};{command}\x07");
+            let (bytes, events) = collect(&[input.as_bytes()]);
+            assert_eq!(bytes, input.as_bytes());
+            assert_eq!(
+                events,
+                [ShellEvent::CommandStart {
+                    command: String::new(),
+                    cwd: None
+                }]
+            );
         }
     }
 }
