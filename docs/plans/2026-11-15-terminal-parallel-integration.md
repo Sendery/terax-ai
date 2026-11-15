@@ -152,4 +152,3 @@ separately from missing implementation.
 The active goal remains a usable normal Terax with the new terminal and the
 same capabilities or better. Default rollout, applicable real-workload and
 platform acceptance remain open. 60 FPS is optional and deferred.
-

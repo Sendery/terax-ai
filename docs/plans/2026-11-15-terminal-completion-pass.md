@@ -85,4 +85,3 @@ acceptance. Record any real external prerequisite rather than declaring it
 implemented. The later sweep owns full frontend and Rust gates, one matching
 sandbox build, privacy/failure scenarios and real app interactions. Do not
 claim the overall goal complete from the implementation pass alone.
-
