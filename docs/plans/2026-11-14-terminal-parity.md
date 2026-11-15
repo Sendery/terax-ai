@@ -163,3 +163,21 @@ A02 remains open until native UI, drafts, actions, command completeness and
 damage/projection behavior are integrated and exercised. All complete gates
 passed on M2. This backend change does not establish other-platform runtime
 acceptance, native blocks UI parity or default rollout.
+
+
+## Parallel integration update (2026-11-15)
+
+The row descriptions above preserve the original audit chronology. Current
+source and runtime evidence are recorded in the
+[parallel integration report](2026-11-15-terminal-parallel-integration.md).
+The integrated a27ea8f source includes native software fallback, physical
+file-drop targeting, owner-bound restoration, background contrast, live cursor
+preferences and owner-bound task delivery. Focused integration checks pass691
+tests plus one existing skip; types, unchanged lint baseline and the sandbox
+build pass. The exact normal-environment bundle starts on M2. Locked-screen
+graphical checks remain pending, so no complete capability row is closed.
+
+The remaining concrete existing-parity gaps include Clear actions, configured
+history rows, Bash command completeness and inactive native-pane capture.
+OSC99/progress9;4 belong to the original requested-new-capabilities Phase4;
+they are not regressions from the old terminal and are not claimed delivered.
