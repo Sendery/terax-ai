@@ -19,6 +19,7 @@ const data = (seq = 1, offset = 0) => ({
       cwd: "/workspace",
       exitCode: 0,
       running: false,
+      headerLine: 0,
       startLine: 2,
       endLine: 3,
       startedAt: 1,
@@ -39,7 +40,7 @@ it("validates the exact presented frame and bounded block metadata", () => {
     { blocks: [{ ...data().blocks[0], id: "b0" }] },
     { blocks: [{ ...data().blocks[0], id: "b18446744073709551616" }] },
     { blocks: [{ ...data().blocks[0], startLine: 4, endLine: 3 }] },
-    { blocks: [{ ...data().blocks[0], command: "x".repeat(4097) }] },
+    { blocks: [{ ...data().blocks[0], command: "x".repeat(1024 * 1024 + 1) }] },
     { blocks: [{ ...data().blocks[0], cwd: "relative" }] },
     { blocks: [data().blocks[0], data().blocks[0]] },
   ])
@@ -147,3 +148,32 @@ function requireFixture<T>(value: T | null | undefined): T {
   if (value == null) throw new Error("Missing test fixture");
   return value;
 }
+
+it("preserves long multiline commands and uses only the native prompt header anchor", () => {
+  const value = data();
+  value.blocks[0].command = "printf 'e\u0301界'\n".repeat(800);
+  value.blocks[0].startLine = 20;
+  value.blocks[0].endLine = 20;
+  value.blocks[0].headerLine = 1;
+  const snapshot = decodeNativeBlocks(value, 1);
+  expect(snapshot.blocks[0].command).toBe(value.blocks[0].command);
+  const visible = projectNativeBlocks(snapshot, 20);
+  expect(visible.blocks[0]).toMatchObject({ top: 406, headerTop: 28 });
+  const unavailable = {
+    ...snapshot,
+    blocks: [{ ...snapshot.blocks[0], headerLine: null }],
+  };
+  expect(projectNativeBlocks(unavailable, 20).blocks).toEqual([]);
+  unavailable.blocks[0].startLine = 2;
+  unavailable.blocks[0].endLine = 3;
+  expect(projectNativeBlocks(unavailable, 20).blocks[0].headerTop).toBeNull();
+});
+it("rejects absent, nonintegral, negative or forward header anchors", () => {
+  for (const headerLine of [undefined, -1, 1.5, NaN, 3, 0x100000000]) {
+    const value = data();
+    const block = { ...value.blocks[0], headerLine };
+    expect(() => decodeNativeBlocks({ ...value, blocks: [block] }, 1)).toThrow(
+      "invalid",
+    );
+  }
+});

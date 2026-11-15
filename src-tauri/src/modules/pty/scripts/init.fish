@@ -95,7 +95,14 @@ __terax_install_prompt
 function __terax_preexec --on-event fish_preexec
     set -g __terax_block_seen 1
     set -l cmd (string replace -ra '[\x00-\x1f\x7f]' ' ' -- "$argv")
-    if test -n "$__terax_aid"
+    if test -n "$__terax_aid"; and set -q TERAX_BLOCKS
+        set -l encoded (string escape --style=url -- "$argv[1]")
+        if test (string length -- "$encoded") -le 3145728
+            printf '\e]133;C%s;cmdline_url=%s\e\\' "$__terax_aid" "$encoded"
+        else
+            printf '\e]133;C%s\e\\' "$__terax_aid"
+        end
+    else if test -n "$__terax_aid"
         printf '\e]133;C%s;cmdline_url=%s\e\\' "$__terax_aid" (string escape --style=url -- (string sub -l 256 -- "$cmd"))
     else
         printf '\e]133;C;%s\e\\' (string sub -l 256 -- "$cmd")

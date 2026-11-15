@@ -842,3 +842,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** clicks miss real controls, or an immediate missing-file read is misclassified as a terminal failure.
 - **Prevention:** resolve known controls within the authenticated Terax PID and current AX window bounds. Poll the same owned public acknowledgement without resending the command. Verify the actual editor value before retargeting. Read the existing tab capabilities before attempting a split; blocks intentionally retain their single-leaf baseline.
 - **Verification:** actual menu/search controls, two independent native block drafts, foreground read reply and separate ordinary split cwd acknowledgements on M2. Capture only Terax surfaces and inspect private-capture rejection without recording private pixels.
+
+
+### A header anchor must still identify a reserved row
+
+- **Trigger:** a long echoed command wraps across several rows, or a program uses cursor addressing above its own output.
+- **Failure mode:** positioning a toolbar at a fixed distance above output overlays a wrapped command. A tracked header reference can also survive after the program writes text into its reserved row, while the output integrity stamp remains valid.
+- **Prevention:** capture the native reserved row at authenticated prompt-end, invalidate pending anchors at prompt-start and transfer ownership at authenticated command-start. Retain nullable anchors with each presented snapshot and let native reflow/collection decide their lifetime. Check visible reserved rows for native text before publishing; suppress only an overwritten or unavailable header, without moving it to a guessed row or rejecting intact output.
+- **Verification:** native wrapped echo/reflow, missing/unsigned/invalidated prompt and CUP overwrite regressions; client rejects invalid anchors and preserves long multiline metadata. Directly invoking preexec verifies encoding only; exercise an interactive PTY to prove how the shell actually delivers the accepted command.

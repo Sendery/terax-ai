@@ -2,7 +2,8 @@ use serde::Serialize;
 
 pub const MAX_CWD_BYTES: usize = 128 * 1024;
 const MAX_OSC_BYTES: usize = MAX_CWD_BYTES * 3 + 512;
-const MAX_MARK_BYTES: usize = 4096;
+pub const MAX_COMMAND_BYTES: usize = 1024 * 1024;
+const MAX_MARK_BYTES: usize = MAX_COMMAND_BYTES * 3 + 512;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +16,8 @@ pub struct ShellState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShellEvent {
+    PromptStart,
+    PromptEnd,
     CommandStart {
         command: String,
         cwd: Option<String>,
@@ -204,9 +207,12 @@ impl ShellIntegration {
         if self.discard {
             return;
         }
-        if self.buffer.len() == MAX_OSC_BYTES
-            || (self.buffer.starts_with(b"133;") && self.buffer.len() == MAX_MARK_BYTES)
-        {
+        let limit = if self.buffer.starts_with(b"133;") {
+            MAX_MARK_BYTES
+        } else {
+            MAX_OSC_BYTES
+        };
+        if self.buffer.len() == limit {
             self.discard = true;
             self.buffer.clear();
             return;
@@ -235,6 +241,9 @@ impl ShellIntegration {
                 if aids.next() == self.token.as_deref() && aids.next().is_none() {
                     match action {
                         "A" => {
+                            if self.capture_events {
+                                self.event = Some(ShellEvent::PromptStart);
+                            }
                             self.allow_cwd = true;
                             self.state.command_running = false;
                         }
@@ -250,6 +259,9 @@ impl ShellIntegration {
                             }
                         }
                         "B" => {
+                            if self.capture_events {
+                                self.event = Some(ShellEvent::PromptEnd);
+                            }
                             self.state.prompt_version = self.state.prompt_version.saturating_add(1);
                             self.allow_cwd = false;
                             self.state.shell_ready = true;
@@ -291,8 +303,11 @@ fn parse_command<'a>(parts: impl Iterator<Item = &'a str>) -> String {
     }
     let decode = || -> Option<String> {
         let mut bytes = encoded.as_bytes();
-        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut decoded = Vec::with_capacity(bytes.len().min(MAX_COMMAND_BYTES));
         while let Some((&byte, rest)) = bytes.split_first() {
+            if decoded.len() == MAX_COMMAND_BYTES {
+                return None;
+            }
             if byte == b'%' {
                 let high = (*rest.first()? as char).to_digit(16)? as u8;
                 let low = (*rest.get(1)? as char).to_digit(16)? as u8;
@@ -627,9 +642,177 @@ mod prompt_revision_tests {
         shell.ingest(b"\x1b]133;B\x1b\\");
         shell.ingest(b"\x1b]133;B;aid=wrong\x1b\\");
         assert_eq!(shell.state().prompt_version, 1);
-        for byte in bytes { shell.ingest(&[*byte]); }
+        for byte in bytes {
+            shell.ingest(&[*byte]);
+        }
         assert_eq!(shell.state().prompt_version, 2);
         assert!(shell.state().shell_ready);
         assert!(!shell.state().command_running);
+    }
+}
+
+#[cfg(test)]
+mod full_command_tests {
+    use super::*;
+    const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+    fn commands(bytes: &[u8]) -> Vec<String> {
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut result = Vec::new();
+        shell
+            .ingest_segments(bytes, |_, event| {
+                if let Some(ShellEvent::CommandStart { command, .. }) = event {
+                    result.push(command);
+                }
+                Ok(())
+            })
+            .unwrap();
+        result
+    }
+    #[test]
+    fn complete_commands_preserve_multiline_unicode_beyond_the_old_marker_limit() {
+        let command = format!("printf '{}'\n\tprintf end", "雪%20;".repeat(1200));
+        let encoded = command
+            .replace('%', "%25")
+            .replace(';', "%3B")
+            .replace('\n', "%0A")
+            .replace('\t', "%09");
+        let marker = format!("\x1b]133;C;aid={TOKEN};cmdline_url={encoded}\x1b\\");
+        assert_eq!(commands(marker.as_bytes()), vec![command]);
+    }
+    #[test]
+    fn command_bound_rejects_the_entire_value_instead_of_publishing_a_prefix() {
+        for command in [
+            "x".repeat(MAX_COMMAND_BYTES + 1),
+            "雪".repeat(MAX_COMMAND_BYTES / 3 + 1),
+        ] {
+            let marker = format!("\x1b]133;C;aid={TOKEN};cmdline_url={command}\x07");
+            assert_eq!(commands(marker.as_bytes()), vec![String::new()]);
+        }
+        let command = "x".repeat(MAX_COMMAND_BYTES);
+        let marker = format!("\x1b]133;C;aid={TOKEN};cmdline_url={command}\x07");
+        assert_eq!(commands(marker.as_bytes()), vec![command]);
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn actual_zsh_native_block_hook_keeps_the_full_original_command() {
+        let home = tempfile::tempdir().unwrap();
+        let script = home.path().join("zsh-integration");
+        std::fs::write(&script, include_str!("../scripts/zshrc.zsh")).unwrap();
+        let command = format!("printf '{}'\n\tprintf tail", "e\u{301}界;".repeat(900));
+        let output = std::process::Command::new("/bin/zsh")
+            .args([
+                "-f",
+                "-c",
+                "source \"$1\"; _terax_preexec \"$2\"",
+                "terax-test",
+            ])
+            .arg(&script)
+            .arg(&command)
+            .env("HOME", home.path())
+            .env("TERAX_USER_ZDOTDIR", home.path())
+            .env("TERAX_SHELL_INTEGRATION_TOKEN", TOKEN)
+            .env("TERAX_BLOCKS", "1")
+            .current_dir(home.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(commands(&output.stdout), vec![command]);
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod interactive_command_tests {
+    use super::*;
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use std::io::{Read, Write};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+    #[test]
+    fn real_interactive_zsh_hook_receives_the_complete_accepted_multiline_command() {
+        const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().canonicalize().unwrap();
+        std::fs::write(root.join(".zshrc"), include_str!("../scripts/zshrc.zsh")).unwrap();
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 8,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        let mut builder = CommandBuilder::new("/bin/zsh");
+        builder.args(["-d", "-i"]);
+        builder.cwd(&root);
+        builder.env("HOME", &root);
+        builder.env("ZDOTDIR", &root);
+        builder.env("TERAX_USER_ZDOTDIR", root.join("empty-user-profile"));
+        builder.env("TERAX_BLOCKS", "1");
+        builder.env("TERAX_SHELL_INTEGRATION_TOKEN", TOKEN);
+        builder.env("TERM", "xterm-256color");
+        builder.env("LC_ALL", "en_US.UTF-8");
+        let mut child = pair.slave.spawn_command(builder).unwrap();
+        drop(pair.slave);
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut writer = pair.master.take_writer().unwrap();
+        let (tx, rx) = mpsc::sync_channel(32);
+        let thread = std::thread::spawn(move || {
+            let mut bytes = [0u8; 16 * 1024];
+            loop {
+                match reader.read(&mut bytes) {
+                    Ok(0) | Err(_) => break,
+                    Ok(count) => {
+                        if tx.send(bytes[..count].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        let command = format!(
+            "printf '%s\\n' '{}'\nprintf 'fixture-complete\\n'",
+            "e\u{301}界;".repeat(900)
+        );
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut commands = Vec::new();
+        let result = (|| -> Result<(), String> {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut submitted_at = None;
+            loop {
+                let bytes = rx
+                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                    .map_err(|_| "interactive zsh did not complete the public fixture")?;
+                shell.ingest_segments(&bytes, |_, event| {
+                    if let Some(ShellEvent::CommandStart { command, .. }) = event {
+                        commands.push(command);
+                    }
+                    Ok(())
+                })?;
+                if let Some(version) = submitted_at {
+                    if !commands.is_empty() && shell.state().prompt_version > version {
+                        break;
+                    }
+                } else if shell.state().prompt_version > 0 {
+                    submitted_at = Some(shell.state().prompt_version);
+                    writer
+                        .write_all(format!("\x1b[200~{command}\x1b[201~\r").as_bytes())
+                        .map_err(|e| e.to_string())?;
+                    writer.flush().map_err(|e| e.to_string())?;
+                }
+            }
+            Ok(())
+        })();
+        drop(rx);
+        let _ = child.kill();
+        let _ = child.wait();
+        drop(writer);
+        drop(pair.master);
+        thread.join().unwrap();
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(commands, vec![command]);
     }
 }

@@ -58,7 +58,7 @@ export type PositionedBlock = {
   top: number;
   bottom: number;
   // Pixel top of the header row (one line above the command, in the blank gap).
-  headerTop: number;
+  headerTop: number | null;
 };
 
 export type VisibleBlocks = {

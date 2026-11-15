@@ -21,6 +21,7 @@ pub struct BlockMeta {
     pub cwd: String,
     pub exit_code: Option<i32>,
     pub running: bool,
+    pub header_line: Option<u32>,
     pub start_line: u32,
     pub end_line: u32,
     pub started_at: u64,
@@ -55,6 +56,7 @@ struct Entry {
     running: bool,
     empty: bool,
     output_stamp: Option<[u8; 32]>,
+    header: Option<TrackedGridRef>,
     start: TrackedGridRef,
     end: Option<TrackedGridRef>,
 }
@@ -62,13 +64,21 @@ impl Entry {
     fn bytes(&self) -> usize {
         std::mem::size_of::<Self>() + self.command.capacity() + self.cwd.capacity()
     }
-    fn meta(&self, start: PointCoordinate, end: PointCoordinate) -> BlockMeta {
+    fn meta(
+        &self,
+        start: PointCoordinate,
+        end: PointCoordinate,
+        header: Option<PointCoordinate>,
+    ) -> BlockMeta {
         BlockMeta {
             id: format!("b{}", self.id),
             command: self.command.clone(),
             cwd: self.cwd.clone(),
             exit_code: self.exit_code,
             running: self.running,
+            header_line: header
+                .filter(|point| point.y <= start.y)
+                .map(|point| point.y),
             start_line: start.y,
             end_line: end.y,
             started_at: self.started_at,
@@ -79,6 +89,7 @@ impl Entry {
 pub struct BlockStore {
     entries: VecDeque<Entry>,
     live: Option<Entry>,
+    prompt_header: Option<TrackedGridRef>,
     next_id: u64,
     version: u64,
     has_any: bool,
@@ -159,6 +170,7 @@ impl BlockStore {
         Self {
             entries: VecDeque::new(),
             live: None,
+            prompt_header: None,
             next_id: 0,
             version: 0,
             has_any: false,
@@ -191,6 +203,11 @@ impl BlockStore {
             if failure.is_none() {
                 if let Some(event) = event {
                     let result = match event {
+                        ShellEvent::PromptStart => {
+                            self.prompt_header = None;
+                            Ok(())
+                        }
+                        ShellEvent::PromptEnd => self.prompt_end(term),
                         ShellEvent::CommandStart { command, cwd } => {
                             self.start(term, command, cwd.unwrap_or_default(), now)
                         }
@@ -206,6 +223,19 @@ impl BlockStore {
             Ok(())
         })?;
         failure.map_or(Ok(()), Err)
+    }
+    fn prompt_end(&mut self, term: &Terminal<'_, '_>) -> Result<(), String> {
+        self.prompt_header = None;
+        if primary(term)? {
+            let row = u32::from(term.cursor_y().map_err(|e| e.to_string())?);
+            if let Some(y) = row.checked_sub(1) {
+                self.prompt_header = Some(
+                    term.track_grid_ref(Point::Active(PointCoordinate { x: 0, y }))
+                        .map_err(|e| e.to_string())?,
+                );
+            }
+        }
+        Ok(())
     }
     fn start(
         &mut self,
@@ -234,6 +264,7 @@ impl BlockStore {
             running: true,
             empty: false,
             output_stamp: None,
+            header: self.prompt_header.take(),
             start: term
                 .track_grid_ref(Point::Active(PointCoordinate {
                     x: 0,
@@ -333,7 +364,30 @@ impl BlockStore {
         if is_primary {
             for entry in self.entries.iter().chain(self.live.iter()) {
                 if let Some((start, end)) = Self::range(entry, term)? {
-                    blocks.push(entry.meta(start, end));
+                    let header = entry
+                        .header
+                        .as_ref()
+                        .map(|reference| {
+                            reference
+                                .point(PointSpace::Screen)
+                                .map_err(|e| e.to_string())
+                        })
+                        .transpose()?
+                        .flatten();
+                    let visible_bottom = viewport
+                        .offset
+                        .saturating_add(u64::from(term.rows().map_err(|e| e.to_string())?));
+                    let header = match header {
+                        Some(point)
+                            if u64::from(point.y) >= viewport.offset
+                                && u64::from(point.y) < visible_bottom
+                                && last_text_col(term, point.y)?.is_some() =>
+                        {
+                            None
+                        }
+                        header => header,
+                    };
+                    blocks.push(entry.meta(start, end, header));
                 }
             }
         }
@@ -908,6 +962,7 @@ mod presentation_tests {
                 cwd: "/workspace".into(),
                 exit_code: Some(0),
                 running: false,
+                header_line: Some(0),
                 start_line: 2,
                 end_line: 3,
                 started_at: 1,
@@ -1084,5 +1139,104 @@ mod content_integrity_tests {
             .feed(&mut term, &mut shell, b"\x1b[?1049l", 3)
             .unwrap();
         assert!(blocks.read(&term, "b1").unwrap().is_some());
+    }
+}
+
+#[cfg(test)]
+mod header_anchor_tests {
+    use super::*;
+    use libghostty_vt::TerminalOptions;
+    const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+    fn terminal() -> Terminal<'static, 'static> {
+        Terminal::new(TerminalOptions {
+            cols: 8,
+            rows: 8,
+            max_scrollback: 64 * 1024,
+        })
+        .unwrap()
+    }
+    #[test]
+    fn header_tracks_the_reserved_prompt_row_across_command_wrap_and_reflow() {
+        let mut term = terminal();
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut blocks = BlockStore::default();
+        let input = format!("\x1b]133;A;aid={TOKEN}\x07\r\n\x1b]133;B;aid={TOKEN}\x07{}\r\n\x1b]133;C;aid={TOKEN};cmdline_url=long-command\x07body\x1b]133;D;0;aid={TOKEN}\x07", "x".repeat(25));
+        blocks
+            .feed(&mut term, &mut shell, input.as_bytes(), 1)
+            .unwrap();
+        let meta = blocks.snapshot(&term).unwrap().blocks.remove(0);
+        assert_eq!(meta.header_line, Some(0));
+        assert_eq!(meta.start_line, 5);
+        assert_eq!(
+            blocks.read(&term, &meta.id).unwrap().unwrap().output,
+            "body"
+        );
+        term.resize(4, 8, 0, 0).unwrap();
+        let reflowed = blocks.snapshot(&term).unwrap().blocks.remove(0);
+        assert_eq!(reflowed.header_line, Some(0));
+        assert!(reflowed.start_line > reflowed.header_line.unwrap() + 2);
+        assert_eq!(
+            blocks.read(&term, &meta.id).unwrap().unwrap().output,
+            "body"
+        );
+    }
+    #[test]
+    fn long_command_markers_pass_through_the_actual_vt_without_becoming_output() {
+        let mut term = terminal();
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut blocks = BlockStore::default();
+        let command = "x".repeat(16 * 1024);
+        let input = format!(
+            "\x1b]133;C;aid={TOKEN};cmdline_url={command}\x1b\\body\x1b]133;D;0;aid={TOKEN}\x07"
+        );
+        for chunk in input.as_bytes().chunks(1024) {
+            blocks.feed(&mut term, &mut shell, chunk, 1).unwrap();
+        }
+        let meta = blocks.snapshot(&term).unwrap().blocks.remove(0);
+        assert_eq!(meta.command, command);
+        assert_eq!(
+            blocks.read(&term, &meta.id).unwrap().unwrap().output,
+            "body"
+        );
+        assert_eq!(
+            crate::modules::pty::engine::text::read_text(&term, 8)
+                .unwrap()
+                .trim(),
+            "body"
+        );
+    }
+    #[test]
+    fn overwritten_reserved_row_hides_only_the_header_and_preserves_output() {
+        let mut term = terminal();
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut blocks = BlockStore::default();
+        let input = format!("\x1b]133;A;aid={TOKEN}\x07\r\n\x1b]133;B;aid={TOKEN}\x07echo\r\n\x1b]133;C;aid={TOKEN};cmdline_url=echo\x07\x1b[1;1HHEADER\x1b[3;1Hbody\x1b]133;D;0;aid={TOKEN}\x07");
+        blocks
+            .feed(&mut term, &mut shell, input.as_bytes(), 1)
+            .unwrap();
+        let meta = blocks.snapshot(&term).unwrap().blocks.remove(0);
+        assert_eq!(meta.header_line, None);
+        assert_eq!(
+            blocks.read(&term, &meta.id).unwrap().unwrap().output,
+            "body"
+        );
+    }
+    #[test]
+    fn missing_unsigned_or_invalidated_prompt_never_guesses_a_header() {
+        for prompt in [
+            String::new(),
+            "\r\n\x1b]133;B\x07".into(),
+            format!("\r\n\x1b]133;B;aid={TOKEN}\x07\x1b]133;A;aid={TOKEN}\x07"),
+            format!("\x1b]133;B;aid={TOKEN}\x07"),
+        ] {
+            let mut term = terminal();
+            let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+            let mut blocks = BlockStore::default();
+            let input = format!("{prompt}echo\r\n\x1b]133;C;aid={TOKEN};cmdline_url=echo\x07body\x1b]133;D;0;aid={TOKEN}\x07");
+            blocks
+                .feed(&mut term, &mut shell, input.as_bytes(), 1)
+                .unwrap();
+            assert_eq!(blocks.snapshot(&term).unwrap().blocks[0].header_line, None);
+        }
     }
 }

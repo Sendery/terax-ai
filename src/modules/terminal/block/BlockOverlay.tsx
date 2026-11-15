@@ -217,10 +217,12 @@ function BlockChrome({ block, all, onSearch }: ChromeProps) {
         className={cn("bt-divider", !block.ok && "bt-divider-fail")}
         style={{ top: block.bottom }}
       />
-      <div className="bt-bar" style={{ top: block.headerTop }}>
-        <Meta block={block} />
-        <Toolbar block={block} all={all} onSearch={onSearch} />
-      </div>
+      {block.headerTop !== null && (
+        <div className="bt-bar" style={{ top: block.headerTop }}>
+          <Meta block={block} />
+          <Toolbar block={block} all={all} onSearch={onSearch} />
+        </div>
+      )}
     </>
   );
 }

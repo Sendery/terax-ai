@@ -64,7 +64,14 @@ function global:__terax_install_readline {
                 $esc = [char]27
                 $cmd = $line -replace '[\x00-\x1F\x7F]', ' '
                 if ($cmd.Length -gt 256) { $cmd = $cmd.Substring(0, 256) }
-                if ($global:__terax_aid) {
+                if ($global:__terax_aid -and $env:TERAX_BLOCKS) {
+                    if ([System.Text.Encoding]::UTF8.GetByteCount($line) -le 1048576) {
+                        $encoded = __terax_urlencode $line
+                        [Console]::Write("$esc]133;C$global:__terax_aid;cmdline_url=$encoded$esc\")
+                    } else {
+                        [Console]::Write("$esc]133;C$global:__terax_aid$esc\")
+                    }
+                } elseif ($global:__terax_aid) {
                     $encoded = __terax_urlencode $cmd
                     [Console]::Write("$esc]133;C$global:__terax_aid;cmdline_url=$encoded$esc\")
                 } else {

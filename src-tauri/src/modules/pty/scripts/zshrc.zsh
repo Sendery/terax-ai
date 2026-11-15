@@ -68,7 +68,15 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
     # row (first prompt, no block above) to two (end gap + header row).
     [[ -n "$TERAX_BLOCKS" ]] && _terax_block_seen=1
     local cmd="${1//[[:cntrl:]]/ }"
-    if [[ -n "$_terax_aid" ]]; then
+    if [[ -n "$_terax_aid" && -n "$TERAX_BLOCKS" ]]; then
+      setopt localoptions no_multibyte
+      local LC_ALL=C
+      if (( ${#1} <= 1048576 )); then
+        printf '\e]133;C%s;cmdline_url=%s\e\\' "$_terax_aid" "$(_terax_urlencode "$1")"
+      else
+        printf '\e]133;C%s\e\\' "$_terax_aid"
+      fi
+    elif [[ -n "$_terax_aid" ]]; then
       printf '\e]133;C%s;cmdline_url=%s\e\\' "$_terax_aid" "$(_terax_urlencode "${cmd[1,256]}")"
     else
       printf '\e]133;C;%s\e\\' "${cmd[1,256]}"

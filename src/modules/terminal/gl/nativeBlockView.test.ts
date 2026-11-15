@@ -108,6 +108,7 @@ it("recovers a discarded projection when the same drawn sequence becomes visible
         cwd: "/tmp",
         exitCode: 0,
         running: false,
+        headerLine: null,
         startLine: 0,
         endLine: 0,
         startedAt: 1,

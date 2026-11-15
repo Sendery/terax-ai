@@ -1218,6 +1218,7 @@ const blockSnapshot = () => ({
       cwd: "/workspace",
       exitCode: 0,
       running: false,
+      headerLine: null,
       startLine: 0,
       endLine: 0,
       startedAt: 1,

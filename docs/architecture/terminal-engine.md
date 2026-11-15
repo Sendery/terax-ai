@@ -514,8 +514,9 @@ Build `ghostty-engine` and set `VITE_TERAX_TERMINAL_ENGINE=ghostty` to route
 ordinary non-block panes to `NativeTerminalPane`. This is an explicit sandbox
 development switch, not the production default or a claim of full parity.
 Existing registered native or legacy owners determine the engine after a view
-remount, even if the blocks preference changed. Initial block terminals retain
-the legacy path until native blocks are implemented.
+remount, even if the blocks preference changed. Native blocks mount the shared
+BlockOverlay and BlockWatermark through one NativeBlockView per EngineSession;
+normal builds still use the legacy route until full functional parity.
 
 `NativeLeafSession` lives in the leaf registry independently of React mounts.
 Splitting, moving or hiding a pane detaches its input/view without terminating
@@ -577,7 +578,9 @@ acceptance of fish, PowerShell and WSL remains pending.
 The Rust actor runs a bounded OSC 7/133 metadata observer on accepted bytes
 before feeding the unchanged byte slice to Ghostty. It skips other OSCs and
 opaque control strings, handles fragmentation/cancellation and bounds decoded
-CWD to 128 KiB and prompt metadata to 4 KiB. Only correctly correlated A/D
+CWD to 128 KiB. Authenticated command markers are bounded to 3 MiB plus 512
+bytes of envelope; decoded command text is bounded to 1 MiB. Oversized or invalid
+command values become unavailable as a whole, never a reexecutable prefix. Only correctly correlated A/D
 opens a CWD window; B/C closes it. Unmatched output cannot unlock that window.
 Decoded paths must be absolute, valid UTF-8 and control-free. Windows drive
 URIs are normalized. The token correlates local shell integration; it does not
@@ -747,9 +750,27 @@ coalesces to one in-flight query and the latest pending frame, drops old or
 disposed replies and recomputes pixel layout for changed cell metrics.
 Metadata revisions do not substitute for frame/geometry identity.
 
-This foundation does not activate ordinary native blocks. The existing shared
-BlockOverlay actions/search/navigation, full submitted command capture,
-completed-cell overwrite/erase integrity and real native-block UI acceptance
-remain required. A projection model must be disposed when its process changes;
-seq values alone do not distinguish process generations. See the
-[input/projection report](../plans/2026-11-15-terminal-native-block-input-projection.md).
+Native blocks now use the shared guarded async BlockOverlay actions/search and
+native output integrity checks. A projection model must be disposed when its
+process changes; seq values alone do not distinguish process generations. See
+the [input/projection report](../plans/2026-11-15-terminal-native-block-input-projection.md)
+and [overlay integration](../plans/2026-11-15-terminal-native-block-overlay.md).
+
+In native blocks mode, zsh, fish and PowerShell emit the complete original
+accepted command through authenticated cmdline_url, preserving Unicode, newlines
+and tabs within the decoded 1 MiB contract. Legacy unsigned and ordinary native
+markers retain their previous behavior. Bash full-command capture still needs
+an authoritative shell source; neither history guesses nor timing of pending
+host writes establishes command identity. Other shell/platform acceptance and
+full functional parity remain open.
+
+Authenticated A invalidates a pending header anchor. B records a tracked native
+reference to the reserved blank row immediately before the prompt-end cursor;
+C transfers it to the actual command entry. Snapshots publish nullable
+headerLine coordinates from those references, alongside separate output bounds.
+Visible reserved rows must still contain no native text; overwriting one hides
+only that header, preserving valid output. Reflow, collection and missing
+markers never trigger a guessed output-relative or live-grid fallback.
+The frontend validates the anchor against output start and uses only the
+presented snapshot. Missing anchors suppress the in-grid bar; sticky output
+actions remain independent. No new persistent schema or public Pi/MCP exposure.

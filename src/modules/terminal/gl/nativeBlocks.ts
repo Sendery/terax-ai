@@ -12,7 +12,7 @@ export type NativeBlockSnapshot = {
   alternateScreen: boolean;
   viewportOffset: number;
   viewportRows: number;
-  blocks: (BlockMeta & { running: boolean })[];
+  blocks: (BlockMeta & { running: boolean; headerLine: number | null })[];
 };
 const encoder = new TextEncoder();
 function invalid(): never {
@@ -47,7 +47,7 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 function command(value: unknown): string {
-  const result = text(value, 4096);
+  const result = text(value, 1024 * 1024);
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(result))
     return invalid();
   return result;
@@ -98,7 +98,10 @@ export function decodeNativeBlocks(
     ids.add(block.id);
     const startLine = integer(block.startLine, 0xffffffff);
     const endLine = integer(block.endLine, 0xffffffff);
-    if (endLine < startLine) return invalid();
+    const headerLine =
+      block.headerLine === null ? null : integer(block.headerLine, 0xffffffff);
+    if (endLine < startLine || (headerLine !== null && headerLine > startLine))
+      return invalid();
     const cmd = command(block.command);
     const path = cwd(block.cwd);
     bytes +=
@@ -112,6 +115,7 @@ export function decodeNativeBlocks(
       cwd: path,
       exitCode: exitCode(block.exitCode),
       running: boolean(block.running),
+      headerLine,
       startLine,
       endLine,
       startedAt: integer(block.startedAt),
@@ -159,7 +163,8 @@ export function projectNativeBlocks(
   for (const block of snapshot.blocks) {
     if (
       block.endLine < snapshot.viewportOffset ||
-      block.startLine >= snapshot.viewportOffset + snapshot.viewportRows
+      (block.headerLine ?? block.startLine) >=
+        snapshot.viewportOffset + snapshot.viewportRows
     )
       continue;
     const top = padding + (block.startLine - snapshot.viewportOffset) * height;
@@ -174,10 +179,15 @@ export function projectNativeBlocks(
       finishedAt: block.finishedAt,
       top,
       bottom: padding + (block.endLine - snapshot.viewportOffset + 1) * height,
-      headerTop: top - 1.9 * height,
+      headerTop:
+        block.headerLine === null
+          ? null
+          : padding +
+            (block.headerLine - snapshot.viewportOffset + 0.1) * height,
     };
     result.blocks.push(positioned);
-    if (block.startLine < snapshot.viewportOffset) result.sticky = positioned;
+    if ((block.headerLine ?? block.startLine) < snapshot.viewportOffset)
+      result.sticky = positioned;
   }
   return result;
 }
