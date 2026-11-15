@@ -88,3 +88,43 @@ checks run without regeneration. Native commands are sequential with the explici
 shared target and the checksum-verified provisional0.2.2 archive pinned in the
 engine contract. Full repository tests, platform matrices and benchmark labs
 are not claimed for this block.
+
+## Focused real WebKit acceptance
+
+Standalone sandbox production commit88516c1 was built with embedded frontend
+and the native feature, copied independently of the Cargo target and exercised
+through authenticated buildInfo/app.snapshot/app.capture. A deterministic public
+PNG/RGB/RGBA fixture ran in real zsh PTYs through an isolated ZDOTDIR profile,
+without editing the user's profiles. The active ordinary tab contained two
+split native panes sharing one renderer.
+
+The inspected1068x1024 PNG shows, in both panes:
+
+- Four PNG color quadrants above underlying text.
+- A direct RGB red/blue image.
+- A half-transparent green RGBA image below readable white text.
+- A below-background purple image covered by an explicit ANSI red background.
+- Independent pane clipping and the intact split divider.
+
+This proves focused pixels and layering on M2 WebKit, not complete image
+protocol acceptance. Cropped-edge filtering, every theme, virtual placeholders,
+image reflow/scroll interactions and physical mixed-DPI remain to verify or
+complete before full replacement is claimed.
+
+The initial direct-launch automation could inspect state but capture timed out.
+Opening the exact frozen bundle through LaunchServices preceded successful
+capture. Earlier keyboard automation failed before its ready acknowledgement;
+the isolated shell startup fixture supplied actual PTY output instead. A one-off
+shell also sourced that profile, so its bounded waiting period was released.
+The fixture was then finished, the candidate closed only after checking unchanged
+public/clean tabs and idle children, and the same88516c1 bundle relaunched with
+the normal inherited environment. Its authenticated build and original active
+tab35 were verified after restoration. No watcher or custom profile remains
+attached to the running candidate.
+
+Evidence:
+.terax/visual-qa/20261115T143125.342Z-native-inline-images-startup-JbKYvi/screenshot.png
+and the matching result.json. Exact capture provenance is retained privately in
+.terax/pi-development/m2/image-qa-result.json. Temporary PIDs and startup scripts
+stay in the ignored journal. No protected Mac project execution, Actions,
+repository publication or FPS experiment was used.
