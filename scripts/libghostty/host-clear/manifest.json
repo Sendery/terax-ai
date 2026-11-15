@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "variant": "host-clear-v1",
+  "repository": "https://github.com/ghostty-org/ghostty.git",
+  "upstreamCommit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "patchSha256": "09aa228231371e80722a7a1ff53b2b9b84991e6ea9043e91e242d61ff37d83a5",
+  "zigVersion": "0.15.2",
+  "abi": [
+    "ghostty_terminal_clear_preserving_cursor_row"
+  ],
+  "license": {
+    "spdx": "MIT",
+    "path": "scripts/libghostty/licenses/Ghostty-LICENSE"
+  },
+  "nativeTestsWritten": 9,
+  "nativeTestsExecuted": true,
+  "focusedPassed": 71,
+  "fullSuiteExecuted": false,
+  "consumerActivated": false,
+  "status": "source-reviewed-focused-native-green-awaiting-combined-artifact",
+  "files": [
+    {
+      "path": "include/ghostty/vt/terminal.h",
+      "upstreamGitBlob": "26ee0c0b8670b4a7c81a4840480063b03bb320a7",
+      "beforeSha256": "c655bfdf0c72e271034767b1fc92a56dbdfded7cf78a5689a2ff59fbbf240b2f",
+      "afterSha256": "aa5381732f098a06a5f28935f17d05dd1bb4dbb79dfc127b9835f9929341bf43"
+    },
+    {
+      "path": "src/lib_vt.zig",
+      "upstreamGitBlob": "e01cdbb892c36cf88d4088c45bb464a429654d57",
+      "beforeSha256": "891aaba636cca7d4168a74f89db8d52722fb2e4a30c125f5b39fa613f91702a3",
+      "afterSha256": "95a7446cda87493964615bc281edc5b3677d62cfb1adf04c268307787967aa19"
+    },
+    {
+      "path": "src/terminal/Screen.zig",
+      "upstreamGitBlob": "6c4db3237c84ace7079e2f2eaa7b379580667d45",
+      "beforeSha256": "ae08a0e34e653ac4a998fc834fefb1089900ba968a75838fa04eea25290f4dfd",
+      "afterSha256": "48ffd637d9fc97e4ccae2a25c276c08b57b9a924893960329f054dca968c057a"
+    },
+    {
+      "path": "src/terminal/Terminal.zig",
+      "upstreamGitBlob": "0892012764e11d8ba17d982ee4982579bc1b6753",
+      "beforeSha256": "1ce8e7d6211126d1f59e4f09c71e7e2f0f819ed114192b52fa7e957ae44b046e",
+      "afterSha256": "4fdf562934faff9c56ab721a8399c7ff657cd16154a1463cfc250ec50619e087"
+    },
+    {
+      "path": "src/terminal/c/main.zig",
+      "upstreamGitBlob": "37dc57684aa5e6edea164acb3d4faa37955667b3",
+      "beforeSha256": "1be3be44796c90537045148e93177e80393867e7deed85aa4707d3315add9230",
+      "afterSha256": "7f62a5c88c4b4d5e9572700129f736da7bb2e33bc8b773b5b947a27524b6262d"
+    },
+    {
+      "path": "src/terminal/c/terminal.zig",
+      "upstreamGitBlob": "1c3b9f0c557aa603cf40eab920623eba07cdc7e8",
+      "beforeSha256": "5207bb1e5357750235338ceb34f8ebccede9b992cbff6d8e213581ac7c4ca464",
+      "afterSha256": "2a4224d146579ec70411add6bf78713ecb3e6537be2c4be0fc41c78288abe86a"
+    },
+    {
+      "path": "src/terminal/kitty/graphics_storage.zig",
+      "upstreamGitBlob": "ba82ea4024b2fe4989bd3eaee9e308528bc2c8fb",
+      "beforeSha256": "8fe14f5988dcb7a3b112acd24f80fdb1ab616049c4229a922784b738349f1504",
+      "afterSha256": "1e4597a368f8f4b8a2139a329af55cf4738fe5aa27b2b9d87a56e0ae8e30d1ac"
+    }
+  ]
+}

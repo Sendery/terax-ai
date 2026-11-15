@@ -1,0 +1,458 @@
+diff --git a/include/ghostty/vt/terminal.h b/include/ghostty/vt/terminal.h
+index 26ee0c0..773fbbd 100644
+--- a/include/ghostty/vt/terminal.h
++++ b/include/ghostty/vt/terminal.h
+@@ -1290,6 +1290,24 @@ GHOSTTY_API GhosttyResult ghostty_terminal_set(GhosttyTerminal terminal,
+                                    GhosttyTerminalOption option,
+                                    const void* value);
+ 
++/**
++ * Clear the active buffer while retaining the complete cursor row as row zero.
++ *
++ * Preserves X, pending wrap, current pen, modes, margins and saved cursor.
++ * Clears history and fills following rows with default cells. References and
++ * selections in this buffer are invalidated; the inactive buffer is untouched.
++ * Image placements are cleared, but transmitted images remain reusable.
++ * No PTY input is sent. Allocation failure leaves the existing buffer intact.
++ *
++ * If history is empty and Y is already zero, this is a true no-op.
++ * On success, optional out_cleared reports whether storage actually changed.
++ * This is an additive Terax host-clear-v1 extension.
++ *
++ * @ingroup terminal
++ */
++GHOSTTY_API GhosttyResult ghostty_terminal_clear_preserving_cursor_row(
++    GhosttyTerminal terminal, bool* out_cleared);
++
+ /**
+  * Write VT-encoded data to the terminal for processing.
+  *
+diff --git a/src/lib_vt.zig b/src/lib_vt.zig
+index e01cdbb..cd323ef 100644
+--- a/src/lib_vt.zig
++++ b/src/lib_vt.zig
+@@ -257,6 +257,7 @@ comptime {
+         @export(&c.terminal_new, .{ .name = "ghostty_terminal_new" });
+         @export(&c.terminal_free, .{ .name = "ghostty_terminal_free" });
+         @export(&c.terminal_reset, .{ .name = "ghostty_terminal_reset" });
++        @export(&c.terminal_clear_preserving_cursor_row, .{ .name = "ghostty_terminal_clear_preserving_cursor_row" });
+         @export(&c.terminal_resize, .{ .name = "ghostty_terminal_resize" });
+         @export(&c.terminal_set, .{ .name = "ghostty_terminal_set" });
+         @export(&c.terminal_vt_write, .{ .name = "ghostty_terminal_vt_write" });
+diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
+index 6c4db32..2388c1a 100644
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -575,6 +575,41 @@ pub fn clone(
+     result.assertIntegrity();
+     return result;
+ }
++/// Prepare a prompt-row grid without mutating the current screen.
++pub fn cloneCursorRow(self: *const Screen) !Screen {
++    var result: Screen = result: {
++        var pages = try self.pages.clone(self.alloc, .{
++            .top = .{ .active = .{ .y = self.cursor.y } },
++            .bot = .{ .active = .{ .y = self.cursor.y } },
++        });
++        errdefer pages.deinit();
++        const pin = try pages.trackPin(pages.pin(.{
++            .active = .{ .x = self.cursor.x },
++        }).?);
++        const rac = pin.rowAndCell();
++        break :result .{
++            .alloc = self.alloc,
++            .pages = pages,
++            .no_scrollback = self.no_scrollback,
++            .cursor = .{
++                .x = self.cursor.x,
++                .y = 0,
++                .page_pin = pin,
++                .page_row = rac.row,
++                .page_cell = rac.cell,
++            },
++        };
++    };
++    errdefer result.deinit();
++    var cursor = self.cursor;
++    cursor.y = 0;
++    try result.cursorCopy(cursor, .{ .hyperlink = false });
++    if (self.cursor.hyperlink) |link|
++        try result.startHyperlinkValue(link.*);
++    result.assertIntegrity();
++    return result;
++}
++
+ pub fn increaseCapacity(
+     self: *Screen,
+     node: *PageList.List.Node,
+@@ -2437,6 +2472,10 @@ pub fn startHyperlink(
+         .implicit => self.cursor.hyperlink_implicit_id -%= 1,
+     };
+ 
++    return self.startHyperlinkValue(link);
++}
++
++fn startHyperlinkValue(self: *Screen, link: hyperlink.Hyperlink) PageList.IncreaseCapacityError!void {
+     // Loop until we have enough page memory to add the hyperlink
+     while (true) {
+         if (self.startHyperlinkOnce(link)) {
+diff --git a/src/terminal/Terminal.zig b/src/terminal/Terminal.zig
+index 0892012..557463b 100644
+--- a/src/terminal/Terminal.zig
++++ b/src/terminal/Terminal.zig
+@@ -3877,6 +3877,28 @@ pub fn plainStringUnwrapped(self: *Terminal, alloc: Allocator) ![]const u8 {
+     return try self.screens.active.dumpStringAllocUnwrapped(alloc, .{ .viewport = .{} });
+ }
+ 
++/// Clear the active buffer, retaining its complete cursor row and terminal modes.
++/// Allocation failure leaves the current buffer and references unchanged.
++pub fn clearHost(self: *Terminal) !bool {
++    const screen = self.screens.active;
++    if (screen.pages.total_rows == screen.pages.rows and screen.cursor.y == 0)
++        return false;
++
++    var replacement = try screen.cloneCursorRow();
++    defer replacement.deinit();
++
++    screen.clearSelection();
++    if (comptime build_options.kitty_graphics)
++        screen.kitty_images.clearHostPlacements(screen);
++    std.mem.swap(PageList, &screen.pages, &replacement.pages);
++    std.mem.swap(Screen.Cursor, &screen.cursor, &replacement.cursor);
++    screen.cursorReload();
++    screen.dirty.selection = true;
++    self.screens.generations.put(self.screens.active_key, self.screens.generation(self.screens.active_key) +% 1);
++    self.flags.dirty.clear = true;
++    return true;
++}
++
+ /// Full reset.
+ ///
+ /// This will attempt to free the existing screen memory but if that fails
+@@ -14398,3 +14420,202 @@ test "Terminal: glyph APC stores session glossary entries" {
+     t.fullReset();
+     try testing.expect(!t.glyph_glossary.contains(0xE0A0));
+ }
++
++test "host clear: initial cursor row is a true no-op" {
++    var t = try init(testing.allocator, .{ .cols = 8, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var stream = t.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("top\x1b[3;1Hbottom\x1b[1;2H");
++    const text = try t.plainString(testing.allocator);
++    defer testing.allocator.free(text);
++    const node = t.screens.active.pages.pages.first;
++    const generation = t.screens.generation(.primary);
++    try testing.expect(!try t.clearHost());
++    const after = try t.plainString(testing.allocator);
++    defer testing.allocator.free(after);
++    try testing.expectEqualStrings(text, after);
++    try testing.expectEqual(node, t.screens.active.pages.pages.first);
++    try testing.expectEqual(generation, t.screens.generation(.primary));
++}
++
++test "host clear: managed prompt row and pen survive, other rows use defaults" {
++    var t = try init(testing.allocator, .{ .cols = 12, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var stream = t.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("old\r\n\x1b[31;44m\x1b]8;;https://example.com\x07e\u{301}\u{754c}!");
++    const screen = t.screens.active;
++    const x = screen.cursor.x;
++    const pen = screen.cursor.style;
++    const link_id = screen.cursor.hyperlink.?.id.implicit;
++    const next_id = screen.cursor.hyperlink_implicit_id;
++    try testing.expect(try t.clearHost());
++    const text = try t.plainString(testing.allocator);
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("e\u{301}\u{754c}!", text);
++    try testing.expectEqual(x, screen.cursor.x);
++    try testing.expectEqual(@as(size.CellCountInt, 0), screen.cursor.y);
++    try testing.expectEqualDeep(pen, screen.cursor.style);
++    try testing.expectEqualStrings("https://example.com", screen.cursor.hyperlink.?.uri);
++    try testing.expectEqual(link_id, screen.cursor.hyperlink.?.id.implicit);
++    try testing.expectEqual(next_id, screen.cursor.hyperlink_implicit_id);
++    const first_pin = screen.pages.pin(.{ .active = .{} }).?;
++    const first_page = first_pin.node.page();
++    const first_cell = first_pin.rowAndCell().cell;
++    try testing.expectEqualDeep(pen, first_page.styles.get(first_page.memory, first_cell.style_id).*);
++    const first_link = first_page.hyperlink_set.get(first_page.memory, first_page.lookupHyperlink(first_cell).?);
++    try testing.expectEqualStrings("https://example.com", first_link.uri.slice(first_page.memory));
++    try testing.expectEqual(@as(usize, t.rows), screen.pages.total_rows);
++    for (1..t.rows) |y| {
++        for (0..t.cols) |x_| {
++            const pin = screen.pages.pin(.{ .active = .{
++                .x = @intCast(x_),
++                .y = @intCast(y),
++            } }).?;
++            const cell = pin.rowAndCell().cell;
++            try testing.expectEqual(style.default_id, cell.style_id);
++            try testing.expectEqual(@as(u21, 0), cell.codepoint());
++            try testing.expect(!cell.hasGrapheme());
++            try testing.expect(!cell.hyperlink);
++        }
++    }
++    screen.assertIntegrity();
++}
++
++test "host clear: pending wrap, saved cursor and modes survive" {
++    var t = try init(testing.allocator, .{ .cols = 6, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var stream = t.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("\x1b[?1004h\x1b[?2004hpre\r\n\x1b[31;44mabcdef");
++    t.saveCursor();
++    const screen = t.screens.active;
++    const saved = screen.saved_cursor;
++    const modes = t.modes;
++    const region = t.scrolling_region;
++    try testing.expect(screen.cursor.pending_wrap);
++    try testing.expect(try t.clearHost());
++    try testing.expect(screen.cursor.pending_wrap);
++    try testing.expectEqual(@as(size.CellCountInt, 5), screen.cursor.x);
++    try testing.expectEqualDeep(saved, screen.saved_cursor);
++    try testing.expectEqualDeep(modes, t.modes);
++    try testing.expectEqualDeep(region, t.scrolling_region);
++    stream.nextSlice("X");
++    const text = try t.plainString(testing.allocator);
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("abcdef\nX", text);
++}
++
++test "host clear: alternate clear preserves the primary buffer and references" {
++    var t = try init(testing.allocator, .{ .cols = 12, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    var stream = t.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("primary\r\nkept\x1b[?1049halt\r\nprompt");
++    const primary = t.screens.get(.primary).?;
++    const before = try primary.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(before);
++    const primary_generation = t.screens.generation(.primary);
++    const alternate_generation = t.screens.generation(.alternate);
++    try testing.expect(try t.clearHost());
++    const after = try primary.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(after);
++    try testing.expectEqualStrings(before, after);
++    try testing.expectEqual(primary_generation, t.screens.generation(.primary));
++    try testing.expectEqual(alternate_generation +% 1, t.screens.generation(.alternate));
++    const text = try t.plainString(testing.allocator);
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("prompt", text);
++}
++
++fn hostClearAllocationFailure(alloc: Allocator) !void {
++    var t = try init(alloc, .{ .cols = 12, .rows = 4 });
++    defer t.deinit(alloc);
++    const screen = t.screens.active;
++    screen.cursor.style.flags.bold = true;
++    try screen.manualStyleUpdate();
++    try screen.startHyperlink("https://example.com/row", "row");
++    try screen.testWriteString("old\npro\u{301}mpt");
++    screen.cursor.style.flags.bold = false;
++    screen.cursor.style.flags.italic = true;
++    screen.cursor.style.bg_color = .{ .rgb = .{ .r = 12, .g = 34, .b = 56 } };
++    try screen.manualStyleUpdate();
++    try screen.startHyperlink("https://example.com/pen", "pen");
++    const pen = screen.cursor.style;
++    const before = try t.plainString(testing.allocator);
++    defer testing.allocator.free(before);
++    const generation = t.screens.generation(.primary);
++    const first = t.screens.active.pages.pages.first;
++    _ = t.clearHost() catch |err| {
++        const after = try t.plainString(testing.allocator);
++        defer testing.allocator.free(after);
++        try testing.expectEqualStrings(before, after);
++        try testing.expectEqual(generation, t.screens.generation(.primary));
++        try testing.expectEqual(first, t.screens.active.pages.pages.first);
++        try testing.expectEqualDeep(pen, screen.cursor.style);
++        try testing.expectEqualStrings("https://example.com/pen", screen.cursor.hyperlink.?.uri);
++        try testing.expectEqualStrings("pen", screen.cursor.hyperlink.?.id.explicit);
++        t.screens.active.assertIntegrity();
++        return err;
++    };
++    try testing.expectEqualDeep(pen, screen.cursor.style);
++    try testing.expectEqualStrings("https://example.com/pen", screen.cursor.hyperlink.?.uri);
++    try testing.expectEqualStrings("pen", screen.cursor.hyperlink.?.id.explicit);
++    const row_pin = screen.pages.pin(.{ .active = .{} }).?;
++    const row_page = row_pin.node.page();
++    const row_cell = row_pin.rowAndCell().cell;
++    const row_style = row_page.styles.get(row_page.memory, row_cell.style_id);
++    try testing.expect(row_style.flags.bold);
++    try testing.expect(!row_style.flags.italic);
++    const row_link = row_page.hyperlink_set.get(row_page.memory, row_page.lookupHyperlink(row_cell).?);
++    try testing.expectEqualStrings("https://example.com/row", row_link.uri.slice(row_page.memory));
++}
++
++test "host clear: allocation failure leaves the original grid intact" {
++    try testing.checkAllAllocationFailures(testing.allocator, hostClearAllocationFailure, .{});
++}
++
++test "host clear: placements clear while image storage remains reusable" {
++    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
++    var t = try init(testing.allocator, .{ .cols = 8, .rows = 4 });
++    defer t.deinit(testing.allocator);
++    try t.screens.active.testWriteString("old\nprompt");
++    const screen = t.screens.active;
++    const storage = &screen.kitty_images;
++    try storage.addImage(testing.allocator, .{ .id = 1, .width = 1, .height = 1 });
++    try storage.addPlacement(testing.allocator, 1, 1, .{
++        .location = .{ .pin = try screen.pages.trackPin(screen.pages.pin(.{ .active = .{} }).?) },
++    });
++    try storage.addPlacement(testing.allocator, 1, 2, .{
++        .location = .{ .virtual = {} },
++    });
++    const generation = storage.generation;
++    try testing.expect(try t.clearHost());
++    try testing.expectEqual(@as(usize, 0), storage.placements.count());
++    try testing.expectEqual(@as(usize, 1), storage.images.count());
++    try testing.expect(storage.generation != generation);
++    try testing.expect(storage.dirty);
++    try storage.addPlacement(testing.allocator, 1, 3, .{
++        .location = .{ .pin = try screen.pages.trackPin(screen.pages.pin(.{ .active = .{} }).?) },
++    });
++    try testing.expectEqual(@as(usize, 1), storage.placements.count());
++}
++
++test "host clear: history and a displaced viewport keep the active cursor row" {
++    var t = try init(testing.allocator, .{ .cols = 12, .rows = 3, .max_scrollback = 1_000_000 });
++    defer t.deinit(testing.allocator);
++    const screen = t.screens.active;
++    try screen.testWriteString("zero\none\ntwo\nthree\nfour\nprompt");
++    try testing.expect(screen.pages.total_rows > screen.pages.rows);
++    screen.scroll(.{ .top = {} });
++    try testing.expect(screen.pages.viewport != .active);
++    try testing.expect(try t.clearHost());
++    try testing.expect(screen.pages.viewport == .active);
++    try testing.expectEqual(@as(usize, t.rows), screen.pages.total_rows);
++    try testing.expectEqual(@as(size.CellCountInt, 0), screen.cursor.y);
++    const text = try t.plainString(testing.allocator);
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("prompt", text);
++    screen.assertIntegrity();
++}
+diff --git a/src/terminal/c/main.zig b/src/terminal/c/main.zig
+index 37dc576..2caa335 100644
+--- a/src/terminal/c/main.zig
++++ b/src/terminal/c/main.zig
+@@ -179,6 +179,7 @@ pub const sys_set = sys.set;
+ pub const terminal_new = terminal.new;
+ pub const terminal_free = terminal.free;
+ pub const terminal_reset = terminal.reset;
++pub const terminal_clear_preserving_cursor_row = terminal.clear_preserving_cursor_row;
+ pub const terminal_resize = terminal.resize;
+ pub const terminal_set = terminal.set;
+ pub const terminal_vt_write = terminal.vt_write;
+diff --git a/src/terminal/c/terminal.zig b/src/terminal/c/terminal.zig
+index 1c3b9f0..f542a0c 100644
+--- a/src/terminal/c/terminal.zig
++++ b/src/terminal/c/terminal.zig
+@@ -683,6 +683,18 @@ pub fn resize(
+     return .success;
+ }
+ 
++/// C: ghostty_terminal_clear_preserving_cursor_row
++pub fn clear_preserving_cursor_row(
++    terminal_: Terminal,
++    out_cleared: ?*bool,
++) callconv(lib.calling_conv) Result {
++    const wrapper = terminal_ orelse return .invalid_value;
++    const changed = wrapper.terminal.clearHost() catch |err|
++        return if (err == error.OutOfMemory) .out_of_memory else .out_of_space;
++    if (out_cleared) |out| out.* = changed;
++    return .success;
++}
++
+ pub fn reset(terminal_: Terminal) callconv(lib.calling_conv) void {
+     const t: *ZigTerminal = (terminal_ orelse return).terminal;
+     t.fullReset();
+@@ -3859,3 +3871,70 @@ test "get_multi null keys returns invalid_value" {
+     var values = [_]?*anyopaque{@ptrCast(&cols)};
+     try testing.expectEqual(Result.invalid_value, get_multi(null, 1, null, &values, null));
+ }
++
++test "host clear: C API no-op and marker invalidation have no PTY output" {
++    try testing.expectEqual(Result.invalid_value, clear_preserving_cursor_row(null, null));
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(&lib.alloc.test_allocator, &t, .{ .cols = 12, .rows = 4, .max_scrollback = 1_000_000 }));
++    defer free(t);
++    var changed = true;
++    try testing.expectEqual(Result.success, clear_preserving_cursor_row(t, &changed));
++    try testing.expect(!changed);
++    const text = "old\r\nprompt";
++    vt_write(t, text, text.len);
++    var first: grid_ref_tracked_c.CTrackedGridRef = null;
++    var prompt: grid_ref_tracked_c.CTrackedGridRef = null;
++    try testing.expectEqual(Result.success, grid_ref_track(t, .{ .tag = .active, .value = .{ .active = .{} } }, &first));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(first);
++    try testing.expectEqual(Result.success, grid_ref_track(t, .{ .tag = .active, .value = .{ .active = .{ .x = 1, .y = 1 } } }, &prompt));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(prompt);
++    var writes: usize = 0;
++    const Counter = struct {
++        fn write(_: Terminal, context: ?*anyopaque, _: [*]const u8, _: usize) callconv(lib.calling_conv) void {
++            const count: *usize = @ptrCast(@alignCast(context.?));
++            count.* += 1;
++        }
++    };
++    t.?.effects.userdata = &writes;
++    t.?.effects.write_pty = &Counter.write;
++    try testing.expectEqual(Result.success, clear_preserving_cursor_row(t, &changed));
++    try testing.expect(changed);
++    try testing.expectEqual(@as(usize, 0), writes);
++    try testing.expect(!grid_ref_tracked_c.tracked_grid_ref_has_value(first));
++    try testing.expect(!grid_ref_tracked_c.tracked_grid_ref_has_value(prompt));
++    var stale: grid_ref_c.CGridRef = .{};
++    try testing.expectEqual(Result.no_value, grid_ref_tracked_c.tracked_grid_ref_snapshot(prompt, &stale));
++    var fresh: grid_ref_tracked_c.CTrackedGridRef = null;
++    try testing.expectEqual(Result.success, grid_ref_track(t, .{ .tag = .active, .value = .{ .active = .{ .x = 1 } } }, &fresh));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(fresh);
++    try testing.expect(grid_ref_tracked_c.tracked_grid_ref_has_value(fresh));
++    try testing.expectEqual(@as(u21, 'r'), fresh.?.pin.rowAndCell().cell.codepoint());
++    try testing.expectEqual(Result.success, clear_preserving_cursor_row(t, &changed));
++    try testing.expect(!changed);
++    try testing.expect(grid_ref_tracked_c.tracked_grid_ref_has_value(fresh));
++}
++
++test "host clear: C refs in the inactive buffer remain usable" {
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(&lib.alloc.test_allocator, &t, .{ .cols = 12, .rows = 4, .max_scrollback = 1_000_000 }));
++    defer free(t);
++    const text = "old\r\nprimary";
++    vt_write(t, text, text.len);
++    var primary: grid_ref_tracked_c.CTrackedGridRef = null;
++    try testing.expectEqual(Result.success, grid_ref_track(t, .{ .tag = .active, .value = .{ .active = .{ .x = 1, .y = 1 } } }, &primary));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(primary);
++    const enter = "\x1b[?1049hfirst\r\nalternate";
++    vt_write(t, enter, enter.len);
++    var alt: grid_ref_tracked_c.CTrackedGridRef = null;
++    try testing.expectEqual(Result.success, grid_ref_track(t, .{ .tag = .active, .value = .{ .active = .{
++        .y = t.?.terminal.screens.active.cursor.y,
++    } } }, &alt));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(alt);
++    try testing.expectEqual(Result.success, clear_preserving_cursor_row(t, null));
++    try testing.expect(grid_ref_tracked_c.tracked_grid_ref_has_value(primary));
++    try testing.expect(!grid_ref_tracked_c.tracked_grid_ref_has_value(alt));
++    var point_: point.Coordinate = undefined;
++    try testing.expectEqual(Result.success, grid_ref_tracked_c.tracked_grid_ref_point(primary, .active, &point_));
++    try testing.expectEqual(point.Coordinate{ .x = 1, .y = 1 }, point_);
++    try testing.expectEqual(@as(u21, 'r'), primary.?.pin.rowAndCell().cell.codepoint());
++}
+diff --git a/src/terminal/kitty/graphics_storage.zig b/src/terminal/kitty/graphics_storage.zig
+index ba82ea4..5c17f63 100644
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -278,6 +278,13 @@ pub const ImageStorage = struct {
+         self.markMutated();
+     }
+ 
++    /// Clear presentation while preserving transmitted images and quotas.
++    pub fn clearHostPlacements(self: *ImageStorage, s: *terminal.Screen) void {
++        if (self.placements.count() == 0) return;
++        self.clearPlacements(s);
++        self.markMutated();
++    }
++
+     fn clearPlacements(self: *ImageStorage, s: *terminal.Screen) void {
+         var it = self.placements.iterator();
+         while (it.next()) |entry| entry.value_ptr.deinit(s);
