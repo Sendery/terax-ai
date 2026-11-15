@@ -66,6 +66,16 @@ impl Snapshotter {
         seq: u32,
         force_full: bool,
     ) -> Result<Option<&[u8]>, libghostty_vt::Error> {
+        self.build_highlighted(term, seq, force_full, &[])
+    }
+
+    pub fn build_highlighted(
+        &mut self,
+        term: &Terminal<'static, '_>,
+        seq: u32,
+        force_full: bool,
+        highlights: &[u8],
+    ) -> Result<Option<&[u8]>, libghostty_vt::Error> {
         let scrollbar = term.scrollbar()?;
         let viewport_scrolled = scrollbar.offset.saturating_add(scrollbar.len) < scrollbar.total;
 
@@ -135,6 +145,7 @@ impl Snapshotter {
                 let mut cached: Option<(StyleId, CellStyle)> = None;
                 let selected_row = row.selection()?.is_some();
                 let mut cell_iter = self.cells.update(row)?;
+                let mut x = 0usize;
                 while let Some(cell) = cell_iter.next() {
                     let raw_cell = cell.raw_cell()?;
                     let (codepoint, width) = match raw_cell.wide()? {
@@ -157,10 +168,22 @@ impl Snapshotter {
                         CellStyle::DEFAULT
                     };
                     style.bg = cell.bg_color()?.map_or(0, pack);
+                    match highlights.get(usize::from(y) * usize::from(cols) + x) {
+                        Some(1) => {
+                            style.bg = set_rgb(0x51, 0x5c, 0x6a);
+                            style.attrs &= !ATTR_INVERSE;
+                        }
+                        Some(2) => {
+                            style.bg = set_rgb(0xd1, 0x86, 0x16);
+                            style.attrs &= !ATTR_INVERSE;
+                        }
+                        _ => {}
+                    }
                     if selected_row && cell.is_selected()? {
                         style.attrs ^= ATTR_INVERSE;
                     }
                     encoder.push_cell(codepoint, width, style);
+                    x += 1;
                 }
                 encoder.end_row();
                 row.set_dirty(false)?;

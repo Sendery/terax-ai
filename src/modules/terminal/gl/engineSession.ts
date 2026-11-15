@@ -1,4 +1,8 @@
 import {
+  validateSearchCommand,
+  type NativeSearchCommand,
+} from "@/modules/terminal/gl/nativeSearch";
+import {
   decodeNativeState,
   type NativeState,
 } from "@/modules/terminal/gl/nativeState";
@@ -768,6 +772,27 @@ export class EngineSession {
       () => {},
     );
     return task;
+  }
+
+  search(command: NativeSearchCommand): Promise<boolean> {
+    try {
+      validateSearchCommand(command);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const id = this.id;
+    if (id === null || this.closed || this.failed)
+      return Promise.reject(new Error("terminal engine is unavailable"));
+    return invoke<unknown>("gterm_search", {
+      id,
+      command: { ...command },
+    }).then((found) => {
+      if (this.closed || this.failed || this.id !== id)
+        throw new Error("terminal engine is unavailable");
+      if (typeof found !== "boolean")
+        throw new Error("invalid terminal search reply");
+      return found;
+    });
   }
 
   readText(maxLines = 200): Promise<string> {

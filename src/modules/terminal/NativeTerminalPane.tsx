@@ -157,6 +157,7 @@ export const NativeTerminalPane = forwardRef<
             onError: report,
           });
           input.current = binding;
+          latest.current.onSearchReady?.(leafId, owner.search);
           measure();
           if (latest.current.visible && (latest.current.focused ?? true))
             binding.focus();

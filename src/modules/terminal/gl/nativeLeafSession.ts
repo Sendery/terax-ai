@@ -1,3 +1,5 @@
+import { createNativeSearch } from "@/modules/terminal/gl/nativeSearch";
+import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
   EngineSession,
   type EngineColors,
@@ -54,6 +56,7 @@ export class NativeLeafSession implements NativeLeaf {
   private pendingExit: number | null = null;
   private selectionRefresh = false;
   private state: NativeState | null = null;
+  private searchAdapter: TerminalSearch | null = null;
 
   constructor(
     config: NativeLeafConfig,
@@ -148,6 +151,30 @@ export class NativeLeafSession implements NativeLeaf {
     this.native?.requestFull();
   }
 
+  get search(): TerminalSearch {
+    if (!this.searchAdapter) {
+      const owner = this.owner;
+      this.searchAdapter = createNativeSearch(async (command) => {
+        await owner.opened;
+        const native = this.native;
+        if (
+          this.owner !== owner ||
+          !native ||
+          this.id === null ||
+          this.closing
+        ) {
+          if (command.kind === "clear") return false;
+          throw new Error("Terminal search is no longer available.");
+        }
+        const found = await native.search(command);
+        if (this.owner !== owner || this.native !== native || this.id === null)
+          throw new Error("Terminal search is no longer available.");
+        return found;
+      });
+    }
+    return this.searchAdapter;
+  }
+
   async readText(maxLines?: number): Promise<string | null> {
     const owner = this.owner;
     await owner.opened;
@@ -223,6 +250,7 @@ export class NativeLeafSession implements NativeLeaf {
 
   private start(): void {
     const generation = ++this.generation;
+    this.searchAdapter = null;
     const prerequisite = this.retirement.beforeOpen();
     this.native = null;
     this.closing = null;

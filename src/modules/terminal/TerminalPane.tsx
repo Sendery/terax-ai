@@ -5,7 +5,7 @@ import { NativeTerminalPane } from "@/modules/terminal/NativeTerminalPane";
 import { nativeTerminalRequested } from "@/modules/terminal/gl/nativeSurfaceContext";
 import { IS_MAC } from "@/lib/platform";
 import { useTheme } from "@/modules/theme";
-import type { SearchAddon } from "@xterm/addon-search";
+import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
   forwardRef,
   memo,
@@ -48,7 +48,7 @@ export type TerminalPaneProps = {
   homePath?: string | null;
   /** Enable command-block decorations (OSC 133) for this terminal. */
   blocks?: boolean;
-  onSearchReady?: (leafId: number, addon: SearchAddon) => void;
+  onSearchReady?: (leafId: number, addon: TerminalSearch) => void;
   onExit?: (leafId: number, code: number) => void;
   onCwd?: (leafId: number, cwd: string) => void;
   onOpenFileLink?: (path: string) => void;

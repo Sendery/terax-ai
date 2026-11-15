@@ -1,6 +1,6 @@
 import { NativeTerminalSurface } from "@/modules/terminal/NativeTerminalSurface";
 import type { Tab } from "@/modules/tabs";
-import type { SearchAddon } from "@xterm/addon-search";
+import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import { useEffect, useMemo, useRef } from "react";
 import { selectLiveTerminals } from "./lib/liveTerminals";
 import { leafIds } from "./lib/panes";
@@ -16,7 +16,7 @@ type Props = {
   activeId: number;
   /** Register/unregister handle by leaf id (not tab id). */
   registerHandle: (leafId: number, handle: TerminalPaneHandle | null) => void;
-  onSearchReady: (leafId: number, addon: SearchAddon) => void;
+  onSearchReady: (leafId: number, addon: TerminalSearch) => void;
   onCwd: (leafId: number, cwd: string) => void;
   onExit: (leafId: number, code: number) => void;
   onFocusLeaf: (tabId: number, leafId: number) => void;
@@ -29,7 +29,7 @@ type Props = {
 
 type Bundle = {
   setRef: (h: TerminalPaneHandle | null) => void;
-  onSearchReady: (leafId: number, addon: SearchAddon) => void;
+  onSearchReady: (leafId: number, addon: TerminalSearch) => void;
   onCwd: (leafId: number, cwd: string) => void;
   onExit: (leafId: number, code: number) => void;
 };

@@ -20,6 +20,8 @@ pub mod input;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod keyboard_modes;
 #[cfg(feature = "ghostty-engine")]
+pub mod search;
+#[cfg(feature = "ghostty-engine")]
 pub mod selection;
 #[cfg(feature = "ghostty-engine")]
 mod snapshot;
@@ -234,6 +236,12 @@ mod runtime {
     pub type TextReceiver = Receiver<TextReply>;
     pub type SelectionReply = Result<Option<String>, String>;
     pub type SelectionReceiver = Receiver<SelectionReply>;
+    pub type SearchReply = Result<bool, String>;
+    pub type SearchReceiver = Receiver<SearchReply>;
+    struct SearchRequest {
+        command: super::search::SearchCommand,
+        reply: SyncSender<SearchReply>,
+    }
     const MAX_TEXT_REQUESTS: usize = 32;
 
     struct TextRequest {
@@ -256,6 +264,7 @@ mod runtime {
         stop: bool,
         text_requests: Vec<TextRequest>,
         selection_requests: Vec<SelectionRequest>,
+        search_requests: Vec<SearchRequest>,
         text_pending: usize,
         text_closed: bool,
     }
@@ -277,12 +286,16 @@ mod runtime {
             (
                 std::mem::take(&mut control.text_requests),
                 std::mem::take(&mut control.selection_requests),
+                std::mem::take(&mut control.search_requests),
             )
         };
         for request in pending.0 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
         for request in pending.1 {
+            let _ = request.reply.try_send(Err("terminal engine closed".into()));
+        }
+        for request in pending.2 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
     }
@@ -364,6 +377,34 @@ mod runtime {
                 control
                     .selection_requests
                     .push(SelectionRequest { command, reply });
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
+        }
+
+        pub fn search(
+            &self,
+            command: super::search::SearchCommand,
+        ) -> Result<SearchReceiver, String> {
+            command.validate()?;
+            let (reply, receiver) = sync_channel(1);
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal queries".into());
+                }
+                control.text_pending += 1;
+                control
+                    .search_requests
+                    .push(SearchRequest { command, reply });
             }
             if matches!(
                 self.wake.try_send(Input::Wake),
@@ -642,6 +683,7 @@ mod runtime {
         input_finished: bool,
         stop_requested: bool,
         selection: super::selection::SelectionState,
+        search: super::search::SearchState,
         keyboard_modes: super::keyboard_modes::KeyboardModes,
         shell: super::shell::ShellIntegration,
         control: Arc<Mutex<Control>>,
@@ -653,6 +695,7 @@ mod runtime {
             self.keyboard_modes.ingest(bytes);
             self.shell.ingest(bytes);
             self.term.vt_write(bytes);
+            self.search.invalidate();
             self.update_input_state();
             self.update_scrollback_rows();
             self.flush_replies();
@@ -715,6 +758,9 @@ mod runtime {
                 for request in c.selection_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
                 }
+                for request in c.search_requests {
+                    let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                }
                 reject_text_requests(&self.control);
                 self.reply_sink.take();
                 *self.replies.borrow_mut() = Vec::new();
@@ -725,6 +771,7 @@ mod runtime {
                     match self.term.resize(cols, rows, 0, 0) {
                         Ok(()) => {
                             self.size = (cols, rows);
+                            self.search.invalidate();
                             self.update_scrollback_rows();
                             self.pump.request_full();
                             self.flush_replies();
@@ -775,6 +822,18 @@ mod runtime {
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
                 control.text_pending = control.text_pending.saturating_sub(1);
             }
+            for request in c.search_requests {
+                let result = if self.health.failure().is_some() {
+                    Err("terminal engine is unavailable".into())
+                } else {
+                    let result = self.search.apply(&mut self.term, &request.command);
+                    self.pump.request_full();
+                    result
+                };
+                let _ = request.reply.try_send(result);
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                control.text_pending = control.text_pending.saturating_sub(1);
+            }
             if let Some(seq) = c.ack {
                 if self.pump.credit(seq, Instant::now()) {
                     self.stats
@@ -791,10 +850,20 @@ mod runtime {
         fn emit(&mut self) {
             let started = Instant::now();
             let seq = self.pump.next_seq();
-            let built = match self
-                .snapshot
-                .build(&self.term, seq, self.pump.full_pending())
-            {
+            let search_was_active = self.search.is_active();
+            let highlights = self.search.highlights(&self.term).unwrap_or_else(|error| {
+                log::warn!("terminal search highlight failed: {error}");
+                self.search.clear();
+                Vec::new()
+            });
+            let full = self.pump.full_pending() || search_was_active;
+            let frame = if highlights.is_empty() {
+                self.snapshot.build(&self.term, seq, full)
+            } else {
+                self.snapshot
+                    .build_highlighted(&self.term, seq, full, &highlights)
+            };
+            let built = match frame {
                 Ok(Some(frame)) => frame.to_vec(),
                 Ok(None) => {
                     self.pump.nothing_changed();
@@ -923,6 +992,7 @@ mod runtime {
             input_finished: false,
             stop_requested: false,
             selection: super::selection::SelectionState::default(),
+            search: super::search::SearchState::default(),
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
             shell: super::shell::ShellIntegration::new(shell_token),
             control,
@@ -1623,9 +1693,25 @@ mod engine_tests {
         began.recv_timeout(WAIT).unwrap();
         assert!(engine.handle.read_text(0).is_err());
         assert!(engine.handle.read_text(1001).is_err());
-        let queries: Vec<_> = (0..32)
+        let queries: Vec<_> = (0..30)
             .map(|_| engine.handle.read_text(2).unwrap())
             .collect();
+        let search = engine
+            .handle
+            .search(super::search::SearchCommand::Clear)
+            .unwrap();
+        let selection = engine
+            .handle
+            .selection(super::selection::SelectionCommand::Read)
+            .unwrap();
+        assert!(engine
+            .handle
+            .search(super::search::SearchCommand::Clear)
+            .is_err());
+        assert!(engine
+            .handle
+            .selection(super::selection::SelectionCommand::Read)
+            .is_err());
         assert!(engine.handle.read_text(2).is_err());
         let (open, wake) = &*gate;
         *open.lock().unwrap() = true;
@@ -1633,6 +1719,8 @@ mod engine_tests {
         for query in queries {
             assert_eq!(query.recv_timeout(WAIT).unwrap().unwrap(), "");
         }
+        assert!(!search.recv_timeout(WAIT).unwrap().unwrap());
+        assert_eq!(selection.recv_timeout(WAIT).unwrap().unwrap(), None);
         engine.input.shutdown();
         engine.thread.join().unwrap();
         assert!(engine.handle.read_text(2).is_err());
@@ -1706,6 +1794,53 @@ mod engine_tests {
         let handle = h.handle.clone();
         h.shutdown();
         assert!(handle.read_text(2).is_err());
+    }
+
+    #[test]
+    fn retained_search_navigates_and_clears_native_highlights_after_input_finishes() {
+        use super::frame::set_rgb;
+        use super::search::SearchCommand;
+        let h = harness(16, 2);
+        h.frame();
+        h.feed(b"needle needle\r\nlast");
+        let finished = h.input.finish().unwrap();
+        assert_eq!(finished.recv_timeout(WAIT).unwrap(), Ok(()));
+        let final_frame = h.frame();
+        let found = h
+            .handle
+            .search(SearchCommand::Find {
+                query: "needle".into(),
+                forward: true,
+                incremental: true,
+            })
+            .unwrap();
+        assert!(found.recv_timeout(WAIT).unwrap().unwrap());
+        h.assert_no_frame();
+        h.handle.credit(final_frame.seq);
+        let highlighted = h.frame();
+        let backgrounds: Vec<_> = highlighted
+            .row(0)
+            .unwrap()
+            .runs
+            .iter()
+            .flat_map(|&(id, len)| {
+                std::iter::repeat_n(highlighted.styles[usize::from(id)].bg, usize::from(len))
+            })
+            .collect();
+        assert_eq!(&backgrounds[..6], &[set_rgb(0xd1, 0x86, 0x16); 6]);
+        assert_eq!(&backgrounds[7..13], &[set_rgb(0x51, 0x5c, 0x6a); 6]);
+        let cleared = h.handle.search(SearchCommand::Clear).unwrap();
+        assert!(!cleared.recv_timeout(WAIT).unwrap().unwrap());
+        h.handle.credit(highlighted.seq);
+        let clean = h.frame();
+        assert!(clean
+            .styles
+            .iter()
+            .all(|s| s.bg != set_rgb(0xd1, 0x86, 0x16) && s.bg != set_rgb(0x51, 0x5c, 0x6a)));
+        assert_eq!(clean.row(0).unwrap().text(), "needle needle");
+        let handle = h.handle.clone();
+        h.shutdown();
+        assert!(handle.search(SearchCommand::Clear).is_err());
     }
 
     #[test]

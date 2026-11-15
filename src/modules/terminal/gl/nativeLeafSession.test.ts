@@ -34,6 +34,7 @@ function driver(id: number, closing: Promise<void> = Promise.resolve()) {
     attachRenderer: vi.fn(),
     getSelection: vi.fn(() => null),
     readText: vi.fn(async () => "history"),
+    search: vi.fn(async () => true),
     encodeKey: vi.fn(async () => "\x1b\r"),
     paste: vi.fn(async () => {}),
     submit: vi.fn(async () => {}),
@@ -341,5 +342,64 @@ it("does not mark an exited shell ready from a delayed state message", async () 
   });
   expect(onReady).not.toHaveBeenCalled();
   expect(session.shellReady).toBe(false);
+  await session.dispose();
+});
+
+it("keeps search after process exit and isolates old adapters from respawn", async () => {
+  const first = driver(9);
+  const next = driver(10);
+  let exit!: (code: number) => void;
+  const open = vi.fn(
+    async (
+      _renderer: GridRenderer,
+      options: {
+        observer: import("@/modules/terminal/gl/engineSession").SessionObserver;
+      },
+    ): Promise<EngineSession> => {
+      exit = (code) => options.observer.onExit?.(code);
+      return (open.mock.calls.length === 1
+        ? first
+        : next) as unknown as EngineSession;
+    },
+  );
+  const session = new NativeLeafSession(config(), open);
+  await session.opened;
+  const oldSearch = session.search;
+  exit(0);
+  await expect(oldSearch.findNext("history")).resolves.toBe(true);
+  expect(first.search).toHaveBeenCalledOnce();
+  await session.respawn();
+  expect(session.search).not.toBe(oldSearch);
+  await expect(oldSearch.clearDecorations()).resolves.toBeUndefined();
+  await expect(oldSearch.findNext("old query")).rejects.toThrow(
+    "no longer available",
+  );
+  expect(next.search).not.toHaveBeenCalled();
+  await expect(session.search.findNext("new query")).resolves.toBe(true);
+  expect(next.search).toHaveBeenCalledOnce();
+  await session.dispose();
+});
+
+it("rejects an in-flight result when respawn replaces its owner", async () => {
+  let finish!: (found: boolean) => void;
+  const first = driver(9);
+  first.search.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const next = driver(10);
+  const open = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(next);
+  const session = new NativeLeafSession(config(), open);
+  await session.opened;
+  const pending = session.search.findNext("old query");
+  const settled = Promise.allSettled([pending]);
+  await Promise.resolve();
+  expect(first.search).toHaveBeenCalledOnce();
+  await session.respawn();
+  finish(true);
+  expect((await settled)[0].status).toBe("rejected");
+  expect(next.search).not.toHaveBeenCalled();
   await session.dispose();
 });

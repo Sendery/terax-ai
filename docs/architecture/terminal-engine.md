@@ -561,7 +561,7 @@ private-terminal capture guards still apply.
 
 The real M2 normal sandbox now proves startup, text input, split, tab
 hide/show, mouse focus, surviving-pane close, renderer replacement and scoped
-capture. This is narrower than terminal parity. Search, links, blocks, remaining settings, TUI mouse reporting, full graphemes,
+capture. This is narrower than terminal parity. Links, blocks, remaining settings, TUI mouse reporting, full graphemes,
 platform validation and rollout remain open in the parity inventory.
 
 
@@ -602,3 +602,38 @@ spaces, focus and tab return, and rejection of unsigned D/A plus OSC 7 while a
 command remains running. Actual zsh/bash profile output and native ordered
 state have regression coverage. Broader restore/task/agent scenarios and other
 platforms remain open in the parity inventory.
+
+
+### Native header search in ordinary panes
+
+The header accepts a minimal TerminalSearch interface shared by native and
+legacy terminals. The legacy adapter retains its actual SearchAddon and
+existing decorations. The native adapter submits ordered gterm_search queries;
+it does not reconstruct history from frames or the bounded text-tail API.
+Incremental input coalesces only adjacent unsent incremental queries. Explicit
+navigation and clear remain ordered. Per-generation ownership and post-reply
+checks prevent an old search from acting on a replacement process.
+
+The actor searches the active screen's retained native history, including soft
+wraps, literal case-insensitive Unicode, combining clusters and wide cells.
+Only active match endpoints are tracked core references; pruning/reflow update
+those anchors. Queries are at most 4096 UTF-8 bytes without controls; the
+on-demand text index is bounded to 64 MiB and invalidated by input or resize.
+Text/selection/search share the existing 32-request admission before blocking
+workers. Receipt timeout is 10 seconds and does not cancel already accepted
+actor work. Search remains available after healthy process exit until close.
+
+Visible matches and the active match use the existing header colors in the
+native frame projection, independently of user selection. No frame ABI change
+is needed. Inactive search reads no history and allocates no overlay. Active
+search refreshes viewport highlights with wrap context; contextual Greek sigma
+queries require complete logical-line context. Normalization operates on joined
+text and verifies transformed byte offsets before mapping native grapheme cells.
+Overlapping matches retain active-color priority. An overlay error clears search
+and forces a full redraw so stale highlights cannot survive.
+
+The UI handles asynchronous errors for the current target, clears on target
+change, and restores terminal focus on Escape. No search text or terminal text
+is added to app snapshots, the Pi bridge or logs. Functional M2 evidence and
+remaining scope are recorded in the native-search report; this does not close
+the full migration or prove Windows/Linux runtime acceptance.

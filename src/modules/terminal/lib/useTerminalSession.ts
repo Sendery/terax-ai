@@ -8,7 +8,7 @@ import { IS_MAC } from "@/lib/platform";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { invoke } from "@tauri-apps/api/core";
-import type { SearchAddon } from "@xterm/addon-search";
+import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
   useCallback,
   useEffect,
@@ -66,7 +66,7 @@ import {
 import { useTerminalFont } from "./useTerminalFont";
 
 type Callbacks = {
-  onSearchReady?: (addon: SearchAddon) => void;
+  onSearchReady?: (addon: TerminalSearch) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
   onOpenFileLink?: (path: string) => void;
@@ -956,7 +956,7 @@ type Options = {
   initialCwd?: string;
   homePath?: string | null;
   blocks?: boolean;
-  onSearchReady?: (addon: SearchAddon) => void;
+  onSearchReady?: (addon: TerminalSearch) => void;
   onExit?: (code: number) => void;
   onCwd?: (cwd: string) => void;
   onOpenFileLink?: (path: string) => void;

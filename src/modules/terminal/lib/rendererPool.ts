@@ -8,6 +8,10 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import { buildTerminalTheme } from "@/styles/terminalTheme";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import {
+  decorateTerminalSearch,
+  type TerminalSearch,
+} from "@/modules/terminal/lib/terminalSearch";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -548,7 +552,7 @@ export type AcquireParams = {
   cols: number;
   rows: number;
   registerOsc: (term: Terminal) => (() => void)[];
-  onSearchReady: (addon: SearchAddon) => void;
+  onSearchReady: (addon: TerminalSearch) => void;
 };
 
 export function acquireSlot(params: AcquireParams): Slot {
@@ -686,7 +690,7 @@ function bindSlot(slot: Slot, p: AcquireParams): void {
     scheduleUnhide(slot, stale || hadWebgl);
   }
 
-  p.onSearchReady(slot.searchAddon);
+  p.onSearchReady(decorateTerminalSearch(slot.searchAddon));
 }
 
 /**
@@ -771,7 +775,7 @@ function rewireSlot(slot: Slot, p: AcquireParams): void {
   }
   slot.lastCols = slot.term.cols;
   slot.lastRows = slot.term.rows;
-  p.onSearchReady(slot.searchAddon);
+  p.onSearchReady(decorateTerminalSearch(slot.searchAddon));
 }
 
 function setupResizeObserver(slot: Slot, p: AcquireParams): void {

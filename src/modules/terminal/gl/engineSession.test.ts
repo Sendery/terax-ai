@@ -19,6 +19,7 @@ const ipc = vi.hoisted(() => ({
   text: null as Promise<unknown> | null,
   encoded: null as Promise<unknown> | null,
   selection: null as Promise<unknown> | null,
+  search: null as Promise<unknown> | null,
   closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
@@ -41,6 +42,8 @@ vi.mock("@tauri-apps/api/core", () => {
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
       if (command === "pty_close" && ipc.closing) return ipc.closing;
+      if (command === "gterm_search")
+        return ipc.search ?? Promise.resolve(true);
       if (command === "gterm_selection")
         return ipc.selection ?? Promise.resolve("native selection");
       if (command === "gterm_encode_input")
@@ -138,6 +141,7 @@ beforeEach(() => {
   ipc.text = null;
   ipc.encoded = null;
   ipc.selection = null;
+  ipc.search = null;
   ipc.closing = null;
 });
 
@@ -1078,4 +1082,33 @@ it("invalidates a failed renderer migration while keeping its original pane avai
   ).rejects.toThrow();
   await session.close();
   expect(first.panes).toHaveLength(0);
+});
+
+it("searches through the native core and rejects stale or malformed replies", async () => {
+  const session = await openSession(new FakeRenderer());
+  const command = {
+    kind: "find",
+    query: "needle",
+    forward: true,
+    incremental: true,
+  } as const;
+  expect(await session.search(command)).toBe(true);
+  expect(commands("gterm_search")).toEqual([
+    { command: "gterm_search", args: { id: 9, command } },
+  ]);
+  ipc.search = Promise.resolve("not a boolean");
+  await expect(session.search(command)).rejects.toThrow(
+    "invalid terminal search reply",
+  );
+  let finish!: (found: boolean) => void;
+  ipc.search = new Promise<boolean>((resolve) => {
+    finish = resolve;
+  });
+  const pending = session.search(command);
+  const settled = Promise.allSettled([pending]);
+  await session.close();
+  finish(true);
+  expect((await settled)[0].status).toBe("rejected");
+  await expect(session.search(command)).rejects.toThrow("unavailable");
+  expect(commands("gterm_search")).toHaveLength(3);
 });

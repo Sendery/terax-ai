@@ -6,7 +6,7 @@ import { usePreferencesStore } from "@/modules/settings/preferences";
 import { getBindingTokens, SHORTCUTS } from "@/modules/shortcuts/shortcuts";
 import { Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { SearchAddon } from "@xterm/addon-search";
+import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import {
   forwardRef,
   useCallback,
@@ -17,15 +17,8 @@ import {
   useState,
 } from "react";
 
-const TERM_DECORATIONS = {
-  matchBackground: "#515c6a",
-  activeMatchBackground: "#d18616",
-  matchOverviewRuler: "#d18616",
-  activeMatchColorOverviewRuler: "#d18616",
-};
-
 export type SearchTarget =
-  | { kind: "terminal"; addon: SearchAddon; focus: () => void }
+  | { kind: "terminal"; addon: TerminalSearch; focus: () => void }
   | { kind: "editor"; handle: EditorPaneHandle; focus: () => void }
   | {
       kind: "git-history";
@@ -45,6 +38,35 @@ type Props = {
 export const SearchInline = forwardRef<SearchInlineHandle, Props>(
   function SearchInline({ target, compact }, ref) {
     const [q, setQ] = useState("");
+    const [searchFeedback, setSearchFeedback] = useState<{
+      target: SearchTarget;
+      message: string;
+    } | null>(null);
+    const searchError =
+      searchFeedback?.target === target ? searchFeedback.message : null;
+    const setSearchError = (message: string | null) =>
+      setSearchFeedback(message === null ? null : { target, message });
+    const requestVersion = useRef(0);
+    const currentTarget = useRef(target);
+    currentTarget.current = target;
+    const runTerminalSearch = (action: () => unknown) => {
+      const version = ++requestVersion.current;
+      setSearchError(null);
+      const failed = (error: unknown) => {
+        if (
+          version === requestVersion.current &&
+          currentTarget.current === target
+        )
+          setSearchError(
+            error instanceof Error ? error.message : String(error),
+          );
+      };
+      try {
+        void Promise.resolve(action()).catch(failed);
+      } catch (error) {
+        failed(error);
+      }
+    };
     // In compact mode the field is hidden behind an icon until activated.
     // In normal mode the field is always present.
     const [openInCompact, setOpenInCompact] = useState(false);
@@ -83,17 +105,45 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
     const focus = useCallback(() => {
       pendingFocusRef.current = true;
       if (compact) setOpenInCompact(true);
-      else inputRef.current?.focus();
-      if (inputRef.current) pendingFocusRef.current = false;
+      if (inputRef.current) {
+        inputRef.current.focus();
+        pendingFocusRef.current = false;
+      }
     }, [compact]);
 
     useImperativeHandle(ref, () => ({ focus }), [focus]);
 
-    const clearTarget = useCallback(() => {
-      if (!target) return;
-      if (target.kind === "terminal") target.addon.clearDecorations();
-      else target.handle.clearQuery();
-    }, [target]);
+    const clearTarget = useCallback(
+      (reportErrors = true) => {
+        if (!target) return;
+        if (target.kind === "terminal") {
+          const version = ++requestVersion.current;
+          try {
+            void Promise.resolve(target.addon.clearDecorations()).catch(
+              (error: unknown) => {
+                if (
+                  reportErrors &&
+                  version === requestVersion.current &&
+                  currentTarget.current === target
+                )
+                  setSearchFeedback({
+                    target,
+                    message:
+                      error instanceof Error ? error.message : String(error),
+                  });
+              },
+            );
+          } catch (error) {
+            if (reportErrors && currentTarget.current === target)
+              setSearchFeedback({
+                target,
+                message: error instanceof Error ? error.message : String(error),
+              });
+          }
+        } else target.handle.clearQuery();
+      },
+      [target],
+    );
 
     const restoreTargetFocus = useCallback(() => {
       if (!target) return;
@@ -101,18 +151,23 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
     }, [target]);
 
     // Target switched (terminal ↔ editor) or removed → drop highlights.
-    useEffect(() => clearTarget, [clearTarget]);
+    useEffect(
+      () => () => {
+        requestVersion.current++;
+        clearTarget(false);
+      },
+      [clearTarget],
+    );
 
     const applyIncremental = (next: string) => {
       if (!target) return;
       if (target.kind === "terminal") {
         if (next) {
-          target.addon.findNext(next, {
-            incremental: true,
-            decorations: TERM_DECORATIONS,
-          });
+          runTerminalSearch(() =>
+            target.addon.findNext(next, { incremental: true }),
+          );
         } else {
-          target.addon.clearDecorations();
+          runTerminalSearch(() => target.addon.clearDecorations());
         }
       } else {
         target.handle.setQuery(next);
@@ -122,9 +177,9 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
     const findDirection = (forward: boolean) => {
       if (!target || !q) return;
       if (target.kind === "terminal") {
-        const opts = { decorations: TERM_DECORATIONS };
-        if (forward) target.addon.findNext(q, opts);
-        else target.addon.findPrevious(q, opts);
+        runTerminalSearch(() =>
+          forward ? target.addon.findNext(q) : target.addon.findPrevious(q),
+        );
       } else if (target.kind === "editor") {
         if (forward) target.handle.findNext();
         else target.handle.findPrevious();
@@ -148,11 +203,20 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
             <Input
               ref={setInputRef}
               value={q}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              aria-invalid={searchError ? true : undefined}
+              aria-describedby={
+                searchError ? "terminal-search-error" : undefined
+              }
               placeholder={placeholder}
               className="h-7 w-full bg-muted/80 pr-7 pl-7 text-[13px]! placeholder:text-muted-foreground/70 focus-visible:ring-0"
               onChange={(e) => {
                 const next = e.target.value;
                 setQ(next);
+                setSearchError(null);
                 applyIncremental(next);
               }}
               onBlur={() => {
@@ -166,6 +230,7 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
                   e.preventDefault();
                   clearTarget();
                   setQ("");
+                  setSearchError(null);
                   if (compact) {
                     setOpenInCompact(false);
                   }
@@ -173,11 +238,21 @@ export const SearchInline = forwardRef<SearchInlineHandle, Props>(
                 }
               }}
             />
+            {searchError && (
+              <div
+                id="terminal-search-error"
+                role="alert"
+                className="absolute top-full right-0 z-50 mt-1 w-64 rounded-md border bg-popover p-2 text-xs text-destructive shadow-md"
+              >
+                {searchError}
+              </div>
+            )}
             {q && (
               <button
                 type="button"
                 onClick={() => {
                   setQ("");
+                  setSearchError(null);
                   clearTarget();
                   inputRef.current?.focus();
                 }}

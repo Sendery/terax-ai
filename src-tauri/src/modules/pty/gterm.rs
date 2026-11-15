@@ -151,6 +151,35 @@ pub async fn gterm_selection(
     }
 }
 
+#[cfg(feature = "ghostty-engine")]
+type SearchCommand = super::engine::search::SearchCommand;
+#[cfg(not(feature = "ghostty-engine"))]
+type SearchCommand = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_search(
+    state: State<'_, PtyState>,
+    id: u32,
+    command: SearchCommand,
+) -> Result<bool, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.search(command)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .map_err(|error| format!("terminal search query failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal search task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, command);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
 #[tauri::command]
 pub fn gterm_set_colors(
     state: State<'_, PtyState>,

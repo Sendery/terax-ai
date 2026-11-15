@@ -711,3 +711,19 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** accepting bare OSC 7 or trusting any printed A/D allows untrusted output to change app CWD. Treating engine open as ready loses restoration input. A late ready message can re-arm global readiness after retirement reset.
 - **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
 - **Verification:** fragment/cancel/oversize/opaque-string tests, real shell script output and actor ordering, deferred open/respawn and post-exit state tests, and actual two-pane CWD plus forged-output rejection. Check native target cfg branches; M2 gates do not compile Windows. Canonicalize temporary directory fixtures before comparing physical shell PWD, per the existing macOS path lesson.
+
+
+### Native search normalization and overlays must share cell meaning
+
+- **Trigger:** replacing a JS search addon with native history search and frame colors.
+- **Failure mode:** non-overlapping Rust matches miss results such as banana/ana; a later ordinary match overwrites active color. Per-character lowercase loses contextual Greek sigma, and viewport-only casing can disagree with a successful full-history search when case-ignorable text continues beyond the viewport. Clearing failed overlays without a full repaint leaves cached colors on unchanged rows.
+- **Prevention:** traverse overlapping matches on UTF-8 boundaries and preserve active priority. Normalize joined logical text, retain transformed byte offsets and map through native grapheme/wide cells. Preserve complete logical-line context when sigma casing needs it. Keep search independent from selection and use tracked native endpoints across reflow. Force full repaint after overlay failure. Serialize native queries, coalesce only adjacent incremental text, and bind adapters to process generations.
+- **Verification:** failing-then-passing overlap, wrapped Unicode, case expansion, long sigma context, erased-anchor and retained post-exit frame tests; stale replies after close/respawn; full gates and real header shortcuts/history captures on M2. Do not infer full rendering grapheme parity from a successful search.
+
+
+### Compact search refocus and literal text input
+
+- **Trigger:** Cmd+F when a compact search field is already mounted, or Escape immediately after typing.
+- **Failure mode:** opening an already open field does not refocus it, and clearing pendingFocus because its ref exists loses the focus request. A native text-field interaction can also consume a first Escape; assuming a tab title is prompt readiness makes the UI harness wait incorrectly.
+- **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug.
+- **Verification:** pre-fix AXTextArea after Cmd+F versus post-fix AXTextField; one Escape returns AXTextArea, then a public shell program writes its acknowledgement. Split tests require distinct PIDs and the unchanged original PID. Use exact inspected captures and remove temporary diagnostics before final gates.
