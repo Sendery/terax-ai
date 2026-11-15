@@ -30,10 +30,21 @@ impl Modes {
         })
     }
 }
+/// Applied actor-owned host policy, never inferred from a setter receipt.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostState {
+    pub scrollback_rows: Option<u32>,
+    pub host_mutation_version: u64,
+    /// Last actually emitted frame at the mutation boundary (wrapping u32).
+    pub host_mutation_after_seq: u32,
+}
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineState {
     pub version: u64,
+    #[serde(flatten)]
+    pub host: HostState,
     #[serde(flatten)]
     pub modes: Modes,
     #[serde(flatten)]
@@ -70,12 +81,19 @@ impl StateStore {
         };
         notify(Some(listener), state)
     }
-    pub fn publish(&self, modes: Modes, shell: &ShellState, blocks_version: Option<u64>) -> bool {
+    pub fn publish(
+        &self,
+        modes: Modes,
+        shell: &ShellState,
+        blocks_version: Option<u64>,
+        host: HostState,
+    ) -> bool {
         let blocks_enabled = blocks_version.is_some();
         let blocks_metadata_version = blocks_version.unwrap_or_default();
         let (listener, state) = {
             let mut inner = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-            if inner.state.modes == modes
+            if inner.state.host == host
+                && inner.state.modes == modes
                 && &inner.state.shell == shell
                 && inner.state.blocks_enabled == blocks_enabled
                 && inner.state.blocks_metadata_version == blocks_metadata_version
@@ -84,6 +102,7 @@ impl StateStore {
             }
             inner.state = EngineState {
                 version: inner.state.version.saturating_add(1),
+                host,
                 modes,
                 shell: shell.clone(),
                 blocks_enabled,
@@ -112,8 +131,8 @@ mod tests {
             modify_other_keys: 2,
             ..Modes::default()
         };
-        assert!(store.publish(modes, &ShellState::default(), None));
-        assert!(store.publish(modes, &ShellState::default(), None));
+        assert!(store.publish(modes, &ShellState::default(), None, HostState::default()));
+        assert!(store.publish(modes, &ShellState::default(), None, HostState::default()));
         assert_eq!(*values.lock().unwrap(), [0, 1]);
     }
     #[test]
@@ -137,5 +156,32 @@ mod tests {
                 kitty_flags: 1
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::*;
+    #[test]
+    fn applied_policy_publishes_without_mode_changes_and_coalesces_identical_receipts() {
+        let store = StateStore::default();
+        let policy = HostState {
+            scrollback_rows: Some(2000),
+            ..HostState::default()
+        };
+        assert!(store.publish(Modes::default(), &ShellState::default(), None, policy));
+        assert_eq!(store.snapshot().version, 1);
+        assert!(store.publish(Modes::default(), &ShellState::default(), None, policy));
+        assert_eq!(store.snapshot().version, 1);
+        let applied = HostState {
+            scrollback_rows: Some(200),
+            host_mutation_version: 1,
+            host_mutation_after_seq: u32::MAX,
+        };
+        assert!(store.publish(Modes::default(), &ShellState::default(), None, applied));
+        let value = serde_json::to_value(store.snapshot()).unwrap();
+        assert_eq!(value["scrollbackRows"], 200);
+        assert_eq!(value["hostMutationVersion"], 1);
+        assert_eq!(value["hostMutationAfterSeq"], u32::MAX);
     }
 }

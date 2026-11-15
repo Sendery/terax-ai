@@ -1,0 +1,3 @@
+src/kitty/graphics.rs whitespace=-blank-at-eol
+src/screen.rs whitespace=-blank-at-eol
+src/terminal.rs whitespace=-blank-at-eol

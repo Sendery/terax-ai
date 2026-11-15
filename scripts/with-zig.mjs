@@ -16,7 +16,7 @@ function run(command, args, options = {}) {
 }
 
 async function main() {
-  const { source, provisional, command } = parseArgs(process.argv.slice(2));
+  const { source, provisional, variant, archive: variantArchive, command } = parseArgs(process.argv.slice(2));
   if (source) {
     run(process.execPath, [join(ROOT, "scripts/libghostty/source.mjs"), "--", ...command]);
     return;
@@ -29,14 +29,24 @@ async function main() {
     pin = provisionalPin(pin, manifest, triple);
     archiveRoot = manifest.archiveRoot;
   }
+  let variantManifest;
+  let variantReceipt;
+  let validateVariantPackage;
+  if (variant) {
+    const { consumerPin, validatePackage } = await import("./libghostty/native-core/consumer.mjs");
+    validateVariantPackage = validatePackage;
+    variantManifest = JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/native-core/manifest.json"), "utf8"));
+    variantReceipt = JSON.parse(readFileSync(join(ROOT, "scripts/libghostty/native-core/consumer.json"), "utf8"));
+    pin = consumerPin(pin, variantManifest, variantReceipt, triple);
+  }
   const target = selectedTarget(pin, triple, process.env, command);
   if (process.platform === "linux" && !process.report.getReport().header.glibcVersionRuntime) throw new Error("prebuilt Linux requires glibc");
-  const base = join(ROOT, "src-tauri/target/toolchains", ...(provisional ? ["provisional"] : []));
+  const base = join(ROOT, "src-tauri/target/toolchains", ...(variant ? ["native-core-v1"] : provisional ? ["provisional"] : []));
   const archive = join(base, archiveName(pin, triple));
   const final = join(base, `${pin.releaseTag}-${triple}-${target.sha256.slice(0, 16)}`);
   mkdirSync(base, { recursive: true });
   let bytes;
-  if (provisional) bytes = readFileSync(resolve(provisional));
+  if (provisional || variant) bytes = readFileSync(resolve(variant ? variantArchive : provisional));
   else if (existsSync(archive)) bytes = readFileSync(archive);
   else {
     const url = `https://github.com/${pin.repository}/releases/download/${pin.releaseTag}/${archiveName(pin, triple)}`;
@@ -55,6 +65,7 @@ async function main() {
     for (const file of [`lib/${libName}`, "include/ghostty/vt.h", "share/pkgconfig/libghostty-vt-static.pc"]) {
       if (!existsSync(join(staging, file))) throw new Error(`invalid prebuilt archive: missing ${file}`);
     }
+    if (variant) validateVariantPackage(variantManifest, variantReceipt, (path) => readFileSync(join(staging, path)));
     const pcRelative = "share/pkgconfig/libghostty-vt-static.pc";
     const prefix = final.replaceAll("\\", "/").replaceAll(" ", "\\ ");
     const pc = join(staging, pcRelative);

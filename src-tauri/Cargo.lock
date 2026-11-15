@@ -2398,8 +2398,6 @@ dependencies = [
 [[package]]
 name = "libghostty-vt"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16c7287a8dc35c3436224b39358af81ab9ea54bafa0f7ea2e068bd2a47bdcb2d"
 dependencies = [
  "bitflags 2.13.1",
  "int-enum",

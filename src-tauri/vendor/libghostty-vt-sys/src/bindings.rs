@@ -2501,6 +2501,18 @@ unsafe extern "C" {
     ) -> Result::Type;
 }
 unsafe extern "C" {
+    /// Terax native-core-v1 extension; unavailable in the original prebuilt.
+    pub fn ghostty_terminal_set_scrollback_limit_rows(
+        terminal: Terminal,
+        max_rows: usize,
+    ) -> Result::Type;
+    /// Terax native-core-v1 extension; out_changed is written after application.
+    pub fn ghostty_terminal_clear_preserving_cursor_row(
+        terminal: Terminal,
+        out_changed: *mut bool,
+    ) -> Result::Type;
+}
+unsafe extern "C" {
     #[doc = " Write VT-encoded data to the terminal for processing.\n\n Feeds raw bytes through the terminal's VT stream parser, updating\n terminal state accordingly. By default, sequences that require output\n (queries, device status reports) are silently ignored. Use\n ghostty_terminal_set() with GHOSTTY_TERMINAL_OPT_WRITE_PTY to install\n a callback that receives response data.\n\n This never fails. Any erroneous input or errors in processing the\n input are logged internally but do not cause this function to fail\n because this input is assumed to be untrusted and from an external\n source; so the primary goal is to keep the terminal state consistent and\n not allow malformed input to corrupt or crash.\n\n"]
     pub fn ghostty_terminal_vt_write(terminal: Terminal, data: *const u8, len: usize);
 }

@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "variant": "terax-native-core-v1",
+  "repository": "https://github.com/ghostty-org/ghostty.git",
+  "upstreamCommit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "upstreamTree": "c73524da697ab769c68054d29bd61712f65700c3",
+  "zigVersion": "0.15.2",
+  "crateVersion": "0.2.2",
+  "abi": [
+    "ghostty_terminal_set_scrollback_limit_rows",
+    "ghostty_terminal_clear_preserving_cursor_row"
+  ],
+  "patch": {
+    "path": "core.patch",
+    "sha256": "46735899626426a334b9c96a5faaed58da3391cd8103c24879fa2e95ff30ad4a"
+  },
+  "license": {
+    "spdx": "MIT",
+    "upstreamPath": "LICENSE",
+    "sha256": "386211873e5b7a02f663ae4d7adf96285999f91608f8f9f31fecfd0f4095e6f1",
+    "dependencyManifestSha256": "8650dbbfaf4d0bd34d45f9411bc3e04ac434bfee6d9b19f504cc81cf86f49de3"
+  },
+  "files": [
+    {
+      "path": "include/ghostty/vt/terminal.h",
+      "upstreamGitBlob": "26ee0c0b8670b4a7c81a4840480063b03bb320a7",
+      "beforeSha256": "c655bfdf0c72e271034767b1fc92a56dbdfded7cf78a5689a2ff59fbbf240b2f",
+      "afterSha256": "e67e6aa2f9addbaa73591ce6a049d34f2d352ea4600cc66a00af5181a8d6f8f6"
+    },
+    {
+      "path": "src/build/Config.zig",
+      "upstreamGitBlob": "0a99473174e27262f04169d0e765f2d2b85d53b7",
+      "beforeSha256": "c4b0ef25d22631205e32df7af4fc9019ff9f7dcdc7f011bc00791b52ab7502d3",
+      "afterSha256": "16b3269b0d872736d9b70f5f173454ed6256b78c2b7a5e7484ce0ffac0a80acc"
+    },
+    {
+      "path": "src/lib_vt.zig",
+      "upstreamGitBlob": "e01cdbb892c36cf88d4088c45bb464a429654d57",
+      "beforeSha256": "891aaba636cca7d4168a74f89db8d52722fb2e4a30c125f5b39fa613f91702a3",
+      "afterSha256": "d3be09cda216ce529fc5f90655ba700a984b48411187e25006138ff4ed7243bb"
+    },
+    {
+      "path": "src/terminal/PageList.zig",
+      "upstreamGitBlob": "79aa96f189b7307cf2cb7aacbcddc074ed124d0b",
+      "beforeSha256": "eff4f6cc93c0f9957cc439385b3d47453eb7529bf8d2c2b9bafdf2f284063751",
+      "afterSha256": "76e7edb3ac1d4e77a831da4c375870a4a8880c15205f9d250baa7f5613cb3db1"
+    },
+    {
+      "path": "src/terminal/Screen.zig",
+      "upstreamGitBlob": "6c4db3237c84ace7079e2f2eaa7b379580667d45",
+      "beforeSha256": "ae08a0e34e653ac4a998fc834fefb1089900ba968a75838fa04eea25290f4dfd",
+      "afterSha256": "ab99f7ecc87bf3aca486d4771846bdf7d69261a3c7882221c01b47045f01bf61"
+    },
+    {
+      "path": "src/terminal/Terminal.zig",
+      "upstreamGitBlob": "0892012764e11d8ba17d982ee4982579bc1b6753",
+      "beforeSha256": "1ce8e7d6211126d1f59e4f09c71e7e2f0f819ed114192b52fa7e957ae44b046e",
+      "afterSha256": "b5dc6aeb712df44d612c2a20831e47e8b4de10793c5e7d6c4e36229bc2a0e0fa"
+    },
+    {
+      "path": "src/terminal/c/main.zig",
+      "upstreamGitBlob": "37dc57684aa5e6edea164acb3d4faa37955667b3",
+      "beforeSha256": "1be3be44796c90537045148e93177e80393867e7deed85aa4707d3315add9230",
+      "afterSha256": "753566723542c9a877b06a10b3a8b9cd36bd14647a5f694c61a9d48b93a2cc8e"
+    },
+    {
+      "path": "src/terminal/c/terminal.zig",
+      "upstreamGitBlob": "1c3b9f0c557aa603cf40eab920623eba07cdc7e8",
+      "beforeSha256": "5207bb1e5357750235338ceb34f8ebccede9b992cbff6d8e213581ac7c4ca464",
+      "afterSha256": "a67a9f056914862f6260d743fd9fc8bfe3e2d0a8187e79e6a9a9687d33ba5eb9"
+    },
+    {
+      "path": "src/terminal/kitty/graphics_storage.zig",
+      "upstreamGitBlob": "ba82ea4024b2fe4989bd3eaee9e308528bc2c8fb",
+      "beforeSha256": "8fe14f5988dcb7a3b112acd24f80fdb1ab616049c4229a922784b738349f1504",
+      "afterSha256": "2f800f8aa3fa898981b119d5808d8ad9a0d86fb89abb9dd495f1e11ec2f2e400"
+    }
+  ],
+  "composition": {
+    "historyPatchSha256": "293a47bae00a5fd4c196ab52e550050f784488d883b1fc2ed436263a44ce4973",
+    "hostClearPatchSha256": "09aa228231371e80722a7a1ff53b2b9b84991e6ea9043e91e242d61ff37d83a5",
+    "additionalChanges": [
+      "lib-vt-only explicit macOS deployment target",
+      "three policy/clear interaction tests",
+      "common focused-test prefix"
+    ]
+  },
+  "producerTarget": "aarch64-macos.11.0",
+  "minimumMacOS": "11.0",
+  "minimumFocusedTests": 23,
+  "status": "source-prepared-unverified-no-combined-native-artifact",
+  "consumerActivated": false
+}

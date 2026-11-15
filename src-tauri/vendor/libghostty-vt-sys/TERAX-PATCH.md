@@ -2,8 +2,9 @@
 
 This is libghostty-vt-sys 0.2.2 from crates.io, upstream
 Uzaaft/libghostty-rs commit c9876b2902d5bb3e1f3d61b6395059f1e5e7b721,
-directory crates/libghostty-vt-sys. The bindings, library and generator are
-unchanged. Terax redistributes this copy under the MIT option, with the
+directory crates/libghostty-vt-sys. The original library and generator are unchanged. The bindings additionally
+declare the two reviewed Terax native-core-v1 exports, which require the matching
+prebuilt variant; they are not provided by the original archive. Terax redistributes this copy under the MIT option, with the
 upstream commit's license in LICENSE-MIT.
 
 The only Rust change is in build.rs: source compilation requires the exact

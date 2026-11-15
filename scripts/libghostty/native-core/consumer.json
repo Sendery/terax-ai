@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "variant": "terax-native-core-v1",
+  "host": "aarch64-macos",
+  "rustTarget": "aarch64-apple-darwin",
+  "commit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "crateVersion": "0.2.2",
+  "zigVersion": "0.15.2",
+  "sha256": "c390cf1908007dc0ab9f1c6914384532c8482cbd6fbe5aea2752e610425e09ae",
+  "patchSha256": "46735899626426a334b9c96a5faaed58da3391cd8103c24879fa2e95ff30ad4a",
+  "manifestSha256": "fc1935ea9bd3941c8712437136c2fd31abcd566b47626e1bba71286d7396e0ab",
+  "terminalHeaderSha256": "e67e6aa2f9addbaa73591ce6a049d34f2d352ea4600cc66a00af5181a8d6f8f6",
+  "capabilities": [
+    "ghostty_terminal_set_scrollback_limit_rows",
+    "ghostty_terminal_clear_preserving_cursor_row"
+  ],
+  "producerTarget": "aarch64-macos.11.0",
+  "minimumMacOS": "11.0",
+  "distribution": "local-verified-M2-archive-not-published"
+}

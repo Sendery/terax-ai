@@ -25,6 +25,8 @@ mod clipboard;
 mod cursor;
 #[cfg(feature = "ghostty-engine")]
 mod graphics;
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod host_tests;
 #[cfg(feature = "ghostty-engine")]
 pub mod input;
 #[cfg(any(test, feature = "ghostty-engine"))]
@@ -57,6 +59,17 @@ pub const MAX_ROWS: u16 = 500;
 // Pinned Ghostty interprets max_scrollback as bytes, despite its C/Rust docs.
 // Pages grow lazily; this bounds history, not a dimension-independent row count.
 pub const SCROLLBACK_BYTES: usize = 16 * 1024 * 1024;
+pub const DEFAULT_SCROLLBACK_ROWS: u32 = 2000;
+pub const MIN_SCROLLBACK_ROWS: u32 = 200;
+pub const MAX_SCROLLBACK_ROWS: u32 = 50_000;
+pub fn validate_scrollback_rows(rows: u32) -> Result<(), String> {
+    if !(MIN_SCROLLBACK_ROWS..=MAX_SCROLLBACK_ROWS).contains(&rows) {
+        return Err(format!(
+            "invalid terminal scrollback rows {rows} (200..=50000)"
+        ));
+    }
+    Ok(())
+}
 
 pub fn validate_size(cols: u16, rows: u16) -> Result<(), String> {
     if cols == 0 || rows == 0 || cols > MAX_COLS || rows > MAX_ROWS {
@@ -311,6 +324,7 @@ mod runtime {
     enum InteractionRequest {
         Selection(SelectionRequest),
         Block(BlockRequest),
+        Clear(SyncSender<Result<bool, String>>),
     }
     impl InteractionRequest {
         fn reject(self, error: &str) {
@@ -319,6 +333,9 @@ mod runtime {
                     let _ = request.reply.try_send(Err(error.into()));
                 }
                 Self::Block(request) => request.reject(error),
+                Self::Clear(reply) => {
+                    let _ = reply.try_send(Err(error.into()));
+                }
             }
         }
     }
@@ -330,6 +347,7 @@ mod runtime {
         cell_pixels: Option<(u32, u32)>,
         colors: Option<Colors>,
         cursor_blink: Option<bool>,
+        scrollback_rows: Option<u32>,
         scroll: i64,
         full: bool,
         stop: bool,
@@ -620,6 +638,53 @@ mod runtime {
             self.update(|c| c.colors = Some(colors));
         }
 
+        /// Coalesced admission only. Applied state is published by the actor.
+        pub fn set_scrollback_rows(&self, rows: u32) -> Result<(), String> {
+            super::validate_scrollback_rows(rows)?;
+            if self.input_state().host.scrollback_rows.is_none() {
+                return Err("terminal row policy is not enabled".into());
+            }
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                control.scrollback_rows = Some(rows);
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(())
+        }
+
+        /// Returns a receipt only after the clear has actually been applied.
+        pub fn clear(&self) -> Result<Receiver<Result<bool, String>>, String> {
+            let (reply, receiver) = sync_channel(1);
+            {
+                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+                if control.text_closed || self.health.failure().is_some() {
+                    return Err("terminal engine is unavailable".into());
+                }
+                if control.text_pending >= MAX_TEXT_REQUESTS {
+                    return Err("too many pending terminal queries".into());
+                }
+                control.text_pending += 1;
+                control
+                    .interaction_requests
+                    .push(InteractionRequest::Clear(reply));
+            }
+            if matches!(
+                self.wake.try_send(Input::Wake),
+                Err(TrySendError::Disconnected(_))
+            ) {
+                return Err("terminal engine closed".into());
+            }
+            Ok(receiver)
+        }
+
         pub fn set_cursor_blink(&self, enabled: bool) {
             self.update(|control| control.cursor_blink = Some(enabled));
         }
@@ -764,6 +829,13 @@ mod runtime {
         pub cursor_blink: bool,
     }
 
+    #[derive(Default)]
+    pub struct EngineOptions {
+        pub appearance: Appearance,
+        /// None retains the low-level byte-budget policy used by benchmarks.
+        pub scrollback_rows: Option<u32>,
+    }
+
     pub fn start_with_colors(
         cols: u16,
         rows: u16,
@@ -774,9 +846,12 @@ mod runtime {
         start_config(
             cols,
             rows,
-            Appearance {
-                colors,
-                ..Appearance::default()
+            EngineOptions {
+                appearance: Appearance {
+                    colors,
+                    ..Appearance::default()
+                },
+                ..EngineOptions::default()
             },
             None,
             false,
@@ -827,11 +902,32 @@ mod runtime {
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
+        start_with_shell_options(
+            cols,
+            rows,
+            EngineOptions {
+                appearance,
+                ..EngineOptions::default()
+            },
+            config,
+            frames,
+            replies,
+        )
+    }
+
+    pub fn start_with_shell_options(
+        cols: u16,
+        rows: u16,
+        options: EngineOptions,
+        config: impl Into<ShellConfig>,
+        frames: FrameSink,
+        replies: ReplySink,
+    ) -> Result<Engine, String> {
         let config = config.into();
         start_config(
             cols,
             rows,
-            appearance,
+            options,
             Some(config.token.into_string()),
             config.blocks,
             frames,
@@ -842,13 +938,16 @@ mod runtime {
     fn start_config(
         cols: u16,
         rows: u16,
-        appearance: Appearance,
+        options: EngineOptions,
         shell_token: Option<String>,
         blocks_enabled: bool,
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
         validate_size(cols, rows)?;
+        if let Some(rows) = options.scrollback_rows {
+            super::validate_scrollback_rows(rows)?;
+        }
         let (tx, rx) = sync_channel(QUEUE_DEPTH);
         let (ready_tx, ready_rx) = sync_channel(1);
         let control = Arc::new(Mutex::new(Control::default()));
@@ -865,7 +964,7 @@ mod runtime {
                         run(
                             cols,
                             rows,
-                            appearance,
+                            options,
                             shell_token,
                             blocks_enabled,
                             &rx,
@@ -938,6 +1037,7 @@ mod runtime {
         term: Terminal<'static, 'cb>,
         snapshot: Snapshotter,
         pump: Pump,
+        host: super::state::HostState,
         size: (u16, u16),
         cell_pixels: (u32, u32),
         frames: FrameSink,
@@ -995,6 +1095,7 @@ mod runtime {
                         modes,
                         self.shell.state(),
                         self.blocks.as_ref().map(|blocks| blocks.metadata_version()),
+                        self.host,
                     ) {
                         self.health.fail(EngineFailure::StateChannelClosed);
                     }
@@ -1016,6 +1117,66 @@ mod runtime {
                     u64::MAX
                 });
             self.stats.scrollback_rows.store(rows, Ordering::Release);
+        }
+
+        fn host_mutated(&mut self) -> Result<(), String> {
+            // Gesture reset releases only gesture pins; clipped core selection
+            // is intentionally retained by the exact-row operation.
+            self.selection.reset(&self.term);
+            self.search.invalidate();
+            self.snapshot.invalidate_host_context();
+            if let Some(frames) = &mut self.block_frames {
+                frames.invalidate_host_context();
+            }
+            if let Some(actions) = &mut self.block_actions {
+                actions.invalidate_host_context()?;
+            }
+            if let Some(blocks) = &mut self.blocks {
+                blocks.prune_visible(&self.term)?;
+            }
+            self.update_scrollback_rows();
+            self.host.host_mutation_version = self
+                .host
+                .host_mutation_version
+                .checked_add(1)
+                .filter(|value| *value <= 9_007_199_254_740_991)
+                .ok_or("terminal host mutation version exhausted")?;
+            // pump.sent runs synchronously after a successful frame sink. No
+            // mutation can interleave with emit, so this covers all old frames.
+            self.host.host_mutation_after_seq = self.pump.last_seq;
+            self.pump.request_full();
+            self.update_input_state();
+            self.health
+                .failure()
+                .map_or(Ok(()), |_| Err("terminal engine is unavailable".into()))
+        }
+
+        fn apply_host_rows(&mut self, rows: u32) -> Result<(), String> {
+            if self.host.scrollback_rows == Some(rows) {
+                return Ok(());
+            }
+            if self.host.scrollback_rows.is_none() {
+                return Err("terminal row policy is not enabled".into());
+            }
+            self.term
+                .set_scrollback_limit_rows(rows as usize)
+                .map_err(|error| error.to_string())?;
+            self.host.scrollback_rows = Some(rows);
+            self.host_mutated()
+        }
+
+        fn clear_host(&mut self) -> Result<bool, String> {
+            if self.health.failure().is_some() {
+                return Err("terminal engine is unavailable".into());
+            }
+            let changed = self
+                .term
+                .clear_preserving_cursor_row()
+                .map_err(|error| error.to_string())?;
+            if changed {
+                self.host_mutated()?;
+            }
+            Ok(changed)
         }
 
         fn flush_replies(&mut self) {
@@ -1099,6 +1260,12 @@ mod runtime {
                     }
                 }
             }
+            if let Some(rows) = c.scrollback_rows {
+                if let Err(error) = self.apply_host_rows(rows) {
+                    log::error!("terminal scrollback policy update failed: {error}");
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                }
+            }
             if c.scroll != 0 {
                 let delta = isize::try_from(c.scroll).unwrap_or(if c.scroll < 0 {
                     isize::MIN
@@ -1146,6 +1313,13 @@ mod runtime {
             }
             for request in c.interaction_requests {
                 match request {
+                    InteractionRequest::Clear(reply) => {
+                        let result = self.clear_host();
+                        if result.is_err() {
+                            self.health.fail(EngineFailure::SnapshotFailed);
+                        }
+                        let _ = reply.try_send(result);
+                    }
                     InteractionRequest::Selection(request) => {
                         let result = if self.health.failure().is_some() {
                             Err("terminal engine is unavailable".into())
@@ -1420,7 +1594,7 @@ mod runtime {
     fn run(
         cols: u16,
         rows: u16,
-        appearance: Appearance,
+        options: EngineOptions,
         shell_token: Option<String>,
         blocks_enabled: bool,
         rx: &Receiver<Input>,
@@ -1438,10 +1612,13 @@ mod runtime {
                 rows,
                 max_scrollback: SCROLLBACK_BYTES,
             })?;
+            if let Some(rows) = options.scrollback_rows {
+                term.set_scrollback_limit_rows(rows as usize)?;
+            }
             term.resize(cols, rows, 8, 16)?;
-            super::cursor::apply(&mut term, appearance.cursor_blink)?;
+            super::cursor::apply(&mut term, options.appearance.cursor_blink)?;
             super::graphics::configure(&mut term)?;
-            if let Some(colors) = &appearance.colors {
+            if let Some(colors) = &options.appearance.colors {
                 colors.apply(&mut term)?;
             }
             term.on_pty_write(|_, data| replies.borrow_mut().extend_from_slice(data))?
@@ -1462,6 +1639,10 @@ mod runtime {
             term,
             snapshot,
             pump: Pump::new(),
+            host: super::state::HostState {
+                scrollback_rows: options.scrollback_rows,
+                ..super::state::HostState::default()
+            },
             size: (cols, rows),
             cell_pixels: (8, 16),
             frames,
@@ -3074,5 +3255,18 @@ mod clipboard_actor_tests {
         assert!(engine.handle.take_clipboard_write().is_none());
         engine.input.shutdown();
         engine.thread.join().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod row_policy_validation_tests {
+    #[test]
+    fn ordinary_terminal_row_range_is_exact_and_bounded() {
+        for rows in [0, 199, 50_001, u32::MAX] {
+            assert!(super::validate_scrollback_rows(rows).is_err());
+        }
+        for rows in [200, 2000, 50_000] {
+            assert!(super::validate_scrollback_rows(rows).is_ok());
+        }
     }
 }

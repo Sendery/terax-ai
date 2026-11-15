@@ -1012,6 +1012,9 @@ pub(super) struct BlockFrames {
     bytes: usize,
 }
 impl BlockFrames {
+    pub fn invalidate_host_context(&mut self) {
+        *self = Self::default();
+    }
     pub fn metadata_version(&self) -> Option<u64> {
         self.frames
             .back()

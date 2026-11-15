@@ -71,6 +71,10 @@ impl Snapshotter {
         self.graphics.set_cell_pixels(width, height);
     }
 
+    pub fn invalidate_host_context(&mut self) {
+        self.links = super::links::LinkCache::default();
+    }
+
     pub fn link_context(
         &self,
         seq: u32,

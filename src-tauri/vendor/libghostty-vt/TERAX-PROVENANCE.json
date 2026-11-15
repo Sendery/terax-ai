@@ -1,0 +1,16 @@
+{
+  "crate": "libghostty-vt",
+  "version": "0.2.2",
+  "crateSha256": "16c7287a8dc35c3436224b39358af81ab9ea54bafa0f7ea2e068bd2a47bdcb2d",
+  "upstreamRepository": "https://github.com/uzaaft/libghostty-rs",
+  "upstreamCommit": "c9876b2902d5bb3e1f3d61b6395059f1e5e7b721",
+  "license": "MIT",
+  "licenseSha256": "64afe9aa17b5a1bf58375ea0e1bcfef3503b2ef85c1cfae7e00c3f7555f29137",
+  "modifiedFiles": [
+    {
+      "path": "src/terminal.rs",
+      "beforeSha256": "70643617cadce7bab3faec80cf26b0a91f90c19bf6474318f4117a5498e726ac",
+      "afterSha256": "0711b224d550d50d2944300e8a1c5d1f75904db2ed6104837f909f4618e381c6"
+    }
+  ]
+}

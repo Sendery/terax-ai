@@ -9,4 +9,5 @@ libghostty-vt = { version = "=0.2.2", default-features = false }
 libghostty-vt-sys = { version = "=0.2.2", default-features = false, features = ["pkg-config"] }
 
 [patch.crates-io]
+libghostty-vt = { path = "../../../src-tauri/vendor/libghostty-vt" }
 libghostty-vt-sys = { path = "../../../src-tauri/vendor/libghostty-vt-sys" }

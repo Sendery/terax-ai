@@ -92,6 +92,7 @@ pub async fn gterm_open(
     colors: Option<TerminalColors>,
     blocks: Option<bool>,
     cursor_blink: Option<bool>,
+    scrollback_rows: Option<u32>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
     on_failure: Channel<String>,
@@ -111,6 +112,7 @@ pub async fn gterm_open(
             colors,
             blocks.unwrap_or(false),
             cursor_blink.unwrap_or(false),
+            scrollback_rows.unwrap_or(super::engine::DEFAULT_SCROLLBACK_ROWS),
             on_frame,
             on_exit,
             on_failure,
@@ -133,6 +135,7 @@ pub async fn gterm_open(
             colors,
             blocks,
             cursor_blink,
+            scrollback_rows,
             on_frame,
             on_exit,
             on_failure,
@@ -347,6 +350,43 @@ pub async fn gterm_link_context(
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, seq, col, row);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_set_scrollback_rows(
+    state: State<'_, PtyState>,
+    id: u32,
+    rows: u32,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        imp::engine(&state, id)?.set_scrollback_rows(rows)
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, rows);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub async fn gterm_clear(state: State<'_, PtyState>, id: u32) -> Result<bool, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.clear()?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal clear receipt failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal clear task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -820,6 +860,7 @@ mod imp {
         colors: Option<TerminalColors>,
         blocks: bool,
         cursor_blink: bool,
+        scrollback_rows: u32,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
         on_failure: Channel<String>,
@@ -827,6 +868,7 @@ mod imp {
         on_clipboard: Option<Channel<u8>>,
     ) -> Result<u32, String> {
         engine::validate_size(cols, rows)?;
+        engine::validate_scrollback_rows(scrollback_rows)?;
         let workspace = WorkspaceEnv::from_option(workspace);
         let cwd = user_spawn_cwd_or_home(registry, cwd.as_deref(), &workspace);
         let id = state.allocate_id();
@@ -838,6 +880,7 @@ mod imp {
             on_frame,
             colors,
             cursor_blink,
+            scrollback_rows,
             slot: slot.clone(),
             on_failure,
             on_state,

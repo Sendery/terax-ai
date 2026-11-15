@@ -84,6 +84,11 @@ pub(super) struct BlockActions {
     search: BlockSearchState,
 }
 impl BlockActions {
+    pub fn invalidate_host_context(&mut self) -> Result<(), String> {
+        self.selected = None;
+        self.searched_block = None;
+        self.search.clear()
+    }
     pub fn manual_selection(&mut self) {
         self.selected = None;
     }

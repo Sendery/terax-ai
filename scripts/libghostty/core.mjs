@@ -11,6 +11,11 @@ export function parseArgs(args) {
   const split = args.indexOf("--");
   if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--source | --provisional <archive>] -- <command> [args...]");
   const flags = args.slice(0, split);
+  if (flags[0] === "--variant") {
+    if (flags.length !== 4 || flags[1] !== "native-core-v1" || flags[2] !== "--archive" ||
+        !flags[3] || flags[3].startsWith("--")) throw new Error("native core variant requires one local archive");
+    return { source: false, variant: flags[1], archive: flags[3], command: args.slice(split + 1) };
+  }
   if (flags[0] === "--provisional") {
     if (flags.length !== 2 || !flags[1] || flags[1].startsWith("--")) throw new Error("provisional mode requires one local archive");
     return { source: false, provisional: flags[1], command: args.slice(split + 1) };
