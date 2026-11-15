@@ -141,6 +141,7 @@ import {
   captureLeafInput,
   captureLeafSubmission,
   canClearActiveLeaf,
+  canClearFocusedTerminal,
   clearActiveLeaf,
   clearFocusedTerminal,
   disposeSession,
@@ -1194,7 +1195,10 @@ export default function App() {
       "pane.focusPrev": () => focusNextPaneInTab(activeId, -1),
       "pane.source": toggleSourceControl,
       "terminal.clear": () => {
-        clearFocusedTerminal();
+        if (activeLeafId === null || !activeTerminalTab) return;
+        void clearFocusedTerminal(activeLeafId).catch((error) =>
+          console.error("clear terminal history failed", error),
+        );
       },
       "terminal.toggleInput": () =>
         window.dispatchEvent(new CustomEvent(TOGGLE_BLOCK_INPUT_EVENT)),
@@ -1226,6 +1230,8 @@ export default function App() {
     }),
     [
       activeId,
+      activeLeafId,
+      activeTerminalTab,
       openCommandPalette,
       cycleTab,
       cycleSpace,
@@ -1283,7 +1289,8 @@ export default function App() {
         // fall through (we never preventDefault when disabled).
         const target =
           (e.target as HTMLElement | null) ?? document.activeElement;
-        return !(target as HTMLElement | null)?.closest?.(".xterm");
+        return activeTab?.kind !== "terminal" ||
+          !canClearFocusedTerminal(activeTab.activeLeafId, target);
       }
       if (id === "terminal.clearActive") {
         const target = (e.target as Element | null) ?? document.activeElement;

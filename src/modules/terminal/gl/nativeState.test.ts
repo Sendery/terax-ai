@@ -76,3 +76,40 @@ it("validates the native block mode, metadata revision and repeated prompt revis
   ])
     expect(() => decodeNativeState({ ...blocks, ...bad })).toThrow("invalid");
 });
+
+it("accepts a complete applied host receipt and keeps old mode-only payloads compatible", () => {
+  const applied = {
+    ...state,
+    scrollbackRows: 2000,
+    hostMutationVersion: 1,
+    hostMutationAfterSeq: 7,
+  };
+  expect(decodeNativeState(applied)).toEqual(applied);
+  expect(decodeNativeState({ ...applied, scrollbackRows: null })).toMatchObject(
+    { scrollbackRows: null },
+  );
+  expect(decodeNativeState(state)).toEqual(state);
+});
+it("rejects partial or malformed applied history receipts", () => {
+  const receipt = {
+    scrollbackRows: 2000,
+    hostMutationVersion: 1,
+    hostMutationAfterSeq: 7,
+  };
+  for (const patch of [
+    { scrollbackRows: 199 },
+    { scrollbackRows: 50001 },
+    { scrollbackRows: 200.5 },
+    { hostMutationVersion: -1 },
+    { hostMutationVersion: Number.MAX_SAFE_INTEGER + 1 },
+    { hostMutationAfterSeq: -1 },
+    { hostMutationAfterSeq: 0x100000000 },
+    { hostMutationAfterSeq: 1.5 },
+  ])
+    expect(() => decodeNativeState({ ...state, ...receipt, ...patch })).toThrow(
+      "invalid",
+    );
+  expect(() => decodeNativeState({ ...state, scrollbackRows: 2000 })).toThrow(
+    "invalid",
+  );
+});

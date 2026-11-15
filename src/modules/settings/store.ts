@@ -1,3 +1,8 @@
+import { clampScrollback, TERMINAL_SCROLLBACK_DEFAULT } from "@/modules/settings/terminalScrollback";
+export {
+  TERMINAL_SCROLLBACK_DEFAULT, TERMINAL_SCROLLBACK_MIN,
+  TERMINAL_SCROLLBACK_MAX, TERMINAL_SCROLLBACK_PRESETS,
+} from "@/modules/settings/terminalScrollback";
 import {
   DEFAULT_AUTOCOMPLETE_MODEL,
   DEFAULT_MODEL_ID,
@@ -310,13 +315,6 @@ export const TERMINAL_FONT_SIZE_MAX = 32;
 
 export const TERMINAL_FONT_SIZES = [
   10, 12, 13, 14, 15, 16, 18, 20, 22, 24,
-] as const;
-
-export const TERMINAL_SCROLLBACK_DEFAULT = 2000;
-export const TERMINAL_SCROLLBACK_MIN = 200;
-export const TERMINAL_SCROLLBACK_MAX = 50_000;
-export const TERMINAL_SCROLLBACK_PRESETS = [
-  500, 1000, 2000, 5000, 10_000, 25_000,
 ] as const;
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -832,14 +830,6 @@ export async function setTerminalFontSize(value: number): Promise<void> {
       )
     : TERMINAL_FONT_SIZE_DEFAULT;
   await writePref(KEY_TERMINAL_FONT_SIZE, clamped);
-}
-
-function clampScrollback(value: number): number {
-  if (!Number.isFinite(value)) return TERMINAL_SCROLLBACK_DEFAULT;
-  return Math.min(
-    TERMINAL_SCROLLBACK_MAX,
-    Math.max(TERMINAL_SCROLLBACK_MIN, Math.round(value)),
-  );
 }
 
 export async function setTerminalScrollback(value: number): Promise<void> {

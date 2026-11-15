@@ -4,6 +4,7 @@ export {
   captureLeafInput,
   captureLeafSubmission,
   canClearActiveLeaf,
+  canClearFocusedTerminal,
   clearActiveLeaf,
   clearFocusedTerminal,
   disposeSession,

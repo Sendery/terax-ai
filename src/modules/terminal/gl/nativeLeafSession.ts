@@ -1,3 +1,7 @@
+import {
+  TERMINAL_SCROLLBACK_DEFAULT,
+  validateScrollbackRows,
+} from "@/modules/settings/terminalScrollback";
 import { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
 import {
   CELL_CODEPOINT_MASK,
@@ -28,6 +32,7 @@ export type NativeLeafConfig = {
   size: TerminalSize;
   colors: EngineColors;
   cursorBlink?: boolean;
+  scrollbackRows?: number;
   cwd?: string;
   blocks?: boolean;
   onReady?: () => void;
@@ -37,6 +42,7 @@ export type NativeLeafView = {
   onSession: (session: EngineSession | null) => void;
   onFrame: (frame?: DecodedFrame | null) => void;
   onDrawn?: (seq: number | null) => void;
+  onHistoryChange?: () => void;
   onError: (error: unknown) => void;
   onExit: (code: number) => void;
   onCwd?: (cwd: string) => void;
@@ -51,6 +57,7 @@ type OpenNative = (
     blocks: boolean;
     colors: EngineColors;
     cursorBlink: boolean;
+    scrollbackRows: number;
     observer: SessionObserver;
   },
 ) => Promise<EngineSession>;
@@ -150,6 +157,10 @@ export class NativeLeafSession implements NativeLeaf {
 
   configure(config: NativeLeafConfig): void {
     const previousBlink = this.config.cursorBlink ?? false;
+    const previousRows =
+      this.config.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+    const rows = config.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+    validateScrollbackRows(rows);
     this.config = config;
     this.owner.resize(config.size.cols, config.size.rows);
     if (!this.native || this.owner.id === null || this.closing) return;
@@ -158,6 +169,7 @@ export class NativeLeafSession implements NativeLeaf {
       this.native.setColors(config.colors);
       if (previousBlink !== (config.cursorBlink ?? false))
         this.native.setCursorBlink(config.cursorBlink ?? false);
+      if (previousRows !== rows) this.native.setScrollbackRows(rows);
     } catch (error) {
       this.report(error);
       void this.closeCurrent().catch(this.report);
@@ -180,6 +192,20 @@ export class NativeLeafSession implements NativeLeaf {
       return;
     this.native.setCursorBlink(enabled);
   }
+  setScrollbackRows(rows: number): void {
+    validateScrollbackRows(rows);
+    const previous = this.config.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+    this.config = { ...this.config, scrollbackRows: rows };
+    if (
+      previous === rows ||
+      !this.native ||
+      this.owner.id === null ||
+      this.closing ||
+      this.disposed
+    )
+      return;
+    this.native.setScrollbackRows(rows);
+  }
   write(text: string): boolean {
     return !this.disposed && this.owner.write(text);
   }
@@ -198,6 +224,24 @@ export class NativeLeafSession implements NativeLeaf {
     await native.write(text, valid);
     if (!valid()) throw new Error("Terminal is no longer available.");
   }
+  async clear(current: () => boolean = () => true): Promise<boolean> {
+    const owner = this.owner;
+    await owner.opened;
+    const native = this.native;
+    const valid = () =>
+      current() &&
+      this.owner === owner &&
+      this.native === native &&
+      !this.disposed &&
+      !this.closing &&
+      owner.failure === null &&
+      native !== null &&
+      this.id !== null;
+    if (!valid() || !native) return false;
+    const changed = await native.clear(valid);
+    return valid() && changed;
+  }
+
   focus(): void {
     if (!this.blockInput?.focus()) this.view?.focus();
   }
@@ -368,12 +412,16 @@ export class NativeLeafSession implements NativeLeaf {
         if (this.disposed || generation !== this.generation)
           throw new Error("Terminal closed while opening.");
         const openingCursorBlink = this.config.cursorBlink ?? false;
+        const openingScrollbackRows =
+          this.config.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+        validateScrollbackRows(openingScrollbackRows);
         const native = await this.open(this.config.renderer, {
           ...size,
           cwd: this.config.cwd,
           blocks: this.blockInput !== null,
           colors: this.config.colors,
           cursorBlink: openingCursorBlink,
+          scrollbackRows: openingScrollbackRows,
           observer: {
             onState: (state) => {
               if (
@@ -399,6 +447,14 @@ export class NativeLeafSession implements NativeLeaf {
             },
             onError: observer.onError,
             onExit: observer.onExit,
+            onHistoryChange: () => {
+              if (generation !== this.generation || this.disposed) return;
+              try {
+                this.view?.onHistoryChange?.();
+              } catch (error) {
+                this.report(error);
+              }
+            },
             onDrawn: (_at, seq) => {
               if (generation !== this.generation || this.disposed) return;
               try {
@@ -463,6 +519,10 @@ export class NativeLeafSession implements NativeLeaf {
           native.setColors(this.config.colors);
           if ((this.config.cursorBlink ?? false) !== openingCursorBlink)
             native.setCursorBlink(this.config.cursorBlink ?? false);
+          const latestRows =
+            this.config.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+          if (latestRows !== openingScrollbackRows)
+            native.setScrollbackRows(latestRows);
         } catch (error) {
           await native.close();
           throw error;

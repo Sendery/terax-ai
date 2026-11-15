@@ -1,3 +1,7 @@
+import {
+  TERMINAL_SCROLLBACK_DEFAULT,
+  validateScrollbackRows,
+} from "@/modules/settings/terminalScrollback";
 import { NativeClipboardRelay } from "@/modules/terminal/gl/nativeClipboard";
 import { writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
@@ -137,6 +141,7 @@ export type FrameTiming = {
 
 export type SessionObserver = {
   onState?: (state: NativeState) => void;
+  onHistoryChange?: () => void;
   onFrameTiming?: (timing: FrameTiming) => void;
   onCreditReply?: (seq: number, at: number, ok: boolean) => void;
   onFrame?: (event: FrameEvent) => void;
@@ -259,6 +264,20 @@ export class EngineSession {
   private linkPending = 0;
   private blockPending = 0;
   private selectionSnapshot: string | null = null;
+  private desiredScrollbackRows = TERMINAL_SCROLLBACK_DEFAULT;
+  private rowsInFlight: {
+    rows: number;
+    ack: boolean;
+    applied: boolean;
+  } | null = null;
+  private failedScrollbackRows: number | null = null;
+  private historyAttempted = false;
+  private historyUncertain = false;
+  private historyEpoch = 0;
+  private hostMutationCutoff: number | null = null;
+  private clearPending = false;
+  private selectionRefreshNeeded = false;
+  private selectionRefreshing = false;
 
   private constructor(
     renderer: TerminalRenderer,
@@ -330,8 +349,12 @@ export class EngineSession {
       observer?: SessionObserver;
       colors?: EngineColors;
       cursorBlink?: boolean;
+      scrollbackRows?: number;
     },
   ): Promise<EngineSession> {
+    const scrollbackRows =
+      options.scrollbackRows ?? TERMINAL_SCROLLBACK_DEFAULT;
+    validateScrollbackRows(scrollbackRows);
     const session = new EngineSession(
       renderer,
       options.observer ?? {},
@@ -339,6 +362,7 @@ export class EngineSession {
       false,
     );
     session.cursorBlinkPreference = options.cursorBlink ?? false;
+    session.desiredScrollbackRows = scrollbackRows;
     return session.start("gterm_open", {
       cols: options.cols,
       rows: options.rows,
@@ -347,6 +371,7 @@ export class EngineSession {
       workspace: currentWorkspaceEnv(),
       colors: options.colors ?? null,
       cursorBlink: session.cursorBlinkPreference,
+      scrollbackRows,
     });
   }
 
@@ -420,6 +445,7 @@ export class EngineSession {
     }
     if (this.pendingColors) this.setColors(this.pendingColors);
     this.flushCursorBlink();
+    this.flushScrollbackRows();
     this.flushCredits();
     this.clipboardWrites.resume();
     return this;
@@ -491,11 +517,13 @@ export class EngineSession {
     const decodedAt = this.observer.onFrameTiming
       ? performance.now()
       : receivedAt;
-    if (frame) this.captureFull(frame);
+    const staleHistory =
+      frame !== null && !this.frameAfterHostMutation(frame.seq);
+    if (frame?.full) this.fullRequested = false;
+    if (frame && !staleHistory) this.captureFull(frame);
     let applied = false;
     let capacityBlocked = false;
-    if (frame) {
-      if (frame.full) this.fullRequested = false;
+    if (frame && !staleHistory) {
       try {
         const result = this.renderer.applyFrame(this.pane, frame);
         applied = result === "applied";
@@ -519,7 +547,8 @@ export class EngineSession {
       // requests a full frame; requesting one here would form a full/ACK loop.
       if (
         !capacityBlocked &&
-        !(this.pane.rect.width <= 0 || this.pane.rect.height <= 0)
+        (Boolean(staleHistory && this.captureConsumer) ||
+          !(this.pane.rect.width <= 0 || this.pane.rect.height <= 0))
       )
         this.requestFull();
       this.renderer.markUndrawn(this.pane);
@@ -528,7 +557,7 @@ export class EngineSession {
       seq,
       bytes: buffer.byteLength,
       receivedAt,
-      frame,
+      frame: staleHistory ? null : frame,
     });
     this.observer.onFrameTiming?.({
       seq,
@@ -647,6 +676,9 @@ export class EngineSession {
       return Promise.reject(
         new Error("Terminal capture is already in progress."),
       );
+    if (!this.historyAvailable)
+      return Promise.reject(new Error("Terminal history is changing."));
+    const epoch = this.historyEpoch;
     const id = this.id;
     const pane = this.pane;
     const { cols, rows } = this.size;
@@ -662,6 +694,8 @@ export class EngineSession {
             this.id === id &&
             !this.closed &&
             !this.failed &&
+            this.historyAvailable &&
+            this.historyEpoch === epoch &&
             this.pane === pane &&
             this.size.cols === cols &&
             this.size.rows === rows &&
@@ -931,6 +965,177 @@ export class EngineSession {
     );
   }
 
+  /** Applied state, not the setter admission ACK, permits history consumers. */
+  get historyAvailable(): boolean {
+    if (
+      this.closed ||
+      this.failed ||
+      this.clearPending ||
+      this.historyUncertain
+    )
+      return false;
+    if (this.isBench) return true;
+    const rows = this.inputStateValue?.scrollbackRows;
+    if (rows === undefined) return !this.historyAttempted;
+    return (
+      rows === this.desiredScrollbackRows &&
+      (!this.rowsInFlight || this.rowsInFlight.applied)
+    );
+  }
+
+  setScrollbackRows(rows: number): void {
+    validateScrollbackRows(rows);
+    if (
+      this.closed ||
+      this.failed ||
+      this.isBench ||
+      rows === this.desiredScrollbackRows
+    )
+      return;
+    this.desiredScrollbackRows = rows;
+    this.failedScrollbackRows = null;
+    this.historyAttempted = true;
+    this.beginHistoryMutation();
+    this.flushScrollbackRows();
+    this.historySettled();
+  }
+
+  private flushScrollbackRows(): void {
+    if (
+      this.closed ||
+      this.failed ||
+      this.isBench ||
+      this.id === null ||
+      this.rowsInFlight ||
+      this.failedScrollbackRows === this.desiredScrollbackRows
+    )
+      return;
+    const applied = this.inputStateValue?.scrollbackRows;
+    if (typeof applied !== "number" || applied === this.desiredScrollbackRows)
+      return;
+    const pending = {
+      rows: this.desiredScrollbackRows,
+      ack: false,
+      applied: false,
+    };
+    this.rowsInFlight = pending;
+    void invoke("gterm_set_scrollback_rows", {
+      id: this.id,
+      rows: pending.rows,
+    })
+      .catch((error: unknown) => {
+        if (this.closed || this.failed || this.rowsInFlight !== pending) return;
+        // A rejected sync command leaves no live pending control. Retire it
+        // without retrying the failed target on unrelated state publications.
+        this.rowsInFlight = null;
+        this.failedScrollbackRows = pending.rows;
+        this.reportError(error);
+        this.flushScrollbackRows(); // A different, explicitly queued target only.
+        this.historySettled();
+      })
+      .finally(() => {
+        if (this.closed || this.failed || this.rowsInFlight !== pending) return;
+        pending.ack = true;
+        this.completeScrollbackRows();
+      });
+  }
+
+  private completeScrollbackRows(): void {
+    if (this.rowsInFlight?.ack && this.rowsInFlight.applied) {
+      this.rowsInFlight = null;
+      this.flushScrollbackRows();
+    }
+    this.historySettled();
+  }
+
+  private beginHistoryMutation(): void {
+    this.historyEpoch++;
+    this.captureConsumer?.cancel(
+      new Error("Terminal history changed during capture."),
+    );
+    if (this.selectionSnapshot !== null) this.selectionRefreshNeeded = true;
+    this.selectionVersion++;
+    this.selectionSnapshot = null;
+    this.notifyHistoryChange();
+  }
+
+  private notifyHistoryChange(): void {
+    try {
+      this.observer.onHistoryChange?.();
+    } catch {
+      console.error("terminal history observer failed");
+    }
+  }
+
+  private historySettled(): void {
+    this.notifyHistoryChange();
+    if (
+      !this.historyAvailable ||
+      !this.selectionRefreshNeeded ||
+      this.selectionRefreshing
+    )
+      return;
+    this.selectionRefreshNeeded = false;
+    this.selectionRefreshing = true;
+    void this.select({ kind: "read" })
+      .catch(this.reportError)
+      .finally(() => {
+        this.selectionRefreshing = false;
+        if (this.selectionRefreshNeeded) this.historySettled();
+      });
+  }
+
+  private frameAfterHostMutation(seq: number): boolean {
+    if (this.hostMutationCutoff === null) return true;
+    const distance = (seq - this.hostMutationCutoff) >>> 0;
+    return distance > 0 && distance < 0x80000000;
+  }
+
+  private assertHistory(epoch: number): void {
+    if (this.historyEpoch !== epoch || !this.historyAvailable)
+      throw new Error("Terminal history changed during the request.");
+  }
+
+  /** Host clear, never terminal input. A false reply is a genuine core no-op. */
+  async clear(current: () => boolean = () => true): Promise<boolean> {
+    const id = this.id;
+    if (id === null || this.closed || this.failed || this.isBench)
+      throw new Error("Terminal engine is unavailable.");
+    if (!current()) return false;
+    if (this.clearPending)
+      throw new Error("Terminal clear is already in progress.");
+    const before = this.inputStateValue?.hostMutationVersion;
+    this.clearPending = true;
+    this.historyUncertain = true;
+    this.beginHistoryMutation();
+    try {
+      // No await may intervene between the owner/focus guard and target IPC.
+      if (!current()) {
+        this.historyUncertain = false;
+        return false;
+      }
+      const changed = await invoke<unknown>("gterm_clear", { id });
+      if (this.id !== id || this.closed || this.failed)
+        throw new Error("Terminal engine is unavailable.");
+      if (typeof changed !== "boolean")
+        throw new Error("Invalid terminal clear reply.");
+      if (changed) {
+        const state = await this.readState();
+        if (
+          before === undefined ||
+          state.hostMutationVersion === undefined ||
+          state.hostMutationVersion <= before
+        )
+          throw new Error("Terminal clear has no applied history receipt.");
+      }
+      this.historyUncertain = false;
+      return changed;
+    } finally {
+      this.clearPending = false;
+      this.historySettled();
+    }
+  }
+
   private cellPixels = { width: 8, height: 16 };
   private cellPixelsKnown = false;
 
@@ -1012,7 +1217,38 @@ export class EngineSession {
       throw new Error("invalid native terminal state version");
     const changed =
       !this.inputStateValue || state.version !== this.inputStateValue.version;
+    const previous = this.inputStateValue;
+    if (!this.isBench && state.scrollbackRows === null)
+      throw new Error("invalid native terminal row policy");
+    if (
+      previous?.hostMutationVersion !== undefined &&
+      (state.hostMutationVersion === undefined ||
+        state.hostMutationVersion < previous.hostMutationVersion)
+    )
+      throw new Error("invalid native terminal host receipt order");
+    if (
+      previous?.hostMutationVersion !== undefined &&
+      state.hostMutationVersion === previous.hostMutationVersion &&
+      (state.scrollbackRows !== previous.scrollbackRows ||
+        state.hostMutationAfterSeq !== previous.hostMutationAfterSeq)
+    )
+      throw new Error("invalid native terminal host receipt version");
     this.inputStateValue = state;
+    const applied =
+      state.hostMutationVersion !== undefined &&
+      state.hostMutationVersion > (previous?.hostMutationVersion ?? 0);
+    if (applied) {
+      this.hostMutationCutoff = state.hostMutationAfterSeq ?? null;
+      this.historyUncertain = false;
+      this.beginHistoryMutation();
+      this.invalidatePresented();
+      this.fullRequested = false;
+      this.requestFull();
+    }
+    if (this.rowsInFlight && state.scrollbackRows === this.rowsInFlight.rows)
+      this.rowsInFlight.applied = true;
+    this.completeScrollbackRows();
+    this.flushScrollbackRows();
     if (changed) {
       try {
         this.observer.onState?.(state);
@@ -1038,7 +1274,7 @@ export class EngineSession {
   }
 
   getSelection(): string | null {
-    return this.closed || this.failed ? null : this.selectionSnapshot;
+    return this.historyAvailable ? this.selectionSnapshot : null;
   }
 
   select(command: NativeSelectionCommand): Promise<string | null> {
@@ -1048,6 +1284,12 @@ export class EngineSession {
       return Promise.reject(
         new Error("too many pending terminal selection requests"),
       );
+    const epoch = this.historyEpoch;
+    try {
+      this.assertHistory(epoch);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     const snapshot = { ...command };
     const version = ++this.selectionVersion;
     if (command.kind !== "read" && command.kind !== "release")
@@ -1058,6 +1300,7 @@ export class EngineSession {
         const id = this.id;
         if (this.closed || this.failed || id === null)
           throw new Error("terminal engine is unavailable");
+        this.assertHistory(epoch);
         try {
           const text = await invoke<unknown>("gterm_selection", {
             id,
@@ -1065,6 +1308,7 @@ export class EngineSession {
           });
           if (this.closed || this.failed || this.id !== id)
             throw new Error("terminal engine is unavailable");
+          this.assertHistory(epoch);
           if (
             text !== null &&
             (typeof text !== "string" ||
@@ -1129,11 +1373,19 @@ export class EngineSession {
       return Promise.reject(
         new Error("Too many pending terminal link queries."),
       );
+    const epoch = this.historyEpoch;
+    try {
+      this.assertHistory(epoch);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     this.linkPending++;
     return invoke<unknown>("gterm_link_context", { id, seq, col, row })
       .then((value) => {
         if (this.closed || this.failed || this.id !== id)
           throw new Error("Terminal engine is unavailable.");
+        this.assertHistory(epoch);
+        if (this.lastDrawnSeq !== seq) return null;
         return decodeNativeLinkContext(value, seq, col, row);
       })
       .finally(() => {
@@ -1214,13 +1466,17 @@ export class EngineSession {
       throw new Error("Terminal engine is unavailable.");
     if (this.blockPending >= 32)
       throw new Error("Too many pending terminal block queries.");
+    const epoch = this.historyEpoch;
+    this.assertHistory(epoch);
     this.blockPending++;
     const run = async () => {
+      this.assertHistory(epoch);
       if (this.id !== id || this.closed || this.failed)
         throw new Error("Terminal engine is unavailable.");
       const value = await invoke<unknown>(command, { id, ...args });
       if (this.id !== id || this.closed || this.failed)
         throw new Error("Terminal engine is unavailable.");
+      this.assertHistory(epoch);
       return decode(value);
     };
     const task = ordered ? this.selectionQueries.then(run) : run();
@@ -1245,12 +1501,19 @@ export class EngineSession {
     const id = this.id;
     if (id === null || this.closed || this.failed)
       return Promise.reject(new Error("terminal engine is unavailable"));
+    const epoch = this.historyEpoch;
+    try {
+      this.assertHistory(epoch);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return invoke<unknown>("gterm_search", {
       id,
       command: { ...command },
     }).then((found) => {
       if (this.closed || this.failed || this.id !== id)
         throw new Error("terminal engine is unavailable");
+      this.assertHistory(epoch);
       if (typeof found !== "boolean")
         throw new Error("invalid terminal search reply");
       return found;
@@ -1265,9 +1528,16 @@ export class EngineSession {
     const id = this.id;
     if (id === null || this.closed || this.failed)
       return Promise.reject(new Error("terminal engine is unavailable"));
+    const epoch = this.historyEpoch;
+    try {
+      this.assertHistory(epoch);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     return invoke<unknown>("gterm_read_text", { id, maxLines }).then((text) => {
       if (this.closed || this.failed || this.id !== id)
         throw new Error("terminal engine is unavailable");
+      this.assertHistory(epoch);
       if (typeof text !== "string")
         throw new Error("invalid terminal text reply");
       return text;

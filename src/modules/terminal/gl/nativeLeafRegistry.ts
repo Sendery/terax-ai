@@ -13,6 +13,7 @@ export type NativeLeaf = {
   getSelection: () => string | null;
   navigateBlocks?: (direction: -1 | 1) => Promise<void>;
   clearBlockSelection?: () => boolean;
+  clear?: (current?: () => boolean) => Promise<boolean>;
   write: (text: string) => boolean;
   writeOwned?: (text: string, current?: () => boolean) => Promise<void>;
   encodeShiftEnter?: () => Promise<string>;

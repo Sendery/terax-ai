@@ -30,10 +30,12 @@ function driver(id: number, closing: Promise<void> = Promise.resolve()) {
       promptVersion: 0,
     },
     close: vi.fn(() => closing),
+    clear: vi.fn(async (_current?: () => boolean) => true),
     write: vi.fn(async () => {}),
     resizeAndWait: vi.fn(async () => {}),
     setColors: vi.fn(),
     setCursorBlink: vi.fn(),
+    setScrollbackRows: vi.fn(),
     requestFull: vi.fn(),
     scroll: vi.fn(),
     attachRenderer: vi.fn(),
@@ -637,5 +639,88 @@ it("rejects owned raw task input retired during requireNative", async () => {
   current = false;
   await expect(result).rejects.toThrow("available");
   expect(native.write).not.toHaveBeenCalled();
+  await session.dispose();
+});
+
+it.each([false, true])(
+  "opens blocks=%s with the row preference before first frame",
+  async (blocks) => {
+    const native = driver(9);
+    const open = vi.fn(
+      async (_renderer: TerminalRenderer, _options: unknown) =>
+        native as unknown as EngineSession,
+    );
+    const session = new NativeLeafSession(
+      { ...config(), blocks, scrollbackRows: 5000 },
+      open,
+    );
+    await session.opened;
+    expect(open.mock.calls[0][1]).toMatchObject({
+      blocks,
+      scrollbackRows: 5000,
+    });
+    expect(native.setScrollbackRows).not.toHaveBeenCalled();
+    await session.dispose();
+  },
+);
+it("uses default rows, updates a hidden owner only on changes and carries rows into respawn", async () => {
+  const first = driver(9),
+    next = driver(10);
+  const open = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(next);
+  const session = new NativeLeafSession(config(), open);
+  const detach = session.attach(view(), config());
+  await session.opened;
+  expect(open.mock.calls[0][1]).toMatchObject({ scrollbackRows: 2000 });
+  detach();
+  session.setScrollbackRows(5000);
+  session.setScrollbackRows(5000);
+  session.configure({ ...config(), scrollbackRows: 5000 });
+  expect(first.setScrollbackRows).toHaveBeenCalledExactlyOnceWith(5000);
+  expect(open).toHaveBeenCalledOnce();
+  expect(first.close).not.toHaveBeenCalled();
+  await session.respawn();
+  expect(open.mock.calls[1][1]).toMatchObject({ scrollbackRows: 5000 });
+  expect(next.setScrollbackRows).not.toHaveBeenCalled();
+  await session.dispose();
+});
+it("coalesces rows changed while opening to the latest desired value", async () => {
+  let finish = (_native: EngineSession) => {};
+  const native = driver(9);
+  const open = vi.fn(
+    (_renderer: TerminalRenderer, _options: unknown) =>
+      new Promise<EngineSession>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const session = new NativeLeafSession(
+    { ...config(), scrollbackRows: 2000 },
+    open,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  session.setScrollbackRows(3000);
+  session.setScrollbackRows(7000);
+  finish(native as unknown as EngineSession);
+  await session.opened;
+  expect(open.mock.calls[0][1]).toMatchObject({ scrollbackRows: 2000 });
+  expect(native.setScrollbackRows).toHaveBeenCalledExactlyOnceWith(7000);
+  await session.dispose();
+});
+
+it("routes host clear to the retained core and cancels a stale owner after opening", async () => {
+  let resolve!: (session: EngineSession) => void;
+  const wait = new Promise<EngineSession>((done) => {
+    resolve = done;
+  });
+  const native = driver(9);
+  const session = new NativeLeafSession(config(), async () => wait);
+  session.attach(view(), config());
+  let current = true;
+  const pending = session.clear(() => current);
+  current = false;
+  resolve(native as unknown as EngineSession);
+  expect(await pending).toBe(false);
+  expect(native.clear).not.toHaveBeenCalled();
+  expect(await session.clear()).toBe(true);
+  expect(native.clear).toHaveBeenCalledOnce();
   await session.dispose();
 });

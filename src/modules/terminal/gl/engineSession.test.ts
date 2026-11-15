@@ -17,6 +17,9 @@ type Call = { command: string; args: unknown };
 const ipc = vi.hoisted(() => ({
   calls: [] as { command: string; args: unknown }[],
   resize: null as Promise<unknown> | null,
+  rowSetting: null as Promise<unknown> | null,
+  clear: null as Promise<unknown> | null,
+  state: null as unknown,
   text: null as Promise<unknown> | null,
   encoded: null as Promise<unknown> | null,
   selection: null as Promise<unknown> | null,
@@ -48,6 +51,10 @@ vi.mock("@tauri-apps/api/core", () => {
         });
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
+      if (command === "gterm_set_scrollback_rows")
+        return ipc.rowSetting ?? Promise.resolve(null);
+      if (command === "gterm_clear") return ipc.clear ?? Promise.resolve(false);
+      if (command === "gterm_state") return Promise.resolve(ipc.state);
       if (command === "pty_close" && ipc.closing) return ipc.closing;
       if (command === "gterm_blocks")
         return ipc.blocks ?? Promise.resolve(null);
@@ -161,6 +168,9 @@ beforeEach(() => {
   ipc.calls.length = 0;
   ipc.open = null;
   ipc.resize = null;
+  ipc.rowSetting = null;
+  ipc.clear = null;
+  ipc.state = null;
   ipc.text = null;
   ipc.encoded = null;
   ipc.selection = null;
@@ -1897,4 +1907,301 @@ it("can capture a retained healthy core after its shell exits without respawning
   expect(commands("gterm_open")).toHaveLength(1);
   expect(commands("pty_write")).toHaveLength(0);
   await session.close();
+});
+
+function appliedHistory(version = 1, mutation = 0, rows = 2000, cutoff = 0) {
+  return {
+    version,
+    alternateScreen: false,
+    mouseTracking: false,
+    bracketedPaste: false,
+    focusTracking: false,
+    modifyOtherKeys: 0,
+    kittyFlags: 0,
+    cwd: null,
+    shellReady: false,
+    commandRunning: false,
+    blocksEnabled: false,
+    blocksMetadataVersion: 0,
+    promptVersion: 0,
+    scrollbackRows: rows,
+    hostMutationVersion: mutation,
+    hostMutationAfterSeq: cutoff,
+  };
+}
+function publishHistory(value: ReturnType<typeof appliedHistory>) {
+  ipc.state = value;
+  const args = commands("gterm_open")[0].args as {
+    onState: { onmessage: (value: unknown) => void };
+  };
+  args.onState.onmessage(value);
+}
+async function microtasks() {
+  for (let index = 0; index < 10; index++) await Promise.resolve();
+}
+
+describe("native host history controls", () => {
+  it("opens the core with row policy, validates before allocation, and keeps bench byte policy", async () => {
+    const renderer = new FakeRenderer();
+    const pending = EngineSession.open(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      scrollbackRows: 5000,
+    });
+    expect(commands("gterm_open")[0].args).toMatchObject({
+      scrollbackRows: 5000,
+    });
+    ipc.open?.resolve(9);
+    await pending;
+    for (const rows of [199, 50001, 200.5, NaN]) {
+      await expect(
+        EngineSession.open(renderer as unknown as GridRenderer, {
+          cols: 4,
+          rows: 2,
+          scrollbackRows: rows,
+        }),
+      ).rejects.toThrow("scrollback");
+    }
+    expect(renderer.panes).toHaveLength(1);
+    const bench = EngineSession.openBench(renderer as unknown as GridRenderer, {
+      cols: 4,
+      rows: 2,
+      kind: "ascii",
+      megabytes: 1,
+    });
+    expect(commands("gterm_bench_open")[0].args).not.toHaveProperty(
+      "scrollbackRows",
+    );
+    ipc.open?.resolve(10);
+    (await bench).setScrollbackRows(5000);
+    expect(commands("gterm_set_scrollback_rows")).toHaveLength(0);
+  });
+
+  it("coalesces the latest target until BOTH admission and applied state, including a revert", async () => {
+    const session = await openSession(new FakeRenderer());
+    expect(commands("gterm_open")[0].args).toMatchObject({
+      scrollbackRows: 2000,
+    });
+    publishHistory(appliedHistory());
+    let acknowledge!: () => void;
+    ipc.rowSetting = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    session.setScrollbackRows(5000);
+    session.setScrollbackRows(7000);
+    session.setScrollbackRows(2000);
+    expect(
+      commands("gterm_set_scrollback_rows").map((call) => call.args),
+    ).toEqual([{ id: 9, rows: 5000 }]);
+    acknowledge();
+    await microtasks();
+    expect(session.historyAvailable).toBe(false);
+    expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
+    publishHistory(appliedHistory(2, 1, 5000, 1));
+    await microtasks();
+    expect(
+      commands("gterm_set_scrollback_rows").map((call) => call.args),
+    ).toEqual([
+      { id: 9, rows: 5000 },
+      { id: 9, rows: 2000 },
+    ]);
+    expect(session.historyAvailable).toBe(false);
+    publishHistory(appliedHistory(3, 2, 2000, 2));
+    await microtasks();
+    expect(session.historyAvailable).toBe(true);
+    session.setScrollbackRows(2000);
+    expect(commands("gterm_set_scrollback_rows")).toHaveLength(2);
+    expect(commands("gterm_open")).toHaveLength(1);
+    expect(commands("pty_write")).toHaveLength(0);
+  });
+
+  it("also waits for the setter ACK when state arrives first and stops after close", async () => {
+    const session = await openSession(new FakeRenderer());
+    publishHistory(appliedHistory());
+    let acknowledge!: () => void;
+    ipc.rowSetting = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    session.setScrollbackRows(3000);
+    session.setScrollbackRows(4000);
+    publishHistory(appliedHistory(2, 1, 3000, 0));
+    expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
+    await session.close();
+    acknowledge();
+    await microtasks();
+    expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
+  });
+
+  it("quarantines late selection/text replies and refreshes the actually clipped core selection", async () => {
+    const renderer = new FakeRenderer();
+    const session = await openSession(renderer);
+    publishHistory(appliedHistory());
+    expect(await session.select({ kind: "all" })).toBe("native selection");
+    let oldSelection!: (text: string) => void;
+    let oldText!: (text: string) => void;
+    ipc.selection = new Promise<string>((resolve) => {
+      oldSelection = resolve;
+    });
+    ipc.text = new Promise<string>((resolve) => {
+      oldText = resolve;
+    });
+    const selection = session.select({ kind: "read" });
+    const text = session.readText();
+    const selectionRejected = expect(selection).rejects.toThrow("history");
+    const textRejected = expect(text).rejects.toThrow("history");
+    await microtasks();
+    session.setScrollbackRows(500);
+    expect(session.getSelection()).toBeNull();
+    publishHistory(appliedHistory(2, 1, 500, 1));
+    ipc.selection = Promise.resolve("clipped selection");
+    oldSelection("stale selection");
+    oldText("stale history");
+    await Promise.all([selectionRejected, textRejected]);
+    await microtasks();
+    expect(session.getSelection()).toBe("clipped selection");
+    expect(
+      commands("gterm_selection").map(
+        (call) => (call.args as { command: { kind: string } }).command.kind,
+      ),
+    ).not.toContain("clear");
+  });
+
+  it("no-op clear preserves the presented frame and selection, never sends input", async () => {
+    const renderer = new FakeRenderer();
+    const session = await openSession(renderer);
+    publishHistory(appliedHistory());
+    channelOf(0).onmessage(frameBuffer(1));
+    renderer.drawFrame();
+    await session.select({ kind: "all" });
+    expect(await session.clear()).toBe(false);
+    await microtasks();
+    expect(session.drawnSeq).toBe(1);
+    expect(session.getSelection()).toBe("native selection");
+    expect(commands("pty_write")).toHaveLength(0);
+    expect(
+      commands("gterm_selection").some(
+        (call) =>
+          (call.args as { command: { kind: string } }).command.kind === "clear",
+      ),
+    ).toBe(false);
+  });
+
+  it("clear success reads an applied receipt, invalidates old frames and permits a retained exited core", async () => {
+    const renderer = new FakeRenderer();
+    const session = await openSession(renderer);
+    publishHistory(appliedHistory());
+    channelOf(0).onmessage(frameBuffer(1));
+    renderer.drawFrame();
+    channelOf(1).onmessage(0);
+    ipc.clear = Promise.resolve(true);
+    ipc.state = appliedHistory(2, 1, 2000, 1);
+    expect(await session.clear()).toBe(true);
+    expect(session.drawnSeq).toBeNull();
+    channelOf(0).onmessage(frameBuffer(1));
+    renderer.drawFrame();
+    expect(session.drawnSeq).toBeNull();
+    channelOf(0).onmessage(frameBuffer(2));
+    renderer.drawFrame();
+    expect(session.drawnSeq).toBe(2);
+    expect(commands("pty_write")).toHaveLength(0);
+  });
+
+  it("rejects clear with a stale guard, transport failure, malformed boolean or absent application proof", async () => {
+    const session = await openSession(new FakeRenderer());
+    publishHistory(appliedHistory());
+    expect(await session.clear(() => false)).toBe(false);
+    expect(commands("gterm_clear")).toHaveLength(0);
+    ipc.clear = Promise.reject(new Error("clear failed"));
+    await expect(session.clear()).rejects.toThrow("clear failed");
+    expect(session.historyAvailable).toBe(false);
+    publishHistory(appliedHistory(2, 1, 2000, 0));
+    ipc.clear = Promise.resolve("yes");
+    await expect(session.clear()).rejects.toThrow("clear reply");
+    publishHistory(appliedHistory(3, 2, 2000, 0));
+    ipc.clear = Promise.resolve(true);
+    await expect(session.clear()).rejects.toThrow("applied");
+  });
+
+  it("cancels an existing capture on admission and only captures a post-mutation full across seq wrap", async () => {
+    const renderer = new FakeRenderer();
+    const session = await openSession(renderer);
+    hiddenSession(renderer, session);
+    publishHistory(appliedHistory());
+    const old = session.captureFrame({ signal: new AbortController().signal });
+    const cancelled = expect(old).rejects.toThrow("history");
+    session.setScrollbackRows(500);
+    await cancelled;
+    await expect(
+      session.captureFrame({ signal: new AbortController().signal }),
+    ).rejects.toThrow("history");
+    publishHistory(appliedHistory(2, 1, 500, 0xffffffff));
+    await microtasks();
+    const capture = session.captureFrame({
+      signal: new AbortController().signal,
+      blocks: true,
+    });
+    let settled = false;
+    void capture.then(() => {
+      settled = true;
+    });
+    channelOf(0).onmessage(frameBuffer(0xffffffff));
+    await microtasks();
+    expect(settled).toBe(false);
+    expect(credits()).toHaveLength(0);
+    renderer.drawFrame();
+    expect(credits()).toHaveLength(1);
+    ipc.blocks = Promise.resolve(captureBlocks(1));
+    channelOf(0).onmessage(frameBuffer(1));
+    const lease = await capture;
+    expect(lease.frame.seq).toBe(1);
+    lease.release();
+  });
+});
+
+it("recovers a subsequent explicit row change after a rejected admission without automatic retry", async () => {
+  const renderer = new FakeRenderer();
+  const errors: unknown[] = [];
+  const opening = EngineSession.open(renderer as unknown as GridRenderer, {
+    cols: 4,
+    rows: 2,
+    observer: { onError: (error) => errors.push(error) },
+  });
+  ipc.open?.resolve(9);
+  const session = await opening;
+  publishHistory(appliedHistory());
+  ipc.rowSetting = Promise.reject("terminal engine is unavailable");
+  session.setScrollbackRows(5000);
+  await microtasks();
+  expect(errors).toHaveLength(1);
+  expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
+  expect(session.historyAvailable).toBe(false);
+  ipc.rowSetting = Promise.resolve(null);
+  session.setScrollbackRows(3000);
+  expect(
+    commands("gterm_set_scrollback_rows").map((call) => call.args),
+  ).toEqual([
+    { id: 9, rows: 5000 },
+    { id: 9, rows: 3000 },
+  ]);
+  expect(session.historyAvailable).toBe(false);
+  publishHistory(appliedHistory(2, 1, 3000, 0));
+  await microtasks();
+  expect(session.historyAvailable).toBe(true);
+  expect(await session.readText()).toBe("native text");
+});
+
+it("can revert a rejected command to the confirmed applied rows without a phantom pending control", async () => {
+  const session = await openSession(new FakeRenderer());
+  publishHistory(appliedHistory());
+  ipc.rowSetting = Promise.reject("terminal engine is unavailable");
+  session.setScrollbackRows(5000);
+  await microtasks();
+  publishHistory(appliedHistory(2, 0, 2000, 0));
+  await microtasks();
+  expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
+  expect(session.historyAvailable).toBe(false);
+  session.setScrollbackRows(2000);
+  expect(session.historyAvailable).toBe(true);
+  expect(await session.readText()).toBe("native text");
+  expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
 });

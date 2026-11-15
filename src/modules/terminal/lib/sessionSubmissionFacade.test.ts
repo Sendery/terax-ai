@@ -27,7 +27,8 @@ vi.mock("@/modules/terminal/lib/useTerminalFont", () => ({
   }),
 }));
 vi.mock("@/modules/settings/preferences", () => ({
-  usePreferencesStore: (select: (value: unknown) => unknown) => select({ shortcuts: {} }),
+  usePreferencesStore: (select: (value: unknown) => unknown) =>
+    select({ shortcuts: {} }),
 }));
 vi.mock("@/modules/terminal/lib/rendererPool", () => {
   const names = [
@@ -72,6 +73,8 @@ import { getSlotForLeaf } from "@/modules/terminal/lib/rendererPool";
 import {
   captureLeafInput,
   canClearActiveLeaf,
+  canClearFocusedTerminal,
+  clearFocusedTerminal,
   clearActiveLeaf,
   captureLeafSubmission,
   disposeSession,
@@ -506,3 +509,102 @@ it.each(["native", "other pane", "editor"] as const)(
     expect(rejected).not.toHaveBeenCalled();
   },
 );
+
+it("host clear uses only the focused native owner, allows a manual private gesture and writes no formfeed", async () => {
+  const native = Object.assign(clearNative(), {
+    clear: vi.fn(async (_current?: () => boolean) => true),
+    exited: true,
+  });
+  clearTarget();
+  expect(canClearFocusedTerminal(leafId, document.activeElement)).toBe(true);
+  expect(await clearFocusedTerminal(leafId)).toBe(true);
+  expect(native.clear).toHaveBeenCalledOnce();
+  expect(native.writeOwned).not.toHaveBeenCalled();
+  expect(harness.pty.write).not.toHaveBeenCalled();
+});
+it.each(["editor", "other pane", "not active"] as const)(
+  "host clear does not claim %s focus",
+  async (kind) => {
+    const native = Object.assign(clearNative(), {
+      clear: vi.fn(async () => true),
+    });
+    const target =
+      kind === "editor"
+        ? ({ closest: () => null } as unknown as Element)
+        : clearTarget(kind === "other pane" ? leafId + 1 : leafId);
+    Object.assign(document, {
+      activeElement: kind === "not active" ? {} : target,
+    });
+    expect(canClearFocusedTerminal(leafId, target)).toBe(false);
+    expect(await clearFocusedTerminal(leafId)).toBe(false);
+    expect(native.clear).not.toHaveBeenCalled();
+  },
+);
+it.each(["owner", "registration", "focus", "caller"] as const)(
+  "cancels a host clear before IPC after %s changes during opening",
+  async (kind) => {
+    let release!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const applied = vi.fn();
+    const native = Object.assign(clearNative(), {
+      clear: vi.fn(async (current = () => true) => {
+        await wait;
+        if (!current()) return false;
+        applied();
+        return true;
+      }),
+    });
+    clearTarget();
+    let caller = true;
+    const pending = clearFocusedTerminal(leafId, () => caller);
+    if (kind === "owner") native.submissionIdentity = {};
+    if (kind === "registration") {
+      takeNativeLeaf(leafId);
+      registerNativeLeaf(leafId, nativeLeaf());
+    }
+    if (kind === "focus") Object.assign(document, { activeElement: {} });
+    if (kind === "caller") caller = false;
+    release();
+    expect(await pending).toBe(false);
+    expect(applied).not.toHaveBeenCalled();
+  },
+);
+it("host clear returns only actual changed and surfaces genuine failure without fallback", async () => {
+  const native = Object.assign(clearNative(), {
+    clear: vi.fn(async () => false),
+  });
+  clearTarget();
+  expect(await clearFocusedTerminal(leafId)).toBe(false);
+  native.clear.mockRejectedValue(new Error("host clear failed"));
+  await expect(clearFocusedTerminal(leafId)).rejects.toThrow(
+    "host clear failed",
+  );
+  expect(native.writeOwned).not.toHaveBeenCalled();
+});
+it("legacy host clear still calls xterm.clear only for its actual focused slot", async () => {
+  useTerminalSession({
+    leafId,
+    container: { current: null },
+    visible: true,
+    focused: true,
+  });
+  for (const effect of harness.effects) effect();
+  await respawnSession(leafId, "/repo");
+  const clear = vi.fn();
+  const target = {
+    closest: (selector: string) => (selector === ".xterm" ? root : null),
+  } as unknown as Element;
+  const root = { contains: (value: Element) => value === target };
+  vi.mocked(getSlotForLeaf).mockReturnValue({
+    term: { element: root, clear },
+  } as unknown as NonNullable<ReturnType<typeof getSlotForLeaf>>);
+  Object.assign(document, { activeElement: target });
+  expect(await clearFocusedTerminal(leafId)).toBe(true);
+  expect(clear).toHaveBeenCalledOnce();
+  expect(harness.pty.write).not.toHaveBeenCalled();
+  Object.assign(document, { activeElement: {} });
+  expect(await clearFocusedTerminal(leafId)).toBe(false);
+  expect(clear).toHaveBeenCalledOnce();
+});

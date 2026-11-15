@@ -630,20 +630,84 @@ export async function clearActiveLeaf(
   return owned();
 }
 
-/**
- * Clear the scrollback and screen of the currently focused terminal, keeping
- * the active prompt line — macOS Terminal's ⌘K behaviour. Returns false when no
- * focused terminal slot is bound (e.g. focus is in the editor or AI panel).
- */
-export function clearFocusedTerminal(): boolean {
-  for (const [leafId, s] of sessions) {
-    if (!s.visibleNow || !s.focusedNow) continue;
-    const slot = getSlotForLeaf(leafId);
-    if (!slot) continue;
-    slot.term.clear();
-    return true;
+/** Whether host clear belongs to this real terminal focus, including a retained core. */
+export function canClearFocusedTerminal(
+  leafId: number,
+  target: Element | null,
+): boolean {
+  if (
+    !target ||
+    target !== document.activeElement ||
+    typeof target.closest !== "function"
+  )
+    return false;
+  const native = getNativeLeaf(leafId);
+  if (native)
+    return Boolean(
+      native.clear &&
+        native.id !== null &&
+        native.focused &&
+        target.localName === "textarea" &&
+        !(target as HTMLTextAreaElement).disabled &&
+        target.closest("[data-native-terminal-grid]") &&
+        target
+          .closest("[data-native-terminal-leaf]")
+          ?.getAttribute("data-native-terminal-leaf") === String(leafId),
+    );
+  const session = sessions.get(leafId);
+  const slot = getSlotForLeaf(leafId);
+  return Boolean(
+    session &&
+      !session.disposed &&
+      session.visibleNow &&
+      session.focusedNow &&
+      target.closest(".xterm") &&
+      slot?.term.element?.contains(target),
+  );
+}
+
+/** Host scrollback clear; never sends Ctrl+L or resets a shell. Private manual gestures are allowed. */
+export async function clearFocusedTerminal(
+  requestedLeafId?: number,
+  current: () => boolean = () => true,
+): Promise<boolean> {
+  const target = document.activeElement;
+  const nativeId = target
+    ?.closest?.("[data-native-terminal-leaf]")
+    ?.getAttribute("data-native-terminal-leaf");
+  const candidate =
+    nativeId === undefined || nativeId === null ? null : Number(nativeId);
+  const leafId =
+    requestedLeafId ??
+    (candidate !== null &&
+    Number.isSafeInteger(candidate) &&
+    canClearFocusedTerminal(candidate, target)
+      ? candidate
+      : [...sessions.keys()].find((id) => canClearFocusedTerminal(id, target)));
+  if (leafId === undefined) return false;
+  const native = getNativeLeaf(leafId);
+  const identity = native?.submissionIdentity;
+  const session = sessions.get(leafId);
+  const slot = getSlotForLeaf(leafId);
+  const valid = () =>
+    current() &&
+    canClearFocusedTerminal(leafId, target) &&
+    getNativeLeaf(leafId) === native &&
+    (native
+      ? native.submissionIdentity === identity
+      : sessions.get(leafId) === session && getSlotForLeaf(leafId) === slot);
+  if (!valid()) return false;
+  if (native?.clear) {
+    try {
+      return (await native.clear(valid)) && valid();
+    } catch (error) {
+      if (!valid()) return false;
+      throw error;
+    }
   }
-  return false;
+  if (!slot) return false;
+  slot.term.clear();
+  return true;
 }
 
 export function leafIdForPty(ptyId: number): number | null {

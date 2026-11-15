@@ -1,5 +1,9 @@
+import { isScrollbackRows } from "@/modules/settings/terminalScrollback";
 export type NativeState = Readonly<{
   version: number;
+  scrollbackRows?: number | null;
+  hostMutationVersion?: number;
+  hostMutationAfterSeq?: number;
   alternateScreen: boolean;
   mouseTracking: boolean;
   bracketedPaste: boolean;
@@ -51,7 +55,29 @@ export function decodeNativeState(value: unknown): NativeState {
       new TextEncoder().encode(cwd).byteLength > 128 * 1024)
   )
     throw new Error("invalid native terminal state");
+  const hasReceipt = [
+    "scrollbackRows",
+    "hostMutationVersion",
+    "hostMutationAfterSeq",
+  ].some((key) => Object.getOwnPropertyDescriptor(data, key) !== undefined);
+  if (
+    hasReceipt &&
+    ((data.scrollbackRows !== null && !isScrollbackRows(data.scrollbackRows)) ||
+      !Number.isSafeInteger(data.hostMutationVersion) ||
+      (data.hostMutationVersion as number) < 0 ||
+      !Number.isInteger(data.hostMutationAfterSeq) ||
+      (data.hostMutationAfterSeq as number) < 0 ||
+      (data.hostMutationAfterSeq as number) > 0xffffffff)
+  )
+    throw new Error("invalid native terminal host receipt");
   return {
+    ...(hasReceipt
+      ? {
+          scrollbackRows: data.scrollbackRows as number | null,
+          hostMutationVersion: data.hostMutationVersion as number,
+          hostMutationAfterSeq: data.hostMutationAfterSeq as number,
+        }
+      : {}),
     cwd: cwd as string | null,
     shellReady: data.shellReady as boolean,
     commandRunning: data.commandRunning as boolean,

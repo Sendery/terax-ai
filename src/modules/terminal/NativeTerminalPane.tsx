@@ -55,6 +55,11 @@ export const NativeTerminalPane = forwardRef<
 >(function NativeTerminalPane(props, ref) {
   const surface = useNativeTerminalSurface();
   const cursorBlink = usePreferencesStore((state) => state.terminalCursorBlink);
+  const scrollbackRows = usePreferencesStore(
+    (state) => state.terminalScrollback,
+  );
+  const scrollbackRowsRef = useRef(scrollbackRows);
+  scrollbackRowsRef.current = scrollbackRows;
   const cursorBlinkRef = useRef(cursorBlink);
   cursorBlinkRef.current = cursorBlink;
   const surfaceRef = useRef(surface);
@@ -117,6 +122,7 @@ export const NativeTerminalPane = forwardRef<
       size: initial,
       colors: model.colors.engine,
       cursorBlink: cursorBlinkRef.current,
+      scrollbackRows: scrollbackRowsRef.current,
       cwd: latest.current.initialCwd,
       blocks: latest.current.blocks ?? false,
       onReady: () => markSessionReady(leafId),
@@ -290,7 +296,8 @@ export const NativeTerminalPane = forwardRef<
                 !disposed &&
                 latest.current.visible &&
                 controller.current === owner &&
-                engine.current === session,
+                engine.current === session &&
+                session.historyAvailable,
               metrics: () => ({ height: renderer.cellSize.height, padding: 6 }),
               onError: report,
             });
@@ -325,7 +332,10 @@ export const NativeTerminalPane = forwardRef<
             (() => {});
           linkBinding = bindNativeLinks(session, renderer, element, {
             available: () =>
-              !disposed && latest.current.visible && engine.current === session,
+              !disposed &&
+              latest.current.visible &&
+              engine.current === session &&
+              session.historyAvailable,
             active: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             cwd: () => owner.cwd ?? latest.current.initialCwd,
@@ -356,6 +366,11 @@ export const NativeTerminalPane = forwardRef<
           }
           linkBinding?.onDrawn();
           blockView?.present(seq);
+        },
+        onHistoryChange: () => {
+          linkBinding?.invalidate();
+          blockView?.present(native?.drawnSeq ?? null);
+          blockView?.layout();
         },
         onError: report,
         onExit: (code) => latest.current.onExit?.(leafId, code),
@@ -436,6 +451,10 @@ export const NativeTerminalPane = forwardRef<
   useEffect(() => {
     controller.current?.setCursorBlink(cursorBlink);
   }, [cursorBlink]);
+
+  useEffect(() => {
+    controller.current?.setScrollbackRows(scrollbackRows);
+  }, [scrollbackRows]);
 
   useImperativeHandle(
     ref,
