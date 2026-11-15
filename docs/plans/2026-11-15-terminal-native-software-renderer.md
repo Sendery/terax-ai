@@ -59,3 +59,20 @@ The user explicitly requested independent worktrees so source validation can
 overlap development. File drop targeting and agent restoration were developed
 separately from this renderer, reviewed while it was still being implemented,
 and are integrated only through their green local Sendery checkpoints.
+
+## Integrated M2 preference round trip
+
+On the frozen normal-environment sandbox at
+5acaa791a7e3927737e35b13abf09af02d024ff1, the actual General Settings
+Use WebGL renderer control was switched on to off to on through the own
+window's Accessibility checkbox. Its original enabled value was restored.
+The active tab, all twelve tabs/pane counts and original idle shell PIDs
+98422 and 98423 stayed unchanged throughout both transitions. The unrelated
+clean editor38 was preserved; only the Settings window opened by this check
+was closed.
+
+This establishes the real preference control and retained shell identity.
+It does not establish an input echo round trip, pixel correctness with the
+software preference disabled, or context-loss/display-wake recovery.
+Those interactions remain in the general functional sweep. No new benchmark
+or performance laboratory was run.

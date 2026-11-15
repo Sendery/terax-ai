@@ -102,3 +102,28 @@ result. Existing visible-pane capture retains its ordinary presentation path.
 No Cargo, application build, UI automation, producer, Actions, push or
 publication was run in this lane. Shared architecture and parity documents were
 left to the integration owner.
+
+## Integrated M2 normal-pane acceptance
+
+The integrated source at 5acaa791a7e3927737e35b13abf09af02d024ff1
+passed 423 tests with one existing skip across 39 focused files, types,
+unchanged lint baseline (119 warnings and two infos), and the sandbox build.
+The frozen normal-environment sandbox used that exact commit and executable,
+confirmed through discovery, app.buildInfo and the mapped binary.
+
+With M2 unlocked, on-console, Accessibility trusted and the exact own app
+foreground, app.capture produced an active two-pane PNG (1964x1564,
+150732 bytes) and an inactive single-pane PNG (1964x1564, 86264 bytes).
+Both PNGs were visually inspected: readable native shell text, colors, cursor
+and pane divider are present. The active tab stayed 35, all twelve tabs
+including the unrelated clean editor38 were preserved, and idle shell PIDs
+72609, 98422 and 98423 remained identical. No terminal input, viewport change,
+profile edit, process replacement or tab activation was needed for capture.
+The generated evidence remains in the ignored M2 development area as
+capture-foreground-runtime-result.json and the recorded capture paths.
+
+Earlier locked-session attempts reached the capture deadline; that condition
+was observed but is not proven to be the sole cause. The successful unlocked
+normal-pane run does not establish blocks/image/grapheme fixture acceptance,
+software-renderer capture, physical mixed-DPI behavior or mutation races.
+Those scenarios remain for the general functional sweep.
