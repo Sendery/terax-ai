@@ -1,149 +1,155 @@
 # Parallel native terminal integration
 
-Independent M2 worktrees allow implementation and validation to overlap.
-Seven source blocks are integrated additively in
-feat/native-terminal-renderer-fallback. The runnable source checkpoint is
-cea3fa6d2fbc9878645dc6bcea7004de0aa9f75b.
+## Current unified qa checkpoint
+
+The validated parallel blocks are consolidated additively in local qa on M2,
+at /Users/andres.rojo/Workspaces/terax-worktrees/qa. The code checkpoint is
+8634b185370521e1c1b156110751632ee88540dc. qa preserves origin/qa history;
+the existing branch was an ancestor and was advanced without a merge commit.
+All new commits use Sendery.
 
 | Block | Original checkpoint | Integrated checkpoint |
 | --- | --- | --- |
 | Native Canvas2D/GPU fallback | 4c0e839 | 4c0e839 |
-| Physical-coordinate file drop targeting | 6f541cf | 7c4a5d0 |
+| Physical-coordinate file drops | 6f541cf | 7c4a5d0 |
 | Owner-bound agent restoration | 349b2c5 | ef3af8b |
 | Image-background foreground contrast | 72d8fdf | 46059a5 |
 | Live cursor preference and header-only frames | 029e9b8, 4dba9aa | 97d40a8, 3eb87f3 |
 | Owner-bound scheduled task handoff | 6473e8b | a27ea8f |
-| Focused native Clear Active shortcut | 76dd863 | cea3fa6 |
+| Focused native Clear Active, Mod+; | 76dd863 | cea3fa6 |
+| Bash compatibility evidence, no production change | 4a1e8d3 | ab5f336 |
+| Inactive native pane capture | e157cfb | 5acaa79 |
+| Capture acceptance and GPU preference evidence | 4bb5a19 | 4bb5a19 |
+| Exact-row retention core and producer | 304bd73, fc853bc | 248fdcc |
+| Cursor-row-preserving host clear core | 690ae3d, 12ca866 | 95fa5ed |
+| Combined archive, safe/sys wrappers and Rust consumer | 1c840f0 | c2baf5e |
+| Live history preference and Cmd+K frontend | fbc7973 | 8634b18 |
 
-All checkpoints use Sendery. Independent appended tests conflicted during
-integration; both sets were retained. Production changes merged additively.
-No Actions, pushes, pull requests, merge commits, publication or protected-Mac
-project operations occurred.
+No Actions, push, pull request, publication or protected-original-Mac project
+operation was performed. Native work and source operations stayed on M2.
+This is a validated source checkpoint, not a new complete runtime acceptance.
 
-## Behavior covered by the latest blocks
+## Current block checks
 
-The contrast block follows the existing background setting: ratio 4.5 for a
-configured image and 1 otherwise, with bounded shared foreground resolution
-for GPU and software rendering. Faint/inverse and decorative exclusions follow
-the legacy behavior. It does not alter SurfaceLayer composition.
+The final assembled qa code passed these lightweight checks on M2:
 
-The cursor block applies the current preference before the first frame, on
-live changes and after respawn. Later VT modes processed after that preference
-remain authoritative. Setter acknowledgement confirms admission, not actor
-application. A native dirty-clean correction sends changed header metadata
-without rereading rows, preserving cursor-only mode updates.
-
-Task handoff binds all deferred reads and writes to the original owner, tab,
-leaf, privacy, space, cwd and seed. Readiness failure writes nothing. An
-uncertain attempted delivery cannot automatically submit the prompt again.
-A queued recovery checks the seed again when its timer actually fires.
-Visual readiness remains a bounded heuristic, not an agent acknowledgement.
-
-See the individual native appearance, cursor preference and task handoff
-reports for scope, review findings and focused checks.
-
-## Integrated checks
-
-The first integrated a27ea8f source passed these checks on M2:
-
-- pnpm exec vitest run src/modules/terminal/gl src/modules/terminal/lib/useTerminalFileDrop.test.ts src/modules/terminal/lib/quoteShellPath.test.ts src/modules/terminal/lib/sessionSubmission.test.ts src/modules/terminal/lib/sessionSubmissionFacade.test.ts src/modules/agents/lib/restore.test.ts src/modules/agents/lib/useAgentSessionRestore.test.ts src/modules/tasks/lib: 691 passed, one existing skip, 55 files.
+- pnpm exec vitest run src/modules/terminal/gl/engineSession.test.ts src/modules/terminal/gl/nativeLeafSession.test.ts src/modules/terminal/gl/nativeState.test.ts src/modules/terminal/lib/sessionSubmissionFacade.test.ts: 173 passed, four files.
 - pnpm check-types: passed.
-- pnpm lint: passed with unchanged 119 warnings and two infos.
-- CARGO_TARGET_DIR=/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target VITE_TERAX_TERMINAL_ENGINE=ghostty .terax/pi-development/m2/with-ghostty pnpm build:sandbox --debug --bundles app --no-sign --features ghostty-engine: passed.
-- git diff --check: passed.
+- git diff --check for the final source block: passed.
 
-The cursor source block separately passed 203 native tests with one existing
-ignored test, 62 plain tests and strict Clippy using the pinned prebuilt. The
-subsequent contrast and task blocks changed no Rust source. These are focused
-block checks and an integrated build, not a new whole-repository test claim.
+The individual native-consumer block passed 39 Node tests, two real actor
+tests, three state tests, one feature-disabled range test, create/feed/render
+smoke and strict library Clippy. Astra reviewed backend, safe/sys wrappers,
+activation and receipts without a remaining source blocker.
 
-Astra reviewed each completed source block and directed concrete corrections.
-The root verified the final seed guard for the already-scheduled retry.
-Native builds sharing the explicit target directory were serialized; agents
-did not compete for Cargo or the live UI.
+The frontend block passed its focused lint checks with baseline warnings.
+Astra found a rejected-admission deadlock in the row-setting queue; root
+reviewed the directed correction and two failing-then-passing regressions.
+A rejected command releases only its own attempt, never fabricates application,
+never retries on unrelated state publication, and permits a later explicit
+preference change.
 
-## Clear Active and Bash follow-up
+These are block checks, not a claim that the whole repository was retested.
+The previous a27ea8f integration passed 691 tests plus one existing skip,
+types, unchanged lint baseline (119 warnings and two infos), and sandbox build.
+The later 5acaa79 capture integration passed 423 tests plus one existing skip
+across 39 files, types, the same lint baseline, and sandbox build. The final
+combined qa code has not yet been built or exercised graphically.
 
-The cea3fa6 checkpoint adds native ownership and actual DOM-focus guards to
-terminal.clearActive (Mod+;), preserving its formfeed payload. The guards
-remain valid through the final owned PTY write. Editor, hidden pane, replaced
-owner and blocks-prompt input do not receive that shortcut. Cmd+K host
-scrollback clearing is a separate existing behavior and remains pending.
+## Native core and official SDK resolution
 
-On the integrated cea3fa6 source, the five affected input/session/shortcut
-test files pass 145 cases and pnpm check-types passes. The sandbox build also
-passes with the same explicit target and verified prebuilt command above.
-Astra and root reviewed the source; actual shortcut interaction remains open.
-These focused checks do not imply a rerun of the earlier 691-test set.
+The earlier SDK build-runner failure was resolved using verified official Apple
+CLT16.2 payloads and the real compatible SDK15.2 in an isolated Developer
+directory on M2. Package signatures, catalog compressed-XAR-TOC checksums,
+payload provenance and archive hashes were checked. No installer script, SDK
+shim, xcrun replacement, global xcode-select change or source-pin substitution
+was used. The protected original Mac was not involved.
 
-The Bash evidence block is integrated as ab5f336. Six cases using real Bash 3.2
-and 5.3 pass on the integrated worktree. They protect command execution, status,
-DEBUG/PS0 hooks and shell marker origin without changing production. Complete
-command metadata was already missing from legacy Bash; it is an improvement
-opportunity rather than a regression introduced by native migration. See the
-[native Bash report](2026-11-15-terminal-native-bash-metadata.md).
+The combined source variant pins Ghostty
+a887df42c56f6de86c0fe6da9c4eeca37931e083 and wrapper0.2.2. Its patch SHA256 is
+46735899626426a334b9c96a5faaed58da3391cd8103c24879fa2e95ff30ad4a.
+It exports exact physical-row retention and host clear preserving the complete
+active cursor row, pen, modes, pending wrap and inactive screen isolation.
 
-## Real runtime status
+The explicit producer completed 93/93 focused tests with zero skips and
+4925/4959 full tests, with 34 documented upstream skips, then ReleaseFast.
+The archive SHA256 is
+c390cf1908007dc0ab9f1c6914384532c8482cbd6fbe5aea2752e610425e09ae
+(2827833 bytes). Both required exports and arm64 architecture were verified;
+all eleven archive objects declare macOS11.0, matching the intended arm64
+deployment minimum. Actual execution on macOS11 is not claimed.
 
-The successful bundle was frozen at
-.terax/qa-candidates/cea3fa6/Pi-Terax Sandbox.app. Discovery PID93366,
-app.buildInfo and the mapped executable confirm that exact sandbox. It has
-the same public clean 11-tab set, active tab 35 and two idle zsh children93803
-and93805. It was launched without the temporary ZDOTDIR fixture override.
+The checksum-pinned local archive lives in the native-core-consumer ignored
+producer output. The explicit native-core-v1 consumer verifies archive,
+extension manifest, headers and capabilities and uses matching vendored safe
+and sys wrappers. It never falls back to Zig source. The original canonical
+published pins remain unchanged. Matching Intel/Linux/Windows variant archives,
+publication and native runtime acceptance on those platforms remain open.
 
-The previous ef3af8b QA and a27ea8f normal candidates were retired through
-their strict own-instance helpers. No user profile was modified. No GPU preference has been changed.
+See the native-core-consumer, native-history and native-host-clear reports.
+The root independently checked the final archive hash and verification summary.
+Native producer and Cargo use were serialized; the shared target directory is
+/Users/andres.rojo/Workspaces/terax-ai/src-tauri/target.
 
-The M2 remains on-console and Accessibility is trusted, but
-CGSSessionScreenIsLocked=true. The existing unlock question remains pending.
-Do not relax AX window matching to operate a locked desktop.
+## History settings and clear semantics
 
-GPU/software switching with preserved shell identity, physical drops,
-restoration, live appearance/cursor changes and actual task delivery still
-need graphical acceptance. Source checks, a successful build and authenticated
-startup are not reported as acceptance of those interactions.
+Ordinary native sessions now use the existing row preference at startup, live,
+while hidden and after respawn, with integer bounds200..50000 and default2000.
+The actor coalesces row targets and publishes applied host mutation receipts.
+Admission acknowledgements are not treated as application. The frontend
+retains one in-flight target and the latest desired value and rejects stale
+history projections, links, searches, reads and captures across mutations.
+Retained core selection is reread after clipping rather than restored from
+obsolete cached text.
 
-## Remaining parity and parallel lanes
+Cmd+K uses a host clear with actual focused input and owner guards and no PTY
+write. A real core no-op stays a no-op. Mod+; retains its independent formfeed
+behavior. Manual private input remains allowed; private read/capture exclusions
+remain enforced. Physical shortcut, preference and retained-selection scenarios
+for the newly assembled code belong to the later general sweep.
 
-The active source audit found Cmd+K host clearing still routed through
-legacy sessions, a fixed byte budget instead of the configured history-row
-limit, and rejection of inactive native pane capture. Existing native selection actions, PTY-to-leaf mapping and AI
-terminal text adapters are present; they need scenario acceptance rather than
-another duplicate implementation.
+## Last exact running sandbox and graphical evidence
 
-The native-history worktree has a source-reviewed exact-row extension and
-separate explicit producer recipe. Seven Node policy tests and independent
-verification of seven upstream blobs, patch application and before/after
-hashes pass. Eleven native tests are written but zero have executed. The
-producer fails while linking Zig 0.15.2's own build runner with the real SDK 27,
-before compiling project tests. An untouched upstream checkout reproduces
-the same failure with SDKROOT pointing at that SDK. Apple Clang links a
-minimal arm64/libc probe successfully. No new native artifact exists.
+The currently frozen running app remains the earlier 5acaa79 normal-environment
+sandbox, PID98257, verified through discovery, app.buildInfo and mapped
+executable. It does not contain the new combined archive/frontend. No temporary
+ZDOTDIR override or user profile edit is active.
 
-SDK 26.5 is also installed with Apple receipt/BOM evidence but lacks an explicit
-arm64 target in its libSystem stub. SDK 15.2 advertises arm64, though its local
-installation origin remains unaccredited. Compatible official SDK acquisition
-or provenance is being investigated without a shim, SDK substitute or silent
-compiler upgrade. The native lease is free after the failed producer and
-successful Clear app build. Normal app builds continue to use the unchanged
-verified prebuilt. No consumer pin or Cargo dependency changed.
+M2 was observed unlocked and on-console with Accessibility trusted and the
+exact own app foreground. Normal public active35 and inactive9 pane captures
+produced 1964x1564 PNGs, visually inspected for readable text, colors, cursor
+and divider. Active tab35, all twelve tabs and idle shell PIDs72609/98422/98423
+were unchanged. The unrelated clean editor38 was preserved and not read.
 
-Explicit producer maintenance on M2 remains distinct from a consumer source
-fallback and retains patch provenance, licenses and exact pins.
+The real Settings Use WebGL renderer checkbox completed on/off/on, restoring
+its original enabled value, with the two original shell identities and tab/pane
+counts unchanged. This proves actual preference control and process retention;
+software pixels/input echo and context-loss recovery remain unaccepted.
+Earlier capture deadlines occurred while locked, but that condition is not
+asserted as the sole cause.
 
-Inactive capture is being implemented in the independent native-inactive-capture
-worktree. It needs a one-shot full frame rendered offscreen with the
-existing CanvasRenderer, owner/privacy checks and coherent block projection.
-Removing its rejection would allow blank or stale captures. It must preserve
-the main renderer, viewport, terminal and PTY.
+The running app must not be blindly closed or replaced: editor38 and the
+current three-shell/tab state differ from older strict close helpers. Preserve
+that unrelated state during the later exact-candidate handoff.
 
-OSC99 and OSC9;4 are requested new capabilities from Phase 4, not lost legacy
-features: the legacy handlers and installed xterm do not implement them.
-The shared agent detector already preserves generic armed-agent OSC9
-attention. Track new capabilities separately from existing-parity defects;
-their original contract item is not claimed complete.
+## Next implementation and validation cadence
 
-The active objective remains a normal runnable Terax with the new terminal
-and the same capabilities or better. Default rollout, scenario acceptance and
-applicable real-workload validation remain open. No further FPS laboratory
-work is planned; 60 FPS remains an optional later optimization.
+Follow the user's [completion-pass instructions](2026-11-15-terminal-completion-pass.md):
+one Astra agent with high reasoning implements all remaining functionality
+from this qa base in one isolated worktree. Use lightweight logical checks and
+focused invariants during that pass, without broad repeated floors or more
+performance labs. After implementation, run one general sweep against the
+complete candidate, then correct failures through atomic worktrees and return
+to atomic validation.
+
+Audit actual source against the full parity inventory. Historical paragraphs
+record earlier gaps and do not mean working native features should be rebuilt.
+Input/TUI/mouse, settings, graphics, notifications, app consumers, agents/tasks/
+restore, captures, privacy/failure, platform compatibility and rollout all
+remain within the objective. Missing scenario acceptance must be recorded
+separately from missing implementation.
+
+The active goal remains a usable normal Terax with the new terminal and the
+same capabilities or better. Default rollout, applicable real-workload and
+platform acceptance remain open. 60 FPS is optional and deferred.
+

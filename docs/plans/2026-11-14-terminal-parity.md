@@ -181,3 +181,15 @@ The remaining concrete existing-parity gaps include Clear actions, configured
 history rows, Bash command completeness and inactive native-pane capture.
 OSC99/progress9;4 belong to the original requested-new-capabilities Phase4;
 they are not regressions from the old terminal and are not claimed delivered.
+
+
+## Unified qa completion-pass update (2026-11-15)
+
+The latest code checkpoint is 8634b185370521e1c1b156110751632ee88540dc in
+local qa. See the parallel integration report for the integrated exact-row
+history, Cmd+K host clear, verified combined native archive and active/inactive
+normal-pane capture evidence. Earlier descriptions above are historical, not
+a request to duplicate native features already present in current source.
+The user's completion-pass document changes the cadence to one Astra high
+implementation pass with light checks, followed by the general sweep and then
+atomic worktree fixes. No complete parity or default rollout is claimed yet.
