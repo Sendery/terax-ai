@@ -9,6 +9,9 @@ export type NativeState = Readonly<{
   cwd: string | null;
   shellReady: boolean;
   commandRunning: boolean;
+  blocksEnabled: boolean;
+  blocksMetadataVersion: number;
+  promptVersion: number;
 }>;
 export function decodeNativeState(value: unknown): NativeState {
   if (!value || typeof value !== "object")
@@ -21,11 +24,14 @@ export function decodeNativeState(value: unknown): NativeState {
     "focusTracking",
     "shellReady",
     "commandRunning",
+    "blocksEnabled",
   ])
     if (typeof data[field] !== "boolean")
       throw new Error("invalid native terminal state");
   for (const [field, max] of [
     ["version", Number.MAX_SAFE_INTEGER],
+    ["blocksMetadataVersion", Number.MAX_SAFE_INTEGER],
+    ["promptVersion", Number.MAX_SAFE_INTEGER],
     ["modifyOtherKeys", 0xffff_ffff],
     ["kittyFlags", 31],
   ] as const)
@@ -49,6 +55,9 @@ export function decodeNativeState(value: unknown): NativeState {
     cwd: cwd as string | null,
     shellReady: data.shellReady as boolean,
     commandRunning: data.commandRunning as boolean,
+    blocksEnabled: data.blocksEnabled as boolean,
+    blocksMetadataVersion: data.blocksMetadataVersion as number,
+    promptVersion: data.promptVersion as number,
     version: data.version as number,
     alternateScreen: data.alternateScreen as boolean,
     mouseTracking: data.mouseTracking as boolean,

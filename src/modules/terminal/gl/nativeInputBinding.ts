@@ -23,6 +23,8 @@ type Appearance = {
 };
 type Options = Appearance & {
   isActive: () => boolean;
+  allowInput?: () => boolean;
+  focusPrompt?: () => void;
   onError: (error: unknown) => void;
   onSelection?: (text: string | null) => void;
 };
@@ -31,6 +33,7 @@ export type NativeInputBinding = {
   dispose: () => void;
   updateAppearance: (appearance: Appearance) => void;
   updateCursor: () => void;
+  updateInputPolicy: () => void;
   wordAt: (clientX: number, clientY: number) => Promise<string | null>;
 };
 
@@ -66,6 +69,7 @@ export function bindNativeInput(
   let dragFrame = 0;
   let selectionBusy = 0;
 
+  const canInput = () => options.allowInput?.() ?? true;
   const report = (error: unknown) => {
     if (disposed) return;
     try {
@@ -102,7 +106,8 @@ export function bindNativeInput(
   };
   updateAppearance(options);
   const reportFocus = (focused: boolean) => {
-    focused = focused && options.isActive() && document.hasFocus();
+    focused =
+      focused && canInput() && options.isActive() && document.hasFocus();
     renderer.setPaneFocused(session.pane, focused);
     if (focused === focusReported || disposed) return;
     focusReported = focused;
@@ -110,8 +115,27 @@ export function bindNativeInput(
   };
   const focus = () => {
     if (disposed) return;
+    textarea.disabled = !canInput();
+    if (textarea.disabled) {
+      reportFocus(false);
+      options.focusPrompt?.();
+      return;
+    }
     textarea.focus({ preventScroll: true });
     reportFocus(true);
+  };
+  const updateInputPolicy = () => {
+    if (disposed) return;
+    textarea.disabled = !canInput();
+    if (textarea.disabled) {
+      pressed.clear();
+      composition.end("");
+      textarea.value = "";
+      preedit.textContent = "";
+      preedit.style.display = "none";
+    }
+    if (options.isActive()) focus();
+    else reportFocus(false);
   };
   const select = (command: NativeSelectionCommand) => {
     selectionBusy++;
@@ -131,7 +155,7 @@ export function bindNativeInput(
     if (session.getSelection() !== null) watch(select({ kind: "clear" }));
   };
   const committed = (text: string) => {
-    if (!text) return;
+    if (!text || !canInput()) return;
     clearForInput();
     watch(session.sendKey({ code: "Unidentified", text }));
   };
@@ -158,12 +182,16 @@ export function bindNativeInput(
         !event.metaKey &&
         event.code === "KeyV";
   const paste = async (text: string) => {
-    if (disposed || !text) return;
+    if (disposed || !text || !canInput()) return;
     clearForInput();
     await session.paste(text);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return;
+    if (!canInput()) {
+      event.preventDefault();
+      return;
+    }
     const decision = composition.onKey(event);
     if (composition.active || event.isComposing || event.keyCode === 229)
       return;
@@ -238,6 +266,10 @@ export function bindNativeInput(
     if (composition.onKey(event).kind === "swallow") event.preventDefault();
   };
   const onInput = (event: Event) => {
+    if (!canInput()) {
+      textarea.value = "";
+      return;
+    }
     const input = event as InputEvent;
     const text = composition.takeInput(input, textarea.value);
     if (composition.active || input.isComposing) return;
@@ -245,10 +277,12 @@ export function bindNativeInput(
     if (text) committed(text);
   };
   const onCompositionStart = () => {
+    if (!canInput()) return;
     composition.start();
     updateCursor();
   };
   const onCompositionUpdate = (event: CompositionEvent) => {
+    if (!canInput()) return;
     preedit.textContent = event.data;
     preedit.style.display = event.data ? "block" : "none";
     updateCursor();
@@ -383,8 +417,10 @@ export function bindNativeInput(
   host.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("blur", onBlur);
   window.addEventListener("focus", onWindowFocus);
+  updateInputPolicy();
   return {
     focus,
+    updateInputPolicy,
     updateAppearance,
     updateCursor,
     wordAt: (clientX, clientY) => {

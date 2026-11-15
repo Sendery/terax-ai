@@ -87,3 +87,101 @@ it("keeps the terminal textarea focused after primary pointer default processing
   await Promise.resolve();
   binding.dispose();
 });
+
+it("routes prompt focus to the editor and blocks late direct input until a program owns the PTY", async () => {
+  let active: unknown = null;
+  let allowed = false;
+  const events = new Map<string, (event: unknown) => void>();
+  const node = () => ({
+    value: "",
+    disabled: false,
+    style: {} as Record<string, string>,
+    setAttribute: vi.fn(),
+    remove: vi.fn(),
+    removeEventListener: vi.fn(),
+    addEventListener: (name: string, cb: (event: unknown) => void) =>
+      events.set(name, cb),
+    focus() {
+      active = this;
+    },
+  });
+  const textarea = node();
+  let count = 0;
+  vi.stubGlobal("document", {
+    hasFocus: () => true,
+    get activeElement() {
+      return active;
+    },
+    createElement: () => (count++ === 0 ? textarea : node()),
+  });
+  vi.stubGlobal("window", {
+    devicePixelRatio: 1,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
+  const session = {
+    pane: {},
+    cursor: null,
+    grid: { cols: 10, rows: 2 },
+    setInputFocused: vi.fn(async () => {}),
+    sendKey: vi.fn(async () => {}),
+    scroll: vi.fn(),
+    getSelection: () => null,
+  };
+  const editor = {};
+  const focusPrompt = vi.fn(() => {
+    active = editor;
+  });
+  const binding = bindNativeInput(
+    session as unknown as EngineSession,
+    {
+      cellSize: { width: 8, height: 16 },
+      setPaneFocused: vi.fn(),
+    } as unknown as GridRenderer,
+    {
+      append: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement,
+    {
+      font: { family: "monospace", size: 14, weight: "400", letterSpacing: 0 },
+      foreground: "#fff",
+      background: "#000",
+      isActive: () => true,
+      allowInput: () => allowed,
+      focusPrompt,
+      onError: vi.fn(),
+    },
+  );
+  binding.focus();
+  expect(active).toBe(editor);
+  expect(textarea.disabled).toBe(true);
+  textarea.value = "late input";
+  const inputEvent = events.get("input");
+  if (!inputEvent) throw new Error("Missing input listener");
+  inputEvent({
+    data: "late input",
+    inputType: "insertText",
+    isComposing: false,
+  });
+  expect(session.sendKey).not.toHaveBeenCalled();
+  allowed = true;
+  binding.updateInputPolicy();
+  expect(textarea.disabled).toBe(false);
+  expect(active).toBe(textarea);
+  textarea.value = "program input";
+  inputEvent({
+    data: "program input",
+    inputType: "insertText",
+    isComposing: false,
+  });
+  expect(session.sendKey).toHaveBeenCalledExactlyOnceWith({
+    code: "Unidentified",
+    text: "program input",
+  });
+  allowed = false;
+  binding.updateInputPolicy();
+  expect(active).toBe(editor);
+  expect(textarea.disabled).toBe(true);
+  binding.dispose();
+});

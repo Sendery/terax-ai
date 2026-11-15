@@ -21,6 +21,8 @@ const ipc = vi.hoisted(() => ({
   selection: null as Promise<unknown> | null,
   search: null as Promise<unknown> | null,
   link: null as Promise<unknown> | null,
+  blocks: null as Promise<unknown> | null,
+  blockOutput: null as Promise<unknown> | null,
   closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
@@ -43,6 +45,10 @@ vi.mock("@tauri-apps/api/core", () => {
       }
       if (command === "gterm_resize" && ipc.resize) return ipc.resize;
       if (command === "pty_close" && ipc.closing) return ipc.closing;
+      if (command === "gterm_blocks")
+        return ipc.blocks ?? Promise.resolve(null);
+      if (command === "gterm_read_block")
+        return ipc.blockOutput ?? Promise.resolve(null);
       if (command === "gterm_link_context")
         return ipc.link ?? Promise.resolve(null);
       if (command === "gterm_search")
@@ -146,6 +152,8 @@ beforeEach(() => {
   ipc.selection = null;
   ipc.search = null;
   ipc.link = null;
+  ipc.blocks = null;
+  ipc.blockOutput = null;
   ipc.closing = null;
 });
 
@@ -977,6 +985,9 @@ it("accepts versioned mode events before and after open while rejecting stale st
     cwd: null,
     shellReady: false,
     commandRunning: false,
+    blocksEnabled: false,
+    blocksMetadataVersion: 0,
+    promptVersion: 0,
   };
   args.onState.onmessage(state);
   ipc.open!.resolve(9);
@@ -1169,4 +1180,107 @@ it("queries links in the drawn sequence and rejects a late result after close", 
   await session.close();
   finish({ ...reply, seq: 2 });
   expect((await settled)[0].status).toBe("rejected");
+});
+
+it("passes the explicit native blocks option to the real open boundary", async () => {
+  const opening = EngineSession.open(
+    new FakeRenderer() as unknown as GridRenderer,
+    {
+      cols: 4,
+      rows: 2,
+      blocks: true,
+    },
+  );
+  const args = commands("gterm_open")[0].args as Record<string, unknown>;
+  const pendingOpen = ipc.open;
+  if (!pendingOpen) throw new Error("Missing native open fixture");
+  pendingOpen.resolve(9);
+  const session = await opening;
+  expect(args.blocks).toBe(true);
+  await session.close();
+});
+
+const blockSnapshot = () => ({
+  seq: 1,
+  metadataVersion: 2,
+  hasAny: true,
+  alternateScreen: false,
+  viewportOffset: 0,
+  viewportRows: 2,
+  blocks: [
+    {
+      id: "b1",
+      command: "printf one",
+      cwd: "/workspace",
+      exitCode: 0,
+      running: false,
+      startLine: 0,
+      endLine: 0,
+      startedAt: 1,
+      finishedAt: 2,
+    },
+  ],
+});
+it("queries blocks only for the presented frame and rejects stale or replaced replies", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  expect(await session.blocks(1)).toBeNull();
+  expect(commands("gterm_blocks")).toHaveLength(0);
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  ipc.blocks = Promise.resolve(blockSnapshot());
+  expect(await session.blocks(1)).toEqual(blockSnapshot());
+  let resolve!: (value: unknown) => void;
+  ipc.blocks = new Promise((r) => {
+    resolve = r;
+  });
+  const pending = session.blocks(1);
+  channelOf(0).onmessage(frameBuffer(2));
+  renderer.drawFrame();
+  resolve(blockSnapshot());
+  expect(await pending).toBeNull();
+  await session.close();
+});
+it("validates block IDs before IPC and discards delayed output after close", async () => {
+  const session = await openSession(new FakeRenderer());
+  await expect(session.readBlock("b0")).rejects.toThrow("invalid");
+  expect(commands("gterm_read_block")).toHaveLength(0);
+  let resolve!: (value: unknown) => void;
+  ipc.blockOutput = new Promise((r) => {
+    resolve = r;
+  });
+  const pending = session.readBlock("b1");
+  const rejected = expect(pending).rejects.toThrow("unavailable");
+  await session.close();
+  resolve({
+    command: "printf one",
+    cwd: "/workspace",
+    exitCode: 0,
+    output: "one",
+  });
+  await rejected;
+});
+it("shares bounded client admission between presented metadata and block reads", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  channelOf(0).onmessage(frameBuffer(1));
+  renderer.drawFrame();
+  let metadata!: (value: unknown) => void;
+  let output!: (value: unknown) => void;
+  ipc.blocks = new Promise((r) => {
+    metadata = r;
+  });
+  ipc.blockOutput = new Promise((r) => {
+    output = r;
+  });
+  const pending = [
+    ...Array.from({ length: 16 }, () => session.blocks(1)),
+    ...Array.from({ length: 16 }, () => session.readBlock("b1")),
+  ];
+  await expect(session.readBlock("b1")).rejects.toThrow("pending");
+  await expect(session.blocks(1)).rejects.toThrow("pending");
+  metadata(blockSnapshot());
+  output(null);
+  await Promise.all(pending);
+  await session.close();
 });

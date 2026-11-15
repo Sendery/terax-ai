@@ -706,3 +706,50 @@ content. Cell overwrite/erase damage, full submitted command capture and the
 existing blocks UI/drafts/actions remain prerequisites for ordinary native
 blocks rollout. See the [native block-core report](../plans/2026-11-15-terminal-native-block-core.md)
 for real-PTY evidence, gates and the remaining parity scope.
+
+
+### Native block input ownership and frame projection
+
+NativeLeafSession allocates NativeBlockInput only for an explicit blocks owner.
+The chosen mode survives view detach/remount; drafts remain in memory per leaf
+through process respawn, matching existing draft persistence scope. Initial
+readiness and the submission-to-marker gap disable direct grid typing. A real
+running command or alternate-screen program can own direct input. Input policy
+changes notify views even when both phases have the public running mode.
+Prompt focus goes to the shared ShellInput editor; leaf activation happens in
+pointer capture before a child can cancel default focus.
+
+Each authenticated OSC 133 B increments promptVersion in shell state. A repeated
+prompt is observable even when no command block starts, such as after a shell
+comment. The submission gap ends on newer authenticated block metadata or a
+new prompt revision. Tokens and command text remain outside public snapshots.
+
+Submission acceptance revalidates process identity, owner, generation and
+lifecycle after awaiting native input. Draft settlement belongs to that owner
+and draft revision, independently of the currently mounted editor. Every edit
+updates its owner immediately; cleanup does not restore a stale draft. The
+shared editor preserves rejected submissions, prevents duplicate pending Enter,
+and drops late current-view updates after retarget or destruction.
+
+gterm_blocks optionally accepts a presented frame sequence. The actor retains
+up to three immutable projections within a 16 MiB snapshot budget plus bounded
+container overhead; identical snapshots share storage. Oversized projections
+are unavailable rather than retained without bound. Metadata-only changes
+force a frame. Unavailable sequences fail explicitly, with no current-grid
+fallback. Terminal output bodies are not cached by this presentation layer.
+Current headless queries without seq retain their existing behavior.
+
+EngineSession validates response IDs, exact sequence, viewport dimensions,
+ranges and text budgets, shares 32 client admissions across block metadata and
+output reads, and rejects replies after close/replacement. The native actor
+still enforces its existing shared 32-query admission. NativeBlockProjection
+coalesces to one in-flight query and the latest pending frame, drops old or
+disposed replies and recomputes pixel layout for changed cell metrics.
+Metadata revisions do not substitute for frame/geometry identity.
+
+This foundation does not activate ordinary native blocks. The existing shared
+BlockOverlay actions/search/navigation, full submitted command capture,
+completed-cell overwrite/erase integrity and real native-block UI acceptance
+remain required. A projection model must be disposed when its process changes;
+seq values alone do not distinguish process generations. See the
+[input/projection report](../plans/2026-11-15-terminal-native-block-input-projection.md).

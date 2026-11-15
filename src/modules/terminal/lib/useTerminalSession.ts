@@ -1,6 +1,7 @@
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   getNativeLeaf,
+  subscribeNativeLeaf,
   nativeLeafForPty,
   takeNativeLeaf,
 } from "@/modules/terminal/gl/nativeLeafRegistry";
@@ -272,27 +273,65 @@ export function leafGridSelection(leafId: number): string | null {
 }
 
 export function getLeafBlockMode(leafId: number): BlockMode {
-  return sessions.get(leafId)?.blockMode ?? "prompt";
+  return (
+    getNativeLeaf(leafId)?.blockInput?.mode ??
+    sessions.get(leafId)?.blockMode ??
+    "prompt"
+  );
 }
 
 export function subscribeLeafBlockMode(
   leafId: number,
   cb: () => void,
 ): () => void {
-  const s = sessions.get(leafId);
-  if (!s) return () => {};
-  s.blockListeners.add(cb);
+  let detach: () => void = () => {};
+  const bind = () => {
+    detach();
+    const native = getNativeLeaf(leafId)?.blockInput;
+    const s = sessions.get(leafId);
+    if (native) detach = native.subscribe(cb);
+    else if (s) {
+      s.blockListeners.add(cb);
+      detach = () => {
+        s.blockListeners.delete(cb);
+      };
+    } else detach = () => {};
+  };
+  bind();
+  const unwatch = subscribeNativeLeaf(leafId, () => {
+    bind();
+    cb();
+  });
   return () => {
-    s.blockListeners.delete(cb);
+    unwatch();
+    detach();
   };
 }
 
 export function setLeafInputFocus(
   leafId: number,
   fn: (() => void) | null,
-): void {
-  const s = sessions.get(leafId);
-  if (s) s.inputFocus = fn;
+  focused: () => boolean = () => false,
+): () => void {
+  let detach: () => void = () => {};
+  const bind = () => {
+    detach();
+    const native = getNativeLeaf(leafId)?.blockInput;
+    const s = sessions.get(leafId);
+    if (native) detach = native.bindFocus(fn, focused);
+    else if (s) {
+      s.inputFocus = fn;
+      detach = () => {
+        if (s.inputFocus === fn) s.inputFocus = null;
+      };
+    } else detach = () => {};
+  };
+  bind();
+  const unwatch = subscribeNativeLeaf(leafId, bind);
+  return () => {
+    unwatch();
+    detach();
+  };
 }
 
 export function focusLeafInput(leafId: number): void {
@@ -305,15 +344,47 @@ export function focusLeafInput(leafId: number): void {
 }
 
 export function getLeafDraft(leafId: number): string {
-  return sessions.get(leafId)?.inputDraft ?? "";
+  return (
+    getNativeLeaf(leafId)?.blockInput?.draft ??
+    sessions.get(leafId)?.inputDraft ??
+    ""
+  );
+}
+
+export function subscribeLeafDraft(leafId: number, cb: () => void): () => void {
+  let detach: () => void = () => {};
+  const bind = () => {
+    detach();
+    detach =
+      getNativeLeaf(leafId)?.blockInput?.subscribeDraft(cb) ?? (() => {});
+  };
+  bind();
+  const unwatch = subscribeNativeLeaf(leafId, () => {
+    bind();
+    cb();
+  });
+  return () => {
+    unwatch();
+    detach();
+  };
 }
 
 export function setLeafDraft(leafId: number, text: string): void {
+  const native = getNativeLeaf(leafId)?.blockInput;
+  if (native) {
+    native.draft = text;
+    return;
+  }
   const s = sessions.get(leafId);
   if (s) s.inputDraft = text;
 }
 
 export function setLeafInputActivity(leafId: number, active: boolean): void {
+  const native = getNativeLeaf(leafId)?.blockInput;
+  if (native) {
+    native.active = active;
+    return;
+  }
   const s = sessions.get(leafId);
   if (!s || s.inputActive === active) return;
   s.inputActive = active;

@@ -257,7 +257,10 @@ mod runtime {
     pub type BlockSnapshotReceiver = Receiver<Result<super::blocks::BlockSnapshot, String>>;
     pub type BlockOutputReceiver = Receiver<Result<Option<super::blocks::BlockOutput>, String>>;
     enum BlockRequest {
-        Snapshot(SyncSender<Result<super::blocks::BlockSnapshot, String>>),
+        Snapshot {
+            seq: Option<u32>,
+            reply: SyncSender<Result<super::blocks::BlockSnapshot, String>>,
+        },
         Read {
             id: String,
             reply: SyncSender<Result<Option<super::blocks::BlockOutput>, String>>,
@@ -266,7 +269,7 @@ mod runtime {
     impl BlockRequest {
         fn reject(self, error: &str) {
             match self {
-                Self::Snapshot(reply) => {
+                Self::Snapshot { reply, .. } => {
                     let _ = reply.try_send(Err(error.into()));
                 }
                 Self::Read { reply, .. } => {
@@ -489,8 +492,15 @@ mod runtime {
         }
 
         pub fn blocks(&self) -> Result<BlockSnapshotReceiver, String> {
+            self.block_snapshot(None)
+        }
+        pub fn blocks_for_frame(&self, seq: u32) -> Result<BlockSnapshotReceiver, String> {
+            if seq == 0 { return Err("invalid terminal block frame".into()); }
+            self.block_snapshot(Some(seq))
+        }
+        fn block_snapshot(&self, seq: Option<u32>) -> Result<BlockSnapshotReceiver, String> {
             let (reply, receiver) = sync_channel(1);
-            self.queue_block(BlockRequest::Snapshot(reply))?;
+            self.queue_block(BlockRequest::Snapshot { seq, reply })?;
             Ok(receiver)
         }
         pub fn read_block(&self, id: String) -> Result<BlockOutputReceiver, String> {
@@ -816,6 +826,7 @@ mod runtime {
         keyboard_modes: super::keyboard_modes::KeyboardModes,
         shell: super::shell::ShellIntegration,
         blocks: Option<super::blocks::BlockStore>,
+        block_frames: Option<super::blocks::BlockFrames>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -996,14 +1007,18 @@ mod runtime {
             }
             for request in c.block_requests {
                 match request {
-                    BlockRequest::Snapshot(reply) => {
+                    BlockRequest::Snapshot { seq, reply } => {
                         let result = if self.health.failure().is_some() {
                             Err("terminal engine is unavailable".into())
                         } else {
-                            self.blocks
-                                .as_ref()
+                            self.blocks.as_ref()
                                 .ok_or_else(|| "native blocks are not enabled".into())
-                                .and_then(|blocks| blocks.snapshot(&self.term))
+                                .and_then(|blocks| match seq {
+                                    None => blocks.snapshot(&self.term),
+                                    Some(seq) => self.block_frames.as_ref()
+                                        .and_then(|frames| frames.query(seq))
+                                        .ok_or_else(|| "terminal block frame is no longer available".into()),
+                                })
                         };
                         let _ = reply.try_send(result);
                     }
@@ -1044,7 +1059,10 @@ mod runtime {
                 self.search.clear();
                 Vec::new()
             });
-            let full = self.pump.full_pending() || search_was_active;
+            let blocks_changed = self.blocks.as_ref().zip(self.block_frames.as_ref())
+                .is_some_and(|(blocks, frames)|
+                    frames.metadata_version() != Some(blocks.metadata_version()));
+            let full = self.pump.full_pending() || search_was_active || blocks_changed;
             let frame = if highlights.is_empty() {
                 self.snapshot.build(&self.term, seq, full)
             } else {
@@ -1065,6 +1083,15 @@ mod runtime {
                     return;
                 }
             };
+            let block_projection = match self.blocks.as_ref().map(|blocks| blocks.snapshot(&self.term)).transpose() {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    log::warn!("terminal block projection failed: {error}");
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                    self.pump.nothing_changed();
+                    return;
+                }
+            };
             let encode = started.elapsed();
             let len = built.len() as u64;
             let sending = Instant::now();
@@ -1077,6 +1104,9 @@ mod runtime {
                 self.sink_open = false;
                 self.health.fail(EngineFailure::FrameChannelClosed);
                 return;
+            }
+            if let (Some(frames), Some(snapshot)) = (&mut self.block_frames, block_projection) {
+                frames.commit(seq, snapshot);
             }
             self.pump.sent(Instant::now());
             self.stats.frames.fetch_add(1, Ordering::Relaxed);
@@ -1196,6 +1226,7 @@ mod runtime {
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
             shell: super::shell::ShellIntegration::new(shell_token),
             blocks: blocks_enabled.then(super::blocks::BlockStore::default),
+            block_frames: blocks_enabled.then(super::blocks::BlockFrames::default),
             control,
             stats,
         };
@@ -2331,6 +2362,34 @@ mod block_actor_tests {
                 .output,
             "last"
         );
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod block_presentation_actor_tests {
+    use super::*;
+    #[test]
+    fn block_queries_are_bound_to_retained_frames_even_after_eof() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let engine = start_with_shell(30, 5, None, ShellConfig {
+            token: shell::ShellToken::for_test(), blocks: true,
+        }, Box::new(move |bytes| tx.send(bytes).is_ok()), Box::new(|_| {})).unwrap();
+        let bytes=b"\x1b]133;C;aid=1234567890abcdef1234567890abcdef;cmdline_url=one\x07one\r\n\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07";
+        assert!(engine.input.feed(bytes.to_vec()));
+        engine.input.finish().unwrap().recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+        let mut latest = None;
+        while let Ok(frame) = rx.try_recv() {
+            latest = Some(super::frame::decode::decode(&frame).seq);
+        }
+        let seq = latest.unwrap();
+        let snapshot = engine.handle.blocks_for_frame(seq).unwrap().recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+        assert_eq!(snapshot.seq, Some(seq));
+        assert_eq!(snapshot.blocks.len(), 1);
+        assert_eq!(snapshot.blocks[0].command, "one");
+        assert!(engine.handle.blocks_for_frame(0).is_err());
+        assert!(engine.handle.blocks_for_frame(seq + 100).unwrap().recv_timeout(Duration::from_secs(3)).unwrap().is_err());
         engine.input.shutdown();
         engine.thread.join().unwrap();
     }

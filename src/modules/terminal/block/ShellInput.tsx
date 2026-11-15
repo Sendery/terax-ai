@@ -3,6 +3,7 @@ import { fmtShortcut, MOD_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/modules/theme";
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   clearLeafBlockSelection,
   getLeafDraft,
@@ -10,6 +11,7 @@ import {
   setLeafDraft,
   setLeafInputActivity,
   setLeafInputFocus,
+  subscribeLeafDraft,
 } from "../lib/useTerminalSession";
 import { useTerminalFont } from "../lib/useTerminalFont";
 import {
@@ -26,7 +28,7 @@ type Props = {
   leafId: number;
   mode: BlockMode;
   focused: boolean;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string) => void | Promise<void>;
   onInterrupt: () => void;
   getCwd: () => string | null;
 };
@@ -81,8 +83,10 @@ export default function ShellInput({
       placeholderText: `Run a command  -  ↑ history  ${fmtShortcut(MOD_KEY, "U")} switch to AI`,
       commandNames: () => commandsRef.current,
       getCwd: () => cbRef.current.getCwd(),
-      onChange: (text) =>
-        setLeafInputActivity(leafIdRef.current, text.length > 0),
+      onChange: (text) => {
+        setLeafDraft(leafIdRef.current, text);
+        setLeafInputActivity(leafIdRef.current, text.length > 0);
+      },
       suggest: historySuggest,
       historyList,
       onSubmit: (text) => {
@@ -91,8 +95,12 @@ export default function ShellInput({
         if (first && !commandsRef.current.includes(first)) {
           commandsRef.current = [first, ...commandsRef.current];
         }
-        cbRef.current.onSubmit(text);
+        return cbRef.current.onSubmit(text);
       },
+      onSubmitError: (error) =>
+        toast.error("Could not run command", {
+          description: error instanceof Error ? error.message : String(error),
+        }),
       onInterrupt: () => cbRef.current.onInterrupt(),
       onEscape: () => clearLeafBlockSelection(leafIdRef.current),
     });
@@ -108,18 +116,31 @@ export default function ShellInput({
   // and swap drafts so each leaf keeps its own unsent command. New or switched
   // tabs land with the cursor already in the input.
   useEffect(() => {
-    setLeafInputFocus(leafId, () => handleRef.current?.focus());
+    const releaseFocus = setLeafInputFocus(
+      leafId,
+      () => {
+        if (focusableRef.current && leafIdRef.current === leafId)
+          handleRef.current?.focus();
+      },
+      () =>
+        leafIdRef.current === leafId &&
+        Boolean(handleRef.current?.view.hasFocus),
+    );
     handleRef.current?.setValue(getLeafDraft(leafId));
     requestAnimationFrame(() => {
       if (focusableRef.current && leafIdRef.current === leafId) {
         handleRef.current?.focus();
       }
     });
+    const releaseDraft = subscribeLeafDraft(leafId, () => {
+      const handle = handleRef.current;
+      if (!handle || leafIdRef.current !== leafId) return;
+      const draft = getLeafDraft(leafId);
+      if (handle.getValue() !== draft) handle.setValue(draft);
+    });
     return () => {
-      const value = handleRef.current?.getValue() ?? "";
-      setLeafDraft(leafId, value);
-      setLeafInputActivity(leafId, value.length > 0);
-      setLeafInputFocus(leafId, null);
+      releaseDraft();
+      releaseFocus();
     };
   }, [leafId]);
 

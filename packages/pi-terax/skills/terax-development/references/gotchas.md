@@ -701,7 +701,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** rasterizing a pane whose canvas lives outside its DOM subtree, or changing tabs during asynchronous font/image work.
 - **Failure mode:** the shared canvas covers DOM dividers, a lost provider silently falls back to a transparent proxy, or a delayed read takes a different tab's pixels. Compositing the crop after the DOM clone also covers native DOM hover/preedit overlays in the artifact, even when those overlays display correctly.
-- **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards.
+- **Prevention:** exclude the shared source from compositing, provide exact per-pane crop proxies, require valid providers and freeze their data URLs before awaits. Revalidate a requested native pane after capture preparation. Reject unsupported hidden-pane capture clearly; preserve private guards. OS gesture points can differ from capture device pixels; derive gestures from the actual window bounds and scale rather than copying bitmap coordinates.
 - **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider. Qualify overlay pixel claims until capture preserves their stacking order; successful interaction or paint mocks alone do not prove captured appearance.
 
 
@@ -709,7 +709,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** native terminals need CWD/readiness or a process is replaced while state delivery is pending.
 - **Failure mode:** accepting bare OSC 7 or trusting any printed A/D allows untrusted output to change app CWD. Treating engine open as ready loses restoration input. A late ready message can re-arm global readiness after retirement reset.
-- **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Block boundaries need the exact authenticated marker terminator within each PTY batch, not its final cursor; preserve all remaining bytes even after metadata failure, then report that failure. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
+- **Prevention:** observe ordered, bounded metadata on the actor and correlate the injected shell's prompt markers per session. A repeated authenticated prompt-end needs its own revision: comments may return a prompt without C/D block metadata. Keep token/command text out of public state and logs; the token is not isolation from a local process that reads its environment. Feed the original bytes to the core unchanged. Block boundaries need the exact authenticated marker terminator within each PTY batch, not its final cursor; preserve all remaining bytes even after metadata failure, then report that failure. Reset readiness on lifecycle transitions and invalidate generation before awaits; ignore late state after closing, exit or failure. Isolate observer errors from teardown.
 - **Verification:** fragment/cancel/oversize/opaque-string tests, multiple C/D markers in one batch, tail bytes after metadata failure, real shell script output and actor ordering, deferred open/respawn and post-exit state tests, and actual two-pane CWD plus forged-output rejection. Check native target cfg branches; M2 gates do not compile Windows. Canonicalize temporary directory fixtures before comparing physical shell PWD, per the existing macOS path lesson.
 
 
@@ -725,7 +725,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** Cmd+F when a compact search field is already mounted, or Escape immediately after typing.
 - **Failure mode:** opening an already open field does not refocus it, and clearing pendingFocus because its ref exists loses the focus request. A native text-field interaction can also consume a first Escape; assuming a tab title is prompt readiness makes the UI harness wait incorrectly.
-- **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug.
+- **Prevention:** always focus an existing input and keep pending focus until an absent one mounts. Disable correction/suggestion attributes for literal search. Prove readiness with an explicit public program acknowledgement, and bind each run to fresh markers and authenticated tab/process identity. Before retargeting after simulated typing, verify the known editor value was consumed; the input tool returning is not that acknowledgement. An empty CodeMirror AXValue may contain its known placeholder, so match that known UI state explicitly while keeping nonempty fixture matching exact. Do not attribute internal OS behavior without evidence. Confirm small highlight spans with color-only pixels before treating an image interpretation as a source bug.
 - **Verification:** pre-fix AXTextArea after Cmd+F versus post-fix AXTextField; one Escape returns AXTextArea, then a public shell program writes its acknowledgement. Split tests require distinct PIDs and the unchanged original PID. Use exact inspected captures and remove temporary diagnostics before final gates.
 
 ### Native link activation must retain presented, bounded metadata
@@ -760,7 +760,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** native pointerdown focuses the terminal's hidden textarea.
 - **Failure mode:** subsequent browser default processing focuses the non-focusable host/body, so clicks appear to work but typing is lost.
-- **Prevention:** prevent only the primary pointer default and retain native selection/pointer capture. Keep focus bubbling to the leaf owner and preserve secondary/context-menu handling.
+- **Prevention:** prevent only the primary pointer default and retain native selection/pointer capture. Activate the leaf during parent pointer capture and preserve keyboard onFocus plus secondary/context-menu handling. A prompt-disabled textarea cannot provide the focus event that previously activated an inactive leaf, and cancelling pointerdown can suppress the compatible mousedown.
 - **Verification:** simulate browser default processing after pointerdown, assert textarea focus and untouched secondary default, then click and type in the real app.
 
 
@@ -784,3 +784,25 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** the shell hides its prompt while the actor disables blocks; a WSL launch silently loses its explicit mode or inherits a stale forwarded value.
 - **Prevention:** clear inherited mode values before applying the explicit option, pass that option to both profile and actor, and remove case/flag variants of the corresponding WSLENV key while preserving unrelated entries. Forward only for an explicit WSL mode.
 - **Verification:** builder-only fixtures cover both options without process-global environment mutation, all mode/WSL combinations, mixed-case forwarding flags and empty WSLENV; exercise the actual profile/PTY path on each target OS.
+
+
+### Asynchronous command acceptance belongs to the draft owner
+
+- **Trigger:** a submit reply arrives after tab retarget, process exit/respawn or a new edit.
+- **Failure mode:** a skipped native write resolves as if accepted and clears unsent text; cleanup restores a command already accepted; an identical draft in another leaf is cleared.
+- **Prevention:** revalidate owner, process identity, generation and lifecycle after awaiting submission. Settle the owning draft by token and edit revision separately from current-view clearing. Persist edits immediately, notify owner draft changes, and do not write a stale editor value back during cleanup. Invalidate current-view completions on retarget/destruction while still settling a valid owner acceptance. Keep the draft after rejection.
+- **Verification:** deferred submit after confirmed enqueue then respawn, independent A/B identical drafts, A-to-other-to-A edits, accepted owner notifications and rejected async editor submissions. Exercise CodeMirror retarget and return through the real native blocks UI before rollout; pure component tests do not establish that combined path.
+
+### A block input mode can hide two different keyboard owners
+
+- **Trigger:** startup, the submit-to-marker gap and a foreground program all display the public running mode.
+- **Failure mode:** deriving keyboard permission from that mode alone lets the grid steal prompt input or prevents a newly running program from receiving keys.
+- **Prevention:** use authenticated native running/alternate state for direct input, gate key/text/paste commits, disable the helper textarea at the prompt and restore focus to the bound editor. Notify policy changes even if the public mode remains running. Keep selection and pointer behavior available.
+- **Verification:** readiness and comment-return revisions, same-mode gap-to-program transition, DOM binding guards for late input, editor focus, ordinary native input and real block-program interaction.
+
+### Block geometry must belong to the frame the user sees
+
+- **Trigger:** asynchronous block projections while output, scrolling, resize or process identity changes.
+- **Failure mode:** metadata revisions deduplicate changing geometry, an old projection paints over a new frame, or a reused seq attaches old blocks after respawn.
+- **Prevention:** retain bounded immutable projections keyed by frame, force presentation for metadata-only changes and reject unavailable frames without a live-grid fallback. Coalesce to one in-flight plus the latest query, validate rows/text/IDs before rendering, and dispose the projection model on process replacement. Recompute pixel geometry when cell metrics change.
+- **Verification:** old/new viewport with identical metadata revision, cache count/allocation limits, actual actor frame query after EOF, stale/closed replies, coalescing and layout-only projection tests. Check real scroll/reflow and process replacement when connecting the UI.

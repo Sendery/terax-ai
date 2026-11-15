@@ -1,3 +1,4 @@
+import { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
 import type { DecodedFrame } from "@/modules/terminal/gl/frameCodec";
 import { createNativeSearch } from "@/modules/terminal/gl/nativeSearch";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
@@ -21,6 +22,7 @@ export type NativeLeafConfig = {
   size: TerminalSize;
   colors: EngineColors;
   cwd?: string;
+  blocks?: boolean;
   onReady?: () => void;
   onResetReady?: () => void;
 };
@@ -38,6 +40,7 @@ type OpenNative = (
   renderer: GridRenderer,
   options: TerminalSize & {
     cwd?: string;
+    blocks: boolean;
     colors: EngineColors;
     observer: SessionObserver;
   },
@@ -45,6 +48,7 @@ type OpenNative = (
 
 /** A leaf owns its process independently of React's pane layout. */
 export class NativeLeafSession implements NativeLeaf {
+  readonly blockInput: NativeBlockInput | null;
   private config: NativeLeafConfig;
   private owner!: TerminalSessionController;
   private native: EngineSession | null = null;
@@ -66,6 +70,7 @@ export class NativeLeafSession implements NativeLeaf {
       EngineSession.open(renderer, options),
   ) {
     this.config = config;
+    this.blockInput = config.blocks ? new NativeBlockInput() : null;
     this.start();
   }
 
@@ -93,7 +98,9 @@ export class NativeLeafSession implements NativeLeaf {
     );
   }
   get focused(): boolean {
-    return this.view?.focused() ?? false;
+    return Boolean(
+      this.view && (this.view.focused() || this.blockInput?.focused),
+    );
   }
   get tuiReady(): boolean {
     const state = this.native?.inputState;
@@ -147,7 +154,7 @@ export class NativeLeafSession implements NativeLeaf {
     return !this.disposed && this.owner.write(text);
   }
   focus(): void {
-    this.view?.focus();
+    if (!this.blockInput?.focus()) this.view?.focus();
   }
   repaint(): void {
     this.native?.requestFull();
@@ -221,13 +228,32 @@ export class NativeLeafSession implements NativeLeaf {
     await native.paste(text);
   }
   async submit(text: string): Promise<void> {
+    if (this.blockInput && !text.trim()) return;
     const native = await this.requireNative();
-    native.scroll(2_147_483_647);
-    await native.submit(text);
+    const owner = this.owner;
+    const generation = this.generation;
+    const ticket = this.blockInput?.beginSubmit(text);
+    try {
+      native.scroll(2_147_483_647);
+      await native.submit(text);
+      if (
+        this.owner !== owner ||
+        this.generation !== generation ||
+        this.native !== native ||
+        this.exited ||
+        native.id === null
+      )
+        throw new Error("Terminal is no longer available.");
+      if (ticket) this.blockInput?.acceptSubmit(ticket);
+    } catch (error) {
+      if (ticket) this.blockInput?.rejectSubmit(ticket);
+      throw error;
+    }
   }
   dispose(): Promise<void> {
     this.resetReady();
     this.disposed = true;
+    this.blockInput?.dispose();
     this.notifySession(null);
     this.view = null;
     return this.closeCurrent();
@@ -268,6 +294,7 @@ export class NativeLeafSession implements NativeLeaf {
         const native = await this.open(this.config.renderer, {
           ...size,
           cwd: this.config.cwd,
+          blocks: this.blockInput !== null,
           colors: this.config.colors,
           observer: {
             onState: (state) => {
@@ -281,6 +308,7 @@ export class NativeLeafSession implements NativeLeaf {
                 return;
               const previous = this.state;
               this.state = state;
+              this.blockInput?.accept(state);
               if (state.cwd !== null && state.cwd !== previous?.cwd)
                 this.notifyCwd(state.cwd);
               if (state.shellReady && !previous?.shellReady) {
@@ -382,6 +410,7 @@ export class NativeLeafSession implements NativeLeaf {
     }
   }
   private resetReady(): void {
+    this.blockInput?.reset();
     try {
       this.config.onResetReady?.();
     } catch (error) {

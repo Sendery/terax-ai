@@ -25,12 +25,16 @@ function driver(id: number, closing: Promise<void> = Promise.resolve()) {
       cwd: null,
       shellReady: false,
       commandRunning: false,
+      blocksEnabled: false,
+      blocksMetadataVersion: 0,
+      promptVersion: 0,
     },
     close: vi.fn(() => closing),
     write: vi.fn(async () => {}),
     resizeAndWait: vi.fn(async () => {}),
     setColors: vi.fn(),
     requestFull: vi.fn(),
+    scroll: vi.fn(),
     attachRenderer: vi.fn(),
     getSelection: vi.fn(() => null),
     readText: vi.fn(async () => "history"),
@@ -403,3 +407,111 @@ it("rejects an in-flight result when respawn replaces its owner", async () => {
   expect(next.search).not.toHaveBeenCalled();
   await session.dispose();
 });
+
+it("keeps native block input ownership through view replacement and rejects stale process state", async () => {
+  const native = driver(9);
+  let state!: NonNullable<
+    import("@/modules/terminal/gl/engineSession").SessionObserver["onState"]
+  >;
+  const optionsSeen: unknown[] = [];
+  const settings = { ...config(), blocks: true };
+  const session = new NativeLeafSession(
+    settings,
+    async (_renderer, options) => {
+      optionsSeen.push(options);
+      state = requireFixture(options.observer.onState);
+      return native as unknown as EngineSession;
+    },
+  );
+  const detach = session.attach(view(), settings);
+  await session.opened;
+  expect(optionsSeen[0]).toMatchObject({ blocks: true });
+  expect(session.blockInput).not.toBeNull();
+  const editorFocus = vi.fn();
+  requireFixture(session.blockInput).bindFocus(editorFocus, () => true);
+  requireFixture(session.blockInput).draft = "unsent full command";
+  state({
+    ...native.inputState,
+    version: 1,
+    shellReady: true,
+    blocksEnabled: true,
+    blocksMetadataVersion: 0,
+  });
+  session.focus();
+  expect(editorFocus).toHaveBeenCalledOnce();
+  detach();
+  session.attach(view(), settings);
+  expect(requireFixture(session.blockInput).draft).toBe("unsent full command");
+  await session.submit("printf 'native block'");
+  expect(requireFixture(session.blockInput).mode).toBe("running");
+  state({
+    ...native.inputState,
+    version: 2,
+    shellReady: true,
+    blocksEnabled: true,
+    blocksMetadataVersion: 2,
+  });
+  expect(requireFixture(session.blockInput).mode).toBe("prompt");
+  await session.dispose();
+  state({
+    ...native.inputState,
+    version: 3,
+    shellReady: true,
+    blocksEnabled: true,
+    blocksMetadataVersion: 4,
+  });
+  expect(requireFixture(session.blockInput).mode).toBe("running");
+  expect(requireFixture(session.blockInput).draft).toBe("");
+});
+
+it("rejects a queued block submit that finished only after process replacement and preserves its owner draft", async () => {
+  const first = driver(9);
+  const next = driver(10);
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  first.submit.mockImplementation(() => {
+    started();
+    return pending;
+  });
+  const states: NonNullable<
+    import("@/modules/terminal/gl/engineSession").SessionObserver["onState"]
+  >[] = [];
+  let index = 0;
+  const settings = { ...config(), blocks: true };
+  const session = new NativeLeafSession(
+    settings,
+    async (_renderer, options) => {
+      states.push(requireFixture(options.observer.onState));
+      return [first, next][index++] as unknown as EngineSession;
+    },
+  );
+  await session.opened;
+  requireFixture(session.blockInput).draft = "keep me";
+  states[0]({
+    ...first.inputState,
+    version: 1,
+    shellReady: true,
+    blocksEnabled: true,
+  });
+  const submitted = session.submit("keep me");
+  const result = expect(submitted).rejects.toThrow("available");
+  await began;
+  expect(first.submit).toHaveBeenCalledOnce();
+  await session.respawn();
+  finish();
+  await result;
+  expect(requireFixture(session.blockInput).draft).toBe("keep me");
+  expect(next.submit).not.toHaveBeenCalled();
+  await session.dispose();
+});
+
+function requireFixture<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Missing test fixture");
+  return value;
+}

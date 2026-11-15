@@ -1,4 +1,6 @@
+import type { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
 export type NativeLeaf = {
+  readonly blockInput?: NativeBlockInput | null;
   readonly id: number | null;
   readonly cwd: string | null;
   readonly shellReady: boolean;
@@ -17,6 +19,32 @@ export type NativeLeaf = {
   respawn: (cwd?: string) => Promise<void>;
 };
 const leaves = new Map<number, NativeLeaf>();
+const listeners = new Map<number, Set<() => void>>();
+export function subscribeNativeLeaf(
+  leafId: number,
+  listener: () => void,
+): () => void {
+  let set = listeners.get(leafId);
+  if (!set) {
+    set = new Set();
+    listeners.set(leafId, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0 && listeners.get(leafId) === set)
+      listeners.delete(leafId);
+  };
+}
+function notify(leafId: number): void {
+  for (const listener of [...(listeners.get(leafId) ?? [])]) {
+    try {
+      listener();
+    } catch {
+      console.error("native terminal ownership observer failed");
+    }
+  }
+}
 export function getNativeLeaf(leafId: number): NativeLeaf | undefined {
   return leaves.get(leafId);
 }
@@ -27,13 +55,18 @@ export function registerNativeLeaf(
   if (leaves.has(leafId))
     throw new Error("native terminal leaf is already registered");
   leaves.set(leafId, leaf);
+  notify(leafId);
   return () => {
-    if (leaves.get(leafId) === leaf) leaves.delete(leafId);
+    if (leaves.get(leafId) === leaf) {
+      leaves.delete(leafId);
+      notify(leafId);
+    }
   };
 }
 export function takeNativeLeaf(leafId: number): NativeLeaf | undefined {
   const leaf = leaves.get(leafId);
   leaves.delete(leafId);
+  if (leaf) notify(leafId);
   return leaf;
 }
 export function nativeLeafForPty(id: number): number | null {

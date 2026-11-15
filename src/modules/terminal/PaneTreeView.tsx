@@ -49,11 +49,10 @@ export function PaneTreeView(props: Props) {
     const b = getBundle(node.id);
     return (
       <div
-        onMouseDownCapture={() => {
+        onPointerDownCapture={() => {
           if (!focused) onFocusLeaf(node.id);
         }}
-        // Catches focus from Tab, programmatic focus, or any path that
-        // skips mousedown — keeps activeLeafId in sync with DOM focus.
+        // Keep keyboard and programmatic focus in sync with the leaf owner.
         onFocus={() => {
           if (!focused) onFocusLeaf(node.id);
         }}

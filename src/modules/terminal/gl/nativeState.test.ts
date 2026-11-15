@@ -11,6 +11,9 @@ const state = {
   cwd: null,
   shellReady: false,
   commandRunning: false,
+  blocksEnabled: false,
+  blocksMetadataVersion: 0,
+  promptVersion: 0,
 };
 it("accepts only bounded protocol state and strips extra data", () => {
   expect(decodeNativeState({ ...state, ignored: "never expose" })).toEqual(
@@ -50,4 +53,26 @@ it("rejects malformed native shell metadata before application callbacks", () =>
     { commandRunning: "true" },
   ])
     expect(() => decodeNativeState({ ...valid, ...bad })).toThrow("invalid");
+});
+
+it("validates the native block mode, metadata revision and repeated prompt revision", () => {
+  const blocks = {
+    ...state,
+    blocksEnabled: true,
+    blocksMetadataVersion: 2,
+    promptVersion: 3,
+  };
+  expect(decodeNativeState(blocks)).toMatchObject({
+    blocksEnabled: true,
+    blocksMetadataVersion: 2,
+    promptVersion: 3,
+  });
+  for (const bad of [
+    { blocksEnabled: "true" },
+    { blocksMetadataVersion: -1 },
+    { blocksMetadataVersion: Number.MAX_SAFE_INTEGER + 1 },
+    { promptVersion: -1 },
+    { promptVersion: 1.5 },
+  ])
+    expect(() => decodeNativeState({ ...blocks, ...bad })).toThrow("invalid");
 });

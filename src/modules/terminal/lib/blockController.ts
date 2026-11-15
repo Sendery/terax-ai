@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getNativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
 import type { BlockMode } from "../block/lib/modeMachine";
 import {
   getLeafBlockMode,
@@ -10,7 +11,7 @@ import {
 
 export type BlockController = {
   blockMode: BlockMode;
-  submitCommand: (text: string) => void;
+  submitCommand: (text: string) => void | Promise<void>;
   interrupt: () => void;
   getCwd: () => string | null;
 };
@@ -32,7 +33,11 @@ export function useBlockController(
     if (leafId == null) return null;
     return {
       blockMode,
-      submitCommand: (text) => submitToLeaf(leafId, text),
+      submitCommand: (text) => {
+        const native = getNativeLeaf(leafId);
+        if (native) return native.submit(text);
+        submitToLeaf(leafId, text);
+      },
       interrupt: () => interruptLeaf(leafId),
       getCwd: () => leafCwd(leafId),
     };

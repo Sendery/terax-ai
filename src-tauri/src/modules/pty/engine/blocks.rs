@@ -11,7 +11,7 @@ const MAX_BLOCKS: usize = 1000;
 const MAX_METADATA_BYTES: usize = 4 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockMeta {
     pub id: String,
@@ -24,9 +24,10 @@ pub struct BlockMeta {
     pub started_at: u64,
     pub finished_at: u64,
 }
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockSnapshot {
+    pub seq: Option<u32>,
     pub metadata_version: u64,
     pub has_any: bool,
     pub alternate_screen: bool,
@@ -332,6 +333,7 @@ impl BlockStore {
             }
         }
         Ok(BlockSnapshot {
+            seq: None,
             metadata_version: self.version,
             has_any: self.has_any,
             alternate_screen: !is_primary,
@@ -759,4 +761,88 @@ mod tests {
         let text = crate::modules::pty::engine::text::read_text(&term, 4).unwrap();
         assert!(text.contains("AFTER"), "{text:?}");
     }
+}
+
+#[cfg(test)]
+mod presentation_tests {
+    use super::*;
+    fn snapshot(version: u64, offset: u64) -> BlockSnapshot {
+        BlockSnapshot {
+            seq: None, metadata_version: version, has_any: true,
+            alternate_screen: false, viewport_offset: offset, viewport_rows: 5,
+            blocks: vec![BlockMeta {
+                id: "b1".into(), command: "printf one".into(), cwd: "/workspace".into(),
+                exit_code: Some(0), running: false, start_line: 2, end_line: 3,
+                started_at: 1, finished_at: 2,
+            }],
+        }
+    }
+    #[test]
+    fn presented_blocks_remain_immutable_and_geometry_is_not_metadata_version() {
+        let mut cache = BlockFrames::default();
+        cache.commit(1, snapshot(2, 0));
+        cache.commit(2, snapshot(2, 2));
+        assert_eq!(cache.query(1).unwrap().viewport_offset, 0);
+        assert_eq!(cache.query(2).unwrap().viewport_offset, 2);
+        assert_eq!(cache.query(1).unwrap().seq, Some(1));
+        let mut external = cache.query(1).unwrap();
+        external.blocks[0].command = "mutated reply".into();
+        assert_eq!(cache.query(1).unwrap().blocks[0].command, "printf one");
+    }
+    #[test]
+    fn presented_block_cache_has_count_and_allocated_byte_limits() {
+        let mut cache = BlockFrames::default();
+        for seq in 1..=4 { cache.commit(seq, snapshot(2, 0)); }
+        assert!(cache.query(1).is_none());
+        assert!(cache.query(2).is_some());
+        assert!(cache.query(4).is_some());
+        let mut oversized = snapshot(2, 0);
+        oversized.blocks[0].command = String::with_capacity(17 * 1024 * 1024);
+        cache.commit(5, oversized);
+        assert!(cache.query(5).is_none());
+        assert!(cache.retained_bytes() <= 16 * 1024 * 1024);
+    }
+}
+
+const MAX_BLOCK_FRAMES: usize = 3;
+const MAX_FRAME_METADATA_BYTES: usize = 16 * 1024 * 1024;
+struct BlockProjection {
+    seq: u32,
+    snapshot: std::sync::Arc<BlockSnapshot>,
+    bytes: usize,
+}
+#[derive(Default)]
+pub(super) struct BlockFrames {
+    frames: VecDeque<BlockProjection>,
+    bytes: usize,
+}
+impl BlockFrames {
+    pub fn metadata_version(&self) -> Option<u64> {
+        self.frames.back().map(|frame| frame.snapshot.metadata_version)
+    }
+    pub fn commit(&mut self, seq: u32, snapshot: BlockSnapshot) {
+        let bytes = std::mem::size_of::<BlockSnapshot>()
+            + snapshot.blocks.capacity() * std::mem::size_of::<BlockMeta>()
+            + snapshot.blocks.iter().map(|block|
+                block.id.capacity() + block.command.capacity() + block.cwd.capacity()
+            ).sum::<usize>();
+        if bytes > MAX_FRAME_METADATA_BYTES { return; }
+        let snapshot = self.frames.back()
+            .filter(|frame| frame.snapshot.as_ref() == &snapshot)
+            .map(|frame| std::sync::Arc::clone(&frame.snapshot))
+            .unwrap_or_else(|| std::sync::Arc::new(snapshot));
+        self.bytes += bytes;
+        self.frames.push_back(BlockProjection { seq, snapshot, bytes });
+        while self.frames.len() > MAX_BLOCK_FRAMES || self.bytes > MAX_FRAME_METADATA_BYTES {
+            if let Some(frame) = self.frames.pop_front() { self.bytes -= frame.bytes; }
+        }
+    }
+    pub fn query(&self, seq: u32) -> Option<BlockSnapshot> {
+        let frame = self.frames.iter().find(|frame| frame.seq == seq)?;
+        let mut snapshot = frame.snapshot.as_ref().clone();
+        snapshot.seq = Some(seq);
+        Some(snapshot)
+    }
+    #[cfg(test)]
+    pub fn retained_bytes(&self) -> usize { self.bytes }
 }

@@ -10,6 +10,7 @@ pub struct ShellState {
     pub cwd: Option<String>,
     pub shell_ready: bool,
     pub command_running: bool,
+    pub prompt_version: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -249,6 +250,7 @@ impl ShellIntegration {
                             }
                         }
                         "B" => {
+                            self.state.prompt_version = self.state.prompt_version.saturating_add(1);
                             self.allow_cwd = false;
                             self.state.shell_ready = true;
                             self.state.command_running = false;
@@ -610,5 +612,24 @@ mod block_event_tests {
                 }]
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod prompt_revision_tests {
+    use super::*;
+    #[test]
+    fn repeated_authenticated_prompt_end_is_observable_without_a_command() {
+        let mut shell = ShellIntegration::new(Some("prompt-test-token".into()));
+        let bytes = b"\x1b]133;B;aid=prompt-test-token\x1b\\";
+        shell.ingest(bytes);
+        assert_eq!(shell.state().prompt_version, 1);
+        shell.ingest(b"\x1b]133;B\x1b\\");
+        shell.ingest(b"\x1b]133;B;aid=wrong\x1b\\");
+        assert_eq!(shell.state().prompt_version, 1);
+        for byte in bytes { shell.ingest(&[*byte]); }
+        assert_eq!(shell.state().prompt_version, 2);
+        assert!(shell.state().shell_ready);
+        assert!(!shell.state().command_running);
     }
 }

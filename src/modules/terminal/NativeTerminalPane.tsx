@@ -65,6 +65,7 @@ export const NativeTerminalPane = forwardRef<
     let disposed = false;
     let binding: NativeInputBinding | null = null;
     let linkBinding: NativeLinkBinding | null = null;
+    let unsubscribeInput: () => void = () => {};
     let native: EngineSession | null = null;
     let layoutFrame = 0;
     const report = (cause: unknown) => {
@@ -83,6 +84,7 @@ export const NativeTerminalPane = forwardRef<
       size: initial,
       colors: model.colors.engine,
       cwd: latest.current.initialCwd,
+      blocks: latest.current.blocks ?? false,
       onReady: () => markSessionReady(leafId),
       onResetReady: () => resetSessionReady(leafId),
     };
@@ -150,6 +152,8 @@ export const NativeTerminalPane = forwardRef<
       {
         onSession: (session) => {
           if (input.current === binding) input.current = null;
+          unsubscribeInput();
+          unsubscribeInput = () => {};
           binding?.dispose();
           linkBinding?.dispose();
           if (links.current === linkBinding) links.current = null;
@@ -166,8 +170,15 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
+            allowInput: () => owner.blockInput?.directInput ?? true,
+            focusPrompt: () => {
+              owner.blockInput?.focus();
+            },
           });
           input.current = binding;
+          unsubscribeInput =
+            owner.blockInput?.subscribe(() => binding?.updateInputPolicy()) ??
+            (() => {});
           linkBinding = bindNativeLinks(session, renderer, element, {
             available: () =>
               !disposed && latest.current.visible && engine.current === session,
@@ -269,7 +280,7 @@ export const NativeTerminalPane = forwardRef<
       write: (text) => {
         if (latest.current.leafId === leafId) controller.current?.write(text);
       },
-      focus: () => input.current?.focus(),
+      focus: () => controller.current?.focus(),
       shiftEnter: () => {
         const owner = controller.current;
         if (!owner || latest.current.leafId !== leafId)
@@ -291,7 +302,7 @@ export const NativeTerminalPane = forwardRef<
 
   const restoreFocus = () => {
     if (latest.current.visible && (latest.current.focused ?? true))
-      input.current?.focus();
+      controller.current?.focus();
   };
   const pasteFromMenu = () => {
     const target = adapter.current;

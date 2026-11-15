@@ -1,4 +1,10 @@
 import {
+  decodeNativeBlocks,
+  decodeNativeBlockOutput,
+  validateNativeBlockId,
+  type NativeBlockSnapshot,
+} from "@/modules/terminal/gl/nativeBlocks";
+import {
   decodeNativeLinkContext,
   type NativeLinkContext,
 } from "@/modules/terminal/gl/nativeLinks";
@@ -219,6 +225,7 @@ export class EngineSession {
   private selectionQueries: Promise<void> = Promise.resolve();
   private selectionPending = 0;
   private linkPending = 0;
+  private blockPending = 0;
   private selectionSnapshot: string | null = null;
 
   private constructor(
@@ -264,6 +271,7 @@ export class EngineSession {
       cols: number;
       rows: number;
       cwd?: string;
+      blocks?: boolean;
       observer?: SessionObserver;
       colors?: EngineColors;
     },
@@ -278,6 +286,7 @@ export class EngineSession {
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd ?? null,
+      blocks: options.blocks ?? false,
       workspace: currentWorkspaceEnv(),
       colors: options.colors ?? null,
     });
@@ -832,6 +841,54 @@ export class EngineSession {
       .finally(() => {
         this.linkPending--;
       });
+  }
+
+  blocks(seq: number): Promise<NativeBlockSnapshot | null> {
+    if (!Number.isInteger(seq) || seq < 1 || seq > 0xffffffff)
+      return Promise.reject(new Error("invalid native terminal block frame"));
+    const grid = this.drawnGrid;
+    if (!grid || grid.seq !== seq) return Promise.resolve(null);
+    return this.blockQuery("gterm_blocks", { seq }, (value) => {
+      if (this.drawnSeq !== seq) return null;
+      const snapshot = decodeNativeBlocks(value, seq);
+      if (snapshot.viewportRows !== grid.rows)
+        throw new Error("invalid native terminal block frame size");
+      return snapshot;
+    });
+  }
+  readBlock(
+    blockId: string,
+  ): Promise<ReturnType<typeof decodeNativeBlockOutput>> {
+    try {
+      validateNativeBlockId(blockId);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.blockQuery(
+      "gterm_read_block",
+      { blockId },
+      decodeNativeBlockOutput,
+    );
+  }
+  private async blockQuery<T>(
+    command: "gterm_blocks" | "gterm_read_block",
+    args: Record<string, unknown>,
+    decode: (value: unknown) => T,
+  ): Promise<T> {
+    const id = this.id;
+    if (id === null || this.closed || this.failed)
+      throw new Error("Terminal engine is unavailable.");
+    if (this.blockPending >= 32)
+      throw new Error("Too many pending terminal block queries.");
+    this.blockPending++;
+    try {
+      const value = await invoke<unknown>(command, { id, ...args });
+      if (this.id !== id || this.closed || this.failed)
+        throw new Error("Terminal engine is unavailable.");
+      return decode(value);
+    } finally {
+      this.blockPending--;
+    }
   }
 
   search(command: NativeSearchCommand): Promise<boolean> {

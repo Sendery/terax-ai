@@ -1,4 +1,5 @@
 import { buildTerminalTheme } from "@/styles/terminalTheme";
+import { ShellSubmission } from "@/modules/terminal/block/lib/shellSubmission";
 import {
   acceptCompletion,
   autocompletion,
@@ -46,7 +47,8 @@ export type ShellEditorOptions = {
   fontSize: number;
   fontWeight: string;
   placeholderText?: string;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string) => void | Promise<void>;
+  onSubmitError?: (error: unknown) => void;
   onInterrupt: () => void;
   /** Escape with no completion open; return true when handled. */
   onEscape?: () => boolean;
@@ -353,6 +355,7 @@ const completionNav = Prec.highest(
 );
 
 export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
+  const submission = new ShellSubmission();
   const themeComp = new Compartment();
   const highlightComp = new Compartment();
   const editableComp = new Compartment();
@@ -370,8 +373,14 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
           // Enter always runs the line (Tab is accept). Predictable shell UX.
           const text = view.state.doc.toString();
           if (!text.trim()) return true;
-          opts.onSubmit(text);
-          clear(view);
+          const doc = view.state.doc;
+          submission.run(
+            () => opts.onSubmit(text),
+            () => {
+              if (view.state.doc === doc) clear(view);
+            },
+            (error) => opts.onSubmitError?.(error),
+          );
           return true;
         },
       },
@@ -451,12 +460,17 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
     view,
     focus: () => view.focus(),
     getValue: () => view.state.doc.toString(),
-    setValue: (text) =>
+    setValue: (text) => {
+      submission.invalidate();
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: text },
         selection: { anchor: text.length },
-      }),
-    clear: () => clear(view),
+      });
+    },
+    clear: () => {
+      submission.invalidate();
+      clear(view);
+    },
     setEditable: (editable) =>
       view.dispatch({
         effects: editableComp.reconfigure(EditorView.editable.of(editable)),
@@ -468,6 +482,9 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
           highlightComp.reconfigure(syntaxHighlighting(highlightStyle())),
         ],
       }),
-    destroy: () => view.destroy(),
+    destroy: () => {
+      submission.invalidate();
+      view.destroy();
+    },
   };
 }

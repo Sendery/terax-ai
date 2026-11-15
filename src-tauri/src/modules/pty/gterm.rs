@@ -202,10 +202,11 @@ type BlockOutput = super::engine::blocks::BlockOutput;
 type BlockOutput = serde_json::Value;
 
 #[tauri::command]
-pub async fn gterm_blocks(state: State<'_, PtyState>, id: u32) -> Result<BlockSnapshot, String> {
+pub async fn gterm_blocks(state: State<'_, PtyState>, id: u32, seq: Option<u32>) -> Result<BlockSnapshot, String> {
     #[cfg(feature = "ghostty-engine")]
     {
-        let reply = imp::engine(&state, id)?.blocks()?;
+        let engine = imp::engine(&state, id)?;
+        let reply = match seq { Some(seq) => engine.blocks_for_frame(seq)?, None => engine.blocks()? };
         tauri::async_runtime::spawn_blocking(move || {
             reply
                 .recv_timeout(std::time::Duration::from_secs(2))
@@ -216,7 +217,7 @@ pub async fn gterm_blocks(state: State<'_, PtyState>, id: u32) -> Result<BlockSn
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
-        let _ = (state, id);
+        let _ = (state, id, seq);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
