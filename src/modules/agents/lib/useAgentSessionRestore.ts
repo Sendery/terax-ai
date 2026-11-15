@@ -3,12 +3,13 @@ import { isSerializableTab } from "@/modules/spaces/lib/serialize";
 import type { ShellFlavor } from "@/modules/tasks/lib/dispatch";
 import type { Tab } from "@/modules/tabs";
 import {
+  captureLeafSubmission,
   findLeafCwd,
+  hasLeaf,
   leafIds,
-  submitToLeaf,
-  whenSessionReady,
 } from "@/modules/terminal";
 import {
+  buildRestoreSnapshot,
   matchRestoreTargets,
   type RestoreCandidateTab,
   type RestoreTarget,
@@ -38,7 +39,7 @@ export type AgentRestoreApi = {
   pending: SavedAgentSession[];
   restore: (sessions: readonly SavedAgentSession[]) => void;
   dismiss: () => void;
-  /** True once boot decided, so the capture hook may start overwriting. */
+  /** True after restore submissions and snapshot cleanup, so capture may write. */
   settled: boolean;
 };
 
@@ -102,6 +103,9 @@ export function useAgentSessionRestore({
   const [pending, setPending] = useState<SavedAgentSession[]>([]);
   const [settled, setSettled] = useState(false);
   const started = useRef(false);
+  const active = useRef(true);
+  const run = useRef(0);
+  const restoring = useRef(false);
   const deps = useRef({
     getTabs,
     knownSpaceIds,
@@ -121,54 +125,147 @@ export function useAgentSessionRestore({
     shellFlavor,
   };
 
-  const resume = useCallback(async (sessions: readonly SavedAgentSession[]) => {
-    const d = deps.current;
-    const targets: RestoreTarget[] = matchRestoreTargets(
-      sessions,
-      candidateTabs(d.getTabs()),
-    );
-    const onScreen = d.activeSpaceId();
-
-    let focus: number | null = null;
-    for (const target of targets) {
-      const tabId =
-        target.tabId ??
-        d.newTabInSpace(target.session.spaceId, target.session.cwd);
-      d.warmTab(tabId);
-      // Activating a tab from a space the user is not looking at would leave
-      // the tab strip pointing at something it does not list.
-      if (focus === null && target.session.spaceId === onScreen) focus = tabId;
-
-      const deadline = Date.now() + TAB_APPEAR_TIMEOUT_MS;
-      // A matched pane is already known; only a brand new tab has to appear.
-      let leafId = target.leafId ?? leafOf(d.getTabs(), tabId);
-      while (leafId === null && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, TAB_POLL_MS));
-        leafId = leafOf(d.getTabs(), tabId);
-      }
-      if (leafId === null) continue;
-
-      const leaf = leafId;
-      const command = resumeCommandLine(target.session, d.shellFlavor);
-      // Each tab is warmed and left to reach its own prompt; typing before the
-      // shell integration reports one loses the command.
-      void whenSessionReady(leaf, READY_TIMEOUT_MS).then(() => {
-        submitToLeaf(leaf, command);
-      });
-    }
-    if (focus !== null) d.setActiveId(focus);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      run.current++;
+      started.current = false;
+      restoring.current = false;
+    };
   }, []);
 
+  const resume = useCallback(
+    async (
+      sessions: readonly SavedAgentSession[],
+      current: () => boolean,
+    ): Promise<SavedAgentSession[]> => {
+      const d = deps.current;
+      const targets: RestoreTarget[] = matchRestoreTargets(
+        buildRestoreSnapshot(sessions, Date.now()).sessions,
+        candidateTabs(d.getTabs()),
+      );
+      const onScreen = d.activeSpaceId();
+      let focused = false;
+      const failed = await Promise.all(
+        targets.map(async (target) => {
+          try {
+            if (
+              !current() ||
+              !deps.current.knownSpaceIds().includes(target.session.spaceId)
+            )
+              return target.session;
+            const tabId =
+              target.tabId ??
+              d.newTabInSpace(target.session.spaceId, target.session.cwd);
+            d.warmTab(tabId);
+            const deadline = Date.now() + TAB_APPEAR_TIMEOUT_MS;
+            let leafId = target.leafId ?? leafOf(deps.current.getTabs(), tabId);
+            let submission =
+              leafId === null ? null : captureLeafSubmission(leafId);
+            while (
+              (leafId === null || submission === null) &&
+              Date.now() < deadline
+            ) {
+              if (!current()) return target.session;
+              const tab = deps.current
+                .getTabs()
+                .find((value) => value.id === tabId);
+              if (
+                (tab &&
+                  (tab.kind !== "terminal" ||
+                    tab.private ||
+                    tab.spaceId !== target.session.spaceId)) ||
+                (!tab && target.tabId !== null)
+              )
+                return target.session;
+              await new Promise((resolve) => setTimeout(resolve, TAB_POLL_MS));
+              leafId = target.leafId ?? leafOf(deps.current.getTabs(), tabId);
+              submission =
+                leafId === null ? null : captureLeafSubmission(leafId);
+            }
+            if (leafId === null || submission === null) return target.session;
+            const leaf = leafId;
+            const targetCurrent = () => {
+              if (
+                !current() ||
+                !deps.current.knownSpaceIds().includes(target.session.spaceId)
+              )
+                return false;
+              const tab = deps.current
+                .getTabs()
+                .find((value) => value.id === tabId);
+              return (
+                tab?.kind === "terminal" &&
+                !tab.private &&
+                tab.spaceId === target.session.spaceId &&
+                hasLeaf(tab.paneTree, leaf) &&
+                (findLeafCwd(tab.paneTree, leaf) ?? tab.cwd) ===
+                  target.session.cwd
+              );
+            };
+            if (!targetCurrent()) return target.session;
+            if (
+              !focused &&
+              target.session.spaceId === onScreen &&
+              deps.current.activeSpaceId() === onScreen
+            ) {
+              focused = true;
+              deps.current.setActiveId(tabId);
+            }
+            const sent = await submission.submitWhenReady(
+              resumeCommandLine(target.session, d.shellFlavor),
+              READY_TIMEOUT_MS,
+              targetCurrent,
+            );
+            return sent ? null : target.session;
+          } catch {
+            return target.session;
+          }
+        }),
+      );
+      return failed.filter(
+        (value): value is SavedAgentSession => value !== null,
+      );
+    },
+    [],
+  );
+
   const finish = useCallback(() => {
+    const ticket = ++run.current;
+    restoring.current = true;
     setPending([]);
-    setSettled(true);
-    void clearRestoreSnapshot();
+    setSettled(false);
+    const complete = () => {
+      if (!active.current || run.current !== ticket) return;
+      restoring.current = false;
+      setSettled(true);
+    };
+    void clearRestoreSnapshot().then(complete, complete);
   }, []);
 
   const restore = useCallback(
     (sessions: readonly SavedAgentSession[]) => {
-      void resume(sessions);
-      finish();
+      if (!active.current || restoring.current) return;
+      restoring.current = true;
+      const ticket = ++run.current;
+      const current = () => active.current && run.current === ticket;
+      setPending([]);
+      setSettled(false);
+      void resume(sessions, current).then(
+        (failed) => {
+          if (!current()) return;
+          if (failed.length) {
+            restoring.current = false;
+            setPending(failed);
+          } else finish();
+        },
+        () => {
+          if (!current()) return;
+          restoring.current = false;
+          setPending([...sessions]);
+        },
+      );
     },
     [resume, finish],
   );
@@ -176,31 +273,29 @@ export function useAgentSessionRestore({
   useEffect(() => {
     if (!ready || started.current) return;
     started.current = true;
+    const ticket = run.current;
     if (policy === "never") {
-      setSettled(true);
-      void clearRestoreSnapshot();
+      finish();
       return;
     }
     void (async () => {
       const snapshot = await readRestoreSnapshot();
+      if (!active.current || run.current !== ticket) return;
       const spaces = new Set(deps.current.knownSpaceIds());
       const usable =
         snapshot?.sessions.filter((session) => spaces.has(session.spaceId)) ??
         [];
       if (usable.length === 0) {
-        setSettled(true);
-        void clearRestoreSnapshot();
+        finish();
         return;
       }
       if (policy === "always") {
-        void resume(usable);
-        setSettled(true);
-        void clearRestoreSnapshot();
+        restore(usable);
         return;
       }
       setPending(usable);
     })();
-  }, [ready, policy, resume]);
+  }, [ready, policy, restore, finish]);
 
   return { pending, restore, dismiss: finish, settled };
 }

@@ -1,5 +1,6 @@
 import type { NativeBlockInput } from "@/modules/terminal/gl/nativeBlockInput";
 export type NativeLeaf = {
+  readonly submissionIdentity?: object;
   readonly blockInput?: NativeBlockInput | null;
   readonly id: number | null;
   readonly cwd: string | null;
@@ -14,7 +15,7 @@ export type NativeLeaf = {
   clearBlockSelection?: () => boolean;
   write: (text: string) => boolean;
   paste: (text: string) => Promise<void>;
-  submit: (text: string) => Promise<void>;
+  submit: (text: string, current?: () => boolean) => Promise<void>;
   focus: () => void;
   repaint: () => void;
   dispose: () => Promise<void>;

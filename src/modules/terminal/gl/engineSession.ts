@@ -622,16 +622,20 @@ export class EngineSession {
     );
   }
 
-  submit(text: string): Promise<void> {
-    if (!text) return this.write("\r");
+  submit(text: string, current: () => boolean = () => true): Promise<void> {
+    if (!text)
+      return this.enqueueInput(1, (id) =>
+        this.writeBytes(id, Uint8Array.of(13), current),
+      );
     return this.enqueueInput(
       textEncoder.encode(text).byteLength + 1,
       async (id) => {
+        if (!current()) throw new Error("terminal input is unavailable");
         const paste = await this.encodeNativeInput(id, { kind: "paste", text });
         const bytes = new Uint8Array(paste.length + 1);
         bytes.set(paste);
         bytes[paste.length] = 13;
-        await this.writeBytes(id, bytes);
+        await this.writeBytes(id, bytes, current);
       },
     );
   }
@@ -720,10 +724,16 @@ export class EngineSession {
     return task;
   }
 
-  private writeBytes(id: number, bytes: Uint8Array): Promise<void> {
+  private writeBytes(
+    id: number,
+    bytes: Uint8Array,
+    current: () => boolean = () => true,
+  ): Promise<void> {
     if (this.failed) return Promise.reject(new Error("terminal engine failed"));
     if (this.id !== id || this.closed || this.exitCode !== null)
       return Promise.resolve();
+    if (!current())
+      return Promise.reject(new Error("terminal input is unavailable"));
     return invoke("pty_write", bytes, { headers: { "x-pty-id": String(id) } });
   }
 

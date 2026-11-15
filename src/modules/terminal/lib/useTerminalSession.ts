@@ -1,3 +1,7 @@
+import {
+  createTerminalSubmission,
+  type TerminalSubmission,
+} from "@/modules/terminal/lib/sessionSubmission";
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   getNativeLeaf,
@@ -76,6 +80,7 @@ type Callbacks = {
 };
 
 type Session = {
+  submissionIdentity: object;
   pty: PtySession | null;
   ptyOpening: boolean;
   initialCwd: string | undefined;
@@ -174,6 +179,55 @@ export function whenSessionReady(
     const arr = readyWaiters.get(leafId) ?? [];
     arr.push({ resolve, timer });
     readyWaiters.set(leafId, arr);
+  });
+}
+
+export function captureLeafSubmission(
+  leafId: number,
+): TerminalSubmission | null {
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    const identity = native.submissionIdentity ?? native;
+    const id = native.id;
+    return createTerminalSubmission({
+      current: () =>
+        getNativeLeaf(leafId) === native &&
+        (native.submissionIdentity ?? native) === identity &&
+        (id === null || native.id === id) &&
+        !native.exited,
+      ready: () =>
+        native.id !== null &&
+        native.shellReady &&
+        !native.commandRunning &&
+        !native.alternateScreen,
+      wait: (timeout) => whenSessionReady(leafId, timeout),
+      submit: (text, current) => native.submit(text, current),
+    });
+  }
+  const session = sessions.get(leafId);
+  if (!session || session.disposed) return null;
+  const identity = session.submissionIdentity;
+  return createTerminalSubmission({
+    current: () =>
+      sessions.get(leafId) === session &&
+      session.submissionIdentity === identity &&
+      !session.disposed &&
+      !session.shellExited,
+    ready: () =>
+      readyLeaves.has(leafId) &&
+      session.pty !== null &&
+      !session.commandRunning &&
+      !isLeafAltScreen(leafId),
+    wait: (timeout) => whenSessionReady(leafId, timeout),
+    submit: async (text) => {
+      const pty = session.pty;
+      if (!pty) throw new Error("Terminal is no longer available.");
+      session.everSubmitted = true;
+      const data = text.includes("\n")
+        ? `\x1b[200~${text}\x1b[201~\r`
+        : `${text}\r`;
+      await pty.write(data);
+    },
   });
 }
 
@@ -631,6 +685,7 @@ function ensureSession(
   if (existing) return existing;
 
   const session: Session = {
+    submissionIdentity: {},
     pty: null,
     ptyOpening: false,
     initialCwd,
@@ -931,6 +986,8 @@ export async function respawnSession(
   }
   const s = sessions.get(leafId);
   if (!s || s.disposed) return;
+  s.submissionIdentity = {};
+  resetSessionReady(leafId);
   s.pty?.close();
   s.pty = null;
   s.snapshot = null;

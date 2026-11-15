@@ -1573,3 +1573,33 @@ describe("EngineSession terminal clipboard", () => {
     expect(ipc.clipboardWrites).toEqual([]);
   });
 });
+
+it.each(["dismiss", "private", "cwd", "space"])(
+  "does not write a restoration invalidated by %s during native encoding",
+  async () => {
+    const session = await openSession(new FakeRenderer());
+    let finish = (_bytes: number[]) => {};
+    ipc.encoded = new Promise((resolve) => {
+      finish = resolve;
+    });
+    let current = true;
+    const submission = session.submit(
+      "resume saved conversation",
+      () => current,
+    );
+    const result = Promise.allSettled([submission]);
+    await Promise.resolve();
+    expect(commands("gterm_encode_input")).toHaveLength(1);
+    current = false;
+    finish([65]);
+    expect((await result)[0].status).toBe("rejected");
+    expect(commands("pty_write")).toEqual([]);
+    await session.close();
+  },
+);
+it("checks restoration ownership before an empty submission writes carriage return", async () => {
+  const session = await openSession(new FakeRenderer());
+  await expect(session.submit("", () => false)).rejects.toThrow("unavailable");
+  expect(commands("pty_write")).toEqual([]);
+  await session.close();
+});

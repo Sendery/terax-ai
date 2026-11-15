@@ -81,6 +81,9 @@ export class NativeLeafSession implements NativeLeaf {
     this.start();
   }
 
+  get submissionIdentity(): object {
+    return this.owner;
+  }
   get cwd(): string | null {
     return this.disposed ? null : (this.state?.cwd ?? null);
   }
@@ -252,15 +255,28 @@ export class NativeLeafSession implements NativeLeaf {
     native.scroll(2_147_483_647);
     await native.paste(text);
   }
-  async submit(text: string): Promise<void> {
+  async submit(
+    text: string,
+    current: () => boolean = () => true,
+  ): Promise<void> {
     if (this.blockInput && !text.trim()) return;
     const native = await this.requireNative();
+    if (!current()) throw new Error("Terminal is no longer available.");
     const owner = this.owner;
     const generation = this.generation;
     const ticket = this.blockInput?.beginSubmit(text);
     try {
       native.scroll(2_147_483_647);
-      await native.submit(text);
+      await native.submit(
+        text,
+        () =>
+          current() &&
+          this.owner === owner &&
+          this.generation === generation &&
+          this.native === native &&
+          !this.exited &&
+          this.id !== null,
+      );
       if (
         this.owner !== owner ||
         this.generation !== generation ||

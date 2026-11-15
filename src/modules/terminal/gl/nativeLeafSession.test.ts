@@ -534,3 +534,35 @@ it("changes between presentation backends without reopening the native process",
   expect(session.id).toBe(9);
   await session.dispose();
 });
+
+it("keeps submission identity across view moves and replaces it on respawn", async () => {
+  const first = driver(9),
+    next = driver(10);
+  const open = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(next);
+  const session = new NativeLeafSession(config(), open);
+  const identity = session.submissionIdentity;
+  const detach = session.attach(view(), config());
+  await session.opened;
+  expect(session.submissionIdentity).toBe(identity);
+  detach();
+  session.attach(view(), config());
+  expect(session.submissionIdentity).toBe(identity);
+  await session.respawn("/next");
+  expect(session.submissionIdentity).not.toBe(identity);
+  await session.dispose();
+});
+
+it("does not submit after its caller retires during requireNative", async () => {
+  const native = driver(9);
+  const session = new NativeLeafSession(
+    config(),
+    async () => native as unknown as EngineSession,
+  );
+  await session.opened;
+  let current = true;
+  const result = session.submit("resume", () => current);
+  current = false;
+  await expect(result).rejects.toThrow("available");
+  expect(native.submit).not.toHaveBeenCalled();
+  await session.dispose();
+});
