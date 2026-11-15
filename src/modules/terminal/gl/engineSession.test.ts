@@ -25,6 +25,8 @@ const ipc = vi.hoisted(() => ({
   blocks: null as Promise<unknown> | null,
   blockOutput: null as Promise<unknown> | null,
   blockAction: null as Promise<unknown> | null,
+  clipboard: null as Promise<unknown> | null,
+  clipboardWrites: [] as string[],
   closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
@@ -63,11 +65,19 @@ vi.mock("@tauri-apps/api/core", () => {
         return ipc.encoded ?? Promise.resolve([13]);
       if (command === "gterm_read_text")
         return ipc.text ?? Promise.resolve("native text");
+      if (command === "gterm_take_clipboard_write")
+        return ipc.clipboard ?? Promise.resolve(null);
       if (command === "gterm_available") return Promise.resolve(true);
       return Promise.resolve(null);
     },
   };
 });
+
+vi.mock("@/modules/terminal/lib/terminalClipboard", () => ({
+  writeTerminalClipboard: async (text: string) => {
+    ipc.clipboardWrites.push(text);
+  },
+}));
 
 vi.mock("@/modules/workspace", () => ({
   currentWorkspaceEnv: () => ({ kind: "local" }),
@@ -160,6 +170,8 @@ beforeEach(() => {
   ipc.blockOutput = null;
   ipc.blockAction = null;
   ipc.closing = null;
+  ipc.clipboard = null;
+  ipc.clipboardWrites.length = 0;
 });
 
 describe("EngineSession credits", () => {
@@ -1487,4 +1499,77 @@ it("acknowledges capacity-blocked frames without resync loops or stale presented
   renderer.drawFrame();
   expect(session.drawnSeq).toBe(4);
   await session.close();
+});
+
+describe("EngineSession terminal clipboard", () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  function channels() {
+    return commands("gterm_open")[0].args as {
+      onClipboard: { onmessage: (signal: unknown) => void };
+      onFailure: { onmessage: (message: string) => void };
+      onExit: { onmessage: (code: number) => void };
+    };
+  }
+  it("pulls a startup notification only after its session id exists", async () => {
+    const { session, pending } = deferredSession();
+    ipc.clipboard = Promise.resolve("startup copy");
+    const { onClipboard } = channels();
+    onClipboard.onmessage(1);
+    expect(commands("gterm_take_clipboard_write")).toHaveLength(0);
+    ipc.open?.resolve(9);
+    await pending;
+    await tick();
+    expect(
+      commands("gterm_take_clipboard_write").map((call) => call.args),
+    ).toEqual([{ id: 9 }]);
+    expect(ipc.clipboardWrites).toEqual(["startup copy"]);
+    await session.close();
+  });
+  it.each(["close", "failure"])(
+    "discards a delayed clipboard payload after %s",
+    async (kind) => {
+      const { session, pending } = deferredSession();
+      ipc.open?.resolve(9);
+      await pending;
+      let finish = (_value: string) => {};
+      ipc.clipboard = new Promise((resolve) => {
+        finish = resolve;
+      });
+      const { onClipboard, onFailure } = channels();
+      onClipboard.onmessage(1);
+      expect(commands("gterm_take_clipboard_write")).toHaveLength(1);
+      if (kind === "close") await session.close();
+      else onFailure.onmessage("native failure");
+      finish("stale copy");
+      await tick();
+      expect(ipc.clipboardWrites).toEqual([]);
+      await session.close();
+    },
+  );
+  it("copies final output after healthy exit and ignores unknown signal values", async () => {
+    const { session, pending } = deferredSession();
+    ipc.open?.resolve(9);
+    await pending;
+    ipc.clipboard = Promise.resolve("final copy");
+    const { onClipboard, onExit } = channels();
+    for (const value of [0, 2, "1", null, {}, ["payload"]])
+      onClipboard.onmessage(value);
+    expect(commands("gterm_take_clipboard_write")).toHaveLength(0);
+    onExit.onmessage(0);
+    onClipboard.onmessage(1);
+    await tick();
+    expect(ipc.clipboardWrites).toEqual(["final copy"]);
+    await session.close();
+  });
+  it("never registers clipboard notifications for synthetic sessions", async () => {
+    const { session, pending } = deferredSession(true);
+    expect(commands("gterm_bench_open")[0].args).not.toHaveProperty(
+      "onClipboard",
+    );
+    ipc.open?.resolve(9);
+    await pending;
+    await session.close();
+    expect(commands("gterm_take_clipboard_write")).toHaveLength(0);
+    expect(ipc.clipboardWrites).toEqual([]);
+  });
 });

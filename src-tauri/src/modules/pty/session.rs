@@ -115,6 +115,7 @@ pub enum OutputSink {
         slot: Arc<CoreSlot>,
         on_failure: Channel<String>,
         on_state: Channel<engine::state::EngineState>,
+        on_clipboard: Option<Channel<u8>>,
     },
 }
 
@@ -180,8 +181,11 @@ pub fn spawn(
     let pipeline = match sink {
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
-        OutputSink::Engine { on_frame, colors, slot, on_failure, on_state } => {
+        OutputSink::Engine { on_frame, colors, slot, on_failure, on_state, on_clipboard } => {
             let engine = start_engine(cols, rows, colors, engine::ShellConfig { token: shell_token.take().ok_or("native shell marker is missing")?, blocks }, on_frame, on_state, writer.clone())?;
+            if let Some(channel) = on_clipboard {
+                engine.handle.on_clipboard(move || channel.send(1).is_ok());
+            }
             Pipeline::Engine(EnginePipeline {
                 core: slot.install(engine)?,
                 slot,

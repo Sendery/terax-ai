@@ -1,0 +1,57 @@
+[
+  {
+    "name": "escape-c0",
+    "input": "\u001b\u0000]52;c;YQ==\u0007",
+    "expected": "a"
+  },
+  {
+    "name": "escape-del",
+    "input": "\u001b\u007f]52;c;YQ==\u0007",
+    "expected": "a"
+  },
+  {
+    "name": "payload-c0",
+    "input": "\u001b]52;c;Y\u0000Q==\u0007",
+    "expected": "a"
+  },
+  {
+    "name": "payload-controls",
+    "input": "\u001b]52;c;Y\t\r\nQ==\u0007",
+    "expected": "a"
+  },
+  {
+    "name": "unicode-osc-st",
+    "input": "\u009d52;c;YQ==\u009c",
+    "expected": "a"
+  },
+  {
+    "name": "unicode-st",
+    "input": "\u001b]52;c;YQ==\u009c",
+    "expected": "a"
+  },
+  {
+    "name": "unicode-osc",
+    "input": "\u009d52;c;YQ==\u001b\\",
+    "expected": "a"
+  },
+  {
+    "name": "escape-ends-osc",
+    "input": "\u001b]52;c;YQ==\u001b[0m",
+    "expected": "a"
+  },
+  {
+    "name": "cancel",
+    "input": "\u001b]52;c;YQ==\u0018",
+    "expected": null
+  },
+  {
+    "name": "del-is-payload",
+    "input": "\u001b]52;c;Y\u007fQ==\u0007",
+    "expected": null
+  },
+  {
+    "name": "combined-selector",
+    "input": "\u001b]52;pc;Y2Fm w6k=\u0007",
+    "expected": "caf\u00e9"
+  }
+]

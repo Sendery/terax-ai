@@ -19,6 +19,8 @@ pub mod bench;
 pub mod block_actions;
 #[cfg(feature = "ghostty-engine")]
 pub mod blocks;
+#[cfg(any(test, feature = "ghostty-engine"))]
+mod clipboard;
 #[cfg(feature = "ghostty-engine")]
 mod graphics;
 #[cfg(feature = "ghostty-engine")]
@@ -373,6 +375,7 @@ mod runtime {
 
     #[derive(Default)]
     struct Stats {
+        clipboard: super::clipboard::ClipboardMailbox,
         input_state: super::state::StateStore,
         bytes_fed: AtomicU64,
         frames: AtomicU64,
@@ -570,6 +573,17 @@ mod runtime {
             }
             Ok(())
         }
+        pub fn take_clipboard_write(&self) -> Option<String> {
+            if self.health.failure().is_some() {
+                return None;
+            }
+            self.stats.clipboard.take()
+        }
+
+        pub fn on_clipboard(&self, listener: impl Fn() -> bool + Send + Sync + 'static) {
+            self.stats.clipboard.subscribe(listener);
+        }
+
         pub fn input_state(&self) -> super::state::EngineState {
             self.stats.input_state.snapshot()
         }
@@ -587,6 +601,7 @@ mod runtime {
         }
 
         pub fn request_stop(&self) {
+            self.stats.clipboard.close();
             self.update(|control| control.stop = true);
         }
 
@@ -810,13 +825,14 @@ mod runtime {
                             blocks_enabled,
                             &rx,
                             control.clone(),
-                            stats,
+                            stats.clone(),
                             frames,
                             replies,
                             ready_tx,
                             health.clone(),
                         );
                     }));
+                    stats.clipboard.close();
                     if result.is_err() {
                         health.fail(EngineFailure::Panicked);
                     }
@@ -1384,6 +1400,9 @@ mod runtime {
                 return;
             }
         };
+        let mut shell = super::shell::ShellIntegration::new(shell_token);
+        let clipboard = stats.clone();
+        shell.on_clipboard(move |data| clipboard.clipboard.record(data));
         let mut session = Session {
             term,
             snapshot,
@@ -1400,7 +1419,7 @@ mod runtime {
             selection: super::selection::SelectionState::default(),
             search: super::search::SearchState::default(),
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
-            shell: super::shell::ShellIntegration::new(shell_token),
+            shell,
             blocks: blocks_enabled.then(super::blocks::BlockStore::default),
             block_frames: blocks_enabled.then(super::blocks::BlockFrames::default),
             block_actions: blocks_enabled.then(super::block_actions::BlockActions::default),
@@ -2915,6 +2934,89 @@ mod block_action_actor_tests {
             .unwrap()
             .unwrap_err()
             .contains("not enabled"));
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod clipboard_actor_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    const WAIT: Duration = Duration::from_secs(5);
+
+    #[test]
+    fn ordinary_and_blocks_copy_fragmented_final_output_independently_of_draw_credits() {
+        for blocks in [false, true] {
+            let engine = start_with_shell(
+                40,
+                3,
+                None,
+                ShellConfig {
+                    token: shell::ShellToken::for_test(),
+                    blocks,
+                },
+                Box::new(|_| true),
+                Box::new(|_| {}),
+            )
+            .unwrap();
+            let notices = Arc::new(AtomicUsize::new(0));
+            let count = notices.clone();
+            engine.handle.on_clipboard(move || {
+                count.fetch_add(1, Ordering::SeqCst);
+                true
+            });
+            for bytes in [
+                b"text\x1b]52;pc;Y2Fm ".as_slice(),
+                b"w6k=\x1b",
+                b"\\\x1b]52;c;?\x07\x1b]52;p;YmFk\x07\x1b]52;c;!!!!\x07 done",
+            ] {
+                assert!(engine.input.feed(bytes.to_vec()));
+            }
+            engine
+                .input
+                .finish()
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap();
+            assert_eq!(notices.load(Ordering::SeqCst), 1);
+            assert_eq!(
+                engine.handle.take_clipboard_write().as_deref(),
+                Some("caf\u{e9}")
+            );
+            assert!(engine.handle.take_clipboard_write().is_none());
+            assert!(!engine.handle.input_state().shell.shell_ready);
+            engine.input.shutdown();
+            engine.thread.join().unwrap();
+            assert!(engine.handle.take_clipboard_write().is_none());
+        }
+    }
+
+    #[test]
+    fn a_failed_clipboard_receiver_does_not_fail_terminal_output_or_finalization() {
+        let engine = start(40, 3, Box::new(|_| true), Box::new(|_| {})).unwrap();
+        engine.handle.on_clipboard(|| false);
+        assert!(engine
+            .input
+            .feed(b"\x1b]52;c;YQ==\x07healthy output".to_vec()));
+        engine
+            .input
+            .finish()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert!(engine
+            .handle
+            .read_text(3)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap()
+            .contains("healthy output"));
+        assert!(engine.handle.take_clipboard_write().is_none());
         engine.input.shutdown();
         engine.thread.join().unwrap();
     }

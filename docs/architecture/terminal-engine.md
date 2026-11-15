@@ -830,3 +830,17 @@ markers never trigger a guessed output-relative or live-grid fallback.
 The frontend validates the anchor against output start and uses only the
 presented snapshot. Missing anchors suppress the in-grid bar; sticky output
 actions remain independent. No new persistent schema or public Pi/MCP exposure.
+
+
+### Native terminal-origin clipboard writes
+
+Ordinary and blocks sessions observe bounded OSC52 writes through the existing
+Rust shell framer, retaining the legacy selector/base64/UTF8 policy instead of
+the pinned core's narrower normalized callback. One pending owned string and
+one constant notification are coalesced independently of frame credits. The
+internal take command resolves an existing native session; no OS clipboard
+read, query reply or Pi/MCP clipboard command is exposed. The client serializes
+writes and validates ownership after IPC and immediately before platform writes.
+Tolerant C0/Unicode C1 clipboard framing cannot authorize shell markers. See
+[the native clipboard report](../plans/2026-11-15-terminal-native-clipboard.md)
+for explicit limits, differences, real M2 acceptance and open platform checks.

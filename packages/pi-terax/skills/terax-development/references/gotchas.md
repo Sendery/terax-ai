@@ -894,3 +894,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** linear filtering mixes texels outside the requested crop; a zero-area native placement can also produce a packet the client correctly rejects, causing repeated full requests.
 - **Prevention:** clamp image lookup to the crop's texel centers and skip zero source/pixel areas before tracking visible placements or image generations. Compare cell/default backgrounds using exact RGB integers, preserving cursor exceptions.
 - **Verification:** native empty-intersection and crop/scroll/resize/history/full regressions, one-pixel sampler bounds and exact-background uniforms. Inspect actual crop-edge pixels in WebKit before claiming visual acceptance.
+
+### Terminal clipboard normalization and async ownership need separate guards
+
+- **Trigger:** replace a legacy OSC52 handler with a normalized core callback, or defer a native plugin import before writing clipboard text.
+- **Failure mode:** normalized pc loses the clipboard destination, whitespace base64 is rejected, and retired sessions can write after an async import even when ownership was checked before calling the helper.
+- **Prevention:** preserve the product decoder and bounded existing framing, and validate ownership immediately before every actual platform write and fallback. Keep tolerant clipboard framing separate from authenticated shell marker acceptance. Represent optional Tauri channels using JavaScriptChannelId on the invoking Webview, rather than Option<Channel<T>>.
+- **Verification:** compare shared fixtures against the installed legacy parser and native observer at every UTF8 boundary; block a plugin import, retire the owner, then resolve it and assert zero writes. Test valid shell tokens through tolerant clipboard-only paths. Prove actual system clipboard writes using a public seed and expected values without exposing previous contents.

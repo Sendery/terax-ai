@@ -1,3 +1,5 @@
+import { NativeClipboardRelay } from "@/modules/terminal/gl/nativeClipboard";
+import { writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
   blockActionSelects,
@@ -212,6 +214,8 @@ export class EngineSession {
   private readonly exits = new Channel<number>();
   private readonly failures = new Channel<string>();
   private readonly states = new Channel<unknown>();
+  private readonly clipboardSignals = new Channel<unknown>();
+  private readonly clipboardWrites: NativeClipboardRelay;
   private inputStateValue: NativeState | null = null;
   private readonly isBench: boolean;
   private awaitingDraw: number[] = [];
@@ -247,6 +251,25 @@ export class EngineSession {
     this.observer = observer;
     this.size = size;
     this.isBench = isBench;
+    this.clipboardWrites = new NativeClipboardRelay({
+      current: () =>
+        this.id !== null && !this.closed && !this.failed && !this.isBench,
+      take: async () => {
+        const id = this.id;
+        if (id === null) return null;
+        const text = await invoke("gterm_take_clipboard_write", { id });
+        return this.id === id && !this.closed && !this.failed ? text : null;
+      },
+      write: (text) =>
+        writeTerminalClipboard(
+          text,
+          () =>
+            this.id !== null && !this.closed && !this.failed && !this.isBench,
+        ),
+    });
+    this.clipboardSignals.onmessage = (signal) => {
+      if (signal === 1) this.clipboardWrites.notify();
+    };
     this.renderPane = renderer.addPane({
       onNeedFullFrame: () => {
         this.invalidatePresented();
@@ -342,6 +365,7 @@ export class EngineSession {
         onExit: this.exits,
         onFailure: this.failures,
         onState: this.states,
+        ...(this.isBench ? {} : { onClipboard: this.clipboardSignals }),
       });
     } catch (error) {
       this.release();
@@ -372,6 +396,7 @@ export class EngineSession {
     }
     if (this.pendingColors) this.setColors(this.pendingColors);
     this.flushCredits();
+    this.clipboardWrites.resume();
     return this;
   }
 
@@ -1069,6 +1094,8 @@ export class EngineSession {
 
   private release(): void {
     this.closed = true;
+    this.clipboardWrites.close();
+    this.clipboardSignals.onmessage = noop;
     this.selectionSnapshot = null;
     this.frames.onmessage = noop;
     this.exits.onmessage = noop;

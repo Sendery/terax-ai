@@ -58,6 +58,22 @@ pub fn gterm_state(state: State<'_, PtyState>, id: u32) -> Result<InputState, St
 }
 
 #[tauri::command]
+pub fn gterm_take_clipboard_write(
+    state: State<'_, PtyState>,
+    id: u32,
+) -> Result<Option<String>, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        imp::engine(&state, id).map(|engine| engine.take_clipboard_write())
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
 pub fn gterm_available() -> bool {
     cfg!(feature = "ghostty-engine")
 }
@@ -66,6 +82,7 @@ pub fn gterm_available() -> bool {
 #[allow(clippy::too_many_arguments)]
 pub async fn gterm_open(
     app: AppHandle,
+    webview: tauri::Webview,
     state: State<'_, PtyState>,
     registry: State<'_, WorkspaceRegistry>,
     cols: u16,
@@ -78,6 +95,7 @@ pub async fn gterm_open(
     on_exit: Channel<i32>,
     on_failure: Channel<String>,
     on_state: Channel<InputState>,
+    on_clipboard: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<u32, String> {
     #[cfg(feature = "ghostty-engine")]
     {
@@ -95,14 +113,28 @@ pub async fn gterm_open(
             on_exit,
             on_failure,
             on_state,
+            on_clipboard.map(|channel| channel.channel_on(webview)),
         )
         .await
     }
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (
-            app, state, registry, cols, rows, cwd, workspace, colors, blocks, on_frame, on_exit,
-            on_failure, on_state,
+            app,
+            webview,
+            state,
+            registry,
+            cols,
+            rows,
+            cwd,
+            workspace,
+            colors,
+            blocks,
+            on_frame,
+            on_exit,
+            on_failure,
+            on_state,
+            on_clipboard,
         );
         Err(ENGINE_UNAVAILABLE.into())
     }
@@ -770,6 +802,7 @@ mod imp {
         on_exit: Channel<i32>,
         on_failure: Channel<String>,
         on_state: Channel<InputState>,
+        on_clipboard: Option<Channel<u8>>,
     ) -> Result<u32, String> {
         engine::validate_size(cols, rows)?;
         let workspace = WorkspaceEnv::from_option(workspace);
@@ -785,6 +818,7 @@ mod imp {
             slot: slot.clone(),
             on_failure,
             on_state,
+            on_clipboard,
         };
         let spawned = tauri::async_runtime::spawn_blocking(move || {
             session::spawn(id, app, cols, rows, cwd, workspace, blocks, sink, on_exit)

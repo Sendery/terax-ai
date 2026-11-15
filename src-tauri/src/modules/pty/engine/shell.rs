@@ -62,8 +62,13 @@ enum ParseState {
     OpaqueEscape,
 }
 
+type ClipboardHandler = Box<dyn FnMut(&[u8]) + Send>;
+
 pub struct ShellIntegration {
     token: Option<String>,
+    clipboard: Option<ClipboardHandler>,
+    clipboard_only: bool,
+    pending_c2: bool,
     state: ShellState,
     parse: ParseState,
     buffer: Vec<u8>,
@@ -77,6 +82,9 @@ impl ShellIntegration {
     pub fn new(token: Option<String>) -> Self {
         Self {
             token,
+            clipboard: None,
+            clipboard_only: false,
+            pending_c2: false,
             state: ShellState::default(),
             parse: ParseState::Ground,
             buffer: Vec::new(),
@@ -87,6 +95,9 @@ impl ShellIntegration {
             event: None,
         }
     }
+    pub fn on_clipboard(&mut self, handler: impl FnMut(&[u8]) + Send + 'static) {
+        self.clipboard = Some(Box::new(handler));
+    }
     pub fn state(&self) -> &ShellState {
         &self.state
     }
@@ -95,7 +106,7 @@ impl ShellIntegration {
         self.buffer.len()
     }
     pub fn ingest(&mut self, bytes: &[u8]) {
-        if self.token.is_none() {
+        if self.token.is_none() && self.clipboard.is_none() {
             return;
         }
         for &byte in bytes {
@@ -107,7 +118,7 @@ impl ShellIntegration {
         bytes: &[u8],
         mut consume: impl FnMut(&[u8], Option<ShellEvent>) -> Result<(), String>,
     ) -> Result<(), String> {
-        if self.token.is_none() {
+        if self.token.is_none() && self.clipboard.is_none() {
             return consume(bytes, None);
         }
         self.capture_events = true;
@@ -132,6 +143,50 @@ impl ShellIntegration {
     }
 
     fn byte(&mut self, byte: u8) {
+        if self.clipboard.is_some() {
+            if std::mem::take(&mut self.pending_c2) {
+                if (0x80..=0x9f).contains(&byte) {
+                    self.clipboard_c1(byte);
+                    return;
+                }
+                self.framed_byte(0xc2);
+            }
+            if byte == 0xc2 {
+                self.pending_c2 = true;
+                return;
+            }
+        }
+        self.framed_byte(byte);
+    }
+
+    fn clipboard_c1(&mut self, byte: u8) {
+        self.utf8_remaining = 0;
+        if matches!(self.parse, ParseState::Opaque | ParseState::OpaqueEscape) {
+            if byte == 0x9c {
+                self.parse = ParseState::Ground;
+            }
+            return;
+        }
+        self.clipboard_only = true;
+        match byte {
+            0x9d => {
+                self.buffer.clear();
+                self.discard = false;
+                self.parse = ParseState::Osc;
+            }
+            0x9c if matches!(self.parse, ParseState::Osc | ParseState::OscEscape) => self.finish(),
+            0x90 | 0x98 | 0x9e | 0x9f => {
+                self.buffer.clear();
+                self.parse = ParseState::Opaque;
+            }
+            _ => {
+                self.buffer.clear();
+                self.parse = ParseState::Ground;
+            }
+        }
+    }
+
+    fn framed_byte(&mut self, byte: u8) {
         let continuation = self.utf8_remaining > 0 && (0x80..=0xbf).contains(&byte);
         self.utf8_remaining = if continuation {
             self.utf8_remaining - 1
@@ -152,6 +207,7 @@ impl ShellIntegration {
         match self.parse {
             ParseState::Ground => {
                 if byte == 0x1b {
+                    self.clipboard_only = false;
                     self.parse = ParseState::Escape;
                 } else if c1 && matches!(byte, 0x90 | 0x98 | 0x9d | 0x9e | 0x9f) {
                     self.parse = ParseState::Opaque;
@@ -164,12 +220,19 @@ impl ShellIntegration {
                     self.parse = ParseState::Osc;
                 }
                 b'P' | b'X' | b'^' | b'_' => self.parse = ParseState::Opaque,
-                0x1b => {}
+                0x1b => self.clipboard_only = false,
+                0x00..=0x1f | 0x7f if self.clipboard.is_some() => self.clipboard_only = true,
                 _ => self.parse = ParseState::Ground,
             },
             ParseState::Osc => match byte {
                 0x07 => self.finish(),
+                0x1b if self.clipboard.is_some() && self.buffer.starts_with(b"52;") => {
+                    self.finish();
+                    self.clipboard_only = false;
+                    self.parse = ParseState::Escape;
+                }
                 0x1b => self.parse = ParseState::OscEscape,
+                0x00..=0x1f if self.clipboard.is_some() => self.clipboard_only = true,
                 _ if c1 && byte == 0x9c => {
                     self.buffer.clear();
                     self.parse = ParseState::Ground;
@@ -207,7 +270,9 @@ impl ShellIntegration {
         if self.discard {
             return;
         }
-        let limit = if self.buffer.starts_with(b"133;") {
+        let limit = if self.clipboard.is_some() && self.buffer.starts_with(b"52;") {
+            super::clipboard::MAX_CLIPBOARD_OSC_BYTES
+        } else if self.buffer.starts_with(b"133;") {
             MAX_MARK_BYTES
         } else {
             MAX_OSC_BYTES
@@ -217,10 +282,19 @@ impl ShellIntegration {
             self.buffer.clear();
             return;
         }
+        if self.buffer.len() == self.buffer.capacity() {
+            let growth = self
+                .buffer
+                .capacity()
+                .max(4096)
+                .min(limit - self.buffer.capacity());
+            self.buffer.reserve_exact(growth);
+        }
         self.buffer.push(byte);
         if self.buffer.len() <= 4
-            && ![b"7;".as_slice(), b"133;".as_slice()]
+            && ![b"7;".as_slice(), b"133;".as_slice(), b"52;".as_slice()]
                 .iter()
+                .filter(|&&prefix| prefix != b"52;" || self.clipboard.is_some())
                 .any(|prefix| prefix.starts_with(&self.buffer) || self.buffer.starts_with(prefix))
         {
             self.discard = true;
@@ -229,8 +303,16 @@ impl ShellIntegration {
     }
     fn finish(&mut self) {
         self.parse = ParseState::Ground;
+        if self.clipboard_only && !self.buffer.starts_with(b"52;") {
+            self.buffer.clear();
+            return;
+        }
         if !self.discard {
-            if let Some(data) = self
+            if let Some(data) = self.buffer.strip_prefix(b"52;") {
+                if let Some(handler) = &mut self.clipboard {
+                    handler(data);
+                }
+            } else if let Some(data) = self
                 .buffer
                 .strip_prefix(b"133;")
                 .and_then(|bytes| std::str::from_utf8(bytes).ok())
@@ -238,7 +320,12 @@ impl ShellIntegration {
                 let mut parts = data.split(';');
                 let action = parts.next().unwrap_or("");
                 let mut aids = parts.clone().filter_map(|part| part.strip_prefix("aid="));
-                if aids.next() == self.token.as_deref() && aids.next().is_none() {
+                if self
+                    .token
+                    .as_deref()
+                    .is_some_and(|token| aids.next() == Some(token))
+                    && aids.next().is_none()
+                {
                     match action {
                         "A" => {
                             if self.capture_events {

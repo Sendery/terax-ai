@@ -24,17 +24,23 @@ export async function readTerminalClipboard(): Promise<string> {
   }
 }
 
-export async function writeTerminalClipboard(text: string): Promise<void> {
+export async function writeTerminalClipboard(
+  text: string,
+  current: () => boolean = () => true,
+): Promise<void> {
+  if (!current()) return;
   if (IS_LINUX) {
     try {
       const { writeText } = await import(
         "@tauri-apps/plugin-clipboard-manager"
       );
+      if (!current()) return;
       await writeText(text);
       return;
     } catch {}
   }
   try {
+    if (!current()) return;
     await webClipboard()?.writeText(text);
   } catch {}
 }
