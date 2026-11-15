@@ -164,3 +164,40 @@ describe("shared native image ownership", () => {
     expect(fake.deleteTexture).not.toHaveBeenCalled();
   });
 });
+
+it("limits magnified one-pixel crops to their own texel centers", () => {
+  const { gl, fake } = setup();
+  const renderer = new GraphicsRenderer(gl);
+  const pane = {};
+  const initial = frame();
+  const cropped: DecodedGraphics = {
+    ...initial,
+    images: [
+      {
+        ...initial.images[0],
+        width: 3,
+        pixels: new Uint8Array([
+          255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
+        ]),
+      },
+    ],
+    placements: [
+      {
+        ...initial.placements[0],
+        sourceX: 1,
+        sourceWidth: 1,
+        width: 160,
+        height: 160,
+      },
+    ],
+  };
+  renderer.apply(pane, cropped);
+  renderer.draw(pane, 2, 16, 32, 320, 320);
+  expect(fake.uniform4f).toHaveBeenCalledWith(
+    "uSampleBounds",
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+  );
+});

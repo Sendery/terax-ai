@@ -26,9 +26,10 @@ void main() {
 const FRAGMENT = `#version 300 es
 precision highp float;
 uniform sampler2D uImage;
+uniform vec4 uSampleBounds;
 in vec2 vUv;
 out vec4 outColor;
-void main() { outColor = texture(uImage,vUv); }`;
+void main() { outColor = texture(uImage,clamp(vUv,uSampleBounds.xy,uSampleBounds.zw)); }`;
 export class GraphicsRenderer {
   private panes = new Map<object, PaneImages>();
   private bytes = 0;
@@ -155,6 +156,13 @@ export class GraphicsRenderer {
       p.sourceWidth / image.width,
       p.sourceHeight / image.height,
     );
+    gl.uniform4f(
+      this.uniforms.uSampleBounds,
+      (p.sourceX + 0.5) / image.width,
+      (p.sourceY + 0.5) / image.height,
+      (p.sourceX + p.sourceWidth - 0.5) / image.width,
+      (p.sourceY + p.sourceHeight - 0.5) / image.height,
+    );
   }
   private upload(image: Image): void {
     if (image.texture) return;
@@ -218,7 +226,7 @@ export class GraphicsRenderer {
       throw new RenderCapacityError();
     }
     this.program = program;
-    for (const name of ["uDest", "uSource", "uView", "uImage"])
+    for (const name of ["uDest", "uSource", "uSampleBounds", "uView", "uImage"])
       this.uniforms[name] = gl.getUniformLocation(program, name);
   }
   remove(pane: object): void {

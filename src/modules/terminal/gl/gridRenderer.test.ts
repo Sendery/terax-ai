@@ -33,15 +33,14 @@ function pane(rect: RenderPane["rect"], ready = true): RenderPane {
   };
 }
 
-function draw(panes: RenderPane[]) {
+function draw(panes: RenderPane[], graphics = false) {
   const drawArraysInstanced = vi.fn();
+  const uniform1ui = vi.fn();
   const gl = new Proxy(
-    { drawArraysInstanced },
+    { drawArraysInstanced, uniform1ui },
     {
       get(target, key) {
-        return key === "drawArraysInstanced"
-          ? target.drawArraysInstanced
-          : vi.fn();
+        return Reflect.get(target, key) ?? vi.fn();
       },
     },
   );
@@ -49,7 +48,8 @@ function draw(panes: RenderPane[]) {
   const renderer = Object.assign(Object.create(GridRenderer.prototype), {
     gl,
     program: {},
-    uniforms: {},
+    uniforms: { uDefaultBg: "default-bg" },
+    graphics: graphics ? { has: () => true, draw: vi.fn() } : undefined,
     drawnPanes,
     panes,
     canvas: { width: 100, height: 100 },
@@ -64,7 +64,7 @@ function draw(panes: RenderPane[]) {
     },
   }) as { draw: () => void };
   renderer.draw();
-  return { drawnPanes, drawArraysInstanced };
+  return { drawnPanes, drawArraysInstanced, uniform1ui };
 }
 
 describe("GridRenderer display acknowledgement", () => {
@@ -291,4 +291,12 @@ it("defers graphic frames during context loss and accepts the recovered full fra
     frame.graphics,
   );
   expect(target.grid?.cols).toBe(frame.cols);
+});
+
+it("preserves exact theme RGB identity when drawing images below cell backgrounds", () => {
+  const target = pane({ x: 0, y: 0, width: 40, height: 40 });
+  if (!target.header) throw new Error("fixture header missing");
+  target.header.defaultBg = 0x55aa73;
+  const result = draw([target], true);
+  expect(result.uniform1ui).toHaveBeenCalledWith("default-bg", 0x55aa73);
 });

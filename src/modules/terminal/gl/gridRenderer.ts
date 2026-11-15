@@ -94,6 +94,7 @@ out vec2 vLocal;
 out float vAbsX;
 flat out vec3 vFg;
 flat out vec3 vBg;
+flat out uint vBgRgb;
 flat out vec3 vUl;
 flat out ivec3 vAtlas;
 flat out uint vBits;
@@ -130,6 +131,7 @@ void main() {
   );
   vFg = rgb(aCell.y);
   vBg = rgb(aCell.z);
+  vBgRgb = aCell.z & 0xffffffu;
   vUl = rgb(aCell.w);
   vBits = cursor ? (bits | 0x2000000u) : bits;
   vSpanW = size.x;
@@ -146,11 +148,12 @@ uniform vec4 uLines;
 uniform int uCursorStyle;
 uniform vec3 uCursorColor;
 uniform int uPass;
-uniform vec3 uDefaultBg;
+uniform uint uDefaultBg;
 in vec2 vLocal;
 in float vAbsX;
 flat in vec3 vFg;
 flat in vec3 vBg;
+flat in uint vBgRgb;
 flat in vec3 vUl;
 flat in ivec3 vAtlas;
 flat in uint vBits;
@@ -179,7 +182,7 @@ void main() {
     bg = uCursorColor;
   }
   if (uPass == 1) {
-    if (all(equal(bg,uDefaultBg)) && !(cursor && uCursorStyle == 1)) discard;
+    if (vBgRgb == uDefaultBg && !(cursor && uCursorStyle == 1)) discard;
     outColor = vec4(bg,1.0);
     return;
   }
@@ -637,12 +640,7 @@ export class GridRenderer {
         this.graphics?.draw(pane, 0, m.width, m.height, gridW, gridH);
         // biome-ignore lint/correctness/useHookAtTopLevel: a WebGL call, not a React hook
         gl.useProgram(this.program);
-        gl.uniform3f(
-          u.uDefaultBg,
-          channel(header.defaultBg, 0),
-          channel(header.defaultBg, 8),
-          channel(header.defaultBg, 16),
-        );
+        gl.uniform1ui(u.uDefaultBg, header.defaultBg);
         gl.uniform1i(u.uPass, 1);
         gl.bindVertexArray(pane.vao);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, grid.cols * grid.rows);

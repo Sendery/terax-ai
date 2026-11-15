@@ -177,7 +177,12 @@ impl GraphicsSnapshot {
             let id = placement.image_id()?;
             let image = storage.image(id).ok_or(Error::InvalidValue)?;
             let info = placement.placement_render_info(&image, term)?;
-            if !info.viewport_visible {
+            if !info.viewport_visible
+                || info.source_width == 0
+                || info.source_height == 0
+                || info.pixel_width == 0
+                || info.pixel_height == 0
+            {
                 continue;
             }
             placement_count += 1;
@@ -525,5 +530,65 @@ mod tests {
                 );
             }
         }
+    }
+    fn placements(packet: &[u32]) -> &[u32] {
+        let mut at = 5;
+        for _ in 0..packet[3] {
+            at += 6 + packet[at + 5] as usize / 4;
+        }
+        &packet[at..]
+    }
+
+    #[test]
+    fn cropped_images_follow_native_scroll_resize_and_history_reentry() {
+        let mut term = terminal();
+        let mut snapshot = super::GraphicsSnapshot::new().unwrap();
+        let payload = base64(&[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
+        let command =
+            format!("\x1b[3;2H\x1b_Ga=T,C=1,f=32,s=3,v=1,i=52,c=4,r=4,x=1,w=1,q=2;{payload}\x1b\\");
+        super::write(&mut term, command.as_bytes()).unwrap();
+        let first = words(snapshot.capture(&term, true).unwrap().unwrap());
+        assert_eq!((first[3], first[4]), (1, 1));
+        assert_eq!(&placements(&first)[4..6], &[1, 2]);
+        assert_eq!(&placements(&first)[8..14], &[1, 0, 1, 1, 32, 64]);
+
+        super::write(&mut term, b"\x1b[10;1H\r\n\r\n").unwrap();
+        let scrolled = words(snapshot.capture(&term, false).unwrap().unwrap());
+        assert_eq!((scrolled[3], scrolled[4]), (0, 1));
+        assert_eq!(&placements(&scrolled)[4..6], &[1, 0]);
+        assert_eq!(&placements(&scrolled)[8..12], &[1, 0, 1, 1]);
+
+        term.resize(20, 10, 10, 20).unwrap();
+        snapshot.set_cell_pixels(10, 20);
+        let resized = words(snapshot.capture(&term, false).unwrap().unwrap());
+        assert_eq!((resized[1], resized[2], resized[3]), (10, 20, 0));
+        assert_eq!(&placements(&resized)[12..14], &[40, 80]);
+
+        super::write(&mut term, b"\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n").unwrap();
+        let hidden = words(snapshot.capture(&term, false).unwrap().unwrap());
+        assert_eq!((hidden[3], hidden[4]), (0, 0));
+        term.scroll_viewport(libghostty_vt::terminal::ScrollViewport::Top);
+        let history = words(snapshot.capture(&term, false).unwrap().unwrap());
+        assert_eq!((history[3], history[4]), (1, 1));
+        assert_eq!(&placements(&history)[8..12], &[1, 0, 1, 1]);
+        let rebuilt = words(snapshot.capture(&term, true).unwrap().unwrap());
+        assert_eq!((rebuilt[3], rebuilt[4]), (1, 1));
+    }
+
+    #[test]
+    fn empty_source_intersection_has_no_renderable_placement() {
+        let mut term = terminal();
+        let mut snapshot = super::GraphicsSnapshot::new().unwrap();
+        super::write(
+            &mut term,
+            b"\x1b_Ga=T,C=1,f=32,s=1,v=1,i=42,c=2,r=2,x=1,w=1,q=2;/wAA/w==\x1b\\",
+        )
+        .unwrap();
+        let count = snapshot
+            .capture(&term, true)
+            .unwrap()
+            .map(|packet| words(packet)[4])
+            .unwrap_or(0);
+        assert_eq!(count, 0);
     }
 }

@@ -128,3 +128,30 @@ and the matching result.json. Exact capture provenance is retained privately in
 .terax/pi-development/m2/image-qa-result.json. Temporary PIDs and startup scripts
 stay in the ignored journal. No protected Mac project execution, Actions,
 repository publication or FPS experiment was used.
+
+## Crop, theme identity and viewport follow-up
+
+The image sampler now clamps bilinear lookup to source texel centers. Magnifying
+a one-pixel crop cannot sample adjacent pixels outside the requested rectangle.
+Grid background identity is carried as exact RGB integers through the shader;
+below-background images no longer depend on equality between independently
+rounded floats. Cursor block handling remains explicit.
+
+A real empty-intersection test failed against88516c1: the core can retain a
+placement with no drawable area, which the producer serialized into a packet the
+strict client rejects. The producer now omits zero source/pixel areas before
+counting placements or retaining image generations, so valid empty crops do not
+cause invalid-frame retries. Core tests also verify native crop/position through
+scroll, changed cell metrics, complete exit from the viewport, history reentry
+and full-frame reconstruction.
+
+Focused final source checks:256 GL tests passed plus the existing skip;188 native
+engine tests passed plus the existing ignored; types, frontend/Pi build, native
+strict clippy and diff checks passed. Lint remains the exact121-diagnostic
+baseline. Astra source review found no remaining blocker in this delta.
+New uniform assertions establish the GPU contract, not actual WebKit pixels;
+the new frozen candidate's visual acceptance is recorded separately.
+
+Commands are the same scoped GL/types/build/lint and explicit-target native
+engine/clippy commands above. No performance experiment or platform claim was
+added, and the live88516c1 app stayed independent while this source changed.

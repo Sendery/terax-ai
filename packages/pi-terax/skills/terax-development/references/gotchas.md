@@ -887,3 +887,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** retaining frame.images also retains the complete incoming IPC buffer, doubling resident pixel memory outside the cache counter. Initializing shaders from rAF can also throw before onDrawn returns credits.
 - **Prevention:** validate bounds before copying; retain owned pixel slices and compact placements without upload views. Initialize resources within the guarded frame-apply path. Defer all GPU work during context loss and reconstruct from full native frames; hidden panes release graphic caches.
 - **Verification:** mutate an input upload after applying it; retain exact raster pixels, reuse stable generations, replace changed generations, and cover shader failure, hidden/reveal and loss/full recovery. Real WebKit pixels remain a separate acceptance step.
+
+### Image crops must constrain sampling and reject empty render areas
+
+- **Trigger:** a source crop is magnified, or the requested rectangle has an empty intersection with the image.
+- **Failure mode:** linear filtering mixes texels outside the requested crop; a zero-area native placement can also produce a packet the client correctly rejects, causing repeated full requests.
+- **Prevention:** clamp image lookup to the crop's texel centers and skip zero source/pixel areas before tracking visible placements or image generations. Compare cell/default backgrounds using exact RGB integers, preserving cursor exceptions.
+- **Verification:** native empty-intersection and crop/scroll/resize/history/full regressions, one-pixel sampler bounds and exact-background uniforms. Inspect actual crop-edge pixels in WebKit before claiming visual acceptance.
