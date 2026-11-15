@@ -1,3 +1,4 @@
+import { NativeContrast } from "@/modules/terminal/gl/minimumContrast";
 import {
   applyFrame,
   CELL_WORDS,
@@ -353,4 +354,83 @@ it("uses complete cluster text across full and partial frames without retaining 
     font: 0,
     wide: false,
   });
+});
+
+it("enhances low contrast text without recoloring decorative blocks or background cells", () => {
+  const policy = new NativeContrast(4.5);
+  const f = frame({
+    cols: 4,
+    rows: 1,
+    defaultFg: 0x141414,
+    defaultBg: 0x141414,
+    styles: [{ attrs: 1 << ATTR_UNDERLINE_SHIFT }],
+    rowRecords: [{ y: 0, runs: [[0, 4]], cells: [65, 0x2588, 0xe0b0, 66] }],
+  });
+  const result = applyFrame(null, f, recordingLookup().lookup, policy);
+  const g = result.grid as CellGrid;
+  expect(cell(g, 0, 0).fg).not.toBe(0x141414);
+  expect(cell(g, 0, 0).ul).toBe(cell(g, 0, 0).fg);
+  for (const x of [1, 2])
+    expect(cell(g, x, 0)).toMatchObject({
+      fg: 0x141414,
+      ul: 0x141414,
+      bg: 0x141414,
+    });
+  for (let x = 0; x < 4; x++) expect(cell(g, x, 0).bg).toBe(0x141414);
+});
+
+it("preserves faint, inverse, explicit underlines and invisible cells under enhanced contrast", () => {
+  const policy = new NativeContrast(4.5);
+  const f = frame({
+    cols: 4,
+    rows: 1,
+    defaultFg: 0x141414,
+    defaultBg: 0x141414,
+    styles: [
+      { attrs: ATTR_FAINT, underlineColor: explicit(0) },
+      { attrs: ATTR_INVERSE, fg: explicit(0x222222), bg: explicit(0x212121) },
+      { attrs: ATTR_INVISIBLE },
+      {},
+    ],
+    graphemes: ["\u2588\u0301"],
+    rowRecords: [
+      {
+        y: 0,
+        runs: [
+          [0, 1],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+        ],
+        cells: [65, 66, 67, CELL_GRAPHEME],
+      },
+    ],
+  });
+  const result = applyFrame(null, f, recordingLookup().lookup, policy);
+  const g = result.grid as CellGrid;
+  const normal = applyFrame(
+    null,
+    frame({
+      cols: 1,
+      rows: 1,
+      defaultFg: 0x141414,
+      defaultBg: 0x141414,
+      rowRecords: [textRow(0, "A")],
+    }),
+    recordingLookup().lookup,
+    new NativeContrast(4.5),
+  ).grid as CellGrid;
+  expect(cell(g, 0, 0).fg).not.toBe(cell(normal, 0, 0).fg);
+  expect(cell(g, 0, 0).ul).toBe(0);
+  expect(cell(g, 1, 0).bg).toBe(0x222222);
+  expect(cell(g, 1, 0).fg).not.toBe(0x212121);
+  expect(cell(g, 2, 0)).toMatchObject({
+    slot: 0,
+    underline: 0,
+    strike: false,
+    overline: false,
+    fg: 0x141414,
+    bg: 0x141414,
+  });
+  expect(cell(g, 3, 0)).toMatchObject({ fg: 0x141414, bg: 0x141414 });
 });

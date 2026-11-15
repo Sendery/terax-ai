@@ -303,3 +303,31 @@ it.each(["font", "dpr"])(
     h.renderer.dispose();
   },
 );
+
+it("changes minimum contrast live without replacing glyphs or session state", () => {
+  const h = harness(),
+    c = callbacks(),
+    pane = h.renderer.addPane(c);
+  h.renderer.setPaneRect(pane, { x: 0, y: 0, width: 80, height: 40 });
+  const input = decodeFrame(
+    encodeFrame({
+      cols: 4,
+      rows: 2,
+      flags: FRAME_FLAG_FULL,
+      defaultFg: 0x141414,
+      defaultBg: 0x141414,
+      rowRecords: [textRow(0, "text")],
+    }),
+  );
+  h.renderer.applyFrame(pane, input);
+  const original = pane.grid?.cells[1];
+  h.renderer.setMinimumContrastRatio(4.5);
+  expect(c.onNeedFullFrame).toHaveBeenCalledOnce();
+  h.renderer.applyFrame(pane, input);
+  expect(pane.grid?.cells[1]).not.toBe(original);
+  h.renderer.setMinimumContrastRatio(1);
+  expect(c.onNeedFullFrame).toHaveBeenCalledTimes(2);
+  h.renderer.applyFrame(pane, input);
+  expect(pane.grid?.cells[1]).toBe(original);
+  h.renderer.dispose();
+});

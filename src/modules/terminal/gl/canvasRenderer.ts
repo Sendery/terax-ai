@@ -1,4 +1,8 @@
 import {
+  NativeContrast,
+  normalizeMinimumContrast,
+} from "@/modules/terminal/gl/minimumContrast";
+import {
   applyFrame,
   CELL_WORDS,
   GLYPH_SLOT_MASK,
@@ -60,6 +64,7 @@ export class CanvasRenderer implements TerminalRenderer {
   private metrics: CellMetrics;
   private dpr: number;
   private background: number;
+  private minimumContrast?: NativeContrast;
   private cursorFallback: number | undefined;
   private panes: RenderPane[] = [];
   private glyphs: Glyph[] = [];
@@ -84,6 +89,9 @@ export class CanvasRenderer implements TerminalRenderer {
     this.context = context;
     this.font = options.font;
     this.background = options.background;
+    const contrast = normalizeMinimumContrast(options.minimumContrastRatio);
+    this.minimumContrast =
+      contrast > 1 ? new NativeContrast(contrast) : undefined;
     this.cursorFallback = options.cursorFallback;
     this.dpr = window.devicePixelRatio || 1;
     this.metrics = measureCell(this.atlasFont());
@@ -167,6 +175,19 @@ export class CanvasRenderer implements TerminalRenderer {
     this.cursorFallback = cursorFallback;
     this.requestDraw();
   }
+  setMinimumContrastRatio(value: number): void {
+    if (this.disposed) return;
+    const ratio = normalizeMinimumContrast(value);
+    if ((this.minimumContrast?.ratio ?? 1) === ratio) return;
+    this.minimumContrast = ratio > 1 ? new NativeContrast(ratio) : undefined;
+    for (const pane of this.panes) {
+      if (pane.rect.width > 0 && pane.rect.height > 0)
+        pane.callbacks.onNeedFullFrame();
+      else pane.needsVisibleFull = true;
+    }
+    this.requestDraw();
+  }
+
   setFont(font: RendererFont): void {
     if (
       this.disposed ||
@@ -209,7 +230,12 @@ export class CanvasRenderer implements TerminalRenderer {
     }
     if (this.blocked.has(pane)) return "blocked";
     try {
-      const result = applyFrame(pane.grid, frame, this.lookup);
+      const result = applyFrame(
+        pane.grid,
+        frame,
+        this.lookup,
+        this.minimumContrast,
+      );
       if (result.result === "needs-full") return result.result;
       if (frame.graphics?.placements.length)
         this.graphics ??= new CanvasGraphics();
@@ -591,6 +617,7 @@ export class CanvasRenderer implements TerminalRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.minimumContrast = undefined;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.blinkTimer) clearInterval(this.blinkTimer);
     this.dprQuery?.removeEventListener("change", this.dprChanged);

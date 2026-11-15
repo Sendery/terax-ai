@@ -1,4 +1,8 @@
 import {
+  contrastExcluded,
+  type NativeContrast,
+} from "@/modules/terminal/gl/minimumContrast";
+import {
   ATTR_BOLD,
   ATTR_FAINT,
   ATTR_INVERSE,
@@ -76,8 +80,12 @@ function halfway(a: number, b: number): number {
   return ((a & 0xfefefe) >>> 1) + ((b & 0xfefefe) >>> 1);
 }
 
-function resolveStyles(frame: DecodedFrame): Uint32Array {
+function resolveStyles(
+  frame: DecodedFrame,
+  contrast?: NativeContrast,
+): Uint32Array {
   const count = Math.max(frame.styleCount, 1);
+  contrast?.prepare(count);
   if (resolved.length < count * RESOLVED_WORDS) {
     resolved = new Uint32Array(count * RESOLVED_WORDS * 2);
   }
@@ -91,6 +99,14 @@ function resolveStyles(frame: DecodedFrame): Uint32Array {
       resolved[out + 2] = frame.defaultFg;
       resolved[out + 3] = 0;
       resolved[out + 4] = 0;
+      contrast?.style(
+        id,
+        frame.defaultFg,
+        frame.defaultBg,
+        false,
+        frame.defaultFg,
+        undefined,
+      );
       continue;
     }
     const word = styleWordOf(frame, id);
@@ -105,8 +121,17 @@ function resolveStyles(frame: DecodedFrame): Uint32Array {
       fg = bg;
       bg = swap;
     }
+    const originalFg = fg;
     if (attrs & ATTR_FAINT) fg = halfway(fg, bg);
     const underline = ulWord & COLOR_EXPLICIT ? ulWord & COLOR_MASK : fg;
+    contrast?.style(
+      id,
+      originalFg,
+      bg,
+      (attrs & ATTR_FAINT) !== 0,
+      fg,
+      ulWord & COLOR_EXPLICIT ? underline : undefined,
+    );
     const invisible = (attrs & ATTR_INVISIBLE) !== 0;
     let kind = (attrs >>> ATTR_UNDERLINE_SHIFT) & ATTR_UNDERLINE_MASK;
     if (kind > UNDERLINE_KIND_MAX) kind = 1;
@@ -156,6 +181,7 @@ export function applyFrame(
   grid: CellGrid | null,
   frame: DecodedFrame,
   glyph: GlyphLookup,
+  contrast?: NativeContrast,
 ): { grid: CellGrid | null; result: ApplyResult } {
   if (!frame.full) {
     if (!grid || grid.cols !== frame.cols || grid.rows !== frame.rows) {
@@ -167,7 +193,7 @@ export function applyFrame(
     target = createGrid(frame.cols, frame.rows);
   }
   const { cols, cells } = target;
-  const styles = resolveStyles(frame);
+  const styles = resolveStyles(frame, contrast);
   const u16 = frame.u16;
   const u32 = frame.u32;
   const row = createRowView();
@@ -201,12 +227,16 @@ export function applyFrame(
       for (let c = 0; c < len; c++) {
         const value = u32[cell++];
         let bits: number;
+        let enhance = contrast !== undefined && !invisible;
         if (value & CELL_SPACER_TAIL) {
           bits = GLYPH_SKIP;
+          enhance = false;
         } else {
           const isWide = (value & CELL_WIDE_HEAD) !== 0;
           const cp = value & CELL_CODEPOINT_MASK;
           const cluster = cellGrapheme(frame, value);
+          if (enhance && contrastExcluded(cluster?.codePointAt(0) ?? cp))
+            enhance = false;
           bits = invisible
             ? 0
             : cluster !== undefined
@@ -217,9 +247,11 @@ export function applyFrame(
           if (isWide) bits |= GLYPH_WIDE;
         }
         cells[dst] = (bits & ~DECORATION_MASK) | decorations;
-        cells[dst + 1] = fg;
+        cells[dst + 1] = enhance ? (contrast?.foreground(styleId) ?? fg) : fg;
         cells[dst + 2] = bg;
-        cells[dst + 3] = underline;
+        cells[dst + 3] = enhance
+          ? (contrast?.underline(styleId) ?? underline)
+          : underline;
         dst += CELL_WORDS;
       }
     }

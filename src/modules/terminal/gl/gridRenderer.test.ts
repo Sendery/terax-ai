@@ -300,3 +300,34 @@ it("preserves exact theme RGB identity when drawing images below cell background
   const result = draw([target], true);
   expect(result.uniform1ui).toHaveBeenCalledWith("default-bg", 0x55aa73);
 });
+
+it("applies the same contrast policy to GPU instances and defers hidden-pane full refresh", () => {
+  const { renderer, a, b, lookup } = capacityRenderer();
+  lookup.mockReturnValue(1);
+  renderer.setPaneRect(b, { x: 40, y: 0, width: 0, height: 40 });
+  const input = decodeFrame(
+    encodeFrame({
+      cols: 1,
+      rows: 1,
+      defaultFg: 0x141414,
+      defaultBg: 0x141414,
+      rowRecords: [textRow(0, "x")],
+    }),
+  );
+  expect(renderer.applyFrame(a, input)).toBe("applied");
+  const original = a.grid?.cells[1],
+    slot = a.grid?.cells[0];
+  renderer.setMinimumContrastRatio(4.5);
+  expect(a.callbacks.onNeedFullFrame).toHaveBeenCalledOnce();
+  expect(b.callbacks.onNeedFullFrame).not.toHaveBeenCalled();
+  expect(b.needsVisibleFull).toBe(true);
+  expect(renderer.applyFrame(a, input)).toBe("applied");
+  expect(a.grid?.cells[1]).not.toBe(original);
+  expect(a.grid?.cells[0]).toBe(slot);
+  renderer.setMinimumContrastRatio(4.5);
+  expect(a.callbacks.onNeedFullFrame).toHaveBeenCalledOnce();
+  renderer.setMinimumContrastRatio(Number.NaN);
+  expect(a.callbacks.onNeedFullFrame).toHaveBeenCalledTimes(2);
+  expect(renderer.applyFrame(a, input)).toBe("applied");
+  expect(a.grid?.cells[1]).toBe(original);
+});

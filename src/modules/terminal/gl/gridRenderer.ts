@@ -1,3 +1,7 @@
+import {
+  NativeContrast,
+  normalizeMinimumContrast,
+} from "@/modules/terminal/gl/minimumContrast";
 import { GraphicsRenderer } from "@/modules/terminal/gl/graphicsRenderer";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
 import {
@@ -46,6 +50,7 @@ export type GridRendererOptions = {
   font: RendererFont;
   /** 0x00BBGGRR, the canvas outside every pane. */
   background: number;
+  minimumContrastRatio?: number;
   /** 0x00BBGGRR, the cursor when the terminal sets no colour. */
   cursorFallback?: number;
   /** Fired after the cell size changed (font or device pixel ratio). */
@@ -278,6 +283,7 @@ export class GridRenderer {
   private font: RendererFont;
   private dpr: number;
   private background: number;
+  private minimumContrast?: NativeContrast;
   private cursorFallback: number | undefined;
   private onMetricsChange: (() => void) | undefined;
   private readonly onDrawTiming: GridRendererOptions["onDrawTiming"];
@@ -315,6 +321,9 @@ export class GridRenderer {
     this.gl = gl;
     this.font = options.font;
     this.background = options.background;
+    const contrast = normalizeMinimumContrast(options.minimumContrastRatio);
+    this.minimumContrast =
+      contrast > 1 ? new NativeContrast(contrast) : undefined;
     this.cursorFallback = options.cursorFallback;
     this.onMetricsChange = options.onMetricsChange;
     this.onDrawTiming = options.onDrawTiming;
@@ -428,6 +437,19 @@ export class GridRenderer {
     this.requestDraw();
   }
 
+  setMinimumContrastRatio(value: number): void {
+    if (this.disposed) return;
+    const ratio = normalizeMinimumContrast(value);
+    if ((this.minimumContrast?.ratio ?? 1) === ratio) return;
+    this.minimumContrast = ratio > 1 ? new NativeContrast(ratio) : undefined;
+    for (const pane of this.panes) {
+      if (pane.rect.width > 0 && pane.rect.height > 0)
+        pane.callbacks.onNeedFullFrame();
+      else pane.needsVisibleFull = true;
+    }
+    this.requestDraw();
+  }
+
   setFont(font: RendererFont): void {
     const same =
       font.family === this.font.family &&
@@ -457,7 +479,12 @@ export class GridRenderer {
     const previous = pane.grid;
     let applied: ReturnType<typeof applyFrame>;
     try {
-      applied = applyFrame(previous, frame, this.atlas.lookup);
+      applied = applyFrame(
+        previous,
+        frame,
+        this.atlas.lookup,
+        this.minimumContrast,
+      );
       if (applied.result !== "needs-full") {
         if (frame.graphics?.placements.length)
           this.graphics ??= new GraphicsRenderer(this.gl);
@@ -930,6 +957,7 @@ export class GridRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.minimumContrast = undefined;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.blinkTimer) clearInterval(this.blinkTimer);
     this.dprQuery?.removeEventListener("change", this.handleDprChange);

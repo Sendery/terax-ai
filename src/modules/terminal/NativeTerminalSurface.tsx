@@ -1,3 +1,4 @@
+import { minimumTerminalContrast } from "@/modules/terminal/gl/minimumContrast";
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
 import { engineAvailable } from "@/modules/terminal/gl/engineSession";
 import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
@@ -42,8 +43,11 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
   }, [preferWebgl]);
   const font = useTerminalEngineFont();
   const colors = useTerminalEngineColors();
-  const appearance = useRef({ font, colors });
-  appearance.current = { font, colors };
+  const minimumContrastRatio = usePreferencesStore((p) =>
+    minimumTerminalContrast(p.backgroundKind, p.backgroundImageId),
+  );
+  const appearance = useRef({ font, colors, minimumContrastRatio });
+  appearance.current = { font, colors, minimumContrastRatio };
   const scheduleLayout = useCallback(() => {
     if (layoutFrame.current) return;
     layoutFrame.current = requestAnimationFrame(() => {
@@ -97,13 +101,18 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
           );
         await ensureMonoFontsLoaded();
         if (disposed) return;
-        const { font: currentFont, colors: currentColors } = appearance.current;
+        const {
+          font: currentFont,
+          colors: currentColors,
+          minimumContrastRatio: currentContrast,
+        } = appearance.current;
         opened = await createTerminalRenderer(
           makeCanvas,
           {
             font: currentFont,
             background: currentColors.background,
             cursorFallback: currentColors.cursor,
+            minimumContrastRatio: currentContrast,
             onMetricsChange: scheduleLayout,
           },
           webgl,
@@ -144,6 +153,9 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
   useEffect(() => {
     renderer?.setBackground(colors.background, colors.cursor);
   }, [renderer, colors]);
+  useEffect(() => {
+    renderer?.setMinimumContrastRatio(minimumContrastRatio);
+  }, [renderer, minimumContrastRatio]);
   const value = useMemo(
     () => ({ renderer, root, font, colors, error, subscribeLayout }),
     [renderer, font, colors, error, subscribeLayout],

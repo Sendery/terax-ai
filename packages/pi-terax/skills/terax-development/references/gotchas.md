@@ -922,3 +922,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a leaf ID can be reused, readiness timeout can look successful, and checking only before submit permits an obsolete command after encoding. Marking restore settled before deleting its snapshot can also delete a new capture.
 - **Prevention:** capture an internal owner-bound submitter, distinguish timeout from shell readiness, pass caller guards through the last async boundary to pty_write, and await snapshot cleanup before capture resumes.
 - **Verification:** deferred read/encoding/write/cleanup tests cover dismiss, private, CWD, space, replacement and empty submission. No new public bridge input or buffer-reading API is required.
+
+### Match existing background composition before changing terminal opacity
+
+- **Trigger:** a native renderer misses the legacy readability improvement when an image background is active.
+- **Failure mode:** treating a global image overlay as an image behind the canvas leads to unnecessary alpha/context changes and inconsistent text or inline-image backgrounds.
+- **Prevention:** inspect SurfaceLayer and the actual legacy renderer policy first. Share foreground contrast resolution across native backends, preserve exact backgrounds and explicit underlines, retain faint semantics and exclude decorative box/block/Powerline glyphs.
+- **Verification:** native cell tests preserve default packed output, invisible and decorative cells, validate adjusted foregrounds and bound the cache; both backends request full refresh without replacing the process. Keep actual WebKit background-preference acceptance distinct from source tests.
