@@ -10,9 +10,10 @@ switch are reused; no new setting or persistence field is introduced.
 
 The preference configures both the native default blink used by DECSCUSR reset
 (CSI0q) and the current DEC12 blink state. Changing it does not change the current
-cursor style or emit synthetic VT bytes. A subsequent program DECSCUSR or DEC12
-sequence remains authoritative for the current blink state; CSI0q returns to
-the configured default. The renderer does not AND a user preference over every
+cursor style or emit synthetic VT bytes. A program DECSCUSR or DEC12 sequence
+processed by the actor after the preference has actually been applied remains
+authoritative for the current blink state; CSI0q returns to the configured
+default. The renderer does not AND a user preference over every
 frame, so a program can still request a blinking cursor after the preference
 was applied.
 
@@ -37,6 +38,13 @@ ShellConfig literal or adding unrelated booleans to startup APIs. Existing
 start_with_colors and start_with_shell keep their false blink default. The
 initial appearance is applied on the engine actor before the first frame.
 Live updates are coalesced on that same actor, independent of row data.
+
+The live IPC result confirms admission to the coalesced control state, not
+application or presentation. IPC preference updates and PTY output are concurrent
+producers; their wall-clock order is not a promised actor-processing order.
+An IPC success alone is not a barrier before a program override. Tests first
+observe the frame containing the applied preference, then feed the program
+sequence to verify the later actor transition. No receipt protocol is added.
 
 The pinned libghostty-vt0.2.2 API provides set_default_cursor_blink (option23)
 and set_mode(Mode::CURSOR_BLINKING) (DEC12). A real probe against the configured
@@ -98,8 +106,8 @@ Commands for this block:
 Native engine checks passed203tests with one existing ignored; the plain engine
 set passed62tests. Strict all-targets native clippy and TypeScript checks passed.
 The focused client set passed106tests. Focal lint exits successfully with three
-preexisting noNonNullAssertion warnings in unchanged test cases. Source review
-status is recorded in the implementation journal; real UI acceptance is separate.
+preexisting noNonNullAssertion warnings in unchanged test cases. Astra source review
+found no remaining blockers; real UI acceptance is separate.
 This source block does not claim real macOS cursor animation, inactive-window
 behavior, physical display changes or Linux/Windows runtime acceptance. Parent
 coordinates the sandbox build and real UI acceptance after source integration.
