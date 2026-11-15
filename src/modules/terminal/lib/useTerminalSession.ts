@@ -570,6 +570,66 @@ export function blockWatermarkState(leafId: number): WatermarkState {
   return "visible";
 }
 
+/** Whether the manual clear-active shortcut may send Ctrl+L to this leaf. */
+export function canClearActiveLeaf(
+  leafId: number,
+  target: Element | null,
+): boolean {
+  if (
+    !target ||
+    target !== document.activeElement ||
+    typeof target.closest !== "function"
+  )
+    return false;
+  const native = getNativeLeaf(leafId);
+  if (native) {
+    return (
+      native.id !== null &&
+      !native.exited &&
+      native.focused &&
+      (native.blockInput?.directInput ?? true) &&
+      target.localName === "textarea" &&
+      !(target as HTMLTextAreaElement).disabled &&
+      Boolean(target.closest("[data-native-terminal-grid]")) &&
+      target
+        .closest("[data-native-terminal-leaf]")
+        ?.getAttribute("data-native-terminal-leaf") === String(leafId)
+    );
+  }
+  const session = sessions.get(leafId);
+  const slot = getSlotForLeaf(leafId);
+  return Boolean(
+    session &&
+      !session.disposed &&
+      !session.shellExited &&
+      session.pty &&
+      session.visibleNow &&
+      session.focusedNow &&
+      target.closest(".xterm") &&
+      slot?.term.element?.contains(target),
+  );
+}
+
+/** Sends the existing formfeed; this is distinct from host scrollback clearing. */
+export async function clearActiveLeaf(
+  leafId: number,
+  current: () => boolean = () => true,
+): Promise<boolean> {
+  const target = document.activeElement;
+  const valid = () => current() && canClearActiveLeaf(leafId, target);
+  if (!valid()) return false;
+  const input = captureLeafInput(leafId);
+  if (!input) return false;
+  const owned = () => input.current() && valid();
+  try {
+    await input.write("\x0c", owned);
+  } catch (error) {
+    if (!owned()) return false;
+    throw error;
+  }
+  return owned();
+}
+
 /**
  * Clear the scrollback and screen of the currently focused terminal, keeping
  * the active prompt line — macOS Terminal's ⌘K behaviour. Returns false when no

@@ -3,6 +3,8 @@ export { TerminalStack } from "./TerminalStack";
 export {
   captureLeafInput,
   captureLeafSubmission,
+  canClearActiveLeaf,
+  clearActiveLeaf,
   clearFocusedTerminal,
   disposeSession,
   isLeafTuiReady,

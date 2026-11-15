@@ -140,6 +140,8 @@ import {
 import {
   captureLeafInput,
   captureLeafSubmission,
+  canClearActiveLeaf,
+  clearActiveLeaf,
   clearFocusedTerminal,
   disposeSession,
   findLeafCwd,
@@ -1164,9 +1166,10 @@ export default function App() {
   const [zenMode, setZenMode] = useState(false);
 
   const clearActiveTerminal = useCallback(() => {
-    if (!document.activeElement?.closest(".xterm")) return;
     if (!activeTerminalTab || activeLeafId === null) return;
-    terminalRefs.current.get(activeLeafId)?.write("\x0c");
+    void clearActiveLeaf(activeLeafId).catch((error) =>
+      console.error("clear active terminal failed", error),
+    );
   }, [activeTerminalTab, activeLeafId]);
 
   const shortcutHandlers = useMemo<ShortcutHandlers>(
@@ -1283,9 +1286,11 @@ export default function App() {
         return !(target as HTMLElement | null)?.closest?.(".xterm");
       }
       if (id === "terminal.clearActive") {
-        const target =
-          (e.target as HTMLElement | null) ?? document.activeElement;
-        return !target?.closest?.(".xterm");
+        const target = (e.target as Element | null) ?? document.activeElement;
+        return (
+          activeTab?.kind !== "terminal" ||
+          !canClearActiveLeaf(activeTab.activeLeafId, target)
+        );
       }
       if (
         id === "terminal.toggleInput" ||
