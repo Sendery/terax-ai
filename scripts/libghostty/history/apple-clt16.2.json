@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "purpose": "explicit producer inputs only; never ship SDK or installers",
+  "cltVersion": "16.2",
+  "sdkVersion": "15.2",
+  "sdkCanonicalName": "macosx15.2",
+  "sdkSettingsSha256": "2fa5c0ce1bbcd261b132b572b1a9eece3b5905b04640a44deae1a6a8812928fb",
+  "libSystemSha256": "a4104fe1c626311206cdaa336c078ffe8f8889f5bdb670952241bd40cf8955b1",
+  "signatureChain": [
+    "Software Update",
+    "Apple Software Update Certification Authority",
+    "Apple Root CA"
+  ],
+  "packages": [
+    {
+      "url": "https://swcdn.apple.com/content/downloads/61/45/072-44426-A_16242I3TPF/74lkhd4yt26hcrwgpibrqtltf7yth9kc5w/CLTools_macOSNMOS_SDK.pkg",
+      "bytes": 57160029,
+      "sha256": "55c193b80f3b4c5ae20b3bd926abe20e11a2933cdd1aa918a63f7e89c16dce21",
+      "catalogDigest": "d3519da802edf6d96f8ca8439d3a02285ff51680",
+      "catalogDigestUnit": "SHA1 of compressed XAR TOC",
+      "signature": "signed Apple Software",
+      "version": "16.2.0.0.1.1733547573"
+    },
+    {
+      "url": "https://swcdn.apple.com/content/downloads/61/45/072-44426-A_16242I3TPF/74lkhd4yt26hcrwgpibrqtltf7yth9kc5w/CLTools_Executables.pkg",
+      "bytes": 604642024,
+      "sha256": "7578692dbf0f5f6e3f811c8653dc0ddfd3caf4adc0e213d8038177141a4b7815",
+      "catalogDigest": "f737fdab6041f54b82ac4a5691e5a09349d06770",
+      "catalogDigestUnit": "SHA1 of compressed XAR TOC",
+      "signature": "signed Apple Software",
+      "version": "16.2.0.0.1.1733547573"
+    },
+    {
+      "url": "https://swcdn.apple.com/content/downloads/61/45/072-44426-A_16242I3TPF/74lkhd4yt26hcrwgpibrqtltf7yth9kc5w/CLTools_SwiftBackDeploy.pkg",
+      "bytes": 48539105,
+      "sha256": "c86cdfbf7763a530608e0e38101b4b94b015b149f75ee99f4c7c7a985d9706ac",
+      "catalogDigest": "9c57b9555abc8897946820e54192cc44fb099d26",
+      "catalogDigestUnit": "SHA1 of compressed XAR TOC",
+      "signature": "signed Apple Software",
+      "version": "16.2.0.0.1.1733547573"
+    },
+    {
+      "url": "https://swcdn.apple.com/content/downloads/61/45/072-44426-A_16242I3TPF/74lkhd4yt26hcrwgpibrqtltf7yth9kc5w/CLTools_macOS_SDK.pkg",
+      "bytes": 5386,
+      "sha256": "87757b5720d9d3dcadca6be4599a2e6d3a9e6f21d2be843134f230eb7376fbba",
+      "catalogDigest": "cf7b5d780f8777f39954cb327f63b167c210d8b2",
+      "catalogDigestUnit": "SHA1 of compressed XAR TOC",
+      "signature": "signed Apple Software",
+      "version": "16.2.0.0.1.1733547573"
+    }
+  ]
+}

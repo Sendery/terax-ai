@@ -1,0 +1,16 @@
+--- a/src/bindings.rs
++++ b/src/bindings.rs
+@@ -2498,6 +2498,13 @@
+         terminal: Terminal,
+         option: TerminalOption::Type,
+         value: *const ::std::os::raw::c_void,
++    ) -> Result::Type;
++}
++unsafe extern "C" {
++    /// Terax exact-history-rows-v1 extension, unavailable in the old prebuilt.
++    pub fn ghostty_terminal_set_scrollback_limit_rows(
++        terminal: Terminal,
++        max_rows: usize,
+     ) -> Result::Type;
+ }
+ unsafe extern "C" {

@@ -1,0 +1,21 @@
+--- a/src/terminal.rs
++++ b/src/terminal.rs
+@@ -551,6 +551,18 @@
+ 
+         let result = unsafe { ffi::ghostty_terminal_set(self.inner.as_raw(), tag, ptr.cast()) };
+         from_result(result)
++    }
++
++    /// Set an exact physical history-row limit on the primary screen.
++    ///
++    /// Requires the Terax exact-history-rows-v1 native artifact. The limit
++    /// applies immediately, survives reset/resize and reserves no history.
++    pub fn set_scrollback_limit_rows(&mut self, max_rows: usize) -> Result<&mut Self> {
++        let result = unsafe {
++            ffi::ghostty_terminal_set_scrollback_limit_rows(self.inner.as_raw(), max_rows)
++        };
++        from_result(result)?;
++        Ok(self)
+     }
+ 
+     /// Get the terminal width in cells.

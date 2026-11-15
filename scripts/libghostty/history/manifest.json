@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "variant": "exact-history-rows-v1",
+  "repository": "https://github.com/ghostty-org/ghostty.git",
+  "upstreamCommit": "a887df42c56f6de86c0fe6da9c4eeca37931e083",
+  "upstreamTree": "c73524da697ab769c68054d29bd61712f65700c3",
+  "zigVersion": "0.15.2",
+  "crateVersion": "0.2.2",
+  "abi": [
+    "ghostty_terminal_set_scrollback_limit_rows"
+  ],
+  "patch": {
+    "path": "core.patch",
+    "sha256": "293a47bae00a5fd4c196ab52e550050f784488d883b1fc2ed436263a44ce4973"
+  },
+  "license": {
+    "spdx": "MIT",
+    "upstreamPath": "LICENSE",
+    "sha256": "386211873e5b7a02f663ae4d7adf96285999f91608f8f9f31fecfd0f4095e6f1",
+    "dependencyManifestSha256": "8650dbbfaf4d0bd34d45f9411bc3e04ac434bfee6d9b19f504cc81cf86f49de3"
+  },
+  "files": [
+    {
+      "path": "src/terminal/PageList.zig",
+      "upstreamGitBlob": "79aa96f189b7307cf2cb7aacbcddc074ed124d0b",
+      "beforeSha256": "eff4f6cc93c0f9957cc439385b3d47453eb7529bf8d2c2b9bafdf2f284063751",
+      "afterSha256": "3f07ba22d7ff9c8293d01f4b86cd298310d4eaf748177ab00817a6602bf22c86"
+    },
+    {
+      "path": "src/terminal/Screen.zig",
+      "upstreamGitBlob": "6c4db3237c84ace7079e2f2eaa7b379580667d45",
+      "beforeSha256": "ae08a0e34e653ac4a998fc834fefb1089900ba968a75838fa04eea25290f4dfd",
+      "afterSha256": "5b8ff77060f583f9888dde5e42e2218ab1ef4c1fa97f3b902256202e18a5b5db"
+    },
+    {
+      "path": "src/terminal/kitty/graphics_storage.zig",
+      "upstreamGitBlob": "ba82ea4024b2fe4989bd3eaee9e308528bc2c8fb",
+      "beforeSha256": "8fe14f5988dcb7a3b112acd24f80fdb1ab616049c4229a922784b738349f1504",
+      "afterSha256": "2b369cf203487c8d69c5d9828413a6d9f192dab1834ef34f3552068a08b591b0"
+    },
+    {
+      "path": "src/terminal/c/terminal.zig",
+      "upstreamGitBlob": "1c3b9f0c557aa603cf40eab920623eba07cdc7e8",
+      "beforeSha256": "5207bb1e5357750235338ceb34f8ebccede9b992cbff6d8e213581ac7c4ca464",
+      "afterSha256": "b1ef10f88d6c563b793cfb9587537f891cf270e24e92168b8b10e49c55d1f846"
+    },
+    {
+      "path": "src/terminal/c/main.zig",
+      "upstreamGitBlob": "37dc57684aa5e6edea164acb3d4faa37955667b3",
+      "beforeSha256": "1be3be44796c90537045148e93177e80393867e7deed85aa4707d3315add9230",
+      "afterSha256": "b9f5c2192cd03c7d252354cd48472cbcdb5747b3169e29c3657e70e1c267d1c1"
+    },
+    {
+      "path": "src/lib_vt.zig",
+      "upstreamGitBlob": "e01cdbb892c36cf88d4088c45bb464a429654d57",
+      "beforeSha256": "891aaba636cca7d4168a74f89db8d52722fb2e4a30c125f5b39fa613f91702a3",
+      "afterSha256": "a741b71b66a88b13d307893bdcb13f1578063f321541144c1223d48b1fabb44a"
+    },
+    {
+      "path": "include/ghostty/vt/terminal.h",
+      "upstreamGitBlob": "26ee0c0b8670b4a7c81a4840480063b03bb320a7",
+      "beforeSha256": "c655bfdf0c72e271034767b1fc92a56dbdfded7cf78a5689a2ff59fbbf240b2f",
+      "afterSha256": "80c91e9ebd119f41b2aea5b3cbf8947b51b4e793fbfbbe4f2f12c5a0db59ced1"
+    }
+  ],
+  "rustWrapper": {
+    "crate": "libghostty-vt",
+    "version": "0.2.2",
+    "repository": "https://github.com/uzaaft/libghostty-rs",
+    "crateSha256": "16c7287a8dc35c3436224b39358af81ab9ea54bafa0f7ea2e068bd2a47bdcb2d",
+    "license": "MIT OR Apache-2.0",
+    "path": "src/terminal.rs",
+    "beforeSha256": "70643617cadce7bab3faec80cf26b0a91f90c19bf6474318f4117a5498e726ac",
+    "afterSha256": "b3fbf4adcef5db2ce35c2cad826c48878aeecdb108b45029974bb2440f57065d",
+    "patch": {
+      "path": "rust-wrapper.patch",
+      "sha256": "c217431cceab339be2fca976ee0471a891fda90f941b877e108cbe6c58b5f259"
+    }
+  },
+  "rustSys": {
+    "crate": "libghostty-vt-sys",
+    "version": "0.2.2",
+    "path": "src/bindings.rs",
+    "beforeSha256": "b044998cc81b073c843aad0f164b37df16de00ca1247b4d78bf37fdeac731e13",
+    "afterSha256": "9c425d50916033fd7ce54816063d90f5a56fbdaad940561af6d440f027bab494",
+    "patch": {
+      "path": "rust-sys.patch",
+      "sha256": "c9c8382d3538cbc86e95945ab386530a19e305ad1ea8dfe72c8e904675f6992b"
+    }
+  },
+  "status": "source-prepared-unverified-no-native-artifact",
+  "minimumFocusedTests": 11
+}

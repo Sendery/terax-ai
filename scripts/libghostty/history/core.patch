@@ -1,0 +1,587 @@
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -4640,7 +4640,16 @@
+     self: *PageList,
+     bl_pt: ?point.Point,
+ ) void {
+-    self.eraseRows(.{ .history = .{} }, bl_pt);
++    self.eraseRows(.{ .history = .{} }, bl_pt, false);
++}
++
++/// Evict the oldest history rows, preserving at most max_rows.
++pub fn pruneHistoryRows(self: *PageList, max_rows: usize) void {
++    const history = self.total_rows - self.rows;
++    if (history <= max_rows) return;
++    const excess = history - max_rows;
++    self.eraseRows(.{ .history = .{} },
++        .{ .history = .{ .y = @intCast(excess - 1) } }, true);
+ }
+ 
+ /// Erase active area rows, from the top of the active area to the
+@@ -4650,7 +4659,7 @@
+     y: size.CellCountInt,
+ ) void {
+     assert(y < self.rows);
+-    self.eraseRows(.{ .active = .{} }, .{ .active = .{ .y = y } });
++    self.eraseRows(.{ .active = .{} }, .{ .active = .{ .y = y } }, false);
+ }
+ 
+ /// Erase rows from tl_pt to bl_pt (inclusive), physically removing
+@@ -4666,6 +4675,7 @@
+     self: *PageList,
+     tl_pt: point.Point,
+     bl_pt: ?point.Point,
++    evict: bool,
+ ) void {
+     defer self.assertIntegrity();
+     self.page_compression.markActivity();
+@@ -4695,6 +4705,12 @@
+                 break;
+             }
+ 
++            if (evict) {
++                for (self.tracked_pins.keys()) |p| {
++                    if (p.node == chunk.node and p != self.viewport_pin)
++                        p.garbage = true;
++                }
++            }
+             erased += chunk.node.rows();
+             self.erasePage(chunk.node);
+             continue;
+@@ -4745,6 +4761,7 @@
+             } else {
+                 p.y = 0;
+                 p.x = 0;
++                if (evict and p != self.viewport_pin) p.garbage = true;
+             }
+         }
+ 
+@@ -17514,3 +17531,48 @@
+         try testing.expectEqualStrings("https://example.com", link.uri.slice(second_page.memory));
+     }
+ }
++
++
++test "row retention: partial page preserves surviving tracked pins" {
++    const testing = std.testing;
++    var list = try PageList.init(testing.allocator, 80, 2, std.math.maxInt(usize));
++    defer list.deinit();
++    for (0..6) |_| _ = try list.grow();
++
++    const evicted = try list.trackPin(list.pin(.{ .history = .{ .y = 1 } }).?);
++    defer list.untrackPin(evicted);
++    const retained = try list.trackPin(list.pin(.{ .history = .{ .x = 3, .y = 4 } }).?);
++    defer list.untrackPin(retained);
++    const serial = retained.node.serial;
++    list.pruneHistoryRows(3);
++
++    try testing.expectEqual(@as(usize, 5), list.total_rows);
++    try testing.expect(evicted.garbage);
++    try testing.expect(!retained.garbage);
++    try testing.expect(retained.node.serial != serial);
++    try testing.expectEqual(point.Point{ .history = .{ .x = 3, .y = 1 } },
++        list.pointFromPin(.history, retained.*).?);
++    try testing.expect(!list.viewport_pin.garbage);
++}
++
++test "row retention: whole pages are reclaimed without reviving lost pins" {
++    const testing = std.testing;
++    var list = try PageList.init(testing.allocator, 215, 3, std.math.maxInt(usize));
++    defer list.deinit();
++    for (0..600) |_| _ = try list.grow();
++    const bytes_before = list.page_size;
++    const lost = try list.trackPin(list.pin(.{ .history = .{} }).?);
++    defer list.untrackPin(lost);
++    const kept = try list.trackPin(list.pin(.{ .active = .{ .x = 1, .y = 2 } }).?);
++    defer list.untrackPin(kept);
++    list.pruneHistoryRows(7);
++    try testing.expectEqual(@as(usize, 10), list.total_rows);
++    try testing.expect(list.page_size < bytes_before);
++    try testing.expect(lost.garbage);
++    try testing.expect(!kept.garbage);
++    try testing.expectEqual(point.Point{ .active = .{ .x = 1, .y = 2 } },
++        list.pointFromPin(.active, kept.*).?);
++    list.pruneHistoryRows(1000);
++    try testing.expectEqual(@as(usize, 10), list.total_rows);
++    try testing.expect(lost.garbage);
++}
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -43,6 +43,9 @@
+ /// this because max_size 0 in PageList gets rounded up to two pages so
+ /// we can always have an active screen.
+ no_scrollback: bool = false,
++
++/// Exact physical history row policy. Null preserves byte-budget retention.
++history_limit_rows: ?usize = null,
+ 
+ /// The current cursor position
+ cursor: Cursor,
+@@ -564,14 +567,16 @@
+         };
+     } else null;
+ 
+-    const result: Screen = .{
++    var result: Screen = .{
+         .alloc = alloc,
+         .pages = pages,
+         .no_scrollback = self.no_scrollback,
++        .history_limit_rows = self.history_limit_rows,
+         .cursor = cursor,
+         .selection = sel,
+         .dirty = self.dirty,
+     };
++    result.enforceHistoryLimit();
+     result.assertIntegrity();
+     return result;
+ }
+@@ -929,6 +934,7 @@
+             @memset(cells[0..self.pages.cols], blank_cell);
+         }
+     }
++    self.enforceHistoryLimit();
+ }
+ 
+ /// This scrolls the active area at and above the cursor.
+@@ -1029,6 +1035,7 @@
+             @memset(cells[0..self.pages.cols], blank_cell);
+         }
+     }
++    self.enforceHistoryLimit();
+ }
+ 
+ fn cursorScrollAboveRotate(
+@@ -1495,6 +1502,59 @@
+         // No matter what, scrolling marks our image state as dirty since
+         // it could move placements. If there are no placements or no images
+         // this is still a very cheap operation.
++        self.kitty_images.dirty = true;
++    }
++    self.enforceHistoryLimit();
++}
++
++/// Install an exact row policy without reserving future history capacity.
++pub fn setHistoryLimitRows(self: *Screen, max_rows: usize) void {
++    self.history_limit_rows = max_rows;
++    // Keep growth on the eviction-aware path even when the row limit is zero.
++    self.no_scrollback = false;
++    self.pages.explicit_max_size = std.math.maxInt(usize);
++    self.enforceHistoryLimit();
++}
++
++fn enforceHistoryLimit(self: *Screen) void {
++    const limit = self.history_limit_rows orelse return;
++    const history = self.pages.total_rows - self.pages.rows;
++    if (history <= limit) return;
++    const excess = history - limit;
++
++    if (self.selection) |*sel| {
++        const start = sel.start();
++        const end = sel.end();
++        const start_y = self.pages.pointFromPin(.screen, start).?.screen.y;
++        const end_y = self.pages.pointFromPin(.screen, end).?.screen.y;
++        if (start.garbage or end.garbage or
++            (start_y < excess and end_y < excess))
++        {
++            self.clearSelection();
++        } else {
++            if (start_y < excess) {
++                var clipped = self.pages.pin(.{ .screen = .{
++                    .y = @intCast(excess),
++                } }).?;
++                clipped.x = if (sel.rectangle) @min(start.x, clipped.node.cols() - 1) else 0;
++                sel.startPtr().* = clipped;
++                self.dirty.selection = true;
++            }
++            if (end_y < excess) {
++                var clipped = self.pages.pin(.{ .screen = .{
++                    .y = @intCast(excess),
++                } }).?;
++                clipped.x = if (sel.rectangle) @min(end.x, clipped.node.cols() - 1) else 0;
++                sel.endPtr().* = clipped;
++                self.dirty.selection = true;
++            }
++        }
++    }
++
++    self.pages.pruneHistoryRows(limit);
++    self.cursorReload();
++    if (comptime build_options.kitty_graphics) {
++        self.kitty_images.pruneGarbagePlacements(self);
+         self.kitty_images.dirty = true;
+     }
+ }
+@@ -2039,6 +2099,7 @@
+         link.deinit(self.alloc);
+         self.alloc.destroy(link);
+     }
++    self.enforceHistoryLimit();
+ }
+ 
+ /// Set a style attribute for the current cursor.
+@@ -11221,3 +11282,125 @@
+     try testing.expectEqual(@as(usize, 1), result.right);
+     try testing.expectEqual(@as(usize, 0), result.left);
+ }
++
++
++test "row retention: exact live cap, lazy increase and reset" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var s = try init(alloc, .{ .cols = 8, .rows = 2, .max_scrollback = 1 });
++    defer s.deinit();
++    const initial_bytes = s.pages.page_size;
++    s.setHistoryLimitRows(50_000);
++    try testing.expectEqual(initial_bytes, s.pages.page_size);
++    try s.testWriteString("one\ntwo\nthree\nfour\nfive\nsix");
++    s.setHistoryLimitRows(2);
++    try testing.expectEqual(@as(usize, 4), s.pages.total_rows);
++    {
++        const text = try s.dumpStringAlloc(alloc, .{ .screen = .{} });
++        defer alloc.free(text);
++        try testing.expectEqualStrings("three\nfour\nfive\nsix", text);
++    }
++    try s.testWriteString("\nseven");
++    try testing.expectEqual(@as(usize, 4), s.pages.total_rows);
++    const bytes = s.pages.page_size;
++    s.setHistoryLimitRows(50_000);
++    try testing.expectEqual(bytes, s.pages.page_size);
++    try testing.expectEqual(@as(usize, 4), s.pages.total_rows);
++    s.setHistoryLimitRows(2);
++    s.reset();
++    try s.testWriteString("one\ntwo\nthree\nfour\nfive");
++    try testing.expectEqual(@as(usize, 4), s.pages.total_rows);
++}
++
++test "row retention: selection clipping preserves direction and rectangle columns" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    for ([_]bool{ false, true }) |rectangle| {
++        for ([_]bool{ false, true }) |reverse| {
++            var s = try init(alloc, .{ .cols = 8, .rows = 2, .max_scrollback = 1_000_000 });
++            defer s.deinit();
++            try s.testWriteString("one\ntwo\nthree\nfour\nfive\nsix");
++            const first = s.pages.pin(.{ .screen = .{ .x = 2 } }).?;
++            const last = s.pages.pin(.{ .screen = .{ .x = 3, .y = 4 } }).?;
++            try s.select(Selection.init(if (reverse) last else first,
++                if (reverse) first else last, rectangle));
++            s.dirty.selection = false;
++            s.setHistoryLimitRows(2);
++            const sel = s.selection.?;
++            const clipped = if (reverse) sel.end() else sel.start();
++            const kept = if (reverse) sel.start() else sel.end();
++            try testing.expectEqual(point.Point{ .screen = .{ .x = if (rectangle) 2 else 0 } },
++                s.pages.pointFromPin(.screen, clipped).?);
++            try testing.expectEqual(point.Point{ .screen = .{ .x = 3, .y = 2 } },
++                s.pages.pointFromPin(.screen, kept).?);
++            try testing.expect(!clipped.garbage);
++            try testing.expect(!kept.garbage);
++            try testing.expectEqual(rectangle, sel.rectangle);
++            try testing.expect(s.dirty.selection);
++        }
++    }
++}
++
++test "row retention: lost selection clears and retained selection keeps ownership" {
++    const testing = std.testing;
++    var s = try init(testing.allocator, .{ .cols = 8, .rows = 2, .max_scrollback = 1_000_000 });
++    defer s.deinit();
++    try s.testWriteString("one\ntwo\nthree\nfour\nfive\nsix");
++    try s.select(Selection.init(s.pages.pin(.{ .screen = .{} }).?,
++        s.pages.pin(.{ .screen = .{ .y = 1 } }).?, false));
++    s.setHistoryLimitRows(2);
++    try testing.expect(s.selection == null);
++    try s.select(Selection.init(s.pages.pin(.{ .screen = .{ .x = 1 } }).?,
++        s.pages.pin(.{ .screen = .{ .x = 2, .y = 1 } }).?, false));
++    const owned = s.selection.?.bounds.tracked;
++    s.setHistoryLimitRows(1);
++    try testing.expect(s.selection.?.bounds.tracked.end == owned.end);
++    try testing.expectEqual(@as(u32, 0),
++        s.pages.pointFromPin(.screen, s.selection.?.end()).?.screen.y);
++}
++
++test "row retention: viewport preserves retained content and clamps removed content" {
++    const testing = std.testing;
++    var s = try init(testing.allocator, .{ .cols = 8, .rows = 2, .max_scrollback = 1_000_000 });
++    defer s.deinit();
++    try s.testWriteString("one\ntwo\nthree\nfour\nfive\nsix");
++    s.scroll(.{ .delta_row = -1 });
++    s.setHistoryLimitRows(2);
++    {
++        const text = try s.dumpStringAlloc(testing.allocator, .{ .viewport = .{} });
++        defer testing.allocator.free(text);
++        try testing.expectEqualStrings("four\nfive", text);
++    }
++    s.scroll(.{ .top = {} });
++    s.setHistoryLimitRows(1);
++    try testing.expectEqual(point.Point{ .screen = .{} },
++        s.pages.pointFromPin(.screen, s.pages.getTopLeft(.viewport)).?);
++    try testing.expect(!s.pages.viewport_pin.garbage);
++}
++
++test "row retention: resize, scroll clear, scroll above and clone keep cap" {
++    const testing = std.testing;
++    var s = try init(testing.allocator, .{ .cols = 12, .rows = 3, .max_scrollback = 1 });
++    defer s.deinit();
++    s.setHistoryLimitRows(2);
++    try s.testWriteString("abcdefghijkl\nmnopqrstuvwx\nyzABCDEFGHIJ\nKLMNOPQRSTUV");
++    try s.resize(.{ .cols = 6, .rows = 2, .reflow = true });
++    try testing.expectEqual(@as(usize, 4), s.pages.total_rows);
++    s.assertIntegrity();
++    try s.scrollClear();
++    try testing.expect(s.pages.total_rows <= 4);
++    s.cursorAbsolute(0, 0);
++    try s.cursorScrollAbove();
++    try testing.expect(s.pages.total_rows <= 4);
++    s.assertIntegrity();
++    var copy = try s.clone(testing.allocator, .{ .screen = .{} }, null);
++    defer copy.deinit();
++    try testing.expectEqual(@as(?usize, 2), copy.history_limit_rows);
++    try copy.testWriteString("\none\ntwo\nthree\nfour");
++    try testing.expect(copy.pages.total_rows <= copy.pages.rows + 2);
++    copy.assertIntegrity();
++    s.setHistoryLimitRows(0);
++    try testing.expectEqual(@as(usize, s.pages.rows), s.pages.total_rows);
++    try s.testWriteString("\none\ntwo\nthree");
++    try testing.expectEqual(@as(usize, s.pages.rows), s.pages.total_rows);
++}
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -282,6 +282,21 @@
+         var it = self.placements.iterator();
+         while (it.next()) |entry| entry.value_ptr.deinit(s);
+         self.placements.clearRetainingCapacity();
++    }
++
++    /// Remove placements whose tracked history anchor was evicted.
++    pub fn pruneGarbagePlacements(self: *ImageStorage, s: *terminal.Screen) void {
++        const before = self.placements.count();
++        var it = self.placements.iterator();
++        while (it.next()) |entry| {
++            switch (entry.value_ptr.location) {
++                .virtual => continue,
++                .pin => |p| if (!p.garbage) continue,
++            }
++            entry.value_ptr.deinit(s);
++            self.placements.removeByPtr(entry.key_ptr);
++        }
++        if (self.placements.count() != before) self.markMutated();
+     }
+ 
+     /// Get an image by its ID. If the image doesn't exist, null is returned.
+@@ -1599,3 +1614,37 @@
+     try testing.expect(s.dirty);
+     try testing.expect(s.generation > gen);
+ }
++
++test "row retention: only evicted pinned image placements are removed" {
++    if (comptime !@import("terminal_options").kitty_graphics) return error.SkipZigTest;
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    var t = try terminal.Terminal.init(alloc, .{ .cols = 8, .rows = 2, .max_scrollback = 1_000_000 });
++    defer t.deinit(alloc);
++    const screen = t.screens.active;
++    var stream = t.vtStream();
++    defer stream.deinit();
++    stream.nextSlice("one\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix");
++    const storage = &screen.kitty_images;
++    try storage.addImage(alloc, .{ .id = 1, .width = 1, .height = 1 });
++    try storage.addPlacement(alloc, 1, 1, .{ .location = .{
++        .pin = try screen.pages.trackPin(screen.pages.pin(.{ .history = .{} }).?),
++    } });
++    try storage.addPlacement(alloc, 1, 2, .{ .location = .{
++        .pin = try screen.pages.trackPin(screen.pages.pin(.{ .history = .{ .y = 3 } }).?),
++    } });
++    try storage.addPlacement(alloc, 1, 3, .{ .location = .{ .virtual = {} } });
++    const generation = storage.generation;
++    screen.setHistoryLimitRows(2);
++    try testing.expectEqual(@as(usize, 2), storage.placements.count());
++    try testing.expectEqual(@as(usize, 1), storage.images.count());
++    try testing.expect(storage.placements.get(.{ .image_id = 1,
++        .placement_id = .{ .tag = .external, .id = 1 } }) == null);
++    const retained = storage.placements.get(.{ .image_id = 1,
++        .placement_id = .{ .tag = .external, .id = 2 } }).?;
++    try testing.expect(!retained.location.pin.garbage);
++    try testing.expectEqual(point.Point{ .history = .{ .y = 1 } },
++        screen.pages.pointFromPin(.history, retained.location.pin.*).?);
++    try testing.expect(storage.generation != generation);
++    try testing.expect(storage.dirty);
++}
+--- a/src/terminal/c/terminal.zig
++++ b/src/terminal/c/terminal.zig
+@@ -680,6 +680,20 @@
+         func(@ptrCast(wrapper), wrapper.effects.userdata, data.ptr, data.len);
+     }
+ 
++    return .success;
++}
++
++/// C: ghostty_terminal_set_scrollback_limit_rows
++pub fn set_scrollback_limit_rows(
++    terminal_: Terminal,
++    max_rows: usize,
++) callconv(lib.calling_conv) Result {
++    const t = (terminal_ orelse return .invalid_value).terminal;
++    const primary = t.screens.get(.primary).?;
++    if (max_rows > std.math.maxInt(u32) - std.math.maxInt(size.CellCountInt))
++        return .invalid_value;
++    primary.setHistoryLimitRows(max_rows);
++    t.flags.dirty.clear = true;
+     return .success;
+ }
+ 
+@@ -3859,3 +3873,105 @@
+     var values = [_]?*anyopaque{@ptrCast(&cols)};
+     try testing.expectEqual(Result.invalid_value, get_multi(null, 1, null, &values, null));
+ }
++
++
++test "row retention: C API applies to primary while alternate is active" {
++    try testing.expectEqual(Result.invalid_value, set_scrollback_limit_rows(null, 2));
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(&lib.alloc.test_allocator, &t,
++        .{ .cols = 8, .rows = 2, .max_scrollback = 1 }));
++    defer free(t);
++    try testing.expectEqual(Result.success, set_scrollback_limit_rows(t, 2));
++    const text = "one\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix";
++    vt_write(t, text, text.len);
++    const primary = t.?.terminal.screens.get(.primary).?;
++    try testing.expectEqual(@as(usize, 4), primary.pages.total_rows);
++    const enter = "\x1b[?1049h";
++    vt_write(t, enter, enter.len);
++    try testing.expectEqual(ScreenSet.Key.alternate, t.?.terminal.screens.active_key);
++    try testing.expectEqual(Result.success, set_scrollback_limit_rows(t, 1));
++    try testing.expectEqual(@as(usize, 3), primary.pages.total_rows);
++    try testing.expectEqual(@as(?usize, null),
++        t.?.terminal.screens.active.history_limit_rows);
++    vt_write(t, text, text.len);
++    try testing.expectEqual(@as(usize, 2), t.?.terminal.screens.active.pages.total_rows);
++    reset(t);
++    try testing.expectEqual(@as(?usize, 1), primary.history_limit_rows);
++    vt_write(t, text, text.len);
++    try testing.expectEqual(@as(usize, 3), primary.pages.total_rows);
++}
++
++test "row retention: tracked C refs retain contents or become unavailable" {
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(&lib.alloc.test_allocator, &t,
++        .{ .cols = 8, .rows = 2, .max_scrollback = 1_000_000 }));
++    defer free(t);
++    const text = "one\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix";
++    vt_write(t, text, text.len);
++    var lost: grid_ref_tracked_c.CTrackedGridRef = null;
++    var kept: grid_ref_tracked_c.CTrackedGridRef = null;
++    try testing.expectEqual(Result.success, grid_ref_track(t,
++        .{ .tag = .history, .value = .{ .history = .{} } }, &lost));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(lost);
++    try testing.expectEqual(Result.success, grid_ref_track(t,
++        .{ .tag = .history, .value = .{ .history = .{ .x = 1, .y = 3 } } }, &kept));
++    defer grid_ref_tracked_c.tracked_grid_ref_free(kept);
++    var original_codepoint: u32 = 0;
++    {
++        var borrowed: grid_ref_c.CGridRef = .{};
++        try testing.expectEqual(Result.success,
++            grid_ref_tracked_c.tracked_grid_ref_snapshot(kept, &borrowed));
++        var cell: cell_c.CCell = undefined;
++        try testing.expectEqual(Result.success, grid_ref_c.grid_ref_cell(&borrowed, &cell));
++        try testing.expectEqual(Result.success,
++            cell_c.get(cell, .codepoint, @ptrCast(&original_codepoint)));
++        try testing.expectEqual(@as(u32, 'o'), original_codepoint);
++    }
++    try testing.expectEqual(Result.success, set_scrollback_limit_rows(t, 2));
++    try testing.expect(!grid_ref_tracked_c.tracked_grid_ref_has_value(lost));
++    try testing.expect(grid_ref_tracked_c.tracked_grid_ref_has_value(kept));
++    var coord: point.Coordinate = undefined;
++    try testing.expectEqual(Result.no_value,
++        grid_ref_tracked_c.tracked_grid_ref_point(lost, .history, &coord));
++    try testing.expectEqual(Result.success,
++        grid_ref_tracked_c.tracked_grid_ref_point(kept, .history, &coord));
++    try testing.expectEqual(point.Coordinate{ .x = 1, .y = 1 }, coord);
++    {
++        var fresh: grid_ref_c.CGridRef = .{};
++        try testing.expectEqual(Result.no_value,
++            grid_ref_tracked_c.tracked_grid_ref_snapshot(lost, &fresh));
++        try testing.expectEqual(Result.success,
++            grid_ref_tracked_c.tracked_grid_ref_snapshot(kept, &fresh));
++        try testing.expectEqual(Result.success,
++            point_from_grid_ref(t, &fresh, .history, &coord));
++        try testing.expectEqual(point.Coordinate{ .x = 1, .y = 1 }, coord);
++        var cell: cell_c.CCell = undefined;
++        try testing.expectEqual(Result.success, grid_ref_c.grid_ref_cell(&fresh, &cell));
++        var codepoint: u32 = 0;
++        try testing.expectEqual(Result.success,
++            cell_c.get(cell, .codepoint, @ptrCast(&codepoint)));
++        try testing.expectEqual(original_codepoint, codepoint);
++    }
++    try testing.expectEqual(Result.success, set_scrollback_limit_rows(t, 0));
++    try testing.expect(!grid_ref_tracked_c.tracked_grid_ref_has_value(kept));
++    vt_write(t, text, text.len);
++    try testing.expectEqual(@as(usize, 2), t.?.terminal.screens.active.pages.total_rows);
++}
++
++
++test "row retention: maximum representable row limit stays valid across resize" {
++    var t: Terminal = null;
++    try testing.expectEqual(Result.success, new(&lib.alloc.test_allocator, &t,
++        .{ .cols = 8, .rows = 2, .max_scrollback = 1 }));
++    defer free(t);
++    const primary = t.?.terminal.screens.get(.primary).?;
++    const before = primary.pages.page_size;
++    const limit: usize = std.math.maxInt(u32) - std.math.maxInt(size.CellCountInt);
++    try testing.expectEqual(Result.success, set_scrollback_limit_rows(t, limit));
++    try testing.expectEqual(before, primary.pages.page_size);
++    try testing.expectEqual(Result.invalid_value, set_scrollback_limit_rows(t, limit + 1));
++    try testing.expectEqual(@as(?usize, limit), primary.history_limit_rows);
++    try testing.expectEqual(before, primary.pages.page_size);
++    try testing.expectEqual(Result.success, resize(t, 8, 3, 1, 1));
++    try testing.expectEqual(@as(?usize, limit), primary.history_limit_rows);
++}
+--- a/src/terminal/c/main.zig
++++ b/src/terminal/c/main.zig
+@@ -181,6 +181,7 @@
+ pub const terminal_reset = terminal.reset;
+ pub const terminal_resize = terminal.resize;
+ pub const terminal_set = terminal.set;
++pub const terminal_set_scrollback_limit_rows = terminal.set_scrollback_limit_rows;
+ pub const terminal_vt_write = terminal.vt_write;
+ pub const terminal_scroll_viewport = terminal.scroll_viewport;
+ pub const terminal_compression_activity = terminal.compression_activity;
+--- a/src/lib_vt.zig
++++ b/src/lib_vt.zig
+@@ -259,6 +259,7 @@
+         @export(&c.terminal_reset, .{ .name = "ghostty_terminal_reset" });
+         @export(&c.terminal_resize, .{ .name = "ghostty_terminal_resize" });
+         @export(&c.terminal_set, .{ .name = "ghostty_terminal_set" });
++        @export(&c.terminal_set_scrollback_limit_rows, .{ .name = "ghostty_terminal_set_scrollback_limit_rows" });
+         @export(&c.terminal_vt_write, .{ .name = "ghostty_terminal_vt_write" });
+         @export(&c.terminal_scroll_viewport, .{ .name = "ghostty_terminal_scroll_viewport" });
+         @export(&c.terminal_compression_activity, .{ .name = "ghostty_terminal_compression_activity" });
+--- a/include/ghostty/vt/terminal.h
++++ b/include/ghostty/vt/terminal.h
+@@ -1291,6 +1291,26 @@
+                                    const void* value);
+ 
+ /**
++ * Set the primary screen's exact physical history row limit.
++ *
++ * Replaces byte-budget retention for this screen and immediately evicts the
++ * oldest excess rows. Active rows are excluded. Zero disables history.
++ * Raising the limit allocates no history and does not restore evicted rows.
++ * The policy survives reset, resize and alternate-screen switches.
++ *
++ * Tracked references to evicted rows become invalid; retained references remain
++ * attached to their contents. A crossing selection is clipped and a wholly
++ * evicted selection is cleared. The viewport clamps only if its rows were lost.
++ *
++ * This extension is additive and leaves GhosttyTerminalOptions unchanged.
++ * Returns GHOSTTY_INVALID_VALUE for NULL or an unrepresentable row limit.
++ *
++ * @ingroup terminal
++ */
++GHOSTTY_API GhosttyResult ghostty_terminal_set_scrollback_limit_rows(
++    GhosttyTerminal terminal, size_t max_rows);
++
++/**
+  * Write VT-encoded data to the terminal for processing.
+  *
+  * Feeds raw bytes through the terminal's VT stream parser, updating
