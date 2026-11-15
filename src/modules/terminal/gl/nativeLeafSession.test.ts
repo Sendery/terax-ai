@@ -33,6 +33,7 @@ function driver(id: number, closing: Promise<void> = Promise.resolve()) {
     write: vi.fn(async () => {}),
     resizeAndWait: vi.fn(async () => {}),
     setColors: vi.fn(),
+    setCursorBlink: vi.fn(),
     requestFull: vi.fn(),
     scroll: vi.fn(),
     attachRenderer: vi.fn(),
@@ -564,5 +565,62 @@ it("does not submit after its caller retires during requireNative", async () => 
   current = false;
   await expect(result).rejects.toThrow("available");
   expect(native.submit).not.toHaveBeenCalled();
+  await session.dispose();
+});
+
+it.each([false, true])(
+  "opens ordinary/blocks=%s with the configured cursor default",
+  async (blocks) => {
+    const native = driver(9);
+    const open = vi.fn(
+      async (_renderer: TerminalRenderer, _options: unknown) =>
+        native as unknown as EngineSession,
+    );
+    const session = new NativeLeafSession(
+      { ...config(), blocks, cursorBlink: true },
+      open,
+    );
+    await session.opened;
+    expect(open.mock.calls[0][1]).toMatchObject({ blocks, cursorBlink: true });
+    await session.dispose();
+  },
+);
+it("applies only changed cursor preferences and carries the latest into respawn", async () => {
+  const first = driver(9),
+    next = driver(10);
+  const open = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(next);
+  const session = new NativeLeafSession(
+    { ...config(), cursorBlink: false },
+    open,
+  );
+  await session.opened;
+  session.setCursorBlink(true);
+  session.setCursorBlink(true);
+  session.configure({ ...config(), cursorBlink: true });
+  expect(first.setCursorBlink).toHaveBeenCalledExactlyOnceWith(true);
+  await session.respawn();
+  expect(open.mock.calls[1][1]).toMatchObject({ cursorBlink: true });
+  expect(next.setCursorBlink).not.toHaveBeenCalled();
+  await session.dispose();
+});
+it("replays a preference changed during opening without resetting unchanged startup defaults", async () => {
+  let finish = (_value: EngineSession) => {};
+  const native = driver(9);
+  const open = vi.fn(
+    (_renderer: TerminalRenderer, _options: unknown) =>
+      new Promise<EngineSession>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const session = new NativeLeafSession(
+    { ...config(), cursorBlink: true },
+    open,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(open.mock.calls[0][1]).toMatchObject({ cursorBlink: true });
+  session.setCursorBlink(false);
+  finish(native as unknown as EngineSession);
+  await session.opened;
+  expect(native.setCursorBlink).toHaveBeenCalledExactlyOnceWith(false);
   await session.dispose();
 });

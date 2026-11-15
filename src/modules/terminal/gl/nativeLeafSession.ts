@@ -27,6 +27,7 @@ export type NativeLeafConfig = {
   renderer: TerminalRenderer;
   size: TerminalSize;
   colors: EngineColors;
+  cursorBlink?: boolean;
   cwd?: string;
   blocks?: boolean;
   onReady?: () => void;
@@ -49,6 +50,7 @@ type OpenNative = (
     cwd?: string;
     blocks: boolean;
     colors: EngineColors;
+    cursorBlink: boolean;
     observer: SessionObserver;
   },
 ) => Promise<EngineSession>;
@@ -147,12 +149,15 @@ export class NativeLeafSession implements NativeLeaf {
   }
 
   configure(config: NativeLeafConfig): void {
+    const previousBlink = this.config.cursorBlink ?? false;
     this.config = config;
     this.owner.resize(config.size.cols, config.size.rows);
     if (!this.native || this.owner.id === null || this.closing) return;
     try {
       this.native.attachRenderer(config.renderer);
       this.native.setColors(config.colors);
+      if (previousBlink !== (config.cursorBlink ?? false))
+        this.native.setCursorBlink(config.cursorBlink ?? false);
     } catch (error) {
       this.report(error);
       void this.closeCurrent().catch(this.report);
@@ -161,6 +166,19 @@ export class NativeLeafSession implements NativeLeaf {
   resize(cols: number, rows: number): void {
     this.config = { ...this.config, size: { cols, rows } };
     this.owner.resize(cols, rows);
+  }
+  setCursorBlink(enabled: boolean): void {
+    const previous = this.config.cursorBlink ?? false;
+    this.config = { ...this.config, cursorBlink: enabled };
+    if (
+      previous === enabled ||
+      !this.native ||
+      this.owner.id === null ||
+      this.closing ||
+      this.disposed
+    )
+      return;
+    this.native.setCursorBlink(enabled);
   }
   write(text: string): boolean {
     return !this.disposed && this.owner.write(text);
@@ -332,11 +350,13 @@ export class NativeLeafSession implements NativeLeaf {
         await prerequisite;
         if (this.disposed || generation !== this.generation)
           throw new Error("Terminal closed while opening.");
+        const openingCursorBlink = this.config.cursorBlink ?? false;
         const native = await this.open(this.config.renderer, {
           ...size,
           cwd: this.config.cwd,
           blocks: this.blockInput !== null,
           colors: this.config.colors,
+          cursorBlink: openingCursorBlink,
           observer: {
             onState: (state) => {
               if (
@@ -424,6 +444,8 @@ export class NativeLeafSession implements NativeLeaf {
             throw new Error("Terminal closed while opening.");
           native.attachRenderer(this.config.renderer);
           native.setColors(this.config.colors);
+          if ((this.config.cursorBlink ?? false) !== openingCursorBlink)
+            native.setCursorBlink(this.config.cursorBlink ?? false);
         } catch (error) {
           await native.close();
           throw error;

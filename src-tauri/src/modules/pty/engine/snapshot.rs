@@ -17,6 +17,7 @@ pub struct Snapshotter {
     rows: RowIterator<'static>,
     cells: CellIterator<'static>,
     encoder: FrameEncoder,
+    last_header: Option<FrameHeader>,
     links: super::links::LinkCache,
     link_scratch: super::links::LinkScratch,
     grapheme_scratch: String,
@@ -58,6 +59,7 @@ impl Snapshotter {
             rows: RowIterator::new()?,
             cells: CellIterator::new()?,
             encoder: FrameEncoder::new(),
+            last_header: None,
             links: super::links::LinkCache::default(),
             link_scratch: super::links::LinkScratch::default(),
             grapheme_scratch: String::new(),
@@ -102,13 +104,18 @@ impl Snapshotter {
 
         let snapshot = self.render.update(term)?;
         let dirty = snapshot.dirty()?;
-        if dirty == Dirty::Clean && !force_full && !self.graphics.changed(term)? {
-            return Ok(None);
-        }
-        let full = force_full || dirty == Dirty::Full;
         let cols = snapshot.cols()?;
         let rows = snapshot.rows()?;
         let colors = snapshot.colors()?;
+        let full = force_full
+            || dirty == Dirty::Full
+            || self.last_header.is_none()
+            || self.last_header.as_ref().is_some_and(|previous| {
+                previous.cols != cols
+                    || previous.rows != rows
+                    || previous.default_fg != plain(colors.foreground)
+                    || previous.default_bg != plain(colors.background)
+            });
 
         let (cursor_style, cursor_x, cursor_y) = match snapshot.cursor_viewport()? {
             Some(c) => {
@@ -142,12 +149,30 @@ impl Snapshotter {
             cursor_color: snapshot.cursor_color()?.map(plain),
         };
 
+        let metadata = FrameHeader {
+            seq: 0,
+            full: false,
+            ..header
+        };
+        // Cursor-only mode changes can leave native row dirtiness clean.
+        if dirty == Dirty::Clean
+            && !full
+            && self.last_header == Some(metadata)
+            && !self.graphics.changed(term)?
+        {
+            return Ok(None);
+        }
+
         self.links.prepare(cols, rows);
         let encoder = &mut self.encoder;
         encoder.begin();
-        let mut row_iter = self.rows.update(&snapshot)?;
+        let mut row_iter = if full || dirty != Dirty::Clean {
+            Some(self.rows.update(&snapshot)?)
+        } else {
+            None
+        };
         let mut y = 0u16;
-        while let Some(row) = row_iter.next() {
+        while let Some(row) = row_iter.as_mut().and_then(|rows| rows.next()) {
             if full || row.dirty()? {
                 let raw = row.raw_row()?;
                 let mut link_row = super::links::LinkRowBuilder::new(
@@ -254,6 +279,7 @@ impl Snapshotter {
         snapshot.set_dirty(Dirty::Clean)?;
         self.links.commit(term, seq)?;
         let graphics = self.graphics.capture(term, full)?;
+        self.last_header = Some(metadata);
         Ok(Some(self.encoder.finish_graphics(&header, graphics)))
     }
 }
@@ -318,5 +344,50 @@ mod grapheme_tests {
         let changed = decode::decode(snapshot.build(&term, 2, false).unwrap().unwrap());
         assert_eq!(changed.row(0).unwrap().text(), "e\u{308}");
         assert_eq!(&*changed.graphemes, &["e\u{308}"]);
+    }
+}
+
+#[cfg(test)]
+mod cursor_header_tests {
+    use super::*;
+    use crate::modules::pty::engine::{
+        cursor,
+        frame::{decode::decode, FLAG_CURSOR_BLINK, FLAG_FULL},
+    };
+    use libghostty_vt::TerminalOptions;
+
+    #[test]
+    fn clean_native_rows_still_publish_cursor_only_metadata_once() {
+        let mut term = Terminal::new(TerminalOptions {
+            cols: 20,
+            rows: 3,
+            max_scrollback: 0,
+        })
+        .unwrap();
+        cursor::apply(&mut term, true).unwrap();
+        let mut snapshot = Snapshotter::new().unwrap();
+        let first = decode(snapshot.build(&term, 1, true).unwrap().unwrap());
+        assert_ne!(first.flags & FLAG_CURSOR_BLINK, 0);
+        term.vt_write(b"\x1b[2 q");
+        {
+            let state = snapshot.render.update(&term).unwrap();
+            assert_eq!(state.dirty().unwrap(), Dirty::Clean);
+            assert!(!state.cursor_blinking().unwrap());
+        }
+        let changed = decode(
+            snapshot
+                .build(&term, 2, false)
+                .unwrap()
+                .expect("cursor-only negotiation requires a frame even when core rows are clean"),
+        );
+        assert_eq!(changed.flags & (FLAG_CURSOR_BLINK | FLAG_FULL), 0);
+        assert!(
+            changed.row_records.is_empty(),
+            "clean rows need no retransmission"
+        );
+        assert!(
+            snapshot.build(&term, 3, false).unwrap().is_none(),
+            "unchanged metadata remains idle"
+        );
     }
 }

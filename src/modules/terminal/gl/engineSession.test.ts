@@ -1603,3 +1603,77 @@ it("checks restoration ownership before an empty submission writes carriage retu
   expect(commands("pty_write")).toEqual([]);
   await session.close();
 });
+
+describe("EngineSession native cursor preference", () => {
+  it.each([false, true])(
+    "opens with cursor blink preference %s",
+    async (cursorBlink) => {
+      const pending = EngineSession.open(
+        new FakeRenderer() as unknown as GridRenderer,
+        {
+          cols: 4,
+          rows: 2,
+          cursorBlink,
+        },
+      );
+      expect(commands("gterm_open")[0].args).toMatchObject({ cursorBlink });
+      ipc.open?.resolve(9);
+      await (await pending).close();
+    },
+  );
+  it("applies actual preference changes once without reapplying after colors", async () => {
+    const session = await openSession(new FakeRenderer());
+    session.setCursorBlink(true);
+    session.setCursorBlink(true);
+    session.setColors(testColors);
+    session.setCursorBlink(false);
+    session.setCursorBlink(false);
+    expect(commands("gterm_set_cursor_blink").map((call) => call.args)).toEqual(
+      [
+        { id: 9, enabled: true },
+        { id: 9, enabled: false },
+      ],
+    );
+    await session.close();
+  });
+  it("coalesces preference changes while opening and applies only the latest after id", async () => {
+    const { session, pending } = deferredSession();
+    session.setCursorBlink(true);
+    session.setCursorBlink(false);
+    session.setCursorBlink(true);
+    expect(commands("gterm_set_cursor_blink")).toHaveLength(0);
+    ipc.open?.resolve(9);
+    await pending;
+    expect(commands("gterm_set_cursor_blink").map((call) => call.args)).toEqual(
+      [{ id: 9, enabled: true }],
+    );
+    await session.close();
+  });
+  it.each(["closed", "failed"])(
+    "ignores preference updates for a %s owner",
+    async (mode) => {
+      const session = await openSession(new FakeRenderer());
+      if (mode === "closed") await session.close();
+      else {
+        const channels = commands("gterm_open")[0].args as {
+          onFailure: { onmessage: (value: string) => void };
+        };
+        channels.onFailure.onmessage("retired");
+      }
+      session.setCursorBlink(true);
+      expect(commands("gterm_set_cursor_blink")).toHaveLength(0);
+      await session.close();
+    },
+  );
+  it("does not apply preference mutations to synthetic sessions", async () => {
+    const { session, pending } = deferredSession(true);
+    ipc.open?.resolve(9);
+    await pending;
+    session.setCursorBlink(true);
+    expect(commands("gterm_set_cursor_blink")).toHaveLength(0);
+    expect(commands("gterm_bench_open")[0].args).not.toHaveProperty(
+      "cursorBlink",
+    );
+    await session.close();
+  });
+});

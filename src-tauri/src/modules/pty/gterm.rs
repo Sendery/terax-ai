@@ -91,6 +91,7 @@ pub async fn gterm_open(
     workspace: Option<WorkspaceEnv>,
     colors: Option<TerminalColors>,
     blocks: Option<bool>,
+    cursor_blink: Option<bool>,
     on_frame: Channel<Response>,
     on_exit: Channel<i32>,
     on_failure: Channel<String>,
@@ -109,6 +110,7 @@ pub async fn gterm_open(
             workspace,
             colors,
             blocks.unwrap_or(false),
+            cursor_blink.unwrap_or(false),
             on_frame,
             on_exit,
             on_failure,
@@ -130,6 +132,7 @@ pub async fn gterm_open(
             workspace,
             colors,
             blocks,
+            cursor_blink,
             on_frame,
             on_exit,
             on_failure,
@@ -344,6 +347,24 @@ pub async fn gterm_link_context(
     #[cfg(not(feature = "ghostty-engine"))]
     {
         let _ = (state, id, seq, col, row);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[tauri::command]
+pub fn gterm_set_cursor_blink(
+    state: State<'_, PtyState>,
+    id: u32,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        imp::engine(&state, id)?.set_cursor_blink(enabled);
+        Ok(())
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, enabled);
         Err(ENGINE_UNAVAILABLE.into())
     }
 }
@@ -798,6 +819,7 @@ mod imp {
         workspace: Option<WorkspaceEnv>,
         colors: Option<TerminalColors>,
         blocks: bool,
+        cursor_blink: bool,
         on_frame: Channel<Response>,
         on_exit: Channel<i32>,
         on_failure: Channel<String>,
@@ -815,6 +837,7 @@ mod imp {
         let sink = OutputSink::Engine {
             on_frame,
             colors,
+            cursor_blink,
             slot: slot.clone(),
             on_failure,
             on_state,

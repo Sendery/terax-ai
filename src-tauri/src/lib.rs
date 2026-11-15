@@ -336,6 +336,7 @@ pub fn run() {
             pty::gterm::gterm_scroll,
             pty::gterm::gterm_request_full,
             pty::gterm::gterm_set_colors,
+            pty::gterm::gterm_set_cursor_blink,
             pty::gterm::gterm_resize,
             pty::gterm::gterm_encode_input,
             pty::gterm::gterm_selection,

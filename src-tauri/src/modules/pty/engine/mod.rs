@@ -22,6 +22,8 @@ pub mod blocks;
 #[cfg(any(test, feature = "ghostty-engine"))]
 mod clipboard;
 #[cfg(feature = "ghostty-engine")]
+mod cursor;
+#[cfg(feature = "ghostty-engine")]
 mod graphics;
 #[cfg(feature = "ghostty-engine")]
 pub mod input;
@@ -327,6 +329,7 @@ mod runtime {
         resize: Option<(u16, u16, u32, u32)>,
         cell_pixels: Option<(u32, u32)>,
         colors: Option<Colors>,
+        cursor_blink: Option<bool>,
         scroll: i64,
         full: bool,
         stop: bool,
@@ -617,6 +620,10 @@ mod runtime {
             self.update(|c| c.colors = Some(colors));
         }
 
+        pub fn set_cursor_blink(&self, enabled: bool) {
+            self.update(|control| control.cursor_blink = Some(enabled));
+        }
+
         pub fn resize(&self, cols: u16, rows: u16) {
             self.resize_pixels(cols, rows, 8, 16);
         }
@@ -751,6 +758,12 @@ mod runtime {
         start_with_colors(cols, rows, None, frames, replies)
     }
 
+    #[derive(Default)]
+    pub struct Appearance {
+        pub colors: Option<Colors>,
+        pub cursor_blink: bool,
+    }
+
     pub fn start_with_colors(
         cols: u16,
         rows: u16,
@@ -758,7 +771,18 @@ mod runtime {
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
-        start_config(cols, rows, colors, None, false, frames, replies)
+        start_config(
+            cols,
+            rows,
+            Appearance {
+                colors,
+                ..Appearance::default()
+            },
+            None,
+            false,
+            frames,
+            replies,
+        )
     }
 
     pub struct ShellConfig {
@@ -782,11 +806,32 @@ mod runtime {
         frames: FrameSink,
         replies: ReplySink,
     ) -> Result<Engine, String> {
+        start_with_shell_appearance(
+            cols,
+            rows,
+            Appearance {
+                colors,
+                ..Appearance::default()
+            },
+            config,
+            frames,
+            replies,
+        )
+    }
+
+    pub fn start_with_shell_appearance(
+        cols: u16,
+        rows: u16,
+        appearance: Appearance,
+        config: impl Into<ShellConfig>,
+        frames: FrameSink,
+        replies: ReplySink,
+    ) -> Result<Engine, String> {
         let config = config.into();
         start_config(
             cols,
             rows,
-            colors,
+            appearance,
             Some(config.token.into_string()),
             config.blocks,
             frames,
@@ -797,7 +842,7 @@ mod runtime {
     fn start_config(
         cols: u16,
         rows: u16,
-        colors: Option<Colors>,
+        appearance: Appearance,
         shell_token: Option<String>,
         blocks_enabled: bool,
         frames: FrameSink,
@@ -820,7 +865,7 @@ mod runtime {
                         run(
                             cols,
                             rows,
-                            colors,
+                            appearance,
                             shell_token,
                             blocks_enabled,
                             &rx,
@@ -1043,6 +1088,15 @@ mod runtime {
                 match colors.apply(&mut self.term) {
                     Ok(()) => self.pump.request_full(),
                     Err(e) => log::warn!("terminal engine colors failed: {e}"),
+                }
+            }
+            if let Some(enabled) = c.cursor_blink {
+                match super::cursor::apply(&mut self.term, enabled) {
+                    Ok(()) => self.pump.request_full(),
+                    Err(error) => {
+                        log::error!("terminal cursor preference update failed: {error}");
+                        self.health.fail(EngineFailure::SnapshotFailed);
+                    }
                 }
             }
             if c.scroll != 0 {
@@ -1366,7 +1420,7 @@ mod runtime {
     fn run(
         cols: u16,
         rows: u16,
-        colors: Option<Colors>,
+        appearance: Appearance,
         shell_token: Option<String>,
         blocks_enabled: bool,
         rx: &Receiver<Input>,
@@ -1385,8 +1439,9 @@ mod runtime {
                 max_scrollback: SCROLLBACK_BYTES,
             })?;
             term.resize(cols, rows, 8, 16)?;
+            super::cursor::apply(&mut term, appearance.cursor_blink)?;
             super::graphics::configure(&mut term)?;
-            if let Some(colors) = &colors {
+            if let Some(colors) = &appearance.colors {
                 colors.apply(&mut term)?;
             }
             term.on_pty_write(|_, data| replies.borrow_mut().extend_from_slice(data))?

@@ -36,6 +36,7 @@ import { NativeLeafSession } from "@/modules/terminal/gl/nativeLeafSession";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
 import { IS_MAC } from "@/lib/platform";
+import { usePreferencesStore } from "@/modules/settings/preferences";
 import { useNativeTerminalSurface } from "@/modules/terminal/gl/nativeSurfaceContext";
 import { TerminalContextMenu } from "@/modules/terminal/TerminalContextMenu";
 import type {
@@ -50,6 +51,9 @@ export const NativeTerminalPane = forwardRef<
   TerminalPaneProps
 >(function NativeTerminalPane(props, ref) {
   const surface = useNativeTerminalSurface();
+  const cursorBlink = usePreferencesStore((state) => state.terminalCursorBlink);
+  const cursorBlinkRef = useRef(cursorBlink);
+  cursorBlinkRef.current = cursorBlink;
   const surfaceRef = useRef(surface);
   surfaceRef.current = surface;
   const latest = useRef(props);
@@ -109,6 +113,7 @@ export const NativeTerminalPane = forwardRef<
       renderer,
       size: initial,
       colors: model.colors.engine,
+      cursorBlink: cursorBlinkRef.current,
       cwd: latest.current.initialCwd,
       blocks: latest.current.blocks ?? false,
       onReady: () => markSessionReady(leafId),
@@ -347,6 +352,10 @@ export const NativeTerminalPane = forwardRef<
       background: surface.colors.engine.background,
     });
   }, [surface]);
+
+  useEffect(() => {
+    controller.current?.setCursorBlink(cursorBlink);
+  }, [cursorBlink]);
 
   useImperativeHandle(
     ref,

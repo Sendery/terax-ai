@@ -229,6 +229,8 @@ export class EngineSession {
   private failed = false;
   private size: { cols: number; rows: number };
   private pendingColors: EngineColors | null = null;
+  private cursorBlinkPreference = false;
+  private pendingCursorBlink: boolean | null = null;
   private inputWrites: Promise<void> = Promise.resolve();
   private queuedInputBytes = 0;
   private closing: Promise<void> | null = null;
@@ -309,6 +311,7 @@ export class EngineSession {
       blocks?: boolean;
       observer?: SessionObserver;
       colors?: EngineColors;
+      cursorBlink?: boolean;
     },
   ): Promise<EngineSession> {
     const session = new EngineSession(
@@ -317,6 +320,7 @@ export class EngineSession {
       { cols: options.cols, rows: options.rows },
       false,
     );
+    session.cursorBlinkPreference = options.cursorBlink ?? false;
     return session.start("gterm_open", {
       cols: options.cols,
       rows: options.rows,
@@ -324,6 +328,7 @@ export class EngineSession {
       blocks: options.blocks ?? false,
       workspace: currentWorkspaceEnv(),
       colors: options.colors ?? null,
+      cursorBlink: session.cursorBlinkPreference,
     });
   }
 
@@ -396,6 +401,7 @@ export class EngineSession {
       }).catch(this.reportError);
     }
     if (this.pendingColors) this.setColors(this.pendingColors);
+    this.flushCursorBlink();
     this.flushCredits();
     this.clipboardWrites.resume();
     return this;
@@ -743,6 +749,35 @@ export class EngineSession {
     if (this.id === null) return;
     this.pendingColors = null;
     invoke("gterm_set_colors", { id: this.id, colors }).catch(this.reportError);
+  }
+
+  setCursorBlink(enabled: boolean): void {
+    if (
+      this.closed ||
+      this.failed ||
+      this.isBench ||
+      enabled === this.cursorBlinkPreference
+    )
+      return;
+    this.cursorBlinkPreference = enabled;
+    this.pendingCursorBlink = enabled;
+    this.flushCursorBlink();
+  }
+
+  private flushCursorBlink(): void {
+    if (
+      this.id === null ||
+      this.pendingCursorBlink === null ||
+      this.closed ||
+      this.failed ||
+      this.isBench
+    )
+      return;
+    const enabled = this.pendingCursorBlink;
+    this.pendingCursorBlink = null;
+    invoke("gterm_set_cursor_blink", { id: this.id, enabled }).catch(
+      this.reportError,
+    );
   }
 
   private cellPixels = { width: 8, height: 16 };

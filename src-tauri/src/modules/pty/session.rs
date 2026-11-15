@@ -112,6 +112,7 @@ pub enum OutputSink {
     Engine {
         on_frame: Channel<Response>,
         colors: Option<super::colors::Colors>,
+        cursor_blink: bool,
         slot: Arc<CoreSlot>,
         on_failure: Channel<String>,
         on_state: Channel<engine::state::EngineState>,
@@ -181,8 +182,8 @@ pub fn spawn(
     let pipeline = match sink {
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
-        OutputSink::Engine { on_frame, colors, slot, on_failure, on_state, on_clipboard } => {
-            let engine = start_engine(cols, rows, colors, engine::ShellConfig { token: shell_token.take().ok_or("native shell marker is missing")?, blocks }, on_frame, on_state, writer.clone())?;
+        OutputSink::Engine { on_frame, colors, cursor_blink, slot, on_failure, on_state, on_clipboard } => {
+            let engine = start_engine(cols, rows, engine::Appearance { colors, cursor_blink }, engine::ShellConfig { token: shell_token.take().ok_or("native shell marker is missing")?, blocks }, on_frame, on_state, writer.clone())?;
             if let Some(channel) = on_clipboard {
                 engine.handle.on_clipboard(move || channel.send(1).is_ok());
             }
@@ -403,7 +404,7 @@ fn spawn_raw_threads(
 fn start_engine(
     cols: u16,
     rows: u16,
-    colors: Option<super::colors::Colors>,
+    appearance: engine::Appearance,
     shell_config: engine::ShellConfig,
     on_frame: Channel<Response>,
     on_state: Channel<engine::state::EngineState>,
@@ -411,7 +412,7 @@ fn start_engine(
 ) -> Result<engine::Engine, String> {
     let frames: engine::FrameSink =
         Box::new(move |frame| on_frame.send(Response::new(frame)).is_ok());
-    let engine = engine::start_with_shell(cols, rows, colors, shell_config, frames, reply_sink(writer))?;
+    let engine = engine::start_with_shell_appearance(cols, rows, appearance, shell_config, frames, reply_sink(writer))?;
     engine.handle.on_state(move |state| on_state.send(state).is_ok());
     Ok(engine)
 }
