@@ -99,7 +99,7 @@ export function fontString(font: AtlasFont, face: number): string {
   return `${style}${weight} ${font.sizePx}px ${font.family}`;
 }
 
-function measureCell(font: AtlasFont): CellMetrics {
+export function measureCell(font: AtlasFont): CellMetrics {
   const ctx = document.createElement("canvas").getContext("2d");
   if (!ctx) throw new Error("2D canvas unavailable");
   ctx.font = fontString(font, 0);

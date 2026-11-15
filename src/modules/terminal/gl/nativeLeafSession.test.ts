@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { NativeLeafSession } from "@/modules/terminal/gl/nativeLeafSession";
 import type { EngineSession } from "@/modules/terminal/gl/engineSession";
-import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
+import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
 import { FALLBACK_ENGINE_COLORS } from "@/modules/terminal/gl/appearance";
 vi.mock("@/modules/workspace", () => ({
   currentWorkspaceEnv: () => ({ kind: "local" }),
@@ -9,7 +9,7 @@ vi.mock("@/modules/workspace", () => ({
 const renderer = {
   setPaneRect: vi.fn(),
   setPaneFocused: vi.fn(),
-} as unknown as GridRenderer;
+} as unknown as TerminalRenderer;
 function driver(id: number, closing: Promise<void> = Promise.resolve()) {
   return {
     id,
@@ -355,7 +355,7 @@ it("keeps search after process exit and isolates old adapters from respawn", asy
   let exit!: (code: number) => void;
   const open = vi.fn(
     async (
-      _renderer: GridRenderer,
+      _renderer: TerminalRenderer,
       options: {
         observer: import("@/modules/terminal/gl/engineSession").SessionObserver;
       },
@@ -515,3 +515,22 @@ function requireFixture<T>(value: T | null | undefined): T {
   if (value == null) throw new Error("Missing test fixture");
   return value;
 }
+
+it("changes between presentation backends without reopening the native process", async () => {
+  const native = driver(9),
+    open = vi.fn(async () => native as unknown as EngineSession);
+  const session = new NativeLeafSession(config(), open);
+  const detach = session.attach(view(), config());
+  await session.opened;
+  detach();
+  const software = {
+    setPaneRect: vi.fn(),
+    setPaneFocused: vi.fn(),
+  } as unknown as TerminalRenderer;
+  session.attach(view(), { ...config(), renderer: software });
+  expect(open).toHaveBeenCalledOnce();
+  expect(native.close).not.toHaveBeenCalled();
+  expect(native.attachRenderer).toHaveBeenCalledWith(software);
+  expect(session.id).toBe(9);
+  await session.dispose();
+});

@@ -1,6 +1,8 @@
 import { ensureMonoFontsLoaded } from "@/lib/fonts";
 import { engineAvailable } from "@/modules/terminal/gl/engineSession";
-import { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
+import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
+import { createTerminalRenderer } from "@/modules/terminal/gl/createTerminalRenderer";
+import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   nativeTerminalRequested,
   NativeSurfaceContext,
@@ -27,11 +29,17 @@ export function NativeTerminalSurface({ children }: { children: ReactNode }) {
 
 function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
-  const currentRenderer = useRef<GridRenderer | null>(null);
+  const currentRenderer = useRef<TerminalRenderer | null>(null);
   const listeners = useRef(new Set<() => void>());
   const layoutFrame = useRef(0);
-  const [renderer, setRenderer] = useState<GridRenderer | null>(null);
+  const [renderer, setRenderer] = useState<TerminalRenderer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const preferWebgl = usePreferencesStore((p) => p.terminalWebglEnabled);
+  const [softwareAfterLoss, setSoftwareAfterLoss] = useState(false);
+  const webgl = preferWebgl && !softwareAfterLoss;
+  useEffect(() => {
+    if (!preferWebgl) setSoftwareAfterLoss(false);
+  }, [preferWebgl]);
   const font = useTerminalEngineFont();
   const colors = useTerminalEngineColors();
   const appearance = useRef({ font, colors });
@@ -55,16 +63,28 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!root.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.setAttribute("aria-hidden", "true");
-    canvas.tabIndex = -1;
-    canvas.setAttribute("data-native-terminal-canvas", "");
-    canvas.setAttribute("data-terax-capture-proxy-source", "");
-    canvas.className = "pointer-events-none absolute inset-0 h-full w-full";
-    root.current.prepend(canvas);
-    setError(null);
+    const element = root.current;
+    let canvas: HTMLCanvasElement | null = null;
     let disposed = false;
-    let opened: GridRenderer | null = null;
+    const makeCanvas = () => {
+      if (disposed) throw new Error("Terminal presentation closed");
+      canvas?.remove();
+      const next = document.createElement("canvas");
+      next.setAttribute("aria-hidden", "true");
+      next.tabIndex = -1;
+      next.setAttribute("data-native-terminal-canvas", "");
+      next.setAttribute("data-terax-capture-proxy-source", "");
+      next.className = "pointer-events-none absolute inset-0 h-full w-full";
+      element.prepend(next);
+      canvas = next;
+      return next;
+    };
+    const lost = () => {
+      if (!disposed && webgl) setSoftwareAfterLoss(true);
+    };
+    setError(null);
+    setRenderer(null);
+    let opened: TerminalRenderer | null = null;
     const resize = new ResizeObserver(scheduleLayout);
     resize.observe(root.current);
     void (async () => {
@@ -78,12 +98,26 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
         await ensureMonoFontsLoaded();
         if (disposed) return;
         const { font: currentFont, colors: currentColors } = appearance.current;
-        opened = new GridRenderer(canvas, {
-          font: currentFont,
-          background: currentColors.background,
-          cursorFallback: currentColors.cursor,
-          onMetricsChange: scheduleLayout,
-        });
+        opened = await createTerminalRenderer(
+          makeCanvas,
+          {
+            font: currentFont,
+            background: currentColors.background,
+            cursorFallback: currentColors.cursor,
+            onMetricsChange: scheduleLayout,
+          },
+          webgl,
+        );
+        if (disposed) {
+          opened.dispose();
+          return;
+        }
+        opened.canvas.setAttribute(
+          "data-native-terminal-renderer",
+          opened.backend,
+        );
+        if (opened.backend === "webgl")
+          opened.canvas.addEventListener("webglcontextlost", lost);
         currentRenderer.current = opened;
         setRenderer(opened);
         scheduleLayout();
@@ -98,10 +132,11 @@ function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
       if (layoutFrame.current) cancelAnimationFrame(layoutFrame.current);
       layoutFrame.current = 0;
       currentRenderer.current = null;
+      opened?.canvas.removeEventListener("webglcontextlost", lost);
       opened?.dispose();
-      canvas.remove();
+      canvas?.remove();
     };
-  }, [scheduleLayout]);
+  }, [scheduleLayout, webgl]);
 
   useEffect(() => {
     renderer?.setFont(font);

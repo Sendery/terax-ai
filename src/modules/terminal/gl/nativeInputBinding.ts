@@ -4,7 +4,7 @@ import type {
   NativeSelectionCommand,
 } from "@/modules/terminal/gl/engineSession";
 import type {
-  GridRenderer,
+  TerminalRenderer,
   RendererFont,
 } from "@/modules/terminal/gl/gridRenderer";
 import { wheelRows } from "@/modules/terminal/gl/keyInput";
@@ -41,7 +41,7 @@ export type NativeInputBinding = {
 /** DOM input for an ordinary native pane; it never encodes a terminal protocol. */
 export function bindNativeInput(
   session: EngineSession,
-  renderer: GridRenderer,
+  renderer: TerminalRenderer,
   host: HTMLElement,
   options: Options,
 ): NativeInputBinding {

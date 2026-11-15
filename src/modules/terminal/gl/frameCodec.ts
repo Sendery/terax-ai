@@ -20,6 +20,7 @@ export const MAX_GRAPHEMES = 500 * 500;
 export const CURSOR_HIDDEN = 0;
 export const CURSOR_BLOCK = 1;
 export const CURSOR_BAR = 2;
+export const CURSOR_UNDERLINE = 3;
 export const CURSOR_HOLLOW_BLOCK = 4;
 
 export const COLOR_EXPLICIT = 1 << 24;

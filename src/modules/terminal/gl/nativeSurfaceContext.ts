@@ -1,5 +1,5 @@
 import type {
-  GridRenderer,
+  TerminalRenderer,
   RendererFont,
 } from "@/modules/terminal/gl/gridRenderer";
 import { terminalEngineChoice } from "@/modules/terminal/gl/nativeSurface";
@@ -11,7 +11,7 @@ export const nativeTerminalRequested =
   "ghostty";
 
 type Surface = {
-  renderer: GridRenderer | null;
+  renderer: TerminalRenderer | null;
   root: RefObject<HTMLDivElement | null>;
   font: RendererFont;
   colors: EngineAppearanceColors;

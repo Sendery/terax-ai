@@ -33,7 +33,7 @@ import {
   peekSeq,
 } from "@/modules/terminal/gl/frameCodec";
 import type {
-  GridRenderer,
+  TerminalRenderer,
   RenderPane,
 } from "@/modules/terminal/gl/gridRenderer";
 import {
@@ -208,7 +208,7 @@ export class EngineSession {
   private renderPane: RenderPane;
   id: number | null = null;
   exitCode: number | null = null;
-  private renderer: GridRenderer;
+  private renderer: TerminalRenderer;
   private readonly observer: SessionObserver;
   private readonly frames = new Channel<ArrayBuffer>();
   private readonly exits = new Channel<number>();
@@ -241,7 +241,7 @@ export class EngineSession {
   private selectionSnapshot: string | null = null;
 
   private constructor(
-    renderer: GridRenderer,
+    renderer: TerminalRenderer,
     observer: SessionObserver,
     size: { cols: number; rows: number },
     isBench: boolean,
@@ -276,6 +276,7 @@ export class EngineSession {
         this.requestFull();
       },
       onDrawn: (rendered) => this.handleDrawn(rendered),
+      onError: this.reportRenderError,
     });
     this.frames.onmessage = (buffer) => this.receive(buffer);
     this.failures.onmessage = (message) => this.failCore(message);
@@ -300,7 +301,7 @@ export class EngineSession {
   }
 
   static async open(
-    renderer: GridRenderer,
+    renderer: TerminalRenderer,
     options: {
       cols: number;
       rows: number;
@@ -327,7 +328,7 @@ export class EngineSession {
   }
 
   static async openBench(
-    renderer: GridRenderer,
+    renderer: TerminalRenderer,
     options: {
       kind: BenchKind;
       megabytes: number;
@@ -404,7 +405,7 @@ export class EngineSession {
     return this.renderPane;
   }
 
-  attachRenderer(renderer: GridRenderer): void {
+  attachRenderer(renderer: TerminalRenderer): void {
     if (this.closed || this.failed)
       throw new Error("Terminal is no longer available.");
     if (renderer === this.renderer) return;
@@ -416,6 +417,7 @@ export class EngineSession {
           this.requestFull();
         },
         onDrawn: (rendered) => this.handleDrawn(rendered),
+        onError: this.reportRenderError,
       });
     } catch (error) {
       this.failCore("terminal renderer migration failed");
@@ -503,6 +505,12 @@ export class EngineSession {
       readyAt,
     });
   }
+
+  private readonly reportRenderError = (error: unknown): void => {
+    if (this.closed || this.failed) return;
+    this.invalidatePresented();
+    this.reportError(error);
+  };
 
   private handleDrawn(rendered = true): void {
     const at = performance.now();
@@ -1117,7 +1125,7 @@ export type InputBinding = { dispose: () => void; focus: () => void };
  */
 export function attachInput(
   session: EngineSession,
-  renderer: GridRenderer,
+  renderer: TerminalRenderer,
   host: HTMLElement,
 ): InputBinding {
   const textarea = document.createElement("textarea");

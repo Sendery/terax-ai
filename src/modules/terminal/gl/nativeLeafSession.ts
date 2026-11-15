@@ -14,7 +14,7 @@ import {
   type SessionObserver,
 } from "@/modules/terminal/gl/engineSession";
 import type { NativeState } from "@/modules/terminal/gl/nativeState";
-import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
+import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
 import type { NativeLeaf } from "@/modules/terminal/gl/nativeLeafRegistry";
 import { adaptGhosttyEngine } from "@/modules/terminal/lib/ghosttyEngine";
 import { TerminalRetirement } from "@/modules/terminal/lib/terminalRetirement";
@@ -24,7 +24,7 @@ import {
 } from "@/modules/terminal/lib/terminalEngine";
 
 export type NativeLeafConfig = {
-  renderer: GridRenderer;
+  renderer: TerminalRenderer;
   size: TerminalSize;
   colors: EngineColors;
   cwd?: string;
@@ -44,7 +44,7 @@ export type NativeLeafView = {
   focus: () => void;
 };
 type OpenNative = (
-  renderer: GridRenderer,
+  renderer: TerminalRenderer,
   options: TerminalSize & {
     cwd?: string;
     blocks: boolean;

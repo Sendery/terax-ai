@@ -39,6 +39,7 @@ export type PaneCallbacks = {
   onNeedFullFrame: () => void;
   /** A display frame showing everything applied so far has been drawn. */
   onDrawn: (rendered?: boolean) => void;
+  onError?: (error: unknown) => void;
 };
 
 export type GridRendererOptions = {
@@ -264,7 +265,10 @@ function channel(color: number, shift: number): number {
  * context and one glyph atlas: one instanced draw per pane. Owns no
  * terminal state beyond each pane's instance buffer and last header.
  */
+export type TerminalRenderer = Pick<GridRenderer, keyof GridRenderer>;
+
 export class GridRenderer {
+  readonly backend: "webgl" | "canvas" = "webgl";
   readonly canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;

@@ -1,7 +1,7 @@
 import { IS_MAC } from "@/lib/platform";
 import { openExternalUrl } from "@/lib/external-link";
 import type { EngineSession } from "@/modules/terminal/gl/engineSession";
-import type { GridRenderer } from "@/modules/terminal/gl/gridRenderer";
+import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
 import type { DecodedFrame } from "@/modules/terminal/gl/frameCodec";
 import {
   NativeLinkCoordinator,
@@ -34,7 +34,7 @@ export type NativeLinkBinding = {
 };
 export function bindNativeLinks(
   session: EngineSession,
-  renderer: GridRenderer,
+  renderer: TerminalRenderer,
   host: HTMLElement,
   options: Options,
 ): NativeLinkBinding {
