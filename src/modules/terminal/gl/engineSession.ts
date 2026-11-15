@@ -1,4 +1,11 @@
 import {
+  blockActionSelects,
+  decodeNativeBlockAction,
+  validateNativeBlockCommand,
+  type NativeBlockCommand,
+  type NativeBlockReply,
+} from "@/modules/terminal/gl/nativeBlockActions";
+import {
   decodeNativeBlocks,
   decodeNativeBlockOutput,
   validateNativeBlockId,
@@ -870,10 +877,46 @@ export class EngineSession {
       decodeNativeBlockOutput,
     );
   }
+  blockAction(command: NativeBlockCommand): Promise<NativeBlockReply> {
+    try {
+      validateNativeBlockCommand(command);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (this.id === null || this.closed || this.failed)
+      return Promise.reject(new Error("Terminal engine is unavailable."));
+    if (this.blockPending >= 32)
+      return Promise.reject(
+        new Error("Too many pending terminal block queries."),
+      );
+    const snapshot = { ...command };
+    const version = blockActionSelects(snapshot)
+      ? ++this.selectionVersion
+      : null;
+    if (version !== null) this.selectionSnapshot = null;
+    return this.blockQuery(
+      "gterm_block_action",
+      { command: snapshot },
+      (value) => {
+        const reply = decodeNativeBlockAction(value, snapshot);
+        if (reply.kind === "selection" && version === this.selectionVersion) {
+          this.selectionSnapshot = reply.selection || null;
+          this.selectionSnapshotVersion = version;
+        }
+        return reply;
+      },
+      true,
+    ).catch((error: unknown) => {
+      if (version !== null && this.selectionSnapshotVersion <= version)
+        this.selectionSnapshot = null;
+      throw error;
+    });
+  }
   private async blockQuery<T>(
-    command: "gterm_blocks" | "gterm_read_block",
+    command: "gterm_blocks" | "gterm_read_block" | "gterm_block_action",
     args: Record<string, unknown>,
     decode: (value: unknown) => T,
+    ordered = false,
   ): Promise<T> {
     const id = this.id;
     if (id === null || this.closed || this.failed)
@@ -881,11 +924,22 @@ export class EngineSession {
     if (this.blockPending >= 32)
       throw new Error("Too many pending terminal block queries.");
     this.blockPending++;
-    try {
+    const run = async () => {
+      if (this.id !== id || this.closed || this.failed)
+        throw new Error("Terminal engine is unavailable.");
       const value = await invoke<unknown>(command, { id, ...args });
       if (this.id !== id || this.closed || this.failed)
         throw new Error("Terminal engine is unavailable.");
       return decode(value);
+    };
+    const task = ordered ? this.selectionQueries.then(run) : run();
+    if (ordered)
+      this.selectionQueries = task.then(
+        () => {},
+        () => {},
+      );
+    try {
+      return await task;
     } finally {
       this.blockPending--;
     }

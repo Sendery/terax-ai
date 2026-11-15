@@ -6,7 +6,7 @@ use libghostty_vt::screen::{CellWide, Screen, TrackedGridRef};
 use libghostty_vt::selection::{FormatOptions, Selection};
 use libghostty_vt::terminal::{Point, PointCoordinate, PointSpace, ScrollViewport};
 use libghostty_vt::{Error, Terminal};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const MAX_QUERY_BYTES: usize = 4096;
 const MAX_INDEX_BYTES: usize = 64 * 1024 * 1024;
@@ -48,6 +48,7 @@ struct Anchor {
 }
 struct RowText {
     row: u32,
+    first_col: u16,
     range: Range<usize>,
 }
 struct Index {
@@ -91,12 +92,12 @@ fn wrapped(term: &Terminal<'_, '_>, row: u32) -> Result<bool, String> {
         .and_then(|r| r.is_wrapped())
         .map_err(|e| e.to_string())
 }
-fn row_text(term: &Terminal<'_, '_>, row: u32, cols: u16) -> Result<String, String> {
+fn row_text(term: &Terminal<'_, '_>, row: u32, first: u16, last: u16) -> Result<String, String> {
     let start = term
-        .grid_ref(grid_point(term, 0, row)?)
+        .grid_ref(grid_point(term, first, row)?)
         .map_err(|e| e.to_string())?;
     let end = term
-        .grid_ref(grid_point(term, cols - 1, row)?)
+        .grid_ref(grid_point(term, last, row)?)
         .map_err(|e| e.to_string())?;
     let selection = Selection::new(start, end, false);
     let options = || {
@@ -129,7 +130,7 @@ fn row_text(term: &Terminal<'_, '_>, row: u32, cols: u16) -> Result<String, Stri
     let mut text = String::from_utf8(bytes).map_err(|_| "invalid UTF-8 in terminal search text")?;
     if wrapped(term, row)? {
         let mut blanks = 0;
-        for col in (0..cols).rev() {
+        for col in (first..=last).rev() {
             let cell = term
                 .grid_ref(grid_point(term, col, row)?)
                 .and_then(|r| r.cell())
@@ -144,12 +145,12 @@ fn row_text(term: &Terminal<'_, '_>, row: u32, cols: u16) -> Result<String, Stri
     }
     Ok(text)
 }
-fn cell_text(term: &Terminal<'_, '_>, row: u32) -> Result<Vec<CellText>, String> {
+fn cell_text(term: &Terminal<'_, '_>, row: u32, first: u16) -> Result<Vec<CellText>, String> {
     let cols = term.cols().map_err(|e| e.to_string())?;
     let mut result = Vec::with_capacity(usize::from(cols));
     let mut offset = 0;
     let mut buf = vec!['\0'; 32];
-    for col in 0..cols {
+    for col in first..cols {
         let grid = term
             .grid_ref(grid_point(term, col, row)?)
             .map_err(|e| e.to_string())?;
@@ -187,6 +188,13 @@ fn cell_text(term: &Terminal<'_, '_>, row: u32) -> Result<Vec<CellText>, String>
 }
 impl Index {
     fn read(term: &Terminal<'_, '_>, range: Range<u32>) -> Result<Self, String> {
+        Self::read_clipped(term, range, None)
+    }
+    fn read_clipped(
+        term: &Terminal<'_, '_>,
+        range: Range<u32>,
+        clip: Option<(PointCoordinate, PointCoordinate)>,
+    ) -> Result<Self, String> {
         let cols = term.cols().map_err(|e| e.to_string())?;
         let mut index = Self {
             text: String::new(),
@@ -194,7 +202,16 @@ impl Index {
         };
         let mut normalized_len = 0usize;
         for row in range {
-            let text = row_text(term, row, cols)?;
+            let first = clip
+                .filter(|(start, _)| start.y == row)
+                .map_or(0, |(start, _)| start.x);
+            let last = clip
+                .filter(|(_, end)| end.y == row)
+                .map_or(cols - 1, |(_, end)| end.x);
+            if first > last || last >= cols {
+                return Err("invalid terminal search range".into());
+            }
+            let text = row_text(term, row, first, last)?;
             let bytes = text
                 .chars()
                 .flat_map(char::to_lowercase)
@@ -215,6 +232,7 @@ impl Index {
             index.text.push_str(&text);
             index.rows.push(RowText {
                 row,
+                first_col: first,
                 range: start..normalized_len,
             });
             if !wrapped(term, row)? {
@@ -242,7 +260,7 @@ impl Index {
             .filter(|r| r.range.contains(&byte))
             .ok_or("invalid terminal search text position")?;
         if let std::collections::btree_map::Entry::Vacant(entry) = cells.entry(row.row) {
-            entry.insert(cell_text(term, row.row)?);
+            entry.insert(cell_text(term, row.row, row.first_col)?);
         }
         let cell = cells[&row.row]
             .iter()
@@ -261,7 +279,7 @@ impl Index {
         let Some(row) = self.rows.iter().find(|r| r.row == point.y) else {
             return Ok(None);
         };
-        let cells = cell_text(term, point.y)?;
+        let cells = cell_text(term, point.y, row.first_col)?;
         Ok(cells
             .iter()
             .find(|c| c.col == point.x)
@@ -660,5 +678,188 @@ mod tests {
         assert!(find(&mut state, &mut term, "σ", true, true));
         assert_eq!(active(&state, &term), (1, 0));
         assert_eq!(state.highlights(&term).unwrap()[1], 2);
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockMatch {
+    pub index: u16,
+    pub line: u32,
+    pub col: u16,
+    pub len: u16,
+}
+#[derive(Default)]
+pub(super) struct BlockSearchState {
+    version: u64,
+    query: String,
+    matches: Vec<Anchor>,
+    active: Option<usize>,
+}
+impl BlockSearchState {
+    fn next_version(&self) -> Result<u64, String> {
+        self.version
+            .checked_add(1)
+            .filter(|value| *value <= 9_007_199_254_740_991)
+            .ok_or_else(|| "terminal block search version exhausted".into())
+    }
+    pub fn is_active(&self) -> bool {
+        !self.query.is_empty()
+    }
+    pub fn clear(&mut self) -> Result<(), String> {
+        let next = self.next_version()?;
+        self.query.clear();
+        self.matches.clear();
+        self.active = None;
+        self.version = next;
+        Ok(())
+    }
+    pub fn find(
+        &mut self,
+        term: &Terminal<'_, '_>,
+        bounds: Option<(PointCoordinate, PointCoordinate)>,
+        query: &str,
+    ) -> Result<(u64, Vec<BlockMatch>), String> {
+        SearchCommand::Find {
+            query: query.into(),
+            forward: true,
+            incremental: true,
+        }
+        .validate()?;
+        let next = self.next_version()?;
+        let query = folded(query);
+        let mut anchors = Vec::new();
+        let mut result = Vec::new();
+        if let Some(bounds) = bounds.filter(|_| !query.is_empty()) {
+            let end = bounds
+                .1
+                .y
+                .checked_add(1)
+                .ok_or("terminal block search range is too large")?;
+            let index = Index::read_clipped(term, bounds.0.y..end, Some(bounds))?;
+            let mut cells = BTreeMap::new();
+            for at in matches(&index.text, &query).take(500) {
+                let start = index.point(term, at, false, &mut cells)?;
+                let end = index.point(term, at + query.len() - 1, true, &mut cells)?;
+                let len = if start.y == end.y {
+                    end.x - start.x + 1
+                } else {
+                    term.cols().map_err(|error| error.to_string())? - start.x
+                };
+                result.push(BlockMatch {
+                    index: result.len() as u16,
+                    line: start.y,
+                    col: start.x,
+                    len,
+                });
+                anchors.push(Anchor {
+                    start: term
+                        .track_grid_ref(Point::Screen(start))
+                        .map_err(|error| error.to_string())?,
+                    end: term
+                        .track_grid_ref(Point::Screen(end))
+                        .map_err(|error| error.to_string())?,
+                    screen: term.active_screen().map_err(|error| error.to_string())?,
+                });
+            }
+        }
+        self.query = query;
+        self.matches = anchors;
+        self.active = None;
+        self.version = next;
+        Ok((next, result))
+    }
+    pub fn reveal(
+        &mut self,
+        term: &mut Terminal<'_, '_>,
+        version: u64,
+        index: u16,
+    ) -> Result<bool, String> {
+        if version != self.version {
+            return Ok(false);
+        }
+        let Some(anchor) = self.matches.get(usize::from(index)) else {
+            return Ok(false);
+        };
+        if term.active_screen().map_err(|error| error.to_string())? != anchor.screen {
+            return Ok(false);
+        }
+        let Some(start) = anchor
+            .start
+            .point(PointSpace::Screen)
+            .map_err(|error| error.to_string())?
+        else {
+            return Ok(false);
+        };
+        if anchor
+            .end
+            .point(PointSpace::Screen)
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        self.active = Some(usize::from(index));
+        let rows = usize::from(term.rows().map_err(|error| error.to_string())?);
+        term.scroll_viewport(ScrollViewport::Row(
+            (start.y as usize).saturating_sub(rows / 2),
+        ));
+        Ok(true)
+    }
+    pub fn highlights(&self, term: &Terminal<'_, '_>) -> Result<Vec<u8>, String> {
+        if !self.is_active() {
+            return Ok(Vec::new());
+        }
+        let screen = term.active_screen().map_err(|error| error.to_string())?;
+        let viewport = term.scrollbar().map_err(|error| error.to_string())?;
+        let cols = term.cols().map_err(|error| error.to_string())?;
+        let rows = term.rows().map_err(|error| error.to_string())?;
+        let mut result = vec![0; usize::from(cols) * usize::from(rows)];
+        for (index, anchor) in self.matches.iter().enumerate() {
+            if anchor.screen != screen {
+                continue;
+            }
+            let Some(start) = anchor
+                .start
+                .point(PointSpace::Screen)
+                .map_err(|error| error.to_string())?
+            else {
+                continue;
+            };
+            let Some(end) = anchor
+                .end
+                .point(PointSpace::Screen)
+                .map_err(|error| error.to_string())?
+            else {
+                continue;
+            };
+            if end.y < start.y || (end.y == start.y && end.x < start.x) {
+                continue;
+            }
+            let from = u64::from(start.y).max(viewport.offset);
+            let until = u64::from(end.y)
+                .saturating_add(1)
+                .min(viewport.offset + u64::from(rows));
+            for row in from..until {
+                let first = if row == u64::from(start.y) {
+                    start.x
+                } else {
+                    0
+                };
+                let last = if row == u64::from(end.y) {
+                    end.x.min(cols - 1)
+                } else {
+                    cols - 1
+                };
+                for col in first..=last {
+                    let slot =
+                        ((row - viewport.offset) as usize) * usize::from(cols) + usize::from(col);
+                    if let Some(value) = result.get_mut(slot) {
+                        *value = (*value).max(if self.active == Some(index) { 2 } else { 1 });
+                    }
+                }
+            }
+        }
+        Ok(result)
     }
 }

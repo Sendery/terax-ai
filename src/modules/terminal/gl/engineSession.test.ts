@@ -23,6 +23,7 @@ const ipc = vi.hoisted(() => ({
   link: null as Promise<unknown> | null,
   blocks: null as Promise<unknown> | null,
   blockOutput: null as Promise<unknown> | null,
+  blockAction: null as Promise<unknown> | null,
   closing: null as Promise<unknown> | null,
   open: null as null | {
     resolve: (id: number) => void;
@@ -47,6 +48,8 @@ vi.mock("@tauri-apps/api/core", () => {
       if (command === "pty_close" && ipc.closing) return ipc.closing;
       if (command === "gterm_blocks")
         return ipc.blocks ?? Promise.resolve(null);
+      if (command === "gterm_block_action")
+        return ipc.blockAction ?? Promise.resolve({ kind: "cleared" });
       if (command === "gterm_read_block")
         return ipc.blockOutput ?? Promise.resolve(null);
       if (command === "gterm_link_context")
@@ -154,6 +157,7 @@ beforeEach(() => {
   ipc.link = null;
   ipc.blocks = null;
   ipc.blockOutput = null;
+  ipc.blockAction = null;
   ipc.closing = null;
 });
 
@@ -1283,4 +1287,106 @@ it("shares bounded client admission between presented metadata and block reads",
   output(null);
   await Promise.all(pending);
   await session.close();
+});
+
+it("orders block selection with pointer selection and snapshots queued commands", async () => {
+  const session = await openSession(new FakeRenderer());
+  let resolve!: (value: unknown) => void;
+  ipc.selection = new Promise((r) => {
+    resolve = r;
+  });
+  const pointer = session.select({ kind: "word", col: 0, row: 0 });
+  const command = { kind: "navigate", direction: -1 } as const;
+  ipc.blockAction = Promise.resolve({
+    kind: "selection",
+    applied: true,
+    blockId: "b1",
+    selection: "block one",
+  });
+  const block = session.blockAction(command);
+  Object.assign(command, { direction: 1 });
+  await Promise.resolve();
+  expect(commands("gterm_block_action")).toHaveLength(0);
+  resolve("pointer word");
+  await pointer;
+  const reply = await block;
+  expect(reply).toMatchObject({ kind: "selection", selection: "block one" });
+  expect(commands("gterm_block_action")[0].args).toEqual({
+    id: 9,
+    command: { kind: "navigate", direction: -1 },
+  });
+  expect(session.getSelection()).toBe("block one");
+  ipc.blockAction = Promise.resolve({
+    kind: "selection",
+    applied: true,
+    blockId: "b1",
+    selection: 42,
+  });
+  await expect(
+    session.blockAction({ kind: "select", blockId: "b1" }),
+  ).rejects.toThrow("invalid");
+  expect(session.getSelection()).toBeNull();
+  await session.close();
+});
+it("does not replace newer pointer selection with an older block receipt", async () => {
+  const session = await openSession(new FakeRenderer());
+  let resolve!: (value: unknown) => void;
+  ipc.blockAction = new Promise((r) => {
+    resolve = r;
+  });
+  const block = session.blockAction({ kind: "select", blockId: "b1" });
+  const pointer = session.select({ kind: "word", col: 0, row: 0 });
+  await Promise.resolve();
+  resolve({
+    kind: "selection",
+    applied: true,
+    blockId: "b1",
+    selection: "old block",
+  });
+  await block;
+  expect(await pointer).toBe("native selection");
+  expect(session.getSelection()).toBe("native selection");
+  await session.close();
+});
+it("shares block-action admission with output reads and rejects before IPC", async () => {
+  const session = await openSession(new FakeRenderer());
+  await expect(
+    session.blockAction({ kind: "navigate", direction: 0 } as never),
+  ).rejects.toThrow("invalid");
+  expect(commands("gterm_block_action")).toHaveLength(0);
+  let output!: (value: unknown) => void;
+  ipc.blockOutput = new Promise((r) => {
+    output = r;
+  });
+  let actionReply!: (value: unknown) => void;
+  ipc.blockAction = new Promise((resolve) => {
+    actionReply = resolve;
+  });
+  const pending = Array.from({ length: 31 }, () => session.readBlock("b1"));
+  const action = session.blockAction({ kind: "clearSearch" });
+  await expect(session.blockAction({ kind: "clearSearch" })).rejects.toThrow(
+    "pending",
+  );
+  await expect(session.readBlock("b1")).rejects.toThrow("pending");
+  output(null);
+  actionReply({ kind: "cleared" });
+  await Promise.all([...pending, action]);
+  await session.close();
+});
+it("rejects delayed block-action replies after its engine is closed", async () => {
+  const session = await openSession(new FakeRenderer());
+  let resolve!: (value: unknown) => void;
+  ipc.blockAction = new Promise((r) => {
+    resolve = r;
+  });
+  const pending = session.blockAction({
+    kind: "find",
+    blockId: "b1",
+    query: "one",
+  });
+  const rejected = expect(pending).rejects.toThrow("unavailable");
+  await Promise.resolve();
+  await session.close();
+  resolve({ kind: "matches", version: 1, matches: [] });
+  await rejected;
 });

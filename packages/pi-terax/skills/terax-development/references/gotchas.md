@@ -806,3 +806,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** metadata revisions deduplicate changing geometry, an old projection paints over a new frame, or a reused seq attaches old blocks after respawn.
 - **Prevention:** retain bounded immutable projections keyed by frame, force presentation for metadata-only changes and reject unavailable frames without a live-grid fallback. Coalesce to one in-flight plus the latest query, validate rows/text/IDs before rendering, and dispose the projection model on process replacement. Recompute pixel geometry when cell metrics change.
 - **Verification:** old/new viewport with identical metadata revision, cache count/allocation limits, actual actor frame query after EOF, stale/closed replies, coalescing and layout-only projection tests. Check real scroll/reflow and process replacement when connecting the UI.
+
+### An expired receipt does not cancel an accepted native selection
+
+- **Trigger:** an internal block selection is accepted while the actor is retained, its IPC receiver times out, then a manual selection arrives.
+- **Failure mode:** frontend promise ordering is released at timeout; separate actor queues can apply the manual selection first and then overwrite it with the older block selection, disagreeing with the frontend selection snapshot.
+- **Prevention:** queue manual selection and block requests under one mutex into one FIFO with shared bounded admission and shutdown rejection. Preserve that arrival order even when a receipt receiver is abandoned. Keep frontend revision guards for late replies.
+- **Verification:** hold the actual actor on a credited output frame, enqueue block Select, abandon its receiver, enqueue manual Clear, release the actor and assert final native selection remains empty. Include native post-exit actions and shared quota tests.
+
+### Stable native rows do not prove immutable completed cell content
+
+- **Trigger:** cursor addressing, erase, insert or delete rewrites a completed command range while its native row references remain valid.
+- **Failure mode:** copying or selecting the old block returns cells belonging to a later command. An empty range searched as a point reads a later prompt.
+- **Prevention:** retain native endpoint references and a bounded canonical unwrapped content digest at completion; revalidate both for explicit reads/actions and visible retirement. The digest is a cell-content guard, not a replacement for reference lifetime. Retire damaged visible metadata without changing the command acceptance revision. Represent a valid empty output as an absent search scope, separately from an unavailable block.
+- **Verification:** native overwrite/ED2/DCH/ICH rejection preserves an existing manual selection; retirement does not advance command metadata; Find -> Unicode soft-wrap reflow -> Reveal paints the exact native cells; empty and wide-endpoint output excludes a following prompt.

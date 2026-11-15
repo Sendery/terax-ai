@@ -16,6 +16,8 @@ pub use health::{final_exit_code, EngineFailure, ENGINE_FAILED_EXIT};
 #[cfg(feature = "ghostty-engine")]
 pub mod bench;
 #[cfg(feature = "ghostty-engine")]
+pub mod block_actions;
+#[cfg(feature = "ghostty-engine")]
 pub mod blocks;
 #[cfg(feature = "ghostty-engine")]
 pub mod input;
@@ -256,7 +258,12 @@ mod runtime {
     }
     pub type BlockSnapshotReceiver = Receiver<Result<super::blocks::BlockSnapshot, String>>;
     pub type BlockOutputReceiver = Receiver<Result<Option<super::blocks::BlockOutput>, String>>;
+    pub type BlockActionReceiver = Receiver<Result<super::block_actions::BlockReply, String>>;
     enum BlockRequest {
+        Action {
+            command: super::block_actions::BlockCommand,
+            reply: SyncSender<Result<super::block_actions::BlockReply, String>>,
+        },
         Snapshot {
             seq: Option<u32>,
             reply: SyncSender<Result<super::blocks::BlockSnapshot, String>>,
@@ -269,6 +276,9 @@ mod runtime {
     impl BlockRequest {
         fn reject(self, error: &str) {
             match self {
+                Self::Action { reply, .. } => {
+                    let _ = reply.try_send(Err(error.into()));
+                }
                 Self::Snapshot { reply, .. } => {
                     let _ = reply.try_send(Err(error.into()));
                 }
@@ -290,6 +300,23 @@ mod runtime {
         reply: SyncSender<SelectionReply>,
     }
 
+    // Accepted work outlives an IPC receipt timeout. Selection and block
+    // requests must retain one arrival order across that boundary.
+    enum InteractionRequest {
+        Selection(SelectionRequest),
+        Block(BlockRequest),
+    }
+    impl InteractionRequest {
+        fn reject(self, error: &str) {
+            match self {
+                Self::Selection(request) => {
+                    let _ = request.reply.try_send(Err(error.into()));
+                }
+                Self::Block(request) => request.reject(error),
+            }
+        }
+    }
+
     #[derive(Default)]
     struct Control {
         ack: Option<u32>,
@@ -299,10 +326,9 @@ mod runtime {
         full: bool,
         stop: bool,
         text_requests: Vec<TextRequest>,
-        selection_requests: Vec<SelectionRequest>,
+        interaction_requests: Vec<InteractionRequest>,
         search_requests: Vec<SearchRequest>,
         link_requests: Vec<LinkRequest>,
-        block_requests: Vec<BlockRequest>,
         text_pending: usize,
         text_closed: bool,
     }
@@ -323,26 +349,22 @@ mod runtime {
             control.text_pending = 0;
             (
                 std::mem::take(&mut control.text_requests),
-                std::mem::take(&mut control.selection_requests),
+                std::mem::take(&mut control.interaction_requests),
                 std::mem::take(&mut control.search_requests),
                 std::mem::take(&mut control.link_requests),
-                std::mem::take(&mut control.block_requests),
             )
         };
         for request in pending.0 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
         for request in pending.1 {
-            let _ = request.reply.try_send(Err("terminal engine closed".into()));
+            request.reject("terminal engine closed");
         }
         for request in pending.2 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
         }
         for request in pending.3 {
             let _ = request.reply.try_send(Err("terminal engine closed".into()));
-        }
-        for request in pending.4 {
-            request.reject("terminal engine closed");
         }
     }
 
@@ -421,8 +443,11 @@ mod runtime {
                 }
                 control.text_pending += 1;
                 control
-                    .selection_requests
-                    .push(SelectionRequest { command, reply });
+                    .interaction_requests
+                    .push(InteractionRequest::Selection(SelectionRequest {
+                        command,
+                        reply,
+                    }));
             }
             if matches!(
                 self.wake.try_send(Input::Wake),
@@ -495,7 +520,9 @@ mod runtime {
             self.block_snapshot(None)
         }
         pub fn blocks_for_frame(&self, seq: u32) -> Result<BlockSnapshotReceiver, String> {
-            if seq == 0 { return Err("invalid terminal block frame".into()); }
+            if seq == 0 {
+                return Err("invalid terminal block frame".into());
+            }
             self.block_snapshot(Some(seq))
         }
         fn block_snapshot(&self, seq: Option<u32>) -> Result<BlockSnapshotReceiver, String> {
@@ -509,6 +536,15 @@ mod runtime {
             self.queue_block(BlockRequest::Read { id, reply })?;
             Ok(receiver)
         }
+        pub fn block_action(
+            &self,
+            command: super::block_actions::BlockCommand,
+        ) -> Result<BlockActionReceiver, String> {
+            command.validate()?;
+            let (reply, receiver) = sync_channel(1);
+            self.queue_block(BlockRequest::Action { command, reply })?;
+            Ok(receiver)
+        }
         fn queue_block(&self, request: BlockRequest) -> Result<(), String> {
             {
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
@@ -519,7 +555,9 @@ mod runtime {
                     return Err("too many pending terminal queries".into());
                 }
                 control.text_pending += 1;
-                control.block_requests.push(request);
+                control
+                    .interaction_requests
+                    .push(InteractionRequest::Block(request));
             }
             if matches!(
                 self.wake.try_send(Input::Wake),
@@ -827,6 +865,7 @@ mod runtime {
         shell: super::shell::ShellIntegration,
         blocks: Option<super::blocks::BlockStore>,
         block_frames: Option<super::blocks::BlockFrames>,
+        block_actions: Option<super::block_actions::BlockActions>,
         control: Arc<Mutex<Control>>,
         stats: Arc<Stats>,
     }
@@ -909,17 +948,14 @@ mod runtime {
                 for request in c.text_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
                 }
-                for request in c.selection_requests {
-                    let _ = request.reply.try_send(Err("terminal engine closed".into()));
+                for request in c.interaction_requests {
+                    request.reject("terminal engine closed");
                 }
                 for request in c.search_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
                 }
                 for request in c.link_requests {
                     let _ = request.reply.try_send(Err("terminal engine closed".into()));
-                }
-                for request in c.block_requests {
-                    request.reject("terminal engine closed");
                 }
                 reject_text_requests(&self.control);
                 self.reply_sink.take();
@@ -968,20 +1004,6 @@ mod runtime {
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
                 control.text_pending = control.text_pending.saturating_sub(1);
             }
-            for request in c.selection_requests {
-                let result = if self.health.failure().is_some() {
-                    Err("terminal engine is unavailable".into())
-                } else {
-                    let update = self.selection.update(&self.term, &request.command);
-                    if update.redraw {
-                        self.pump.request_full();
-                    }
-                    update.text
-                };
-                let _ = request.reply.try_send(result);
-                let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
-                control.text_pending = control.text_pending.saturating_sub(1);
-            }
             for request in c.search_requests {
                 let result = if self.health.failure().is_some() {
                     Err("terminal engine is unavailable".into())
@@ -1005,33 +1027,89 @@ mod runtime {
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
                 control.text_pending = control.text_pending.saturating_sub(1);
             }
-            for request in c.block_requests {
+            for request in c.interaction_requests {
                 match request {
-                    BlockRequest::Snapshot { seq, reply } => {
+                    InteractionRequest::Selection(request) => {
                         let result = if self.health.failure().is_some() {
                             Err("terminal engine is unavailable".into())
                         } else {
-                            self.blocks.as_ref()
-                                .ok_or_else(|| "native blocks are not enabled".into())
-                                .and_then(|blocks| match seq {
-                                    None => blocks.snapshot(&self.term),
-                                    Some(seq) => self.block_frames.as_ref()
-                                        .and_then(|frames| frames.query(seq))
-                                        .ok_or_else(|| "terminal block frame is no longer available".into()),
-                                })
+                            if !matches!(
+                                request.command,
+                                super::selection::SelectionCommand::Read
+                                    | super::selection::SelectionCommand::Release
+                            ) {
+                                if let Some(actions) = &mut self.block_actions {
+                                    actions.manual_selection();
+                                }
+                            }
+                            let update = self.selection.update(&self.term, &request.command);
+                            if update.redraw {
+                                self.pump.request_full();
+                            }
+                            update.text
                         };
-                        let _ = reply.try_send(result);
+                        let _ = request.reply.try_send(result);
                     }
-                    BlockRequest::Read { id, reply } => {
-                        let result = if self.health.failure().is_some() {
-                            Err("terminal engine is unavailable".into())
-                        } else {
-                            self.blocks
-                                .as_ref()
-                                .ok_or_else(|| "native blocks are not enabled".into())
-                                .and_then(|blocks| blocks.read(&self.term, &id))
-                        };
-                        let _ = reply.try_send(result);
+                    InteractionRequest::Block(request) => {
+                        match request {
+                            BlockRequest::Action { command, reply } => {
+                                let result = if self.health.failure().is_some() {
+                                    Err("terminal engine is unavailable".into())
+                                } else {
+                                    let result = match (
+                                        &self.blocks,
+                                        &self.block_frames,
+                                        &mut self.block_actions,
+                                    ) {
+                                        (Some(blocks), Some(frames), Some(actions)) => actions
+                                            .apply(
+                                                &mut self.term,
+                                                blocks,
+                                                frames,
+                                                &mut self.selection,
+                                                &command,
+                                            ),
+                                        _ => Err("native blocks are not enabled".into()),
+                                    };
+                                    // An action may mutate selection before formatting its receipt fails.
+                                    self.pump.request_full();
+                                    result
+                                };
+                                let _ = reply.try_send(result);
+                            }
+                            BlockRequest::Snapshot { seq, reply } => {
+                                let result = if self.health.failure().is_some() {
+                                    Err("terminal engine is unavailable".into())
+                                } else {
+                                    self.blocks
+                                        .as_ref()
+                                        .ok_or_else(|| "native blocks are not enabled".into())
+                                        .and_then(|blocks| match seq {
+                                            None => blocks.snapshot(&self.term),
+                                            Some(seq) => self
+                                                .block_frames
+                                                .as_ref()
+                                                .and_then(|frames| frames.query(seq))
+                                                .ok_or_else(|| {
+                                                    "terminal block frame is no longer available"
+                                                        .into()
+                                                }),
+                                        })
+                                };
+                                let _ = reply.try_send(result);
+                            }
+                            BlockRequest::Read { id, reply } => {
+                                let result = if self.health.failure().is_some() {
+                                    Err("terminal engine is unavailable".into())
+                                } else {
+                                    self.blocks
+                                        .as_ref()
+                                        .ok_or_else(|| "native blocks are not enabled".into())
+                                        .and_then(|blocks| blocks.read(&self.term, &id))
+                                };
+                                let _ = reply.try_send(result);
+                            }
+                        }
                     }
                 }
                 let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
@@ -1051,18 +1129,61 @@ mod runtime {
         }
 
         fn emit(&mut self) {
+            let blocks_pruned = match self
+                .blocks
+                .as_mut()
+                .map(|blocks| blocks.prune_visible(&self.term))
+                .transpose()
+            {
+                Ok(changed) => changed.unwrap_or(false),
+                Err(error) => {
+                    log::warn!("terminal block validation failed: {error}");
+                    self.sink_open = false;
+                    self.health.fail(EngineFailure::SnapshotFailed);
+                    self.pump.nothing_changed();
+                    return;
+                }
+            };
             let started = Instant::now();
             let seq = self.pump.next_seq();
             let search_was_active = self.search.is_active();
-            let highlights = self.search.highlights(&self.term).unwrap_or_else(|error| {
+            let block_search_was_active = self
+                .block_actions
+                .as_ref()
+                .is_some_and(|actions| actions.is_search_active());
+            let mut highlights = self.search.highlights(&self.term).unwrap_or_else(|error| {
                 log::warn!("terminal search highlight failed: {error}");
                 self.search.clear();
                 Vec::new()
             });
-            let blocks_changed = self.blocks.as_ref().zip(self.block_frames.as_ref())
-                .is_some_and(|(blocks, frames)|
-                    frames.metadata_version() != Some(blocks.metadata_version()));
-            let full = self.pump.full_pending() || search_was_active || blocks_changed;
+            let block_highlights = match (&mut self.block_actions, &self.blocks) {
+                (Some(actions), Some(blocks)) => actions
+                    .highlights(&self.term, blocks)
+                    .unwrap_or_else(|error| {
+                        log::warn!("terminal block search highlight failed: {error}");
+                        Vec::new()
+                    }),
+                _ => Vec::new(),
+            };
+            if highlights.is_empty() {
+                highlights = block_highlights;
+            } else {
+                for (target, source) in highlights.iter_mut().zip(block_highlights) {
+                    *target = (*target).max(source);
+                }
+            }
+            let blocks_changed = self
+                .blocks
+                .as_ref()
+                .zip(self.block_frames.as_ref())
+                .is_some_and(|(blocks, frames)| {
+                    frames.metadata_version() != Some(blocks.metadata_version())
+                });
+            let full = self.pump.full_pending()
+                || search_was_active
+                || block_search_was_active
+                || blocks_changed
+                || blocks_pruned;
             let frame = if highlights.is_empty() {
                 self.snapshot.build(&self.term, seq, full)
             } else {
@@ -1083,7 +1204,12 @@ mod runtime {
                     return;
                 }
             };
-            let block_projection = match self.blocks.as_ref().map(|blocks| blocks.snapshot(&self.term)).transpose() {
+            let block_projection = match self
+                .blocks
+                .as_ref()
+                .map(|blocks| blocks.snapshot(&self.term))
+                .transpose()
+            {
                 Ok(snapshot) => snapshot,
                 Err(error) => {
                     log::warn!("terminal block projection failed: {error}");
@@ -1227,6 +1353,7 @@ mod runtime {
             shell: super::shell::ShellIntegration::new(shell_token),
             blocks: blocks_enabled.then(super::blocks::BlockStore::default),
             block_frames: blocks_enabled.then(super::blocks::BlockFrames::default),
+            block_actions: blocks_enabled.then(super::block_actions::BlockActions::default),
             control,
             stats,
         };
@@ -1925,7 +2052,7 @@ mod engine_tests {
         began.recv_timeout(WAIT).unwrap();
         assert!(engine.handle.read_text(0).is_err());
         assert!(engine.handle.read_text(1001).is_err());
-        let queries: Vec<_> = (0..27)
+        let queries: Vec<_> = (0..26)
             .map(|_| engine.handle.read_text(2).unwrap())
             .collect();
         let search = engine
@@ -1940,6 +2067,18 @@ mod engine_tests {
         assert!(engine.handle.read_block("b0".into()).is_err());
         let blocks = engine.handle.blocks().unwrap();
         let block_read = engine.handle.read_block("b1".into()).unwrap();
+        assert!(engine
+            .handle
+            .block_action(super::block_actions::BlockCommand::Navigate { direction: 0 })
+            .is_err());
+        let block_action = engine
+            .handle
+            .block_action(super::block_actions::BlockCommand::ClearSearch)
+            .unwrap();
+        assert!(engine
+            .handle
+            .block_action(super::block_actions::BlockCommand::ClearSearch)
+            .is_err());
         assert!(engine.handle.blocks().is_err());
         assert!(engine.handle.read_block("b1".into()).is_err());
         assert!(engine.handle.link_context(1, 0, 0).is_err());
@@ -1967,6 +2106,11 @@ mod engine_tests {
             .unwrap_err()
             .contains("not enabled"));
         assert!(block_read
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap_err()
+            .contains("not enabled"));
+        assert!(block_action
             .recv_timeout(WAIT)
             .unwrap()
             .unwrap_err()
@@ -2373,23 +2517,339 @@ mod block_presentation_actor_tests {
     #[test]
     fn block_queries_are_bound_to_retained_frames_even_after_eof() {
         let (tx, rx) = std::sync::mpsc::channel();
-        let engine = start_with_shell(30, 5, None, ShellConfig {
-            token: shell::ShellToken::for_test(), blocks: true,
-        }, Box::new(move |bytes| tx.send(bytes).is_ok()), Box::new(|_| {})).unwrap();
+        let engine = start_with_shell(
+            30,
+            5,
+            None,
+            ShellConfig {
+                token: shell::ShellToken::for_test(),
+                blocks: true,
+            },
+            Box::new(move |bytes| tx.send(bytes).is_ok()),
+            Box::new(|_| {}),
+        )
+        .unwrap();
         let bytes=b"\x1b]133;C;aid=1234567890abcdef1234567890abcdef;cmdline_url=one\x07one\r\n\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07";
         assert!(engine.input.feed(bytes.to_vec()));
-        engine.input.finish().unwrap().recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+        engine
+            .input
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap()
+            .unwrap();
         let mut latest = None;
         while let Ok(frame) = rx.try_recv() {
             latest = Some(super::frame::decode::decode(&frame).seq);
         }
         let seq = latest.unwrap();
-        let snapshot = engine.handle.blocks_for_frame(seq).unwrap().recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+        let snapshot = engine
+            .handle
+            .blocks_for_frame(seq)
+            .unwrap()
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap()
+            .unwrap();
         assert_eq!(snapshot.seq, Some(seq));
         assert_eq!(snapshot.blocks.len(), 1);
         assert_eq!(snapshot.blocks[0].command, "one");
         assert!(engine.handle.blocks_for_frame(0).is_err());
-        assert!(engine.handle.blocks_for_frame(seq + 100).unwrap().recv_timeout(Duration::from_secs(3)).unwrap().is_err());
+        assert!(engine
+            .handle
+            .blocks_for_frame(seq + 100)
+            .unwrap()
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap()
+            .is_err());
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+}
+
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod block_action_actor_tests {
+    use super::block_actions::{BlockCommand, BlockReply};
+    use super::selection::SelectionCommand;
+    use super::*;
+    const WAIT: Duration = Duration::from_secs(3);
+    fn fixture(enabled: bool) -> Engine {
+        let engine = start_with_shell(
+            30,
+            5,
+            None,
+            ShellConfig {
+                token: shell::ShellToken::for_test(),
+                blocks: enabled,
+            },
+            Box::new(|_| true),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        assert!(engine.input.feed(b"\x1b]133;C;aid=1234567890abcdef1234567890abcdef\x07banana banana\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07\r\n\x1b]133;C;aid=1234567890abcdef1234567890abcdef\x07banana elsewhere\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07".to_vec()));
+        engine
+            .input
+            .finish()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        engine
+    }
+    #[test]
+    fn actor_uses_native_block_actions_after_eof_and_resets_navigation_on_manual_selection() {
+        let engine = fixture(true);
+        let selected = engine
+            .handle
+            .block_action(BlockCommand::Select {
+                block_id: "b1".into(),
+            })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(selected,BlockReply::Selection{applied:true,block_id:Some(ref id),selection:Some(ref value)}
+            if id=="b1" && value=="banana banana")
+        );
+        let found = engine
+            .handle
+            .block_action(BlockCommand::Find {
+                block_id: "b1".into(),
+                query: "ana".into(),
+            })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(found,BlockReply::Matches{matches,..} if matches.len()==4));
+        engine
+            .handle
+            .selection(SelectionCommand::Word { col: 0, row: 1 })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        let reply = engine
+            .handle
+            .block_action(BlockCommand::Navigate { direction: 1 })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(reply,BlockReply::Selection{applied:false,selection:Some(ref value),..} if value=="banana")
+        );
+        let handle = engine.handle.clone();
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+        assert!(handle.block_action(BlockCommand::ClearSearch).is_err());
+    }
+    #[test]
+    fn an_abandoned_block_receipt_cannot_overtake_a_later_manual_selection() {
+        use std::sync::{mpsc, Arc, Condvar, Mutex};
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let waiting = gate.clone();
+        let (entered, began) = mpsc::channel();
+        let (presented, first) = mpsc::channel();
+        let mut frames = 0;
+        let engine = start_with_shell(
+            30,
+            5,
+            None,
+            ShellConfig {
+                token: shell::ShellToken::for_test(),
+                blocks: true,
+            },
+            Box::new(move |bytes| {
+                frames += 1;
+                if frames == 1 {
+                    presented
+                        .send(super::frame::decode::decode(&bytes).seq)
+                        .unwrap();
+                }
+                if frames == 2 {
+                    entered.send(()).unwrap();
+                    let (open, wake) = &*waiting;
+                    let mut open = open.lock().unwrap();
+                    while !*open {
+                        open = wake.wait(open).unwrap();
+                    }
+                }
+                true
+            }),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        engine.handle.credit(first.recv_timeout(WAIT).unwrap());
+        assert!(engine.input.feed(b"\x1b]133;C;aid=1234567890abcdef1234567890abcdef\x07output\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07".to_vec()));
+        began.recv_timeout(WAIT).unwrap();
+        let abandoned = engine
+            .handle
+            .block_action(BlockCommand::Select {
+                block_id: "b1".into(),
+            })
+            .unwrap();
+        drop(abandoned); // The IPC waiter can time out without cancelling accepted work.
+        let manual = engine.handle.selection(SelectionCommand::Clear).unwrap();
+        let (open, wake) = &*gate;
+        *open.lock().unwrap() = true;
+        wake.notify_all();
+        assert_eq!(manual.recv_timeout(WAIT).unwrap().unwrap(), None);
+        let current = engine
+            .handle
+            .selection(SelectionCommand::Read)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+        assert_eq!(
+            current, None,
+            "accepted requests must retain their arrival order after an abandoned receipt"
+        );
+    }
+    #[test]
+    fn scoped_search_merges_and_clears_real_frame_colors_without_changing_selection() {
+        use super::frame::{
+            decode::{decode, Frame},
+            set_rgb,
+        };
+        use super::search::SearchCommand;
+        use std::sync::mpsc::{channel, Receiver};
+        fn colors(frame: &Frame, row: u16) -> Vec<u32> {
+            frame
+                .row(row)
+                .map(|row| {
+                    row.runs
+                        .iter()
+                        .flat_map(|&(id, len)| {
+                            std::iter::repeat_n(frame.styles[usize::from(id)].bg, usize::from(len))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        fn painted(engine: &Engine, rx: &Receiver<Vec<u8>>, expected: impl Fn(&Frame) -> bool) {
+            let deadline = std::time::Instant::now() + WAIT;
+            loop {
+                let bytes = rx
+                    .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                    .unwrap();
+                let frame = decode(&bytes);
+                engine.handle.credit(frame.seq);
+                if expected(&frame) {
+                    return;
+                }
+            }
+        }
+        let (tx, rx) = channel();
+        let engine = start_with_shell(
+            30,
+            5,
+            None,
+            ShellConfig {
+                token: shell::ShellToken::for_test(),
+                blocks: true,
+            },
+            Box::new(move |bytes| tx.send(bytes).is_ok()),
+            Box::new(|_| {}),
+        )
+        .unwrap();
+        assert!(engine.input.feed(b"\x1b]133;C;aid=1234567890abcdef1234567890abcdef\x07banana banana\x1b]133;D;0;aid=1234567890abcdef1234567890abcdef\x07\r\nbanana elsewhere".to_vec()));
+        engine
+            .input
+            .finish()
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        for bytes in rx.try_iter() {
+            engine.handle.credit(decode(&bytes).seq);
+        }
+        assert!(engine
+            .handle
+            .search(SearchCommand::Find {
+                query: "elsewhere".into(),
+                forward: true,
+                incremental: true
+            })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap());
+        let found = engine
+            .handle
+            .block_action(BlockCommand::Find {
+                block_id: "b1".into(),
+                query: "ana".into(),
+            })
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        let version = match found {
+            BlockReply::Matches { version, matches } => {
+                assert_eq!(matches.len(), 4);
+                version
+            }
+            _ => panic!("expected matches"),
+        };
+        let ordinary = set_rgb(0x51, 0x5c, 0x6a);
+        let active = set_rgb(0xd1, 0x86, 0x16);
+        painted(&engine, &rx, |frame| {
+            colors(frame, 0).get(1) == Some(&ordinary) && colors(frame, 1).get(7) == Some(&active)
+        });
+        assert!(matches!(
+            engine
+                .handle
+                .block_action(BlockCommand::Reveal { version, index: 0 })
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            BlockReply::Revealed { found: true }
+        ));
+        painted(&engine, &rx, |frame| {
+            colors(frame, 0).get(1) == Some(&active)
+        });
+        engine
+            .handle
+            .block_action(BlockCommand::ClearSearch)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap();
+        painted(&engine, &rx, |frame| {
+            colors(frame, 0)
+                .get(1)
+                .is_some_and(|color| *color != ordinary && *color != active)
+                && colors(frame, 1).get(7) == Some(&active)
+        });
+        assert_eq!(
+            engine
+                .handle
+                .selection(SelectionCommand::Read)
+                .unwrap()
+                .recv_timeout(WAIT)
+                .unwrap()
+                .unwrap(),
+            None
+        );
+        engine.input.shutdown();
+        engine.thread.join().unwrap();
+    }
+    #[test]
+    fn disabled_block_actions_fail_explicitly() {
+        let engine = fixture(false);
+        assert!(engine
+            .handle
+            .block_action(BlockCommand::ClearSearch)
+            .unwrap()
+            .recv_timeout(WAIT)
+            .unwrap()
+            .unwrap_err()
+            .contains("not enabled"));
         engine.input.shutdown();
         engine.thread.join().unwrap();
     }

@@ -193,6 +193,39 @@ pub async fn gterm_search(
 }
 
 #[cfg(feature = "ghostty-engine")]
+type BlockCommand = super::engine::block_actions::BlockCommand;
+#[cfg(not(feature = "ghostty-engine"))]
+type BlockCommand = serde_json::Value;
+#[cfg(feature = "ghostty-engine")]
+type BlockReply = super::engine::block_actions::BlockReply;
+#[cfg(not(feature = "ghostty-engine"))]
+type BlockReply = serde_json::Value;
+
+#[tauri::command]
+pub async fn gterm_block_action(
+    state: State<'_, PtyState>,
+    id: u32,
+    command: BlockCommand,
+) -> Result<BlockReply, String> {
+    #[cfg(feature = "ghostty-engine")]
+    {
+        let reply = imp::engine(&state, id)?.block_action(command)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            reply
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .map_err(|error| format!("terminal block action failed: {error}"))?
+        })
+        .await
+        .map_err(|error| format!("terminal block action task failed: {error}"))?
+    }
+    #[cfg(not(feature = "ghostty-engine"))]
+    {
+        let _ = (state, id, command);
+        Err(ENGINE_UNAVAILABLE.into())
+    }
+}
+
+#[cfg(feature = "ghostty-engine")]
 type BlockSnapshot = super::engine::blocks::BlockSnapshot;
 #[cfg(not(feature = "ghostty-engine"))]
 type BlockSnapshot = serde_json::Value;
@@ -202,11 +235,18 @@ type BlockOutput = super::engine::blocks::BlockOutput;
 type BlockOutput = serde_json::Value;
 
 #[tauri::command]
-pub async fn gterm_blocks(state: State<'_, PtyState>, id: u32, seq: Option<u32>) -> Result<BlockSnapshot, String> {
+pub async fn gterm_blocks(
+    state: State<'_, PtyState>,
+    id: u32,
+    seq: Option<u32>,
+) -> Result<BlockSnapshot, String> {
     #[cfg(feature = "ghostty-engine")]
     {
         let engine = imp::engine(&state, id)?;
-        let reply = match seq { Some(seq) => engine.blocks_for_frame(seq)?, None => engine.blocks()? };
+        let reply = match seq {
+            Some(seq) => engine.blocks_for_frame(seq)?,
+            None => engine.blocks()?,
+        };
         tauri::async_runtime::spawn_blocking(move || {
             reply
                 .recv_timeout(std::time::Duration::from_secs(2))

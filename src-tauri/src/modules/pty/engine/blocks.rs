@@ -5,11 +5,13 @@ use libghostty_vt::selection::{FormatOptions, Selection};
 use libghostty_vt::terminal::{Point, PointCoordinate, PointSpace};
 use libghostty_vt::{Error, Terminal};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
 
 const MAX_BLOCKS: usize = 1000;
 const MAX_METADATA_BYTES: usize = 4 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+const MAX_CONTENT_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +54,7 @@ struct Entry {
     finished_at: u64,
     running: bool,
     empty: bool,
+    output_stamp: Option<[u8; 32]>,
     start: TrackedGridRef,
     end: Option<TrackedGridRef>,
 }
@@ -230,6 +233,7 @@ impl BlockStore {
             finished_at: 0,
             running: true,
             empty: false,
+            output_stamp: None,
             start: term
                 .track_grid_ref(Point::Active(PointCoordinate {
                     x: 0,
@@ -279,6 +283,7 @@ impl BlockStore {
         entry.running = false;
         entry.exit_code = exit_code;
         entry.finished_at = now.max(entry.started_at);
+        entry.output_stamp = content_stamp(term, &entry)?;
         self.entries.push_back(entry);
         self.enforce_limits();
         Ok(())
@@ -342,67 +347,109 @@ impl BlockStore {
             blocks,
         })
     }
-    pub fn read(&self, term: &Terminal<'_, '_>, id: &str) -> Result<Option<BlockOutput>, String> {
+    pub(super) fn verified_range(
+        &self,
+        term: &Terminal<'_, '_>,
+        id: &str,
+    ) -> Result<Option<(PointCoordinate, PointCoordinate)>, String> {
         let id = id_number(id)?;
         if !primary(term)? {
             return Ok(None);
         }
-        let Some(entry) = self.entries.iter().find(|e| e.id == id) else {
+        let Some(entry) = self.entries.iter().find(|entry| entry.id == id) else {
+            return Ok(None);
+        };
+        let Some(range) = Self::range(entry, term)? else {
+            return Ok(None);
+        };
+        if entry.output_stamp.is_none() || content_stamp(term, entry)? != entry.output_stamp {
+            return Ok(None);
+        }
+        Ok(Some(range))
+    }
+    pub(super) fn output_selection<'t>(
+        &self,
+        term: &'t Terminal<'_, '_>,
+        id: &str,
+    ) -> Result<Option<VerifiedOutput<'t>>, String> {
+        let Some((start, end)) = self.verified_range(term, id)? else {
+            return Ok(None);
+        };
+        let number = id_number(id)?;
+        let entry = self
+            .entries
+            .iter()
+            .find(|entry| entry.id == number)
+            .ok_or("terminal block disappeared")?;
+        let selection = if entry.empty {
+            None
+        } else {
+            let Some(selection) = entry_selection(term, entry)? else {
+                return Ok(None);
+            };
+            Some(selection)
+        };
+        Ok(Some(VerifiedOutput {
+            start,
+            end,
+            selection,
+        }))
+    }
+    pub fn prune_visible(&mut self, term: &Terminal<'_, '_>) -> Result<bool, String> {
+        if !primary(term)? {
+            return Ok(false);
+        }
+        let viewport = term.scrollbar().map_err(|error| error.to_string())?;
+        let bottom = viewport
+            .offset
+            .saturating_add(u64::from(term.rows().map_err(|error| error.to_string())?));
+        let mut changed = false;
+        let mut at = 0;
+        while at < self.entries.len() {
+            let entry = &self.entries[at];
+            let range = Self::range(entry, term)?;
+            let valid = match range {
+                None => false,
+                Some((start, end))
+                    if u64::from(end.y) >= viewport.offset && u64::from(start.y) < bottom =>
+                {
+                    entry.output_stamp.is_some()
+                        && content_stamp(term, entry)? == entry.output_stamp
+                }
+                Some(_) => true,
+            };
+            if valid {
+                at += 1;
+            } else if let Some(entry) = self.entries.remove(at) {
+                self.metadata_bytes = self.metadata_bytes.saturating_sub(entry.bytes());
+                changed = true;
+            }
+        }
+        Ok(changed)
+    }
+    pub fn read(&self, term: &Terminal<'_, '_>, id: &str) -> Result<Option<BlockOutput>, String> {
+        let number = id_number(id)?;
+        if !primary(term)? {
+            return Ok(None);
+        }
+        let Some(entry) = self.entries.iter().find(|entry| entry.id == number) else {
             return Ok(None);
         };
         if Self::range(entry, term)?.is_none() {
             return Ok(None);
         }
-        if entry.empty {
-            return Ok(Some(BlockOutput {
-                command: entry.command.clone(),
-                cwd: entry.cwd.clone(),
-                exit_code: entry.exit_code,
-                output: String::new(),
-            }));
-        }
-        let Some(end) = &entry.end else {
-            return Ok(None);
-        };
-        let Some(start) = entry.start.snapshot(term).map_err(|e| e.to_string())? else {
-            return Ok(None);
-        };
-        let Some(end) = end.snapshot(term).map_err(|e| e.to_string())? else {
-            return Ok(None);
-        };
-        let selection = Selection::new(start, end, false);
-        let options = || {
-            FormatOptions::new()
-                .with_emit_format(Format::Plain)
-                .with_unwrap(false)
-                .with_trim(true)
-                .with_selection(&selection)
-        };
-        let required = match term.format_selection_buf(options(), &mut []) {
-            Ok(Some(0)) => 0,
-            Err(Error::OutOfSpace { required }) => required,
-            Err(e) => return Err(e.to_string()),
-            _ => return Err("terminal block text is unavailable".into()),
-        };
-        if required > self.max_output_bytes {
-            return Err("terminal block output exceeds its byte limit".into());
-        }
-        let mut bytes = vec![0; required];
-        if required > 0 {
-            let len = term
-                .format_selection_buf(options(), &mut bytes)
-                .map_err(|e| e.to_string())?
-                .ok_or("terminal block text is unavailable")?;
-            if len > bytes.len() {
-                return Err("invalid terminal block output size".into());
+        let bytes = match entry_text(term, entry, self.max_output_bytes, false)? {
+            BlockText::Unavailable => return Ok(None),
+            BlockText::TooLarge => {
+                return Err("terminal block output exceeds its byte limit".into())
             }
-            bytes.truncate(len);
+            BlockText::Text(bytes) => bytes,
+        };
+        if self.verified_range(term, id)?.is_none() {
+            return Ok(None);
         }
-        let mut output =
+        let output =
             String::from_utf8(bytes).map_err(|_| "invalid UTF-8 in terminal block output")?;
-        while output.ends_with('\n') {
-            output.pop();
-        }
         Ok(Some(BlockOutput {
             command: entry.command.clone(),
             cwd: entry.cwd.clone(),
@@ -410,6 +457,87 @@ impl BlockStore {
             output,
         }))
     }
+}
+
+pub(super) struct VerifiedOutput<'t> {
+    pub start: PointCoordinate,
+    pub end: PointCoordinate,
+    pub selection: Option<Selection<'t>>,
+}
+
+enum BlockText {
+    Unavailable,
+    TooLarge,
+    Text(Vec<u8>),
+}
+fn entry_selection<'t>(
+    term: &'t Terminal<'_, '_>,
+    entry: &Entry,
+) -> Result<Option<Selection<'t>>, String> {
+    let Some(end) = &entry.end else {
+        return Ok(None);
+    };
+    let Some(start) = entry
+        .start
+        .snapshot(term)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+    let Some(end) = end.snapshot(term).map_err(|error| error.to_string())? else {
+        return Ok(None);
+    };
+    Ok(Some(Selection::new(start, end, false)))
+}
+fn entry_text(
+    term: &Terminal<'_, '_>,
+    entry: &Entry,
+    limit: usize,
+    unwrap: bool,
+) -> Result<BlockText, String> {
+    if entry.empty {
+        return Ok(BlockText::Text(Vec::new()));
+    }
+    let Some(selection) = entry_selection(term, entry)? else {
+        return Ok(BlockText::Unavailable);
+    };
+    let options = || {
+        FormatOptions::new()
+            .with_emit_format(Format::Plain)
+            .with_unwrap(unwrap)
+            .with_trim(true)
+            .with_selection(&selection)
+    };
+    let required = match term.format_selection_buf(options(), &mut []) {
+        Ok(Some(0)) => 0,
+        Err(Error::OutOfSpace { required }) => required,
+        Err(error) => return Err(error.to_string()),
+        _ => return Err("terminal block text is unavailable".into()),
+    };
+    if required > limit {
+        return Ok(BlockText::TooLarge);
+    }
+    let mut bytes = vec![0; required];
+    if required > 0 {
+        let len = term
+            .format_selection_buf(options(), &mut bytes)
+            .map_err(|error| error.to_string())?
+            .ok_or("terminal block text is unavailable")?;
+        if len > bytes.len() {
+            return Err("invalid terminal block output size".into());
+        }
+        bytes.truncate(len);
+    }
+    while bytes.last() == Some(&b'\n') {
+        bytes.pop();
+    }
+    Ok(BlockText::Text(bytes))
+}
+fn content_stamp(term: &Terminal<'_, '_>, entry: &Entry) -> Result<Option<[u8; 32]>, String> {
+    Ok(match entry_text(term, entry, MAX_CONTENT_BYTES, true)? {
+        BlockText::Text(bytes) => Some(Sha256::digest(&bytes).into()),
+        _ => None,
+    })
 }
 
 #[cfg(test)]
@@ -768,12 +896,22 @@ mod presentation_tests {
     use super::*;
     fn snapshot(version: u64, offset: u64) -> BlockSnapshot {
         BlockSnapshot {
-            seq: None, metadata_version: version, has_any: true,
-            alternate_screen: false, viewport_offset: offset, viewport_rows: 5,
+            seq: None,
+            metadata_version: version,
+            has_any: true,
+            alternate_screen: false,
+            viewport_offset: offset,
+            viewport_rows: 5,
             blocks: vec![BlockMeta {
-                id: "b1".into(), command: "printf one".into(), cwd: "/workspace".into(),
-                exit_code: Some(0), running: false, start_line: 2, end_line: 3,
-                started_at: 1, finished_at: 2,
+                id: "b1".into(),
+                command: "printf one".into(),
+                cwd: "/workspace".into(),
+                exit_code: Some(0),
+                running: false,
+                start_line: 2,
+                end_line: 3,
+                started_at: 1,
+                finished_at: 2,
             }],
         }
     }
@@ -792,7 +930,9 @@ mod presentation_tests {
     #[test]
     fn presented_block_cache_has_count_and_allocated_byte_limits() {
         let mut cache = BlockFrames::default();
-        for seq in 1..=4 { cache.commit(seq, snapshot(2, 0)); }
+        for seq in 1..=4 {
+            cache.commit(seq, snapshot(2, 0));
+        }
         assert!(cache.query(1).is_none());
         assert!(cache.query(2).is_some());
         assert!(cache.query(4).is_some());
@@ -818,23 +958,37 @@ pub(super) struct BlockFrames {
 }
 impl BlockFrames {
     pub fn metadata_version(&self) -> Option<u64> {
-        self.frames.back().map(|frame| frame.snapshot.metadata_version)
+        self.frames
+            .back()
+            .map(|frame| frame.snapshot.metadata_version)
     }
     pub fn commit(&mut self, seq: u32, snapshot: BlockSnapshot) {
         let bytes = std::mem::size_of::<BlockSnapshot>()
             + snapshot.blocks.capacity() * std::mem::size_of::<BlockMeta>()
-            + snapshot.blocks.iter().map(|block|
-                block.id.capacity() + block.command.capacity() + block.cwd.capacity()
-            ).sum::<usize>();
-        if bytes > MAX_FRAME_METADATA_BYTES { return; }
-        let snapshot = self.frames.back()
+            + snapshot
+                .blocks
+                .iter()
+                .map(|block| block.id.capacity() + block.command.capacity() + block.cwd.capacity())
+                .sum::<usize>();
+        if bytes > MAX_FRAME_METADATA_BYTES {
+            return;
+        }
+        let snapshot = self
+            .frames
+            .back()
             .filter(|frame| frame.snapshot.as_ref() == &snapshot)
             .map(|frame| std::sync::Arc::clone(&frame.snapshot))
             .unwrap_or_else(|| std::sync::Arc::new(snapshot));
         self.bytes += bytes;
-        self.frames.push_back(BlockProjection { seq, snapshot, bytes });
+        self.frames.push_back(BlockProjection {
+            seq,
+            snapshot,
+            bytes,
+        });
         while self.frames.len() > MAX_BLOCK_FRAMES || self.bytes > MAX_FRAME_METADATA_BYTES {
-            if let Some(frame) = self.frames.pop_front() { self.bytes -= frame.bytes; }
+            if let Some(frame) = self.frames.pop_front() {
+                self.bytes -= frame.bytes;
+            }
         }
     }
     pub fn query(&self, seq: u32) -> Option<BlockSnapshot> {
@@ -844,5 +998,91 @@ impl BlockFrames {
         Some(snapshot)
     }
     #[cfg(test)]
-    pub fn retained_bytes(&self) -> usize { self.bytes }
+    pub fn retained_bytes(&self) -> usize {
+        self.bytes
+    }
+}
+
+#[cfg(test)]
+mod content_integrity_tests {
+    use super::*;
+    const TOKEN: &str = "1234567890abcdef1234567890abcdef";
+    fn fixture() -> (Terminal<'static, 'static>, ShellIntegration, BlockStore) {
+        let mut term = Terminal::new(libghostty_vt::TerminalOptions {
+            cols: 12,
+            rows: 5,
+            max_scrollback: 1024 * 1024,
+        })
+        .unwrap();
+        let mut shell = ShellIntegration::new(Some(TOKEN.into()));
+        let mut blocks = BlockStore::default();
+        blocks.feed(&mut term,&mut shell,
+            format!("\x1b]133;C;aid={TOKEN};cmdline_url=one\x07one\r\ntwo\x1b]133;D;0;aid={TOKEN}\x07\r\nPROMPT").as_bytes(),1).unwrap();
+        (term, shell, blocks)
+    }
+    #[test]
+    fn completed_reads_reject_cell_replacement_or_erasure_without_mutating_user_selection() {
+        for damage in [
+            b"\x1b[1;1HNEW".as_slice(),
+            b"\x1b[2J".as_slice(),
+            b"\x1b[1;1H\x1b[P".as_slice(),
+            b"\x1b[1;1H\x1b[@X".as_slice(),
+        ] {
+            let (mut term, mut shell, mut blocks) = fixture();
+            blocks.feed(&mut term, &mut shell, damage, 2).unwrap();
+            term.vt_write(b"\x1b[5;1HKEEP");
+            let all = term.select_all().unwrap().unwrap();
+            term.set_selection(Some(&all)).unwrap();
+            let before = term
+                .format_selection_alloc(None, FormatOptions::new().with_emit_format(Format::Plain))
+                .unwrap()
+                .unwrap()
+                .to_vec();
+            assert!(
+                blocks.read(&term, "b1").unwrap().is_none(),
+                "damage {damage:?}"
+            );
+            let after = term
+                .format_selection_alloc(None, FormatOptions::new().with_emit_format(Format::Plain))
+                .unwrap()
+                .unwrap()
+                .to_vec();
+            assert_eq!(before, after);
+        }
+    }
+    #[test]
+    fn invalid_visible_blocks_are_retired_without_changing_command_metadata_revision() {
+        let (mut term, mut shell, mut blocks) = fixture();
+        let version = blocks.metadata_version();
+        blocks
+            .feed(&mut term, &mut shell, b"\x1b[2Jnew command output", 2)
+            .unwrap();
+        assert!(blocks.prune_visible(&term).unwrap());
+        assert!(blocks.snapshot(&term).unwrap().blocks.is_empty());
+        assert_eq!(blocks.metadata_version(), version);
+        assert!(!blocks.prune_visible(&term).unwrap());
+    }
+    #[test]
+    fn content_guards_preserve_real_reflow_and_hide_only_primary_blocks_during_alternate_screen() {
+        let (mut term, mut shell, mut blocks) = fixture();
+        term.resize(3, 5, 0, 0).unwrap();
+        assert_eq!(
+            blocks
+                .read(&term, "b1")
+                .unwrap()
+                .unwrap()
+                .output
+                .replace('\n', ""),
+            "onetwo"
+        );
+        assert!(!blocks.prune_visible(&term).unwrap());
+        blocks
+            .feed(&mut term, &mut shell, b"\x1b[?1049hALT", 2)
+            .unwrap();
+        assert!(!blocks.prune_visible(&term).unwrap());
+        blocks
+            .feed(&mut term, &mut shell, b"\x1b[?1049l", 3)
+            .unwrap();
+        assert!(blocks.read(&term, "b1").unwrap().is_some());
+    }
 }
