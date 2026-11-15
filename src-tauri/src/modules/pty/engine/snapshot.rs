@@ -168,6 +168,7 @@ impl Snapshotter {
         }
 
         self.links.prepare(cols, rows);
+        self.graphics.prepare_rows(rows);
         let encoder = &mut self.encoder;
         encoder.begin();
         let mut row_iter = if full || dirty != Dirty::Clean {
@@ -178,6 +179,7 @@ impl Snapshotter {
         let mut y = 0u16;
         while let Some(row) = row_iter.as_mut().and_then(|rows| rows.next()) {
             if full || row.dirty()? {
+                self.graphics.clear_row(y);
                 let raw = row.raw_row()?;
                 let mut link_row = super::links::LinkRowBuilder::new(
                     cols,
@@ -254,7 +256,23 @@ impl Snapshotter {
                     if selected_row && cell.is_selected()? {
                         style.attrs ^= ATTR_INVERSE;
                     }
-                    if has_link_graphemes
+                    if codepoint == super::graphics_placeholders::PLACEHOLDER {
+                        let count = cell.graphemes_len()?;
+                        if count > super::frame::MAX_GRAPHEME_BYTES {
+                            return Err(libghostty_vt::Error::OutOfSpace { required: count });
+                        }
+                        self.grapheme_scratch.clear();
+                        cell.graphemes_utf8(&mut self.grapheme_scratch)?;
+                        self.graphics.placeholder(
+                            x as u16,
+                            y,
+                            cell.style()?,
+                            &self.grapheme_scratch,
+                        );
+                        style.attrs &= ATTR_INVERSE;
+                        style.set_underline(UnderlineKind::None);
+                        encoder.push_cell(0, width, style);
+                    } else if has_link_graphemes
                         && raw_cell.content_tag()? == CellContentTag::CodepointGrapheme
                         && width != CellWidth::SpacerTail
                     {
@@ -327,6 +345,63 @@ mod grapheme_tests {
     use super::*;
     use crate::modules::pty::engine::frame::{decode, CELL_SPACER_TAIL, CELL_WIDE_HEAD};
     use libghostty_vt::TerminalOptions;
+    #[test]
+    fn virtual_images_follow_real_placeholder_rows_and_erasure() {
+        let mut term = Terminal::new(TerminalOptions {
+            cols: 20,
+            rows: 3,
+            max_scrollback: 0,
+        })
+        .unwrap();
+        super::super::graphics::configure(&mut term).unwrap();
+        super::super::graphics::write(
+            &mut term,
+            b"\x1b_Ga=T,U=1,f=32,s=1,v=1,i=42,c=2,r=2,q=2;/wAA/w==\x1b\\",
+        )
+        .unwrap();
+        term.vt_write("\x1b[H\x1b[38;5;42m\u{10eeee}\u{0305}\u{0305}\u{10eeee}\r\n\u{10eeee}\u{030d}\u{0305}\u{10eeee}".as_bytes());
+        let mut snapshot = Snapshotter::new().unwrap();
+        snapshot.set_cell_pixels(8, 8);
+        let frame = snapshot.build(&term, 1, true).unwrap().unwrap().to_vec();
+        assert_ne!(frame[17] & 16, 0);
+        let u16_at = |at: usize| u16::from_le_bytes(frame[at..at + 2].try_into().unwrap()) as usize;
+        let mut at = 36 + u16_at(32) * 16;
+        for _ in 0..u16_at(18) {
+            at += 8 + u16_at(at + 2) * 4 + u16_at(at + 4) * 4;
+        }
+        let mut fixture = frame.clone();
+        let image = at + 20;
+        let placement = image + 28;
+        for stamp in [image + 4, placement + 4, placement + 60] {
+            fixture[stamp..stamp + 8].copy_from_slice(&1u64.to_le_bytes());
+        }
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("tests/fixtures/terminal-graphics/virtual-rgba.frame");
+        if std::env::var("UPDATE_FIXTURES").as_deref() == Ok("1") {
+            std::fs::write(&path, &fixture).unwrap();
+        }
+        assert_eq!(fixture, std::fs::read(path).unwrap());
+        assert_eq!(
+            snapshot.graphics.capture(&term, true).unwrap().unwrap()[0],
+            2
+        );
+        let packet = snapshot.graphics.capture(&term, true).unwrap().unwrap();
+        let words: Vec<u32> = packet
+            .chunks_exact(4)
+            .map(|v| u32::from_le_bytes(v.try_into().unwrap()))
+            .collect();
+        assert_eq!(&words[..5], &[2, 8, 8, 1, 2]);
+        let first = 12;
+        assert_eq!(f32::from_bits(words[first + 11]), 0.5);
+        assert_eq!(f32::from_bits(words[first + 14 + 9]), 0.5);
+        term.vt_write(b"\x1b[H\x1b[2J");
+        snapshot.build(&term, 2, false).unwrap().unwrap();
+        let packet = snapshot.graphics.capture(&term, true).unwrap().unwrap();
+        assert_eq!(u32::from_le_bytes(packet[16..20].try_into().unwrap()), 0);
+    }
+
     #[test]
     fn actual_native_cells_preserve_combining_marks_zwj_and_frame_local_replacements() {
         let mut term = Terminal::new(TerminalOptions {

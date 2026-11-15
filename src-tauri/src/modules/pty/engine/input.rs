@@ -1,6 +1,7 @@
 use libghostty_vt::key::{Action, Encoder, Event, Key, Mods};
-use libghostty_vt::terminal::Mode;
-use libghostty_vt::{focus, paste, Error, Terminal};
+use libghostty_vt::screen::{CellWide, Screen};
+use libghostty_vt::terminal::{Mode, Point, PointCoordinate};
+use libghostty_vt::{focus, mouse, paste, Error, Terminal};
 use serde::Deserialize;
 
 pub const MAX_PASTE_BYTES: usize = 1024 * 1024;
@@ -12,7 +13,20 @@ const MOD_MASK: u16 = 63;
 pub enum InputEvent {
     Key { event: KeyEvent },
     Paste { text: String },
+    Mouse { event: MouseEvent },
+    MoveCursor { event: CursorTarget },
     Focus { focused: bool },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CursorTarget {
+    col: u16,
+    row: u16,
+    cols: u16,
+    rows: u16,
+    cursor_x: u16,
+    cursor_y: u16,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -25,6 +39,35 @@ pub struct KeyEvent {
     consumed_mods: u16,
     unshifted: Option<char>,
     legacy_shift_enter: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MouseEvent {
+    #[serde(default = "one")]
+    repeat: u8,
+    action: MouseAction,
+    button: Option<u8>,
+    mods: u16,
+    x: f64,
+    y: f64,
+    cell_width: u32,
+    cell_height: u32,
+    screen_width: u32,
+    screen_height: u32,
+    buttons: u8,
+}
+
+fn one() -> u8 {
+    1
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum MouseAction {
+    Press,
+    Release,
+    Motion,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
@@ -49,6 +92,44 @@ impl InputEvent {
                     .is_some_and(|text| text.len() > MAX_KEY_BYTES)
                 {
                     return Err("terminal key text exceeds the byte limit".into());
+                }
+            }
+            Self::Mouse { event } => {
+                if event.repeat == 0
+                    || event.repeat > 32
+                    || (event.repeat > 1
+                        && (!matches!(event.action, MouseAction::Press)
+                            || !matches!(event.button, Some(3..=6))))
+                    || event.mods & !MOD_MASK != 0
+                    || event.button.is_some_and(|button| button > 8)
+                    || event.buttons > 31
+                    || !event.x.is_finite()
+                    || !event.y.is_finite()
+                    || event.x.abs() > 1_000_000.0
+                    || event.y.abs() > 1_000_000.0
+                    || event.cell_width == 0
+                    || event.cell_height == 0
+                    || event.cell_width > 4096
+                    || event.cell_height > 4096
+                    || event.screen_width == 0
+                    || event.screen_height == 0
+                    || event.screen_width > 1_000_000
+                    || event.screen_height > 1_000_000
+                {
+                    return Err("invalid terminal mouse event".into());
+                }
+            }
+            Self::MoveCursor { event } => {
+                if event.cols == 0
+                    || event.cols > 1000
+                    || event.rows == 0
+                    || event.rows > 500
+                    || event.col >= event.cols
+                    || event.row >= event.rows
+                    || event.cursor_x >= event.cols
+                    || event.cursor_y >= event.rows
+                {
+                    return Err("invalid terminal cursor target".into());
                 }
             }
             Self::Paste { text } if text.len() > MAX_PASTE_BYTES => {
@@ -133,6 +214,52 @@ pub fn encode(
             }
             Ok(output)
         }
+        InputEvent::MoveCursor { event } => move_cursor(term, event, modify_other_keys),
+        InputEvent::Mouse { event } => {
+            let mut mouse = mouse::Event::new().map_err(|error| error.to_string())?;
+            mouse
+                .set_action(match event.action {
+                    MouseAction::Press => mouse::Action::Press,
+                    MouseAction::Release => mouse::Action::Release,
+                    MouseAction::Motion => mouse::Action::Motion,
+                })
+                .set_button(event.button.map(|button| match button {
+                    0 => mouse::Button::Left,
+                    1 => mouse::Button::Middle,
+                    2 => mouse::Button::Right,
+                    3 => mouse::Button::Four,
+                    4 => mouse::Button::Five,
+                    5 => mouse::Button::Six,
+                    6 => mouse::Button::Seven,
+                    7 => mouse::Button::Eight,
+                    _ => mouse::Button::Nine,
+                }))
+                .set_mods(modifiers(event.mods))
+                .set_position(mouse::Position {
+                    x: event.x as f32,
+                    y: event.y as f32,
+                });
+            let mut encoder = mouse::Encoder::new().map_err(|error| error.to_string())?;
+            encoder
+                .set_options_from_terminal(term)
+                .set_any_button_pressed(event.buttons != 0)
+                .set_track_last_cell(false)
+                .set_size(mouse::EncoderSize {
+                    screen_width: event.screen_width,
+                    screen_height: event.screen_height,
+                    cell_width: event.cell_width,
+                    cell_height: event.cell_height,
+                    padding_top: 0,
+                    padding_bottom: 0,
+                    padding_left: 0,
+                    padding_right: 0,
+                });
+            let mut output = [0; 128];
+            let written = encoder
+                .encode(&mouse, &mut output)
+                .map_err(|error| error.to_string())?;
+            Ok(output[..written].repeat(usize::from(event.repeat)))
+        }
         InputEvent::Paste { text } => {
             let mut data = text.replace("\r\n", "\n").into_bytes();
             let bracketed = term
@@ -163,6 +290,137 @@ pub fn encode(
             Ok(bytes[..written].to_vec())
         }
     }
+}
+
+fn move_cursor(
+    term: &Terminal<'_, '_>,
+    target: &CursorTarget,
+    modify_other_keys: u32,
+) -> Result<Vec<u8>, String> {
+    let native = |error: Error| error.to_string();
+    let scrollbar = term.scrollbar().map_err(native)?;
+    if term.cols().map_err(native)? != target.cols
+        || term.rows().map_err(native)? != target.rows
+        || term.cursor_x().map_err(native)? != target.cursor_x
+        || term.cursor_y().map_err(native)? != target.cursor_y
+        || scrollbar.offset.saturating_add(scrollbar.len) < scrollbar.total
+        || term.is_mouse_tracking().map_err(native)?
+    {
+        return Ok(Vec::new());
+    }
+    let cols = usize::from(target.cols);
+    let from = usize::from(target.cursor_y) * cols + usize::from(target.cursor_x);
+    let to = usize::from(target.row) * cols + usize::from(target.col);
+    let mut moves = Vec::new();
+    if matches!(term.active_screen().map_err(native)?, Screen::Primary) {
+        moves.push((
+            if to < from {
+                KeyCode::ArrowLeft
+            } else {
+                KeyCode::ArrowRight
+            },
+            from.abs_diff(to),
+        ));
+    } else {
+        let mut wrapped = Vec::with_capacity(usize::from(target.rows));
+        for y in 0..target.rows {
+            wrapped.push(
+                term.grid_ref(Point::Active(PointCoordinate {
+                    x: 0,
+                    y: u32::from(y),
+                }))
+                .map_err(native)?
+                .row()
+                .map_err(native)?
+                .is_wrap_continuation()
+                .map_err(native)?,
+            );
+        }
+        let head = |mut row: usize| {
+            while row > 0 && wrapped[row] {
+                row -= 1;
+            }
+            row
+        };
+        let start = head(usize::from(target.cursor_y));
+        let end = head(usize::from(target.row));
+        let vertical = (start.min(end)..start.max(end))
+            .filter(|row| !wrapped[*row])
+            .count();
+        let cell_distance = |from: usize, to: usize| -> Result<usize, String> {
+            if from.abs_diff(to) > 32768 {
+                return Err("terminal cursor movement exceeds the input limit".into());
+            }
+            let mut cells = 0;
+            for index in from.min(to)..from.max(to) {
+                let cell = term
+                    .grid_ref(Point::Active(PointCoordinate {
+                        x: (index % cols) as u16,
+                        y: (index / cols) as u32,
+                    }))
+                    .map_err(native)?
+                    .cell()
+                    .map_err(native)?;
+                if !matches!(
+                    cell.wide().map_err(native)?,
+                    CellWide::SpacerTail | CellWide::SpacerHead
+                ) {
+                    cells += 1;
+                }
+            }
+            Ok(cells)
+        };
+        if vertical > 0 {
+            moves.push((
+                KeyCode::ArrowLeft,
+                cell_distance(from, start * cols + usize::from(target.cursor_x))?,
+            ));
+            moves.push((
+                if end < start {
+                    KeyCode::ArrowUp
+                } else {
+                    KeyCode::ArrowDown
+                },
+                vertical,
+            ));
+        }
+        let horizontal_from = if vertical > 0 {
+            end * cols + usize::from(target.cursor_x)
+        } else {
+            from
+        };
+        let cells = cell_distance(horizontal_from, to)?;
+        moves.push((
+            if to < horizontal_from {
+                KeyCode::ArrowLeft
+            } else {
+                KeyCode::ArrowRight
+            },
+            cells,
+        ));
+    }
+    let mut output = Vec::new();
+    for (code, count) in moves {
+        if count > 32768 {
+            return Err("terminal cursor movement exceeds the input limit".into());
+        }
+        let key = InputEvent::Key {
+            event: KeyEvent {
+                code,
+                ..KeyEvent::default()
+            },
+        };
+        let encoded = encode(term, &key, modify_other_keys)?;
+        let bytes = encoded
+            .len()
+            .checked_mul(count)
+            .ok_or("invalid terminal cursor movement")?;
+        if output.len() + bytes > MAX_PASTE_BYTES {
+            return Err("terminal cursor movement exceeds the input limit".into());
+        }
+        output.extend(encoded.repeat(count));
+    }
+    Ok(output)
 }
 
 // Closed mapping for DOM KeyboardEvent.code values to the pinned native enum.
@@ -578,6 +836,120 @@ mod tests {
         )
         .unwrap()
     }
+
+    fn cursor_target(term: &Terminal<'_, '_>, col: u16, row: u16) -> InputEvent {
+        InputEvent::MoveCursor {
+            event: CursorTarget {
+                col,
+                row,
+                cols: term.cols().unwrap(),
+                rows: term.rows().unwrap(),
+                cursor_x: term.cursor_x().unwrap(),
+                cursor_y: term.cursor_y().unwrap(),
+            },
+        }
+    }
+
+    #[test]
+    fn alt_click_moves_through_native_rows_and_live_cursor_key_modes() {
+        let mut term = Terminal::new(TerminalOptions {
+            cols: 8,
+            rows: 4,
+            max_scrollback: 8192,
+        })
+        .unwrap();
+        term.vt_write(b"abcdefghij");
+        assert_eq!(
+            encode(&term, &cursor_target(&term, 5, 0)).unwrap(),
+            b"\x1b[D".repeat(5)
+        );
+        term.vt_write(b"\x1b[?1049h\x1b[?1h\x1b[2;3H");
+        assert_eq!(
+            encode(&term, &cursor_target(&term, 4, 3)).unwrap(),
+            [b"\x1bOB".repeat(2), b"\x1bOC".repeat(2)].concat()
+        );
+        term.vt_write(b"\x1b[2J\x1b[Habcdefghij");
+        assert_eq!(
+            encode(&term, &cursor_target(&term, 2, 2)).unwrap(),
+            [b"\x1bOD".repeat(8), b"\x1bOB".to_vec()].concat()
+        );
+        term.vt_write("\x1b[2J\x1b[H界abcdefg".as_bytes());
+        assert_eq!(
+            encode(&term, &cursor_target(&term, 1, 2)).unwrap(),
+            [b"\x1bOD".repeat(7), b"\x1bOB".to_vec()].concat()
+        );
+        term.vt_write("\x1b[2J\x1b[H界a\x1b[H".as_bytes());
+        assert_eq!(
+            encode(&term, &cursor_target(&term, 3, 0)).unwrap(),
+            b"\x1bOC".repeat(2)
+        );
+    }
+
+    #[test]
+    fn alt_click_rejects_scrollback_changed_cursor_and_mouse_owner() {
+        use libghostty_vt::terminal::ScrollViewport;
+        let mut term = Terminal::new(TerminalOptions {
+            cols: 8,
+            rows: 4,
+            max_scrollback: 8192,
+        })
+        .unwrap();
+        let stale = cursor_target(&term, 4, 0);
+        term.vt_write(b"x");
+        assert!(encode(&term, &stale).unwrap().is_empty());
+        term.vt_write(b"\x1b[?1000h");
+        assert!(encode(&term, &cursor_target(&term, 4, 0))
+            .unwrap()
+            .is_empty());
+        term.vt_write(b"\x1b[?1000l1\r\n2\r\n3\r\n4\r\n5\r\n6");
+        term.scroll_viewport(ScrollViewport::Top);
+        assert!(encode(&term, &cursor_target(&term, 4, 0))
+            .unwrap()
+            .is_empty());
+    }
+    #[test]
+    fn mouse_encoding_follows_live_modes_and_physical_cell_geometry() {
+        let mut term = terminal();
+        let event = |action: &str, button: Option<u8>, buttons: u8| {
+            serde_json::from_value(
+            serde_json::json!({"kind":"mouse","event":{"action":action,"button":button,"buttons":buttons,
+                "mods":0,"x":24.0,"y":48.0,"cellWidth":16,"cellHeight":32,"screenWidth":1280,"screenHeight":768}})
+        ).unwrap()
+        };
+        assert!(encode(&term, &event("press", Some(0), 1))
+            .unwrap()
+            .is_empty());
+        term.vt_write(b"\x1b[?1000h\x1b[?1006h");
+        assert_eq!(
+            encode(&term, &event("press", Some(0), 1)).unwrap(),
+            b"\x1b[<0;2;2M"
+        );
+        assert_eq!(
+            encode(&term, &event("release", Some(0), 0)).unwrap(),
+            b"\x1b[<0;2;2m"
+        );
+        assert!(encode(&term, &event("motion", None, 0)).unwrap().is_empty());
+        term.vt_write(b"\x1b[?1003h");
+        assert_eq!(
+            encode(&term, &event("motion", None, 0)).unwrap(),
+            b"\x1b[<35;2;2M"
+        );
+        assert_eq!(
+            encode(&term, &event("press", Some(3), 0)).unwrap(),
+            b"\x1b[<64;2;2M"
+        );
+        term.vt_write(b"\x1b[?1016h");
+        assert_eq!(
+            encode(&term, &event("press", Some(0), 1)).unwrap(),
+            b"\x1b[<0;24;48M"
+        );
+        let mut invalid = event("press", Some(0), 1);
+        if let InputEvent::Mouse { event } = &mut invalid {
+            event.cell_width = 0;
+        }
+        assert!(invalid.validate().is_err());
+    }
+
     #[test]
     fn navigation_follows_the_live_application_cursor_mode() {
         let mut term = terminal();

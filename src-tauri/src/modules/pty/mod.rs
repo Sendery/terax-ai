@@ -1,4 +1,5 @@
 mod agent_detect;
+mod terminal_signals;
 #[path = "engine/colors.rs"]
 pub mod colors;
 mod da_filter;

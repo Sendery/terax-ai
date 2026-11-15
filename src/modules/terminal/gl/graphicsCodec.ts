@@ -48,7 +48,17 @@ export function decodeGraphics(
     if (lo === 0 && hi === 0) return fail();
     return [hi.toString(16), lo.toString(16)].join(":");
   };
-  if (word() !== 1) return fail();
+  const version = word();
+  if (version !== 1 && version !== 2) return fail();
+  const floatWords = new Float32Array(u32.buffer, u32.byteOffset, u32.length);
+  const geometry = (): number => {
+    if (version === 1) return word();
+    if (at >= floatWords.length) return fail();
+    const value = floatWords[at++];
+    if (!Number.isFinite(value) || value < 0 || value > 1_000_000)
+      return fail();
+    return value;
+  };
   const cellWidth = word(),
     cellHeight = word(),
     imageCount = word(),
@@ -100,14 +110,14 @@ export function decodeGraphics(
       z = word() | 0,
       col = word() | 0,
       row = word() | 0;
-    const offsetX = word(),
-      offsetY = word(),
-      sourceX = word(),
-      sourceY = word();
-    const sourceWidth = word(),
-      sourceHeight = word(),
-      width = word(),
-      height = word();
+    const offsetX = geometry(),
+      offsetY = geometry(),
+      sourceX = geometry(),
+      sourceY = geometry();
+    const sourceWidth = geometry(),
+      sourceHeight = geometry(),
+      width = geometry(),
+      height = geometry();
     const image = images.get(key);
     if (
       id === 0 ||
@@ -120,8 +130,8 @@ export function decodeGraphics(
       (full && !image) ||
       (image &&
         (image.id !== id ||
-          sourceX + sourceWidth > image.width ||
-          sourceY + sourceHeight > image.height))
+          sourceX + sourceWidth > image.width + 0.001 ||
+          sourceY + sourceHeight > image.height + 0.001))
     )
       return fail();
     used.add(key);

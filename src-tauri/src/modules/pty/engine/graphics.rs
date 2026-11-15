@@ -1,3 +1,4 @@
+use super::graphics_placeholders::{self, Run};
 use std::collections::HashSet;
 use std::io::Cursor;
 
@@ -130,6 +131,7 @@ pub struct GraphicsSnapshot {
     generation: u64,
     active: bool,
     out: Vec<u8>,
+    virtual_rows: Vec<Vec<Run>>,
 }
 
 impl GraphicsSnapshot {
@@ -141,7 +143,32 @@ impl GraphicsSnapshot {
             generation: 0,
             active: false,
             out: Vec::new(),
+            virtual_rows: Vec::new(),
         })
+    }
+
+    pub fn prepare_rows(&mut self, rows: u16) {
+        self.virtual_rows.truncate(usize::from(rows));
+    }
+
+    pub fn clear_row(&mut self, row: u16) {
+        if let Some(row) = self.virtual_rows.get_mut(usize::from(row)) {
+            row.clear();
+        }
+    }
+
+    pub fn placeholder(&mut self, x: u16, y: u16, style: libghostty_vt::style::Style, text: &str) {
+        if self.virtual_rows.len() <= usize::from(y) {
+            self.virtual_rows.resize_with(usize::from(y) + 1, Vec::new);
+        }
+        graphics_placeholders::append(
+            &mut self.virtual_rows[usize::from(y)],
+            u32::from(x),
+            u32::from(y),
+            style.fg_color,
+            style.underline_color,
+            text,
+        );
     }
 
     pub fn set_cell_pixels(&mut self, width: u32, height: u32) {
@@ -170,6 +197,8 @@ impl GraphicsSnapshot {
         let mut uploads = Vec::new();
         let mut placements = Vec::new();
         let mut next_visible = HashSet::new();
+        let fractional = self.virtual_rows.iter().any(|row| !row.is_empty());
+        let mut chosen = HashSet::new();
         let mut placement_count = 0;
         let mut upload_count = 0;
         let mut current = self.iterator.update(&storage)?;
@@ -177,15 +206,57 @@ impl GraphicsSnapshot {
             let id = placement.image_id()?;
             let image = storage.image(id).ok_or(Error::InvalidValue)?;
             let info = placement.placement_render_info(&image, term)?;
-            if !info.viewport_visible
-                || info.source_width == 0
-                || info.source_height == 0
-                || info.pixel_width == 0
-                || info.pixel_height == 0
+            let mut fragments = Vec::new();
+            if placement.is_virtual()? {
+                let placement_id = placement.placement_id()?;
+                for run in self.virtual_rows.iter().flatten().filter(|run| {
+                    run.image == id
+                        && (run.placement == placement_id
+                            || (run.placement == 0 && !chosen.contains(&id)))
+                }) {
+                    if let Some(mut geometry) = graphics_placeholders::fragment(
+                        run,
+                        (image.width()?, image.height()?),
+                        (placement.columns()?, placement.rows()?),
+                        self.cell,
+                    ) {
+                        let shift_x = (geometry[0] / cell_width as f32).floor() as u32;
+                        let shift_y = (geometry[1] / cell_height as f32).floor() as u32;
+                        geometry[0] -= (shift_x * cell_width) as f32;
+                        geometry[1] -= (shift_y * cell_height) as f32;
+                        fragments.push((
+                            run.x as i32 + shift_x as i32,
+                            run.y as i32 + shift_y as i32,
+                            geometry,
+                        ));
+                    }
+                }
+                chosen.insert(id);
+            } else if info.viewport_visible
+                && info.source_width > 0
+                && info.source_height > 0
+                && info.pixel_width > 0
+                && info.pixel_height > 0
             {
+                fragments.push((
+                    info.viewport_col,
+                    info.viewport_row,
+                    [
+                        placement.x_offset()? as f32,
+                        placement.y_offset()? as f32,
+                        info.source_x as f32,
+                        info.source_y as f32,
+                        info.source_width as f32,
+                        info.source_height as f32,
+                        info.pixel_width as f32,
+                        info.pixel_height as f32,
+                    ],
+                ));
+            }
+            if fragments.is_empty() {
                 continue;
             }
-            placement_count += 1;
+            placement_count += fragments.len();
             if placement_count > MAX_PLACEMENTS {
                 return Err(Error::OutOfSpace {
                     required: placement_count,
@@ -236,27 +307,27 @@ impl GraphicsSnapshot {
                 }
                 upload_count += 1;
             }
-            word(&mut placements, id);
-            generation(&mut placements, stamp);
-            word(&mut placements, placement.z()? as u32);
-            word(&mut placements, info.viewport_col as u32);
-            word(&mut placements, info.viewport_row as u32);
-            word(&mut placements, placement.x_offset()?);
-            word(&mut placements, placement.y_offset()?);
-            for value in [
-                info.source_x,
-                info.source_y,
-                info.source_width,
-                info.source_height,
-                info.pixel_width,
-                info.pixel_height,
-            ] {
-                word(&mut placements, value);
+            for (col, row, geometry) in fragments {
+                word(&mut placements, id);
+                generation(&mut placements, stamp);
+                word(&mut placements, placement.z()? as u32);
+                word(&mut placements, col as u32);
+                word(&mut placements, row as u32);
+                for value in geometry {
+                    word(
+                        &mut placements,
+                        if fractional {
+                            value.to_bits()
+                        } else {
+                            value as u32
+                        },
+                    );
+                }
             }
         }
         self.out.clear();
         for value in [
-            1,
+            if fractional { 2 } else { 1 },
             cell_width,
             cell_height,
             upload_count,

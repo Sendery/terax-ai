@@ -62,6 +62,29 @@ export type NativeKeyEvent = {
   legacyShiftEnter?: boolean;
 };
 
+export type NativeMouseEvent = {
+  repeat?: number;
+  action: "press" | "release" | "motion";
+  button: number | null;
+  buttons: number;
+  mods: number;
+  x: number;
+  y: number;
+  cellWidth: number;
+  cellHeight: number;
+  screenWidth: number;
+  screenHeight: number;
+};
+
+export type NativeCursorTarget = {
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+  cursorX: number;
+  cursorY: number;
+};
+
 export type NativeSelectionCommand =
   | {
       kind: "press";
@@ -88,6 +111,8 @@ export type NativeSelectionCommand =
 type NativeInputEvent =
   | { kind: "key"; event: NativeKeyEvent }
   | { kind: "paste"; text: string }
+  | { kind: "mouse"; event: NativeMouseEvent }
+  | { kind: "moveCursor"; event: NativeCursorTarget }
   | { kind: "focus"; focused: boolean };
 
 export type BenchCreditSender = (
@@ -800,6 +825,24 @@ export class EngineSession {
     );
   }
 
+  sendMouse(event: NativeMouseEvent): Promise<void> {
+    const repeat = event.repeat ?? 1;
+    if (!Number.isInteger(repeat) || repeat < 1 || repeat > 32)
+      return Promise.reject(new Error("invalid native mouse repeat"));
+    return this.sendNativeInput(
+      { kind: "mouse", event: { ...event } },
+      128 * (event.repeat ?? 1),
+    );
+  }
+
+  moveCursor(event: NativeCursorTarget, current: () => boolean): Promise<void> {
+    return this.sendNativeInput(
+      { kind: "moveCursor", event: { ...event } },
+      128,
+      current,
+    );
+  }
+
   paste(text: string): Promise<void> {
     return this.sendNativeInput(
       { kind: "paste", text },
@@ -856,10 +899,12 @@ export class EngineSession {
   private sendNativeInput(
     event: NativeInputEvent,
     bytes: number,
+    current: () => boolean = () => true,
   ): Promise<void> {
     return this.enqueueInput(bytes, async (id) => {
+      if (!current()) return;
       const encoded = await this.encodeNativeInput(id, event);
-      if (encoded.byteLength > 0) await this.writeBytes(id, encoded);
+      if (encoded.byteLength > 0) await this.writeBytes(id, encoded, current);
     });
   }
 

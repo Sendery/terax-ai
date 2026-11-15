@@ -2,6 +2,35 @@
 
 Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-webgl2.md`. This file is the single source of truth for the Rust and the TypeScript side; when the two disagree, this file wins and gets fixed first. The engine remains behind an off-by-default cargo feature. The initial phases 0 and 1 use Terminal Lab; ordinary native terminal panes now have an explicit sandbox development opt-in, described below. Production defaults and the full parity/rollout requirements have not changed.
 
+## Current implementation checkpoint
+
+Ordinary and blocks panes, app/agent/task consumers, active/inactive capture,
+exact-row retention and host clear are integrated behind the sandbox opt-in.
+The completion pass adds negotiated mouse, Alt-click cursor navigation, selection autoscroll, readline,
+OSC9/99 notifications, OSC9;4 progress and Kitty Unicode placeholders.
+See [the source inventory and acceptance boundary](../plans/2026-11-15-terminal-complete-implementation.md).
+Earlier phase paragraphs below retain their historical context.
+
+The internal gterm_encode_input union also accepts moveCursor: a bounded target
+cell with expected cursor/grid. The actor checks its live viewport and mouse
+owner, then encodes cursor movement from native rows. The input queue rechecks
+the frontend owner/focus/gesture guard before writing.
+
+The internal gterm_encode_input union also accepts mouse events: closed action,
+bounded button/modifiers/geometry and optional repeat1..32 only for wheel
+presses. Encoding remains actor-ordered and uses the terminal's actual modes.
+Coordinates use physical pixels relative to the terminal grid, without host
+padding. The pinned SGR-pixels encoder emits that coordinate system directly.
+
+Graphics tables retain subformat1 for ordinary placements. Subformat2 has the
+same header, image data and14-word placement size, with the final eight
+geometry words encoded as little-endian IEEE754 f32. Identity/generation,
+signed z/col/row and capacity limits are unchanged. Geometry must be finite,
+nonnegative and bounded; widths/heights are positive. This supports fractional
+source cropping across virtual placeholder rows. Both renderers and inactive
+capture consume the same decoder. This is a frame subformat, not a core ABI
+or archive change.
+
 ## Invariants
 
 1. **Bytes are never dropped.** The PTY reader hands bytes to the engine through a bounded queue. When the engine is behind, the reader blocks, the kernel PTY buffer fills and the child blocks. There is no overflow path.
@@ -612,8 +641,8 @@ Capture uses required per-pane crop providers, with pixels frozen before font
 and image awaits. The shared source canvas is excluded from DOM compositing so
 it cannot cover dividers and other chrome. A required provider cannot silently
 fall back to a transparent canvas. A pane hidden during capture preparation is
-rejected. Explicit inactive native-pane capture currently requires focusing its
-tab first; offscreen capture remains an open integration capability. Existing
+rejected. Explicit inactive native-pane capture uses an owner-guarded frozen full frame
+and a temporary software canvas without focusing the tab. Existing
 private-terminal capture guards still apply.
 
 The real M2 normal sandbox now proves startup, text input, split, tab

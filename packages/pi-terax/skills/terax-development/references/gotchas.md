@@ -929,3 +929,28 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** treating a global image overlay as an image behind the canvas leads to unnecessary alpha/context changes and inconsistent text or inline-image backgrounds.
 - **Prevention:** inspect SurfaceLayer and the actual legacy renderer policy first. Share foreground contrast resolution across native backends, preserve exact backgrounds and explicit underlines, retain faint semantics and exclude decorative box/block/Powerline glyphs.
 - **Verification:** native cell tests preserve default packed output, invisible and decorative cells, validate adjusted foregrounds and bound the cache; both backends request full refresh without replacing the process. Keep actual WebKit background-preference acceptance distinct from source tests.
+
+
+## Terminal presentation and native input
+
+### Fractional image slices need nonzero scratch surfaces
+
+- **Trigger:** a native image is distributed across terminal placeholder rows.
+- **Failure mode:** integer source crops drop slices smaller than one image
+  pixel; assigning a fractional crop size to canvas dimensions truncates to zero.
+- **Prevention:** preserve bounded fractional source geometry in the frame
+  contract, round scratch dimensions up, and scale the whole scratch surface.
+  Keep GPU sample bounds ordered for slices smaller than one pixel.
+- **Verification:** a one-pixel native virtual image spread across two rows
+  yields two half-pixel source slices; GPU/Canvas2D crop invariants and an actual
+  native snapshot cover reconstruction and erasure.
+
+### Retained terminal output still needs keyboard focus after process exit
+
+- **Trigger:** a terminal process ends while its native grid remains retained.
+- **Failure mode:** disabling the input textarea also disables keyboard copy
+  and history navigation over the surviving output.
+- **Prevention:** separate focus/selection ownership from permission to write.
+  Retained panes stay focusable; PTY input, mouse and focus reports stop at exit.
+- **Verification:** exercise selection/copy/history after healthy exit and
+  assert that no new PTY write or mouse report is attempted.

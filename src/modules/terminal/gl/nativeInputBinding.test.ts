@@ -48,7 +48,11 @@ it("keeps the terminal textarea focused after primary pointer default processing
   };
   const session = {
     pane: {},
-    cursor: null,
+    id: 42,
+    cursor: null as { x: number; y: number } | null,
+    exitCode: null,
+    selectionRevision: 0,
+    moveCursor: vi.fn(async () => {}),
     grid: { cols: 10, rows: 2 },
     setInputFocused: vi.fn(async () => {}),
     select: vi.fn(
@@ -124,6 +128,27 @@ it("keeps the terminal textarea focused after primary pointer default processing
     type: "pointercancel",
   });
   await Promise.resolve();
+  session.cursor = { x: 4, y: 0 };
+  const alt = { ...primary, altKey: true, type: "pointerup" };
+  listeners.get("pointerdown")?.(alt);
+  session.drawnSeq++;
+  listeners.get("pointerup")?.(alt);
+  await vi.waitFor(() => expect(session.moveCursor).toHaveBeenCalledTimes(1));
+  expect(session.moveCursor.mock.calls[0]).toEqual([
+    { col: 1, row: 0, cols: 10, rows: 2, cursorX: 4, cursorY: 0 },
+    expect.any(Function),
+  ]);
+  listeners.get("pointerdown")?.(alt);
+  listeners.get("pointerup")?.({ ...alt, clientX: 30 });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(session.moveCursor).toHaveBeenCalledTimes(1);
+  delay = true;
+  listeners.get("pointerdown")?.(alt);
+  listeners.get("pointerup")?.(alt);
+  session.id++;
+  release();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(session.moveCursor).toHaveBeenCalledTimes(1);
   binding.dispose();
 });
 
@@ -222,5 +247,133 @@ it("routes prompt focus to the editor and blocks late direct input until a progr
   binding.updateInputPolicy();
   expect(active).toBe(editor);
   expect(textarea.disabled).toBe(true);
+  binding.dispose();
+});
+
+it("routes negotiated TUI mouse and wheel, with Shift retaining native selection", async () => {
+  const hostEvents = new Map<string, (event: unknown) => void>();
+  const inputEvents = new Map<string, (event: unknown) => void>();
+  const node = () => ({
+    style: {},
+    value: "",
+    setAttribute: vi.fn(),
+    focus: vi.fn(),
+    remove: vi.fn(),
+    addEventListener: (name: string, cb: (event: unknown) => void) =>
+      inputEvents.set(name, cb),
+    removeEventListener: vi.fn(),
+  });
+  vi.stubGlobal("document", { hasFocus: () => true, createElement: node });
+  vi.stubGlobal("window", {
+    devicePixelRatio: 2,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
+  const session = {
+    pane: {},
+    cursor: null,
+    grid: { cols: 10, rows: 2 },
+    inputState: {
+      mouseTracking: true,
+      alternateScreen: true,
+      kittyFlags: 0,
+      modifyOtherKeys: 0,
+    },
+    setInputFocused: vi.fn(async () => {}),
+    sendMouse: vi.fn(async () => {}),
+    sendKey: vi.fn(async () => {}),
+    exitCode: null as number | null,
+    select: vi.fn(async () => null),
+    scroll: vi.fn(),
+    getSelection: () => null,
+  };
+  const binding = bindNativeInput(
+    session as unknown as EngineSession,
+    {
+      cellSize: { width: 8, height: 16 },
+      cellPixels: { width: 16, height: 32 },
+      setPaneFocused: vi.fn(),
+    } as unknown as GridRenderer,
+    {
+      append: vi.fn(),
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+      getBoundingClientRect: () => ({
+        left: 10,
+        top: 20,
+        right: 102,
+        bottom: 64,
+        width: 92,
+        height: 44,
+      }),
+      addEventListener: (name: string, cb: (event: unknown) => void) =>
+        hostEvents.set(name, cb),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement,
+    {
+      font: { family: "monospace", size: 14, weight: "400", letterSpacing: 0 },
+      foreground: "#fff",
+      background: "#000",
+      isActive: () => true,
+      onError: vi.fn(),
+    },
+  );
+  const pointer = {
+    button: 2,
+    buttons: 2,
+    pointerId: 7,
+    clientX: 24,
+    clientY: 42,
+    shiftKey: false,
+    ctrlKey: false,
+    altKey: false,
+    metaKey: false,
+    preventDefault: vi.fn(),
+  };
+  hostEvents.get("pointerdown")?.(pointer);
+  expect(session.sendMouse).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      action: "press",
+      button: 2,
+      x: 16,
+      y: 32,
+      cellWidth: 16,
+      cellHeight: 32,
+      screenWidth: 160,
+      screenHeight: 64,
+    }),
+  );
+  hostEvents.get("pointerup")?.({ ...pointer, buttons: 0 });
+  expect(session.sendMouse).toHaveBeenLastCalledWith(
+    expect.objectContaining({ action: "release", button: 2 }),
+  );
+  expect(session.select).not.toHaveBeenCalled();
+  hostEvents.get("wheel")?.({ ...pointer, deltaY: -16, deltaMode: 0 });
+  expect(session.sendMouse).toHaveBeenLastCalledWith(
+    expect.objectContaining({ action: "press", button: 3 }),
+  );
+  expect(session.scroll).not.toHaveBeenCalled();
+  hostEvents.get("pointerdown")?.({ ...pointer, button: 0, shiftKey: true });
+  expect(session.select).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "press", col: 1, row: 1 }),
+  );
+  hostEvents.get("pointerup")?.({
+    ...pointer,
+    button: 0,
+    shiftKey: true,
+    type: "pointerup",
+  });
+  session.inputState.mouseTracking = false;
+  hostEvents.get("wheel")?.({ ...pointer, deltaY: 16, deltaMode: 0 });
+  expect(session.sendKey).toHaveBeenLastCalledWith({ code: "ArrowDown" });
+  expect(session.scroll).not.toHaveBeenCalled();
+  session.inputState.alternateScreen = false;
+  hostEvents.get("wheel")?.({ ...pointer, deltaY: 16, deltaMode: 0 });
+  expect(session.scroll).toHaveBeenCalledWith(1);
+  session.inputState.alternateScreen = true;
+  session.exitCode = 0;
+  session.sendKey.mockClear();
+  hostEvents.get("wheel")?.({ ...pointer, deltaY: -16, deltaMode: 0 });
+  expect(session.sendKey).not.toHaveBeenCalled();
   binding.dispose();
 });

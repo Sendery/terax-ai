@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
 import {
   nativeKeyEvent,
+  nativeClipboardAction,
+  nativeReadlineSequence,
   type NativeKeyboardEvent,
 } from "@/modules/terminal/gl/nativeKeyboard";
 
@@ -90,4 +92,44 @@ it("does not mislabel a shifted symbol as its unshifted codepoint", () => {
     nativeKeyEvent(key({ key: "!", code: "Digit1", shiftKey: true }), false)
       ?.unshifted,
   ).toBeUndefined();
+});
+
+it("retains normal readline shortcuts without overriding negotiated TUI keys", () => {
+  const normal = { alternateScreen: false, kittyFlags: 0, modifyOtherKeys: 0 };
+  const left = key({ key: "ArrowLeft", code: "ArrowLeft", metaKey: true });
+  expect(nativeReadlineSequence(left, true, normal)).toBe("\x01");
+  expect(
+    nativeReadlineSequence(
+      key({ key: "Backspace", code: "Backspace", altKey: true }),
+      true,
+      normal,
+    ),
+  ).toBe("\x17");
+  for (const mode of [
+    { ...normal, alternateScreen: true },
+    { ...normal, kittyFlags: 1 },
+    { ...normal, modifyOtherKeys: 2 },
+  ])
+    expect(nativeReadlineSequence(left, true, mode)).toBeNull();
+});
+
+it("reserves platform Insert clipboard shortcuts without swallowing modified terminal keys", () => {
+  const insert = key({ key: "Insert", code: "Insert" });
+  for (const [event, action] of [
+    [{ ...insert, ctrlKey: true }, "copy"],
+    [{ ...insert, shiftKey: true }, "paste"],
+  ] as const) {
+    expect(nativeClipboardAction(event, false)).toBe(action);
+    expect(nativeKeyEvent(event, false)).toBeNull();
+    expect(nativeClipboardAction(event, true)).toBeNull();
+  }
+  expect(
+    nativeClipboardAction({ ...insert, ctrlKey: true, shiftKey: true }, false),
+  ).toBeNull();
+  expect(
+    nativeClipboardAction(
+      key({ key: "v", ctrlKey: true, shiftKey: true, altKey: true }),
+      false,
+    ),
+  ).toBeNull();
 });

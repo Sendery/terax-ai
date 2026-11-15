@@ -16,7 +16,9 @@ export type AgentSignalKind =
   | "finished"
   | "subagent"
   | "bound"
-  | "exited";
+  | "exited"
+  | "notification"
+  | "progress";
 
 /** The colour and sound a native notification carries, one per situation. */
 export type NotificationTone =
@@ -41,6 +43,8 @@ export type AgentSignal = {
   reason?: AttentionReason | null;
   /** Only on `bound`: the transcript this pane is writing. */
   sessionId?: string | null;
+  title?: string | null;
+  progress?: { state: number; percent: number | null } | null;
 };
 
 export type DigestTaskKind = "subagent" | "monitor" | "background" | "loop";

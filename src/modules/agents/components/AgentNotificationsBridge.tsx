@@ -1,5 +1,6 @@
+import { hasLeaf, leafIds, leafIdForPty } from "@/modules/terminal";
+import { useTerminalProgress } from "@/modules/terminal/lib/terminalProgress";
 import type { Tab } from "@/modules/tabs";
-import { leafIdForPty } from "@/modules/terminal";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { describeAgentEvent } from "../lib/describeEvent";
@@ -34,6 +35,14 @@ async function notify(
   text?: string | null,
   reason?: AttentionReason | null,
 ): Promise<void> {
+  const isPublic = () =>
+    getCtx().tabs.some(
+      (tab) =>
+        tab.kind === "terminal" &&
+        !tab.private &&
+        hasLeaf(tab.paneTree, session.leafId),
+    );
+  if (!isPublic()) return;
   const before = getCtx();
   // The process is already gone on exit, and its digest was read while it ran.
   const digest =
@@ -44,6 +53,7 @@ async function notify(
           findPaneCwd(before.tabs, session.leafId),
         );
   // Tabs, focus and the active tab may have changed while the digest was read.
+  if (!isPublic()) return;
   const ctx = getCtx();
   const info = findAgentTab(ctx.tabs, session.leafId);
   const tabTitle = info?.title ?? "";
@@ -60,6 +70,7 @@ async function notify(
 
   routeAgentNotification({
     source: "terminal",
+    current: isPublic,
     agent: session.agent,
     kind,
     reason,
@@ -94,6 +105,41 @@ function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
   const cwd = () => findPaneCwd(getCtx().tabs, leafId);
 
   switch (sig.kind) {
+    case "progress":
+      if (sig.progress)
+        useTerminalProgress.getState().update(leafId, sig.id, sig.progress);
+      return;
+    case "notification": {
+      const isPublic = () =>
+        leafIdForPty(sig.id) === leafId &&
+        getCtx().tabs.some(
+          (tab) =>
+            tab.kind === "terminal" &&
+            !tab.private &&
+            hasLeaf(tab.paneTree, leafId),
+        );
+      if (!isPublic() || !sig.title) return;
+      const ctx = getCtx();
+      const info = findAgentTab(ctx.tabs, leafId);
+      if (!info) return;
+      routeAgentNotification({
+        source: "terminal",
+        agent: store.sessions[leafId]?.agent ?? "terminal",
+        kind: "attention",
+        title: sig.title,
+        body: sig.text ?? undefined,
+        text: [sig.title, sig.text].filter(Boolean).join(": "),
+        tone: "attention",
+        focused: ctx.focused,
+        visible: ctx.activeId === info.tabId,
+        tabId: info.tabId,
+        leafId,
+        tabTitle: info.title,
+        tabColor: info.color,
+        current: isPublic,
+      });
+      return;
+    }
     case "started": {
       const info = findAgentTab(getCtx().tabs, leafId);
       if (!info) return;
@@ -140,6 +186,9 @@ function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
       return;
     }
     case "exited": {
+      useTerminalProgress
+        .getState()
+        .update(leafId, sig.id, { state: 0, percent: null });
       // The agent process ending is the only event that means the work is
       // over, so it is reported separately from a turn handing back.
       const session = store.sessions[leafId];
@@ -180,6 +229,14 @@ export function AgentNotificationsBridge({
   onActivate: Activate;
 }) {
   const focused = useWindowFocus();
+  useEffect(() => {
+    const retained = new Set(
+      tabs.flatMap((tab) =>
+        tab.kind === "terminal" ? leafIds(tab.paneTree) : [],
+      ),
+    );
+    useTerminalProgress.getState().retain(retained);
+  }, [tabs]);
   const ctxRef = useRef<Ctx>({ tabs, activeId, focused, onActivate });
   ctxRef.current = { tabs, activeId, focused, onActivate };
 

@@ -13,6 +13,7 @@ import type {
 } from "./types";
 
 type RouteArgs = {
+  current?: () => boolean;
   source: AgentSource;
   agent: string;
   kind: NotificationKind;
@@ -61,6 +62,7 @@ export function isDuplicate(key: string, now: number): boolean {
  * focused window.
  */
 export function routeAgentNotification({
+  current = () => true,
   source,
   agent,
   kind,
@@ -78,6 +80,7 @@ export function routeAgentNotification({
   tabColor = null,
   sessionName,
 }: RouteArgs): void {
+  if (!current()) return;
   if (!usePreferencesStore.getState().agentNotifications) return;
   if (focused && visible) return;
   if (isDuplicate(`${source}:${leafId}:${kind}:${reason ?? ""}`, Date.now()))
@@ -101,25 +104,29 @@ export function routeAgentNotification({
 
   const accent = tabColor ? TAB_COLOR_CSS[tabColor] : null;
   // The plain notification has no image, so it names the agent in words.
-  const fallback = () =>
+  const fallback = () => {
+    if (!current()) return;
     void osNotify(
       title,
       [[displayAgent(agent), subtitle].filter(Boolean).join(" · "), body]
         .filter(Boolean)
         .join("\n"),
     );
+  };
 
   void agentBadgePng(agent, accent, tone)
     .then((icon) =>
-      native.agentNotify({
-        title,
-        ...(subtitle ? { subtitle } : {}),
-        ...(body ? { body } : {}),
-        ...(accent ? { accent } : {}),
-        ...(icon ? { icon } : {}),
-        tone,
-        ...(source === "terminal" ? { leafId, tabId } : {}),
-      }),
+      current()
+        ? native.agentNotify({
+            title,
+            ...(subtitle ? { subtitle } : {}),
+            ...(body ? { body } : {}),
+            ...(accent ? { accent } : {}),
+            ...(icon ? { icon } : {}),
+            tone,
+            ...(source === "terminal" ? { leafId, tabId } : {}),
+          })
+        : true,
     )
     .then((posted) => {
       // Only macOS has the rich path; elsewhere the plain notification carries

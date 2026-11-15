@@ -76,8 +76,8 @@ export class GraphicsRenderer {
       const image = images.get(placement.key);
       if (!image) throw new Error("missing native graphic image");
       if (
-        placement.sourceX + placement.sourceWidth > image.width ||
-        placement.sourceY + placement.sourceHeight > image.height
+        placement.sourceX + placement.sourceWidth > image.width + 0.001 ||
+        placement.sourceY + placement.sourceHeight > image.height + 0.001
       )
         throw new Error("invalid native graphic crop");
     }
@@ -158,10 +158,12 @@ export class GraphicsRenderer {
     );
     gl.uniform4f(
       this.uniforms.uSampleBounds,
-      (p.sourceX + 0.5) / image.width,
-      (p.sourceY + 0.5) / image.height,
-      (p.sourceX + p.sourceWidth - 0.5) / image.width,
-      (p.sourceY + p.sourceHeight - 0.5) / image.height,
+      (p.sourceX + Math.min(0.5, p.sourceWidth / 2)) / image.width,
+      (p.sourceY + Math.min(0.5, p.sourceHeight / 2)) / image.height,
+      (p.sourceX + p.sourceWidth - Math.min(0.5, p.sourceWidth / 2)) /
+        image.width,
+      (p.sourceY + p.sourceHeight - Math.min(0.5, p.sourceHeight / 2)) /
+        image.height,
     );
   }
   private upload(image: Image): void {

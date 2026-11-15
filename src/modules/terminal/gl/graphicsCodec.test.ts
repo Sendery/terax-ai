@@ -33,7 +33,7 @@ describe("native graphics table", () => {
       expect(() => decodeGraphics(words.subarray(0, end), 0, true)).toThrow();
   });
   it.each([
-    [0, 2],
+    [0, 3],
     [1, 0],
     [2, 513],
     [3, 4097],
@@ -84,5 +84,52 @@ describe("native graphics table", () => {
       sourceWidth: 1,
       sourceHeight: 1,
     });
+  });
+});
+
+it("decodes fractional placeholder slices and rejects nonfinite geometry", () => {
+  const words = packet();
+  words[0] = 2;
+  const floats = new Float32Array(words.buffer);
+  for (let at = 18; at < 26; at++) floats[at] = words[at];
+  floats[21] = 0.5;
+  floats[23] = 0.5;
+  const placement = decodeGraphics(words, 0, true).graphics.placements[0];
+  expect(placement).toMatchObject({
+    sourceY: 0.5,
+    sourceHeight: 0.5,
+    width: 16,
+  });
+  floats[23] = Number.NaN;
+  expect(() => decodeGraphics(words, 0, true)).toThrow();
+});
+
+it("decodes the native virtual-image snapshot with fractional source rows", () => {
+  const data = readFileSync(
+    new URL(
+      "../../../../tests/fixtures/terminal-graphics/virtual-rgba.frame",
+      import.meta.url,
+    ),
+  );
+  const frame = decodeFrame(Uint8Array.from(data).buffer);
+  expect(frame.graphics?.images[0].pixels).toEqual(
+    new Uint8Array([255, 0, 0, 255]),
+  );
+  expect(frame.graphics?.placements).toHaveLength(2);
+  expect(frame.graphics?.placements[0]).toMatchObject({
+    col: 0,
+    row: 0,
+    sourceX: 0,
+    sourceY: 0,
+    sourceWidth: 1,
+    sourceHeight: 0.5,
+    width: 16,
+    height: 8,
+  });
+  expect(frame.graphics?.placements[1]).toMatchObject({
+    col: 0,
+    row: 1,
+    sourceY: 0.5,
+    sourceHeight: 0.5,
   });
 });

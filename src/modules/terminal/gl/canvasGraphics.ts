@@ -44,8 +44,8 @@ export class CanvasGraphics {
       )
         throw new Error("native graphic generation reused");
       if (
-        placement.sourceX + placement.sourceWidth > image.width ||
-        placement.sourceY + placement.sourceHeight > image.height
+        placement.sourceX + placement.sourceWidth > image.width + 0.001 ||
+        placement.sourceY + placement.sourceHeight > image.height + 0.001
       )
         throw new Error("invalid native graphic crop");
       if (!refs.has(placement.key)) {
@@ -153,17 +153,16 @@ export class CanvasGraphics {
         p.sourceHeight !== image.height
       ) {
         if (!this.crop || !this.cropContext) continue;
-        if (
-          this.crop.width !== p.sourceWidth ||
-          this.crop.height !== p.sourceHeight
-        ) {
+        const cropWidth = Math.max(1, Math.ceil(p.sourceWidth));
+        const cropHeight = Math.max(1, Math.ceil(p.sourceHeight));
+        if (this.crop.width !== cropWidth || this.crop.height !== cropHeight) {
           this.crop.width = 0;
           this.crop.height = 0;
-          this.crop.width = p.sourceWidth;
-          this.crop.height = p.sourceHeight;
+          this.crop.width = cropWidth;
+          this.crop.height = cropHeight;
         }
         const context = this.cropContext;
-        context.clearRect(0, 0, p.sourceWidth, p.sourceHeight);
+        context.clearRect(0, 0, cropWidth, cropHeight);
         context.drawImage(
           source,
           p.sourceX,
@@ -172,8 +171,8 @@ export class CanvasGraphics {
           p.sourceHeight,
           0,
           0,
-          p.sourceWidth,
-          p.sourceHeight,
+          cropWidth,
+          cropHeight,
         );
         source = this.crop;
       }
@@ -181,8 +180,8 @@ export class CanvasGraphics {
         source,
         0,
         0,
-        p.sourceWidth,
-        p.sourceHeight,
+        source.width,
+        source.height,
         (p.col + p.offsetX / f.cellWidth) * cw,
         (p.row + p.offsetY / f.cellHeight) * ch,
         (p.width / f.cellWidth) * cw,

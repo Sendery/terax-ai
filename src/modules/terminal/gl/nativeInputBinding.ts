@@ -2,6 +2,7 @@ import { IS_MAC } from "@/lib/platform";
 import type {
   EngineSession,
   NativeSelectionCommand,
+  NativeMouseEvent,
 } from "@/modules/terminal/gl/engineSession";
 import type {
   TerminalRenderer,
@@ -9,7 +10,11 @@ import type {
 } from "@/modules/terminal/gl/gridRenderer";
 import { wheelRows } from "@/modules/terminal/gl/keyInput";
 import { createNativeComposition } from "@/modules/terminal/gl/nativeComposition";
-import { nativeKeyEvent } from "@/modules/terminal/gl/nativeKeyboard";
+import {
+  nativeKeyEvent,
+  nativeClipboardAction,
+  nativeReadlineSequence,
+} from "@/modules/terminal/gl/nativeKeyboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
 import {
   readTerminalClipboard,
@@ -65,18 +70,39 @@ export function bindNativeInput(
   let disposed = false;
   let blockPress: { seq: number; row: number; x: number; y: number } | null =
     null;
+  let altPress: {
+    id: number | null;
+    x: number;
+    y: number;
+    at: number;
+    width: number;
+    height: number;
+    cursorX: number;
+    cursorY: number;
+    cols: number;
+    rows: number;
+  } | null = null;
   let focusReported = false;
   let compositionTurn: ReturnType<typeof setTimeout> | null = null;
   let wheelCarry = 0;
+  let wheelCarryX = 0;
   let pointer: number | null = null;
   let pendingDrag: NativeSelectionCommand | null = null;
   let dragFrame = 0;
   let selectionBusy = 0;
   let selectionGeneration = 0;
+  let mousePointer: number | null = null;
+  let mouseButton: number | null = null;
+  let lastMouse: NativeMouseEvent | null = null;
+  let pendingMotion: NativeMouseEvent | null = null;
+  let motionFrame = 0;
+  let motionBusy = false;
+  let dragPosition: { x: number; y: number; alt: boolean } | null = null;
+  let autoscrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   const canInput = () => options.allowInput?.() ?? true;
   const report = (error: unknown) => {
-    if (disposed) return;
+    if (disposed || session.exitCode != null) return;
     try {
       options.onError(error);
     } catch {
@@ -116,7 +142,7 @@ export function bindNativeInput(
     renderer.setPaneFocused(session.pane, focused);
     if (focused === focusReported || disposed) return;
     focusReported = focused;
-    watch(session.setInputFocused(focused));
+    if (session.exitCode == null) watch(session.setInputFocused(focused));
   };
   const focus = () => {
     if (disposed) return;
@@ -140,7 +166,7 @@ export function bindNativeInput(
       preedit.style.display = "none";
     }
     if (options.isActive()) focus();
-    else reportFocus(false);
+    else onBlur();
   };
   const select = (command: NativeSelectionCommand) => {
     if (command.kind !== "read" && command.kind !== "release")
@@ -162,34 +188,12 @@ export function bindNativeInput(
     if (session.getSelection() !== null) watch(select({ kind: "clear" }));
   };
   const committed = (text: string) => {
-    if (!text || !canInput()) return;
+    if (!text || !canInput() || session.exitCode != null) return;
     clearForInput();
     watch(session.sendKey({ code: "Unidentified", text }));
   };
-  const isCopy = (event: KeyboardEvent) =>
-    IS_MAC
-      ? event.metaKey &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        event.code === "KeyC"
-      : event.ctrlKey &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        event.code === "KeyC";
-  const isPaste = (event: KeyboardEvent) =>
-    IS_MAC
-      ? event.metaKey &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        event.code === "KeyV"
-      : event.ctrlKey &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        event.code === "KeyV";
   const paste = async (text: string) => {
-    if (disposed || !text || !canInput()) return;
+    if (disposed || !text || !canInput() || session.exitCode != null) return;
     clearForInput();
     await session.paste(text);
   };
@@ -209,16 +213,16 @@ export function bindNativeInput(
     if (decision.kind === "send") {
       event.preventDefault();
       clearForInput();
-      watch(session.write(decision.data));
+      if (session.exitCode == null) watch(session.write(decision.data));
       return;
     }
-    if (isCopy(event)) {
+    if (nativeClipboardAction(event, IS_MAC) === "copy") {
       event.preventDefault();
       const text = session.getSelection();
       if (text !== null) watch(writeTerminalClipboard(text));
       return;
     }
-    if (isPaste(event)) {
+    if (nativeClipboardAction(event, IS_MAC) === "paste") {
       event.preventDefault();
       watch(readTerminalClipboard().then(paste));
       return;
@@ -245,6 +249,17 @@ export function bindNativeInput(
       session.scroll((event.code === "PageUp" ? -1 : 1) * session.grid.rows);
       return;
     }
+    if (session.exitCode != null) {
+      event.preventDefault();
+      return;
+    }
+    const readline = nativeReadlineSequence(event, IS_MAC, session.inputState);
+    if (readline) {
+      event.preventDefault();
+      clearForInput();
+      watch(session.write(readline));
+      return;
+    }
     const native = nativeKeyEvent(event, IS_MAC);
     if (!native) return;
     event.preventDefault();
@@ -267,7 +282,7 @@ export function bindNativeInput(
     composition.onKey(event);
     if (!pressed.delete(event.code)) return;
     const native = nativeKeyEvent(event, IS_MAC);
-    if (native) watch(session.sendKey(native));
+    if (native && session.exitCode == null) watch(session.sendKey(native));
   };
   const onKeyPress = (event: KeyboardEvent) => {
     if (composition.onKey(event).kind === "swallow") event.preventDefault();
@@ -347,7 +362,115 @@ export function bindNativeInput(
     if (!dragFrame && !disposed)
       dragFrame = requestAnimationFrame(() => flushDrag());
   }
+  const reportsMouse = (event: {
+    shiftKey: boolean;
+    metaKey: boolean;
+    ctrlKey: boolean;
+  }) =>
+    canInput() &&
+    session.exitCode == null &&
+    Boolean(session.inputState?.mouseTracking) &&
+    !event.shiftKey &&
+    !(IS_MAC ? event.metaKey : event.ctrlKey);
+  const mouseEvent = (
+    event: MouseEvent,
+    action: NativeMouseEvent["action"],
+    button: number | null,
+  ): NativeMouseEvent => {
+    const box = host.getBoundingClientRect();
+    const cell = renderer.cellPixels ?? renderer.cellSize;
+    const dpr = window.devicePixelRatio || 1;
+    return {
+      action,
+      button,
+      buttons: event.buttons ?? 0,
+      mods:
+        (event.shiftKey ? 1 : 0) |
+        (event.altKey ? 2 : 0) |
+        (event.ctrlKey ? 4 : 0) |
+        (event.metaKey ? 8 : 0),
+      x: Math.max(0, (event.clientX - box.left - 6) * dpr),
+      y: Math.max(0, (event.clientY - box.top - 6) * dpr),
+      cellWidth: Math.max(1, Math.round(cell.width)),
+      cellHeight: Math.max(1, Math.round(cell.height)),
+      screenWidth: Math.max(1, Math.round(cell.width * session.grid.cols)),
+      screenHeight: Math.max(1, Math.round(cell.height * session.grid.rows)),
+    };
+  };
+  const stopAutoscroll = () => {
+    if (autoscrollTimer !== null) clearTimeout(autoscrollTimer);
+    autoscrollTimer = null;
+    dragPosition = null;
+  };
+  const autoscroll = () => {
+    autoscrollTimer = null;
+    if (disposed || pointer === null || !dragPosition || selectionBusy) {
+      if (!disposed && pointer !== null && dragPosition)
+        autoscrollTimer = setTimeout(autoscroll, 40);
+      return;
+    }
+    const box = host.getBoundingClientRect();
+    const { x, y, alt } = dragPosition;
+    const distance =
+      y < box.top + 6
+        ? y - box.top - 6
+        : y > box.bottom - 6
+          ? y - box.bottom + 6
+          : 0;
+    if (!distance) return;
+    session.scroll(
+      Math.sign(distance) *
+        Math.min(
+          10,
+          Math.max(1, Math.ceil(Math.abs(distance) / renderer.cellSize.height)),
+        ),
+    );
+    watch(select({ kind: "drag", ...point(x, y), rectangle: alt }));
+    autoscrollTimer = setTimeout(autoscroll, 40);
+  };
+  const scheduleMotion = () => {
+    if (motionFrame || motionBusy || disposed || !pendingMotion) return;
+    motionFrame = requestAnimationFrame(() => {
+      motionFrame = 0;
+      const motion = pendingMotion;
+      pendingMotion = null;
+      if (!motion || disposed) return;
+      motionBusy = true;
+      watch(
+        session.sendMouse(motion).finally(() => {
+          motionBusy = false;
+          scheduleMotion();
+        }),
+      );
+    });
+  };
+  const flushMotion = () => {
+    if (motionFrame) cancelAnimationFrame(motionFrame);
+    motionFrame = 0;
+    if (pendingMotion) watch(session.sendMouse(pendingMotion));
+    pendingMotion = null;
+  };
   const onPointerDown = (event: PointerEvent) => {
+    if (
+      reportsMouse(event) &&
+      !(IS_MAC && event.ctrlKey && event.button === 0)
+    ) {
+      if (event.button < 0 || event.button > 4) return;
+      event.preventDefault();
+      focus();
+      mousePointer = event.pointerId;
+      mouseButton = event.button <= 2 ? event.button : event.button + 4;
+      try {
+        host.setPointerCapture(event.pointerId);
+      } catch {
+        /* Detached host. */
+      }
+      flushMotion();
+      lastMouse = mouseEvent(event, "press", mouseButton);
+      watch(session.sendMouse(lastMouse));
+      return;
+    }
+
     if (isSecondaryClick(event, IS_MAC) || event.button !== 0) return;
     event.preventDefault();
     focus();
@@ -359,6 +482,26 @@ export function bindNativeInput(
     }
     const { col, row, x, y } = point(event.clientX, event.clientY);
     const seq = session.drawnSeq;
+    const cursor = session.cursor;
+    altPress =
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      seq !== null &&
+      cursor &&
+      canInput()
+        ? {
+            id: session.id,
+            x: event.clientX,
+            y: event.clientY,
+            at: performance.now(),
+            width: renderer.cellSize.width,
+            height: renderer.cellSize.height,
+            cursorX: cursor.x,
+            cursorY: cursor.y,
+            ...session.grid,
+          }
+        : null;
     blockPress =
       options.onBlockClick && seq != null && !event.metaKey && !event.ctrlKey
         ? { seq, row, x: event.clientX, y: event.clientY }
@@ -375,12 +518,42 @@ export function bindNativeInput(
     );
   };
   const onPointerMove = (event: PointerEvent) => {
+    if (
+      mousePointer === event.pointerId ||
+      (pointer === null && reportsMouse(event))
+    ) {
+      pendingMotion = mouseEvent(
+        event,
+        "motion",
+        event.buttons & 1
+          ? 0
+          : event.buttons & 4
+            ? 1
+            : event.buttons & 2
+              ? 2
+              : event.buttons & 8
+                ? 7
+                : event.buttons & 16
+                  ? 8
+                  : null,
+      );
+      lastMouse = pendingMotion;
+      scheduleMotion();
+      return;
+    }
     if (pointer !== event.pointerId) return;
     if (
       blockPress &&
       Math.hypot(event.clientX - blockPress.x, event.clientY - blockPress.y) > 4
     )
       blockPress = null;
+    if (
+      altPress &&
+      Math.hypot(event.clientX - altPress.x, event.clientY - altPress.y) > 4
+    )
+      altPress = null;
+    dragPosition = { x: event.clientX, y: event.clientY, alt: event.altKey };
+    if (autoscrollTimer === null) autoscrollTimer = setTimeout(autoscroll, 40);
     pendingDrag = {
       kind: "drag",
       ...point(event.clientX, event.clientY),
@@ -389,16 +562,72 @@ export function bindNativeInput(
     scheduleDrag();
   };
   const onPointerUp = (event: PointerEvent) => {
+    if (mousePointer === event.pointerId) {
+      flushMotion();
+      watch(session.sendMouse(mouseEvent(event, "release", mouseButton)));
+      mousePointer = null;
+      mouseButton = null;
+      lastMouse = null;
+      try {
+        host.releasePointerCapture(event.pointerId);
+      } catch {
+        /* Already released. */
+      }
+      return;
+    }
     if (pointer !== event.pointerId) return;
+    stopAutoscroll();
     flushDrag(true);
     pointer = null;
     const click = blockPress;
+    const alt = altPress;
+    const duration = alt ? performance.now() - alt.at : Infinity;
+    altPress = null;
     blockPress = null;
     const released = select({ kind: "release" });
     const generation = selectionGeneration;
     const revision = session.selectionRevision;
     watch(
-      released.then(async () => {
+      released.then(async (text) => {
+        const current = () =>
+          !disposed &&
+          options.isActive() &&
+          document.hasFocus() &&
+          document.activeElement === textarea &&
+          session.exitCode == null &&
+          generation === selectionGeneration &&
+          session.selectionRevision === revision &&
+          session.id === alt?.id &&
+          session.grid.cols === alt?.cols &&
+          session.grid.rows === alt?.rows &&
+          session.cursor?.x === alt?.cursorX &&
+          session.cursor?.y === alt?.cursorY &&
+          renderer.cellSize.width === alt?.width &&
+          renderer.cellSize.height === alt?.height &&
+          canInput();
+        if (
+          alt &&
+          event.altKey &&
+          event.type !== "pointercancel" &&
+          duration < 500 &&
+          (text?.length ?? 0) <= 1 &&
+          Math.hypot(event.clientX - alt.x, event.clientY - alt.y) <= 4 &&
+          current()
+        ) {
+          const { col, row } = point(event.clientX, event.clientY);
+          await session.moveCursor(
+            {
+              col,
+              row,
+              cols: alt.cols,
+              rows: alt.rows,
+              cursorX: alt.cursorX,
+              cursorY: alt.cursorY,
+            },
+            current,
+          );
+          return;
+        }
         if (
           !disposed &&
           click &&
@@ -426,10 +655,70 @@ export function bindNativeInput(
       session.grid.rows,
     );
     wheelCarry = delta.carry;
-    if (delta.rows) session.scroll(delta.rows);
+    if (reportsMouse(event)) {
+      const horizontal = wheelRows(
+        wheelCarryX,
+        event.deltaX || 0,
+        event.deltaMode,
+        renderer.cellSize.width,
+        session.grid.cols,
+      );
+      wheelCarryX = horizontal.carry;
+      if (horizontal.rows)
+        watch(
+          session.sendMouse({
+            ...mouseEvent(event, "press", horizontal.rows < 0 ? 5 : 6),
+            repeat: Math.min(32, Math.abs(horizontal.rows)),
+          }),
+        );
+    }
+    if (delta.rows && reportsMouse(event)) {
+      watch(
+        session.sendMouse({
+          ...mouseEvent(event, "press", delta.rows < 0 ? 3 : 4),
+          repeat: Math.min(32, Math.abs(delta.rows)),
+        }),
+      );
+    } else if (
+      delta.rows &&
+      session.inputState?.alternateScreen &&
+      session.exitCode == null &&
+      canInput()
+    ) {
+      watch(
+        session.sendKey({ code: delta.rows < 0 ? "ArrowUp" : "ArrowDown" }),
+      );
+    } else if (delta.rows) session.scroll(delta.rows);
+  };
+  const onContextMenu = (event: MouseEvent) => {
+    if (reportsMouse(event) && !(IS_MAC && event.ctrlKey))
+      event.preventDefault();
   };
   const onFocus = () => reportFocus(true);
   const onBlur = () => {
+    stopAutoscroll();
+    if (pointer !== null) {
+      flushDrag(true);
+      pointer = null;
+      blockPress = null;
+      altPress = null;
+      watch(select({ kind: "release" }));
+    }
+    if (mousePointer !== null) {
+      flushMotion();
+      if (lastMouse && session.exitCode == null)
+        watch(
+          session.sendMouse({
+            ...lastMouse,
+            action: "release",
+            buttons: 0,
+            button: mouseButton,
+          }),
+        );
+      mousePointer = null;
+      mouseButton = null;
+      lastMouse = null;
+    }
     pressed.clear();
     reportFocus(false);
   };
@@ -449,6 +738,7 @@ export function bindNativeInput(
   host.addEventListener("pointerup", onPointerUp);
   host.addEventListener("pointercancel", onPointerUp);
   host.addEventListener("wheel", onWheel, { passive: false });
+  host.addEventListener("contextmenu", onContextMenu);
   window.addEventListener("blur", onBlur);
   window.addEventListener("focus", onWindowFocus);
   updateInputPolicy();
@@ -463,6 +753,9 @@ export function bindNativeInput(
     },
     dispose() {
       disposed = true;
+      stopAutoscroll();
+      if (motionFrame) cancelAnimationFrame(motionFrame);
+      pendingMotion = null;
       if (dragFrame) cancelAnimationFrame(dragFrame);
       if (compositionTurn !== null) clearTimeout(compositionTurn);
       textarea.removeEventListener("keydown", onKeyDown);
@@ -480,6 +773,7 @@ export function bindNativeInput(
       host.removeEventListener("pointerup", onPointerUp);
       host.removeEventListener("pointercancel", onPointerUp);
       host.removeEventListener("wheel", onWheel);
+      host.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onWindowFocus);
       textarea.remove();

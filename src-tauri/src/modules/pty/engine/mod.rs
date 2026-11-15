@@ -25,6 +25,8 @@ mod clipboard;
 mod cursor;
 #[cfg(feature = "ghostty-engine")]
 mod graphics;
+#[cfg(feature = "ghostty-engine")]
+mod graphics_placeholders;
 #[cfg(all(test, feature = "ghostty-engine"))]
 mod host_tests;
 #[cfg(feature = "ghostty-engine")]

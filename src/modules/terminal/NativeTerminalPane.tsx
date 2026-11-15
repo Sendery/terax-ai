@@ -1,3 +1,4 @@
+import { TerminalProgress } from "@/modules/terminal/TerminalProgress";
 import { registerNativeCaptureProvider } from "@/modules/capture/lib/captureLease";
 import { captureNativePane } from "@/modules/terminal/gl/nativeCaptureProvider";
 import { minimumTerminalContrast } from "@/modules/terminal/gl/minimumContrast";
@@ -310,7 +311,8 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
-            allowInput: () => owner.blockInput?.directInput ?? true,
+            allowInput: () =>
+              owner.exited || (owner.blockInput?.directInput ?? true),
             focusPrompt: () => {
               owner.blockInput?.focus();
             },
@@ -373,7 +375,10 @@ export const NativeTerminalPane = forwardRef<
           blockView?.layout();
         },
         onError: report,
-        onExit: (code) => latest.current.onExit?.(leafId, code),
+        onExit: (code) => {
+          binding?.updateInputPolicy();
+          latest.current.onExit?.(leafId, code);
+        },
         onCwd: (cwd) => {
           linkBinding?.invalidate();
           latest.current.onCwd?.(leafId, cwd);
@@ -427,7 +432,7 @@ export const NativeTerminalPane = forwardRef<
       visible && focused && document.hasFocus(),
     );
     blocksView?.view.present(session.drawnSeq);
-    if (visible && focused) input.current?.focus();
+    input.current?.updateInputPolicy();
   }, [visible, focused, renderer, blocksView]);
   useEffect(() => {
     if (!visible || !focused) links.current?.invalidate();
@@ -499,6 +504,16 @@ export const NativeTerminalPane = forwardRef<
   const onContextMenuCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (replayContextMenu.current) {
       replayContextMenu.current = false;
+      return;
+    }
+    if (
+      engine.current?.exitCode === null &&
+      engine.current?.inputState?.mouseTracking &&
+      !event.shiftKey &&
+      !(IS_MAC ? event.metaKey || event.ctrlKey : event.ctrlKey)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
     const saved = preClickSelection.current;
@@ -603,6 +618,7 @@ export const NativeTerminalPane = forwardRef<
             />
           </>
         )}
+        <TerminalProgress leafId={leafId} />
         {(error ?? surface?.error) && (
           <div
             role="alert"

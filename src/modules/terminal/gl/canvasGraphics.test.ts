@@ -243,3 +243,34 @@ it("releases a newly allocated bitmap immediately when pixel upload fails", () =
   expect(h.canvases[1].height).toBe(0);
   h.renderer.dispose();
 });
+
+it("retains a fractional placeholder crop on a nonzero intermediate canvas", () => {
+  const h = setup(),
+    pane = {},
+    f = frame();
+  f.placements[0].sourceY = 0.5;
+  f.placements[0].sourceHeight = 0.5;
+  h.renderer.apply(pane, f);
+  const drawImage = vi.fn();
+  h.renderer.draw(
+    { drawImage } as unknown as CanvasRenderingContext2D,
+    pane,
+    2,
+    8,
+    16,
+  );
+  expect(h.canvases[0].height).toBe(1);
+  expect(h.contexts[0].drawImage).toHaveBeenCalledWith(
+    h.canvases[1],
+    1,
+    0.5,
+    1,
+    0.5,
+    0,
+    0,
+    1,
+    1,
+  );
+  expect(drawImage.mock.calls[0].slice(1, 5)).toEqual([0, 0, 1, 1]);
+  h.renderer.dispose();
+});
