@@ -195,6 +195,23 @@ export function saveLabCapture(
   });
 }
 
+export type NativeCaptureFrame = {
+  readonly frame: DecodedFrame;
+  readonly blocks: NativeBlockSnapshot | null;
+  current: () => boolean;
+  release: () => void;
+};
+type CaptureConsumer = {
+  frame: DecodedFrame | null;
+  hold: boolean;
+  current: () => boolean;
+  accept: (frame: DecodedFrame, blocks: NativeBlockSnapshot | null) => void;
+  cancel: (error: unknown) => void;
+  blocks: boolean;
+  cols: number;
+  rows: number;
+};
+
 const textEncoder = new TextEncoder();
 const noop = () => {};
 
@@ -225,6 +242,7 @@ export class EngineSession {
   private lastDrawnSize: { cols: number; rows: number } | null = null;
   private drawnUnsent: { seq: number; drawnAt: number }[] = [];
   private fullRequested = false;
+  private captureConsumer: CaptureConsumer | null = null;
   private closed = false;
   private failed = false;
   private size: { cols: number; rows: number };
@@ -429,6 +447,7 @@ export class EngineSession {
       this.failCore("terminal renderer migration failed");
       throw error;
     }
+    this.captureConsumer?.cancel(new Error("Terminal capture owner changed."));
     this.renderer.removePane(this.renderPane);
     this.renderer = renderer;
     this.renderPane = pane;
@@ -472,6 +491,7 @@ export class EngineSession {
     const decodedAt = this.observer.onFrameTiming
       ? performance.now()
       : receivedAt;
+    if (frame) this.captureFull(frame);
     let applied = false;
     let capacityBlocked = false;
     if (frame) {
@@ -495,7 +515,13 @@ export class EngineSession {
       // Return credit after a display turn. Blocked capacity awaits explicit
       // recovery instead of scheduling another full frame.
       this.invalidatePresented();
-      if (!capacityBlocked) this.requestFull();
+      // Hidden renderers intentionally discard the grid. Their reveal path
+      // requests a full frame; requesting one here would form a full/ACK loop.
+      if (
+        !capacityBlocked &&
+        !(this.pane.rect.width <= 0 || this.pane.rect.height <= 0)
+      )
+        this.requestFull();
       this.renderer.markUndrawn(this.pane);
     }
     this.observer.onFrame?.({
@@ -546,8 +572,11 @@ export class EngineSession {
       this.drawnUnsent.length === 0
     )
       return;
-    const seqs = this.drawnUnsent;
-    this.drawnUnsent = [];
+    const held = this.captureConsumer?.hold
+      ? this.captureConsumer.frame?.seq
+      : null;
+    const seqs = this.drawnUnsent.filter((item) => item.seq !== held);
+    this.drawnUnsent = this.drawnUnsent.filter((item) => item.seq === held);
     for (const { seq, drawnAt } of seqs) {
       let sent: Promise<unknown>;
       if (this.sendCredit) {
@@ -580,6 +609,7 @@ export class EngineSession {
   private failCore(message: string): void {
     if (this.closed || this.failed) return;
     this.failed = true;
+    this.captureConsumer?.cancel(new Error(message));
     this.selectionSnapshot = null;
     this.inputStateValue = null;
     this.awaitingDraw = [];
@@ -600,7 +630,122 @@ export class EngineSession {
     const id = this.id;
     if (id === null || this.closed || this.failed || this.fullRequested) return;
     this.fullRequested = true;
-    invoke("gterm_request_full", { id }).catch(this.reportError);
+    invoke("gterm_request_full", { id }).catch((error) => {
+      this.fullRequested = false;
+      this.captureConsumer?.cancel(error);
+      this.reportError(error);
+    });
+  }
+
+  /** Internal one-shot full consumer; it never changes the live pane or drawnSeq. */
+  captureFrame(options: {
+    signal: AbortSignal;
+    blocks?: boolean;
+    current?: () => boolean;
+  }): Promise<NativeCaptureFrame> {
+    if (this.captureConsumer)
+      return Promise.reject(
+        new Error("Terminal capture is already in progress."),
+      );
+    const id = this.id;
+    const pane = this.pane;
+    const { cols, rows } = this.size;
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let settled = false;
+      const current = () => {
+        try {
+          return (
+            !done &&
+            !options.signal.aborted &&
+            id !== null &&
+            this.id === id &&
+            !this.closed &&
+            !this.failed &&
+            this.pane === pane &&
+            this.size.cols === cols &&
+            this.size.rows === rows &&
+            (pane.rect.width <= 0 || pane.rect.height <= 0) &&
+            (options.current?.() ?? true)
+          );
+        } catch {
+          return false;
+        }
+      };
+      const release = () => {
+        if (done) return;
+        done = true;
+        options.signal.removeEventListener("abort", abort);
+        if (this.captureConsumer === consumer) this.captureConsumer = null;
+        consumer.hold = false;
+        this.flushCredits();
+      };
+      const cancel = (error: unknown) => {
+        release();
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      };
+      const abort = () => cancel(new Error("Terminal capture was cancelled."));
+      const consumer: CaptureConsumer = {
+        frame: null,
+        hold: false,
+        current,
+        cancel,
+        cols,
+        rows,
+        blocks: options.blocks ?? false,
+        accept: (frame, blocks) => {
+          if (!current()) {
+            cancel(new Error("Terminal capture is no longer available."));
+            return;
+          }
+          settled = true;
+          resolve({ frame, blocks, current, release });
+        },
+      };
+      if (!current()) {
+        cancel(new Error("Terminal capture is no longer available."));
+        return;
+      }
+      this.captureConsumer = consumer;
+      options.signal.addEventListener("abort", abort, { once: true });
+      // Any earlier hidden packet must finish its existing display turn before
+      // the core can produce the requested full. This is not a second ACK path.
+      if (this.awaitingDraw.length) this.renderer.markUndrawn(pane);
+      this.requestFull();
+    });
+  }
+
+  private captureFull(frame: DecodedFrame): void {
+    const consumer = this.captureConsumer;
+    if (!consumer || consumer.frame || !frame.full) return;
+    if (
+      !consumer.current() ||
+      frame.cols !== consumer.cols ||
+      frame.rows !== consumer.rows
+    ) {
+      consumer.cancel(new Error("Terminal capture geometry changed."));
+      return;
+    }
+    consumer.frame = frame;
+    consumer.hold = consumer.blocks;
+    const blocks = consumer.blocks
+      ? this.blockQuery("gterm_blocks", { seq: frame.seq }, (value) => {
+          const snapshot = decodeNativeBlocks(value, frame.seq);
+          if (snapshot.viewportRows !== frame.rows)
+            throw new Error("Invalid terminal capture block projection.");
+          return snapshot;
+        })
+      : Promise.resolve(null);
+    void blocks
+      .then((snapshot) => {
+        consumer.hold = false;
+        this.flushCredits();
+        consumer.accept(frame, snapshot);
+      })
+      .catch(consumer.cancel);
   }
 
   write(text: string, current: () => boolean = () => true): Promise<void> {
@@ -1153,6 +1298,9 @@ export class EngineSession {
 
   private release(): void {
     this.closed = true;
+    this.captureConsumer?.cancel(
+      new Error("Terminal capture is no longer available."),
+    );
     this.clipboardWrites.close();
     this.clipboardSignals.onmessage = noop;
     this.selectionSnapshot = null;

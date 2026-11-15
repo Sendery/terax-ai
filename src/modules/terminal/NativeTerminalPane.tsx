@@ -1,3 +1,6 @@
+import { registerNativeCaptureProvider } from "@/modules/capture/lib/captureLease";
+import { captureNativePane } from "@/modules/terminal/gl/nativeCaptureProvider";
+import { minimumTerminalContrast } from "@/modules/terminal/gl/minimumContrast";
 import {
   RenderCapacityError,
   RENDER_CAPACITY_MESSAGE,
@@ -185,6 +188,82 @@ export const NativeTerminalPane = forwardRef<
           ? renderer.snapshot(native.pane)
           : null,
     );
+    const captureRoot = paneRoot.current;
+    const unregisterNativeCapture = captureRoot
+      ? registerNativeCaptureProvider(captureRoot, async (scope) => {
+          const session = native;
+          const currentSurface = surfaceRef.current;
+          if (!session || !currentSurface)
+            throw new Error("Native terminal capture is unavailable.");
+          const identity = owner.submissionIdentity;
+          const id = session.id;
+          const appearanceKey = () => {
+            const surface = surfaceRef.current;
+            const prefs = usePreferencesStore.getState();
+            const style = window.getComputedStyle(captureRoot);
+            return JSON.stringify({
+              font: surface?.font,
+              colors: surface?.colors,
+              contrast: minimumTerminalContrast(
+                prefs.backgroundKind,
+                prefs.backgroundImageId,
+              ),
+              dpr: window.devicePixelRatio || 1,
+              cell: renderer.cellSize,
+              focused: session.pane.focused,
+              blocks: latest.current.blocks ?? false,
+              css: [
+                style.font,
+                style.color,
+                style.backgroundColor,
+                document.documentElement.getAttribute("class"),
+                document.documentElement.getAttribute("style"),
+              ],
+            });
+          };
+          const key = appearanceKey();
+          const current = () =>
+            !disposed &&
+            scope.current() &&
+            !latest.current.visible &&
+            !latest.current.privateTerminal &&
+            latest.current.leafId === leafId &&
+            paneRoot.current === captureRoot &&
+            getNativeLeaf(leafId) === owner &&
+            controller.current === owner &&
+            owner.submissionIdentity === identity &&
+            native === session &&
+            engine.current === session &&
+            id !== null &&
+            session.id === id &&
+            surfaceRef.current?.renderer === renderer &&
+            appearanceKey() === key;
+          const box = captureProxy.getBoundingClientRect();
+          const prefs = usePreferencesStore.getState();
+          return captureNativePane({
+            root: captureRoot,
+            canvas: captureProxy,
+            session,
+            blocks: latest.current.blocks ?? false,
+            promptReady: () => owner.blockInput?.mode === "prompt",
+            appearance: {
+              font: { ...currentSurface.font },
+              background: currentSurface.colors.background,
+              cursorFallback: currentSurface.colors.cursor,
+              minimumContrastRatio: minimumTerminalContrast(
+                prefs.backgroundKind,
+                prefs.backgroundImageId,
+              ),
+              width: box.width,
+              height: box.height,
+              dpr: window.devicePixelRatio || 1,
+              cellSize: { ...renderer.cellSize },
+              focused: session.pane.focused,
+            },
+            scope: { signal: scope.signal, current },
+          });
+        })
+      : () => {};
     const detach = owner.attach(
       {
         onSession: (session) => {
@@ -302,6 +381,7 @@ export const NativeTerminalPane = forwardRef<
       disposed = true;
       blockView?.dispose();
       detach();
+      unregisterNativeCapture();
       unregisterCapture();
       captureProxy.remove();
       unsubscribe();

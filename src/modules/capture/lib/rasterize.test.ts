@@ -1,3 +1,4 @@
+import type { NativeCaptureLease } from "@/modules/capture/lib/captureLease";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSvgMarkup,
@@ -278,4 +279,138 @@ it("retains pane clipping for an IME foreground instead of bleeding into a neigh
     })),
   );
   expect(context.rect).toHaveBeenLastCalledWith(0, 0, 50, 80);
+});
+
+function leasedCanvas() {
+  const native = {
+    style: { visibility: "hidden" },
+    contains: (_node: unknown) => true,
+  } as unknown as HTMLElement;
+  const canvas = {
+    hasAttribute: (key: string) => key === "data-terax-capture-required",
+    closest: () => native,
+    getBoundingClientRect: () => ({ left: 6, top: 6, width: 100, height: 80 }),
+  } as unknown as HTMLCanvasElement;
+  const root = {
+    contains: (node: unknown) => node === native || node === canvas,
+    querySelectorAll: () => [canvas],
+  } as unknown as HTMLElement;
+  const lease = {
+    root: native,
+    canvas,
+    snapshot: "data:image/png;base64,full",
+    excluded: [],
+    current: () => true,
+    dispose: vi.fn(),
+  } satisfies NativeCaptureLease;
+  return { root, native, canvas, lease };
+}
+it("opts in only the explicitly leased hidden native canvas", () => {
+  const f = leasedCanvas();
+  const rect = { left: 0, top: 0 } as DOMRect;
+  expect(collectCanvasOverlays(f.root, rect)).toEqual([]);
+  expect(collectCanvasOverlays(f.root, rect, [f.lease])).toEqual([
+    {
+      canvas: f.canvas,
+      snapshot: f.lease.snapshot,
+      required: true,
+      x: 6,
+      y: 6,
+      width: 100,
+      height: 80,
+    },
+  ]);
+  expect(collectCanvasOverlays(f.root, rect)).toEqual([]);
+});
+it("refuses a stale or foreign native lease instead of returning blank pixels", () => {
+  const f = leasedCanvas();
+  const rect = { left: 0, top: 0 } as DOMRect;
+  expect(() =>
+    collectCanvasOverlays(f.root, rect, [{ ...f.lease, current: () => false }]),
+  ).toThrow("available");
+  expect(() =>
+    collectCanvasOverlays(f.root, rect, [
+      { ...f.lease, root: {} as HTMLElement },
+    ]),
+  ).toThrow("available");
+});
+it("substitutes only frozen block foregrounds for the leased pane", () => {
+  const f = leasedCanvas();
+  const previous = {
+    style: {},
+    closest: () => f.native,
+    contains: () => false,
+  } as unknown as HTMLElement;
+  const frozen = {
+    style: { visibility: "hidden" },
+    closest: () => f.native,
+    contains: () => false,
+    parentElement: null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 112, height: 92 }),
+  } as unknown as HTMLElement;
+  const other = {
+    style: {},
+    closest: () => ({ style: { visibility: "hidden" } }),
+    contains: () => false,
+  } as unknown as HTMLElement;
+  const root = {
+    contains: () => true,
+    querySelectorAll: () => [previous, frozen, other],
+  } as unknown as HTMLElement;
+  vi.stubGlobal("window", {
+    getComputedStyle: () => ({ visibility: "hidden", display: "block" }),
+  });
+  const lease = { ...f.lease, foreground: frozen, excluded: [previous] };
+  const overlay = { canvas: f.canvas, x: 6, y: 6, width: 100, height: 80 };
+  const found = collectForegroundElements(
+    root,
+    { left: 0, top: 0, width: 112, height: 92 } as DOMRect,
+    [overlay],
+    [lease],
+  );
+  expect(found.map((item) => item.element)).toEqual([frozen]);
+});
+it("cancels native snapshot image loading without drawing late pixels", async () => {
+  const images: {
+    src: string;
+    onload: (() => void) | null;
+    onerror: (() => void) | null;
+  }[] = [];
+  vi.stubGlobal(
+    "Image",
+    class {
+      src = "";
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        images.push(this);
+      }
+    },
+  );
+  const controller = new AbortController();
+  const context = { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D;
+  const pending = compositeCaptureLayers(
+    context,
+    {} as CanvasImageSource,
+    [
+      {
+        canvas: {} as HTMLCanvasElement,
+        snapshot: "data:image/png;base64,full",
+        required: true,
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      },
+    ],
+    [],
+    { signal: controller.signal, current: () => true },
+  );
+  const rejected = expect(pending).rejects.toThrow("cancel");
+  controller.abort();
+  await Promise.resolve();
+  expect(images[0].src).toBe("");
+  expect(images[0].onload).toBeNull();
+  await rejected;
+  expect(context.drawImage).toHaveBeenCalledOnce();
 });

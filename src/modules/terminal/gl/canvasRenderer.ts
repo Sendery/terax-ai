@@ -311,6 +311,10 @@ export class CanvasRenderer implements TerminalRenderer {
       at - start,
       [...drawn.values()].filter(Boolean).length,
     );
+    // A discarded hidden frame still owns a credit until this display turn.
+    for (const pane of this.panes)
+      if (pane.undrawn && (pane.rect.width <= 0 || pane.rect.height <= 0))
+        drawn.set(pane, false);
     for (const [pane, rendered] of drawn)
       if (pane.undrawn) {
         pane.undrawn = false;

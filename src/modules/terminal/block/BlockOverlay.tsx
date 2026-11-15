@@ -176,6 +176,7 @@ export function BlockOverlay(props: Props) {
 
   return (
     <div
+      data-native-block-overlay=""
       data-terax-capture-foreground=""
       className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
     >
@@ -195,6 +196,55 @@ export function BlockOverlay(props: Props) {
           revealMatch={props.revealMatch}
           clearSearch={props.clearSearch}
           onClose={closeSearch}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Read-only capture chrome from one immutable native block projection. */
+export function BlockOverlaySnapshot({
+  visible,
+  promptReady = false,
+}: {
+  visible: VisibleBlocks;
+  promptReady?: boolean;
+}) {
+  const noAction = () => {};
+  const actions: OverlayActions = {
+    subscribe: () => noAction,
+    getVisible: () => visible,
+    readOutput: () => null,
+    searchBlock: () => [],
+    revealMatch: () => false,
+    clearSearch: noAction,
+    promptReady,
+    onRunAgain: noAction,
+    onRestoreFocus: noAction,
+    privateTerminal: true,
+    active: false,
+    current: () => false,
+    canAttach: () => false,
+  };
+  return (
+    <div
+      inert
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+    >
+      {visible.blocks.map((block) => (
+        <BlockChrome
+          key={block.id}
+          block={block}
+          all={actions}
+          onSearch={noAction}
+        />
+      ))}
+      {visible.sticky && (
+        <StickyHeader
+          block={visible.sticky}
+          all={actions}
+          onSearch={noAction}
         />
       )}
     </div>

@@ -1724,3 +1724,177 @@ it("does not mark a launch as attempted when ownership changes during encoding",
   expect(commands("pty_write")).toEqual([]);
   await session.close();
 });
+
+it("does not create a recovery-full loop for a hidden pane", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  session.pane.rect = { x: 0, y: 0, width: 0, height: 0 };
+  renderer.nextResult = "needs-full";
+  channelOf(0).onmessage(frameBuffer(1, true));
+  expect(commands("gterm_request_full")).toHaveLength(0);
+  expect(credits()).toHaveLength(0);
+  renderer.drawFrame();
+  expect(credits()).toHaveLength(1);
+  expect(session.drawnSeq).toBeNull();
+  channelOf(0).onmessage(frameBuffer(2, true));
+  expect(commands("gterm_request_full")).toHaveLength(0);
+  await session.close();
+});
+
+function hiddenSession(renderer: FakeRenderer, session: { pane: RenderPane }) {
+  session.pane.rect = { x: 0, y: 0, width: 0, height: 0 };
+  renderer.nextResult = "needs-full";
+}
+function captureBlocks(seq: number) {
+  return {
+    seq,
+    metadataVersion: 1,
+    hasAny: false,
+    alternateScreen: false,
+    viewportOffset: 0,
+    viewportRows: 2,
+    blocks: [],
+  };
+}
+it("captures one full with its exact block projection while preserving display-turn credits", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  hiddenSession(renderer, session);
+  channelOf(0).onmessage(frameBuffer(1, false));
+  let resolve = (_value: unknown) => {};
+  ipc.blocks = new Promise((done) => {
+    resolve = done;
+  });
+  const controller = new AbortController();
+  const pending = session.captureFrame({
+    signal: controller.signal,
+    blocks: true,
+  });
+  expect(commands("gterm_request_full")).toHaveLength(1);
+  expect(credits()).toHaveLength(0);
+  renderer.drawFrame();
+  expect(credits().map((call) => (call.args as { seq: number }).seq)).toEqual([
+    1,
+  ]);
+  const buffer = frameBuffer(2);
+  channelOf(0).onmessage(buffer);
+  renderer.drawFrame();
+  expect(credits()).toHaveLength(1);
+  expect(commands("gterm_blocks")).toEqual([
+    { command: "gterm_blocks", args: { id: 9, seq: 2 } },
+  ]);
+  expect(session.drawnSeq).toBeNull();
+  resolve(captureBlocks(2));
+  const captured = await pending;
+  expect(captured.frame.seq).toBe(2);
+  expect(captured.frame.u32.buffer).toBe(buffer);
+  expect(captured.blocks?.seq).toBe(2);
+  expect(credits().map((call) => (call.args as { seq: number }).seq)).toEqual([
+    1, 2,
+  ]);
+  expect(commands("gterm_resize")).toHaveLength(0);
+  expect(commands("gterm_scroll")).toHaveLength(0);
+  expect(commands("pty_write")).toHaveLength(0);
+  expect(session.drawnSeq).toBeNull();
+  captured.release();
+  renderer.drawFrame();
+  expect(credits()).toHaveLength(2);
+  await session.close();
+});
+it("ignores partial capture packets and rejects a concurrent consumer until release", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  hiddenSession(renderer, session);
+  const controller = new AbortController();
+  const pending = session.captureFrame({ signal: controller.signal });
+  await expect(
+    session.captureFrame({ signal: controller.signal }),
+  ).rejects.toThrow("already");
+  channelOf(0).onmessage(frameBuffer(1, false));
+  let resolved = false;
+  void pending.then(() => {
+    resolved = true;
+  });
+  await Promise.resolve();
+  expect(resolved).toBe(false);
+  renderer.drawFrame();
+  channelOf(0).onmessage(frameBuffer(2, true));
+  const captured = await pending;
+  expect(captured.blocks).toBeNull();
+  expect(captured.frame.seq).toBe(2);
+  expect(session.drawnSeq).toBeNull();
+  captured.release();
+  const next = session.captureFrame({ signal: controller.signal });
+  channelOf(0).onmessage(frameBuffer(3, true));
+  (await next).release();
+  await session.close();
+});
+it("aborts a pinned block query, returns its credit once, and ignores the late projection", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  hiddenSession(renderer, session);
+  let resolve = (_value: unknown) => {};
+  ipc.blocks = new Promise((done) => {
+    resolve = done;
+  });
+  const controller = new AbortController();
+  const pending = session.captureFrame({
+    signal: controller.signal,
+    blocks: true,
+  });
+  const rejected = expect(pending).rejects.toThrow("cancel");
+  channelOf(0).onmessage(frameBuffer(1, true));
+  renderer.drawFrame();
+  expect(credits()).toHaveLength(0);
+  controller.abort();
+  await rejected;
+  expect(credits()).toHaveLength(1);
+  resolve(captureBlocks(1));
+  await Promise.resolve();
+  const next = session.captureFrame({ signal: new AbortController().signal });
+  channelOf(0).onmessage(frameBuffer(2, true));
+  (await next).release();
+  renderer.drawFrame();
+  expect(credits().map((call) => (call.args as { seq: number }).seq)).toEqual([
+    1, 2,
+  ]);
+  await session.close();
+});
+it.each(["close", "owner", "size", "projection"] as const)(
+  "rejects a one-shot full after %s invalidates the capture",
+  async (kind) => {
+    const renderer = new FakeRenderer();
+    const session = await openSession(renderer);
+    hiddenSession(renderer, session);
+    let current = true;
+    if (kind === "projection") ipc.blocks = Promise.resolve(captureBlocks(99));
+    const pending = session.captureFrame({
+      signal: new AbortController().signal,
+      current: () => current,
+      blocks: kind === "projection",
+    });
+    const rejected = expect(pending).rejects.toThrow();
+    if (kind === "close") await session.close();
+    if (kind === "owner") current = false;
+    if (kind === "size") session.resize(5, 2);
+    channelOf(0).onmessage(frameBuffer(1, true));
+    await rejected;
+    renderer.drawFrame();
+    expect(session.drawnSeq).toBeNull();
+    if (kind !== "close") await session.close();
+  },
+);
+it("can capture a retained healthy core after its shell exits without respawning", async () => {
+  const renderer = new FakeRenderer();
+  const session = await openSession(renderer);
+  hiddenSession(renderer, session);
+  channelOf(1).onmessage(0);
+  const pending = session.captureFrame({
+    signal: new AbortController().signal,
+  });
+  channelOf(0).onmessage(frameBuffer(1, true));
+  (await pending).release();
+  expect(commands("gterm_open")).toHaveLength(1);
+  expect(commands("pty_write")).toHaveLength(0);
+  await session.close();
+});

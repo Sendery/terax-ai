@@ -592,6 +592,10 @@ export class GridRenderer {
         if (rendered) renderedPanes++;
       this.onDrawTiming(at, this.stats.lastDrawMs, renderedPanes);
     }
+    // Hidden frames are discarded, but their credit belongs to this turn.
+    for (const pane of this.panes)
+      if (pane.undrawn && (pane.rect.width <= 0 || pane.rect.height <= 0))
+        this.drawnPanes.set(pane, false);
     for (const [pane, rendered] of this.drawnPanes) {
       if (!pane.undrawn) continue;
       pane.undrawn = false;

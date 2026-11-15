@@ -1726,11 +1726,10 @@ export default function App() {
       }),
       capture: async (payload) => {
         try {
-          return await captureSurface(
-            payload,
-            tabsRef.current,
-            activeIdRef.current,
-          );
+          return await captureSurface(payload, () => ({
+            tabs: tabsRef.current,
+            activeTabId: activeIdRef.current,
+          }));
         } catch (error) {
           throw {
             code: "command_failed",

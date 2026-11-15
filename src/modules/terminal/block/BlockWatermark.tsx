@@ -34,6 +34,7 @@ export function BlockWatermark({ leafId, subscribe }: Props) {
   return (
     <div
       aria-hidden
+      data-terax-capture-foreground=""
       className={cn(
         "pointer-events-none absolute inset-0 z-[5] flex select-none flex-col items-center justify-center gap-8",
         "transition-[opacity,transform] duration-500 ease-out",

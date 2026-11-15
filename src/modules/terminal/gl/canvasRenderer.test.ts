@@ -1,3 +1,4 @@
+import { renderNativeCapturePixels } from "@/modules/terminal/gl/nativeCapturePixels";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CanvasRenderer } from "@/modules/terminal/gl/canvasRenderer";
 import {
@@ -329,5 +330,167 @@ it("changes minimum contrast live without replacing glyphs or session state", ()
   expect(c.onNeedFullFrame).toHaveBeenCalledTimes(2);
   h.renderer.applyFrame(pane, input);
   expect(pane.grid?.cells[1]).toBe(original);
+  h.renderer.dispose();
+});
+
+it("acknowledges a discarded hidden pane once on its display turn without painting it", () => {
+  const h = harness();
+  const c = callbacks();
+  const pane = h.renderer.addPane(c);
+  expect(h.renderer.applyFrame(pane, full())).toBe("needs-full");
+  h.renderer.markUndrawn(pane);
+  expect(c.onDrawn).not.toHaveBeenCalled();
+  expect(h.context.fillText).not.toHaveBeenCalled();
+  h.draw();
+  expect(c.onDrawn).toHaveBeenCalledExactlyOnceWith(false);
+  expect(pane.grid).toBeNull();
+  expect(h.context.fillText).not.toHaveBeenCalled();
+  h.draw();
+  expect(c.onDrawn).toHaveBeenCalledOnce();
+  h.renderer.dispose();
+});
+
+it("reconstructs full graphemes and image pixels in a disposable capture renderer", () => {
+  const h = harness();
+  vi.stubGlobal(
+    "ImageData",
+    class {
+      constructor(
+        readonly data: Uint8ClampedArray,
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    },
+  );
+  const frame = {
+    ...decodeFrame(
+      encodeFrame({
+        cols: 5,
+        rows: 2,
+        flags: FRAME_FLAG_FULL,
+        graphemes: ["e\u0301", "\u{1f469}\u200d\u{1f4bb}"],
+        rowRecords: [
+          {
+            y: 0,
+            runs: [[0, 3]],
+            cells: [CELL_GRAPHEME, wide(CELL_GRAPHEME | 1), TAIL],
+          },
+        ],
+      }),
+    ),
+    graphics: {
+      cellWidth: 8,
+      cellHeight: 16,
+      images: [
+        {
+          id: 1,
+          key: "0:1",
+          width: 1,
+          height: 1,
+          pixels: new Uint8Array([1, 2, 3, 255]),
+        },
+      ],
+      placements: [
+        {
+          id: 1,
+          key: "0:1",
+          z: 0,
+          col: 0,
+          row: 1,
+          offsetX: 0,
+          offsetY: 0,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 1,
+          sourceHeight: 1,
+          width: 8,
+          height: 16,
+        },
+      ],
+    },
+  };
+  const count = h.canvases.length;
+  const result = renderNativeCapturePixels(
+    frame,
+    {
+      font: { family: "mono", weight: "normal", size: 14, letterSpacing: 0 },
+      background: 0,
+      cursorFallback: 0xffffff,
+      minimumContrastRatio: 4.5,
+      width: 40,
+      height: 32,
+      dpr: 1,
+      cellSize: { width: 8, height: 16 },
+      focused: false,
+    },
+    () => true,
+  );
+  expect(result).toBe("data:image/png;base64,public");
+  expect(h.painted.map((item) => item.text)).toEqual([
+    "e\u0301",
+    "\u{1f469}\u200d\u{1f4bb}",
+  ]);
+  expect(
+    h.contexts.some((ctx) => ctx.putImageData.mock.calls.length === 1),
+  ).toBe(true);
+  expect(
+    h.canvases
+      .slice(count)
+      .every((canvas) => canvas.width === 0 && canvas.height === 0),
+  ).toBe(true);
+  expect(h.canvas.width).toBe(200);
+  expect(h.renderer.stats.draws).toBe(0);
+  h.renderer.dispose();
+});
+it("rejects missing full image uploads and stale appearance without returning a blank capture", () => {
+  const h = harness();
+  const options = {
+    font: { family: "mono", weight: "normal", size: 14, letterSpacing: 0 },
+    background: 0,
+    width: 80,
+    height: 32,
+    dpr: 1,
+    cellSize: { width: 8, height: 16 },
+    focused: false,
+  };
+  const frame = {
+    ...full(),
+    graphics: {
+      cellWidth: 8,
+      cellHeight: 16,
+      images: [],
+      placements: [
+        {
+          id: 1,
+          key: "0:missing",
+          z: 0,
+          col: 0,
+          row: 0,
+          offsetX: 0,
+          offsetY: 0,
+          sourceX: 0,
+          sourceY: 0,
+          sourceWidth: 1,
+          sourceHeight: 1,
+          width: 8,
+          height: 16,
+        },
+      ],
+    },
+  };
+  const count = h.canvases.length;
+  expect(() => renderNativeCapturePixels(frame, options, () => true)).toThrow();
+  expect(
+    h.canvases
+      .slice(count)
+      .every((canvas) => canvas.width === 0 && canvas.height === 0),
+  ).toBe(true);
+  expect(() =>
+    renderNativeCapturePixels(full(), { ...options, dpr: 2 }, () => true),
+  ).toThrow("appearance");
+  expect(() => renderNativeCapturePixels(full(), options, () => false)).toThrow(
+    "available",
+  );
+  expect(h.canvas.width).toBe(200);
   h.renderer.dispose();
 });
