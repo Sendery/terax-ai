@@ -11,7 +11,7 @@ an interactive graph", or "Dock this graph beside my terminal".
 
 ## Discover and customize manager actions
 
-In-app, the actual tools are `terax_app_state`, `terax_app_command` and
+With an SDK-backed model in the built-in AI, the actual tools are `terax_app_state`, `terax_app_command` and
 `terax_manager_actions`. The last tool reads the active workspace's
 `.terax/pi-terax-commands.json` and returns validated custom actions plus starter actions.
 It never executes the file. The normal command tool performs each selected action and
@@ -29,7 +29,15 @@ to the UI allowlist in `src/modules/ai/lib/piTeraxManager.ts`; arbitrary shell c
 scripts, extra instruction fields and duplicate action ids are rejected. When the file is
 missing or invalid, the tool returns starter actions and the reason.
 
-External Pi agents use their offered `terax_status`, `terax_get_state` and
+The selected persona and custom instructions also reach the existing Claude Code,
+Codex, Cursor Agent and OpenCode CLI runners as a separate instruction section before
+the conversation transcript. Pi receives them once in its system-prompt append.
+The stored user/assistant messages are unchanged. Selecting a CLI provider does not
+attach Terax's SDK tools: use that CLI's configured MCP connection, or Pi's Terax
+extension, and report missing capabilities. `terax_manager_actions` is SDK-only;
+CLI agents read the configuration through their own authorized file tools.
+
+Pi agents use their offered `terax_status`, `terax_get_state` and
 `terax_call` tools. MCP clients discover the offered grouped tools, including
 `terax_inspect` and `terax_open_view`. External agents can read the same configuration
 with their authorized file tools. The in-app tool names are not external MCP tool names.

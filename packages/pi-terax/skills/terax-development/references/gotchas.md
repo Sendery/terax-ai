@@ -1003,3 +1003,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** cloning the parent DOM produces blank frame pixels; compositing the native canvas afterward can also erase the parent toolbar. Accessibility may expose a rendered SVG as one image rather than individual nodes.
 - **Prevention:** use a fixed bounded snapshot protocol in the trusted frame, with actual frame identity, session token, document incarnation/revision and request id. Keep capture scope/privacy checks through persistence, refuse unavailable pixels, and include parent panels plus their frame snapshots in foreground restoration.
 - **Verification:** test cancellation, retirement, privacy and stale replies; use actual system WebKit PNGs and the real compositor to check graph/panel/menu ordering above synthetic native pixels. Use actual SVG geometry receipts and captured pixels, not missing descendant accessibility labels, as render evidence.
+
+### CLI runners must preserve selected agent instructions
+
+- **Trigger:** an in-app agent picker passes persona/custom instructions to a CLI-backed provider.
+- **Failure mode:** a runner that flattens only chat messages silently loses the selected persona, while tool descriptions may incorrectly imply SDK tools are available to the CLI.
+- **Prevention:** include persona and custom instructions in the existing runner prompt without modifying stored user messages or execution options. Keep Pi's system append singular, and discover the actual Pi/MCP capabilities instead of assuming SDK-only tools.
+- **Verification:** test planned argv and stdin for each runner without invoking an LLM; verify instruction presence, unchanged history/options, empty-context compatibility and no Pi duplication.

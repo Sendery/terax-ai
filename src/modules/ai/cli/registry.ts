@@ -1,3 +1,4 @@
+import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { ParserFactory } from "./parsers/emitter";
 import { createClaudeParser } from "./parsers/claude";
 import { createCodexParser } from "./parsers/codex";
@@ -33,12 +34,19 @@ type BuildArgv = (
 /** CLIs without their own session handling get the flattened transcript as a
  *  single argument, every turn. */
 function transcriptRun(buildArgv: BuildArgv): CliAgentDef["planRun"] {
-  return (ctx) => ({
-    argv: buildArgv(messagesToPrompt(ctx.messages), {
-      model: ctx.model,
-      permission: ctx.permission,
-    }),
-  });
+  return (ctx) => {
+    const instructions = cliInstructionBlocks(ctx);
+    const transcript = messagesToPrompt(ctx.messages);
+    const prompt = instructions.length
+      ? [...instructions, `## Conversation\n${transcript}`].join("\n\n")
+      : transcript;
+    return {
+      argv: buildArgv(prompt, {
+        model: ctx.model,
+        permission: ctx.permission,
+      }),
+    };
+  };
 }
 
 const CLAUDE_PERMISSION: Record<CliPermissionMode, string> = {

@@ -1,3 +1,4 @@
+import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { UIMessage } from "ai";
 import { messagesToPrompt, messageText } from "./transcript";
 import type { CliPermissionMode, CliRunContext, CliRunPlan } from "./types";
@@ -151,10 +152,7 @@ function piSystemAppend(ctx: {
       "## Plan mode\nThe user turned on plan mode: investigate and propose a plan, do not change files.",
     );
   }
-  const persona = ctx.persona?.instructions.trim();
-  if (persona) blocks.push(`## Active agent: ${ctx.persona?.name}\n${persona}`);
-  const custom = ctx.customInstructions?.trim();
-  if (custom) blocks.push(`## User custom instructions\n${custom}`);
+  blocks.push(...cliInstructionBlocks(ctx));
   return blocks.join("\n\n");
 }
 
