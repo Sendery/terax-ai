@@ -13,6 +13,7 @@ let nextToken = UUID().uuidString
 let baseline = CommandLine.arguments.contains("--baseline")
 let composite = CommandLine.arguments.contains("--composite")
 let rawCSP = CommandLine.arguments.contains("--raw-csp")
+let panelFit = CommandLine.arguments.contains("--panel-fit")
 let baselineStyles = CommandLine.arguments.contains("--baseline-styles")
 let allowedScripts = "tauri://localhost/graphx/engine.js tauri://localhost/graphx/frame.js"
 let rawConfig = try! Data(contentsOf:root.appendingPathComponent("src-tauri/tauri.conf.json"))
@@ -36,6 +37,8 @@ let token='\(token)',revision=1,retired=null;
 const nextToken='\(nextToken)',received=new Set(),checks=[];
 let sourceRefusals=0,tokenRefusals=0,wrongRevision=false,finished=false;
 const spec={title:'WK GraphX',lang:'en',nodes:[{id:'a',label:'Interface',shape:'decision',kind:'service',fill:'#cc8844',color:'#008855'},{id:'b',label:'Store',shape:'datastore'}],edges:[{id:'e',from:'a',to:'b',label:'Write',color:'#008855'}],flows:[{id:'flow',title:'Request',participants:['a','b'],messages:[{id:'m',from:'a',to:'b',label:'Write',kind:'sync'}]}]};
+const fitOwner=frame.contentWindow;
+if(\(panelFit ? "true" : "false"))spec.tour={title:'Review',steps:[{title:'Read the diagram',body:'Keep this tour below the graph.'}]};
 function result(passed,reason){if(finished)return;finished=true;window.webkit.messageHandlers.diagnostic.postMessage({kind:'result',passed,reason,checks,sourceRefusals,tokenRefusals,wrongRevision});}
 window.addEventListener('message',async e=>{
  if(e.source!==frame.contentWindow){sourceRefusals++;return;}
@@ -47,6 +50,11 @@ window.addEventListener('message',async e=>{
  }
  if(e.data.type==='terax:graphx:rendered'){
   if(e.data.revision!==revision){wrongRevision=true;result(false,'wrong revision acknowledged');return;}
+  if(\(panelFit ? "true" : "false")){
+   frame.style.width='640px';frame.style.height='440px';
+   setTimeout(()=>frame.contentWindow.postMessage({type:'test:measure-fit',token,revision},'*'),200);
+   return;
+  }
   for(const stale of [{token:'retired-token'},{documentId:'retired-document'},{revision:revision-1}])
    frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'retired-request',...stale},'*');
   frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'capture-'+revision},'*');
@@ -61,6 +69,17 @@ window.addEventListener('message',async e=>{
    try { await checkComposite(e.data.png); } catch(error) {result(false,'compositor: '+String(error));return;}
   }
   frame.contentWindow.postMessage({type:'test:inspect',token,revision},'*');
+ }
+ if(e.data.type==='test:fit'){
+  checks.push(e.data);
+  if(checks.length===1){
+   frame.style.width='680px';frame.style.height='700px';
+   setTimeout(()=>frame.contentWindow.postMessage({type:'test:measure-fit',token,revision},'*'),200);
+  }else{
+   const [small,large]=checks;
+   const fit=checks.every(c=>c.tourHeight>0&&c.tourScroll<=c.tourClient+1&&Math.abs(c.bottom-c.height)<=2&&c.stageTop>=c.barBottom-1&&c.tourTop>=c.stageBottom-1&&c.svgHeight>100&&Math.abs(c.svgWidth-(c.width-2))<=2);
+   result(fit&&large.svgHeight-small.svgHeight>=250&&large.svgWidth-small.svgWidth>=38&&frame.contentWindow===fitOwner&&token==='\(token)'&&revision===1&&received.size===1,'same-frame live panel resize with natural tour');
+  }
  }
  if(e.data.type==='test:checked'){
   checks.push(e.data);
@@ -120,6 +139,12 @@ let diagnostics = """
   // before sampling pixels so their initial interpolation is not mistaken for CSS failure.
   if(e.data?.type==='terax:graphx:capture')
    for(const animation of document.getAnimations())try{animation.finish();}catch{}
+  if(e.data?.type==='test:measure-fit'&&e.data.token===location.hash.slice(1)){
+   const stage=document.querySelector('.gx-stage'),bar=document.querySelector('.gx-bar'),tour=document.querySelector('.gx-tour'),svg=document.querySelector('.gx-svg');
+   const a=stage.getBoundingClientRect(),b=bar.getBoundingClientRect(),t=tour.getBoundingClientRect(),v=svg.getBoundingClientRect();
+   parent.postMessage({type:'test:fit',token:e.data.token,revision:e.data.revision,width:innerWidth,height:innerHeight,svgWidth:v.width,svgHeight:v.height,stageTop:a.top,stageBottom:a.bottom,barBottom:b.bottom,tourTop:t.top,tourHeight:t.height,tourClient:tour.clientHeight,tourScroll:tour.scrollHeight,bottom:t.bottom},'*');
+   return;
+  }
   if(e.data?.type==='test:late'){parent.postMessage({type:'terax:graphx:rendered',token:e.data.token,revision:2},'*');return;}
   if(e.data?.type!=='test:inspect'||e.data.token!==location.hash.slice(1))return;
   let parentBlocked=false,networkBlocked=false;

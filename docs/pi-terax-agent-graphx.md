@@ -256,3 +256,16 @@ with an explicit styles error. It saves PNG evidence under ignored
 `.terax/pi-development/graphx-webkit-runtime/`. No Terax process is started or
 controlled. The frame and composition checks passed on M2; visible packaged-app
 capture acceptance remains with the coordinated integration pass.
+
+
+## Resizing an embedded graph
+
+The graph stage fills the panel height remaining below its toolbar and above its
+optional tour. Toolbar and tour keep their natural height. Terax's static embed
+CSS overrides the engine's narrow-screen stage height (58vh), so resizing or
+docking a panel uses its available space without replacing the frame or document.
+
+Run the compiled `scripts/check-graphx-webkit.swift` fixture with `--panel-fit`
+to check a live resize of the same iframe, token and revision from 640×440 to
+680×700. It verifies SVG width/height growth, unclipped tour content and alignment
+with the bottom of the panel under the packaged nonce policy.

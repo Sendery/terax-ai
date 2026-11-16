@@ -1031,3 +1031,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** the nonce disables `unsafe-inline`; an engine's later injected stylesheet is blocked even though scripts run and SVG nodes exist. A raw-config WebKit fixture misses this transformation, and a 300-by-150 default SVG can look like a successful layout receipt.
 - **Prevention:** authorize only known trusted engine styles with the real nonce from the frame's own static style, reprocessing their text after assignment. Do not disable asset CSP modification or add general style observers. Check computed styling and the visible graph/flow SVG before declaring ready.
 - **Verification:** model installed Tauri HTML nonce injection and response-policy processing in system WebKit. Assert responsive SVG geometry, styled controls/fonts, generated color fills and rejection of unauthorized CSS, then inspect graph and flow capture pixels. A missing static nonce marker must fail readiness explicitly.
+
+
+### Embedded graph sizing must override stage-local responsive rules
+
+- **Trigger:** a graph engine sets a stage-local height variable in its narrow-screen media query.
+- **Failure mode:** the stage's 58vh rule wins over the inherited mount height; resizing the panel leaves unused space even though the outer frame resizes.
+- **Prevention:** use the embed's own static CSS to make the stage consume remaining flex height, with min-height zero and nonshrinking toolbar/tour. Keep vendor code and engine lifecycle unchanged.
+- **Verification:** resize one already-rendered iframe at two widths below the media breakpoint. Assert actual SVG growth, unchanged frame/token/revision, natural tour height and no clipped tour content; replacing frames at different sizes does not prove live resize.
