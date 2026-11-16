@@ -22,3 +22,20 @@ describe("SelectionAskAi", () => {
     vi.unstubAllGlobals();
   });
 });
+
+it("disables all selection actions while the popup closes", () => {
+  const html = renderToStaticMarkup(
+    <SelectionAskAi
+      state="closed"
+      x={0}
+      y={0}
+      onAsk={vi.fn()}
+      onAddToNote={vi.fn()}
+      onOpenMermaid={vi.fn()}
+      onDismiss={vi.fn()}
+    />,
+  );
+  const buttons = [...html.matchAll(/<button\b[^>]*>/g)];
+  expect(buttons).toHaveLength(3);
+  expect(buttons.every(([tag]) => tag.includes('disabled=""'))).toBe(true);
+});

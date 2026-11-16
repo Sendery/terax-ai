@@ -762,12 +762,17 @@ export default function App() {
     stopSpeaking();
   }, []);
 
-  const { askPopup, setAskPopup, onAskFromSelection, onAddToNoteFromSelection } =
-    useSelectionAskAi({
-      captureActiveSelection,
-      askFromSelection,
-      addSelectionToNote,
-    });
+  const {
+    askPopup,
+    setAskPopup,
+    onAskFromSelection,
+    onAddToNoteFromSelection,
+    runSelectionAction,
+  } = useSelectionAskAi({
+    captureActiveSelection,
+    askFromSelection,
+    addSelectionToNote,
+  });
   const openMermaidWithSource = useCallback(
     (selection: string) => {
       const source = validateMermaidSource(selection);
@@ -2538,7 +2543,9 @@ export default function App() {
               y={askPopup?.y ?? 0}
               onAsk={onAskFromSelection}
               onAddToNote={onAddToNoteFromSelection}
-              onOpenMermaid={onOpenMermaidFromSelection}
+              onOpenMermaid={() =>
+                runSelectionAction(onOpenMermaidFromSelection)
+              }
               onDismiss={() => setAskPopup(null)}
             />
           ) : null}

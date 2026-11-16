@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { createSelectionPopup } from "@/modules/ai/hooks/selectionPopup";
+import {
+  TERMINAL_SELECTION_GESTURE_EVENT,
+  type TerminalSelectionGesture,
+} from "@/modules/terminal/lib/selectionGesture";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Params = {
   captureActiveSelection: () => string | null;
@@ -6,11 +11,6 @@ type Params = {
   addSelectionToNote: () => void;
 };
 
-/**
- * Tracks text selections inside the terminal / editor and surfaces the selection
- * actions popup (Ask AI / Add to Note) at the pointer. Dismisses on any click
- * outside the AI surface.
- */
 export function useSelectionAskAi({
   captureActiveSelection,
   askFromSelection,
@@ -19,64 +19,68 @@ export function useSelectionAskAi({
   const [askPopup, setAskPopup] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const popup = useRef<ReturnType<typeof createSelectionPopup> | null>(null);
 
   useEffect(() => {
-    const isInsideAi = (t: EventTarget | null) => {
-      const el = t as HTMLElement | null;
-      if (!el) return false;
-      return !!(
-        el.closest("[data-selection-ask-ai]") ||
-        el.closest("[data-ai-input-bar]") ||
-        el.closest("[data-ai-mini-window]")
+    const controller = createSelectionPopup({
+      readSelection: captureActiveSelection,
+      show: setAskPopup,
+      defer: (run) => setTimeout(run, 0),
+    });
+    popup.current = controller;
+    const isInsideAi = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return !!element?.closest?.(
+        "[data-selection-ask-ai], [data-ai-input-bar], [data-ai-mini-window]",
       );
     };
-
-    const onDown = (e: MouseEvent) => {
-      if (isInsideAi(e.target)) return;
-      setAskPopup(null);
+    const onDown = (event: MouseEvent) => {
+      if (!isInsideAi(event.target)) controller.dismiss();
     };
-    const onUp = (e: MouseEvent) => {
-      if (isInsideAi(e.target)) return;
-      // Only a primary-button selection gesture raises the popup. A right-click
-      // opens the pane's context menu, which carries the same actions; without
-      // this the two used to appear stacked on top of each other.
-      if (e.button !== 0) return;
-      const el = e.target as HTMLElement | null;
-      const inContentArea = el?.closest?.(".xterm, .cm-editor");
-      if (!inContentArea) return;
-      // Defer one tick so xterm/CodeMirror finalize the selection.
-      setTimeout(() => {
-        const text = captureActiveSelection();
-        if (text && text.trim().length > 0) {
-          setAskPopup({ x: e.clientX, y: e.clientY });
-        } else {
-          setAskPopup(null);
-        }
-      }, 0);
+    const onUp = (event: MouseEvent) => {
+      if (event.button !== 0 || isInsideAi(event.target)) return;
+      const element = event.target as HTMLElement | null;
+      if (!element?.closest?.(".xterm, .cm-editor")) return;
+      controller.legacy({ x: event.clientX, y: event.clientY });
     };
-
-    document.addEventListener("mousedown", onDown);
+    const onNativeSelection = (event: Event) => {
+      controller.native(
+        (event as CustomEvent<TerminalSelectionGesture>).detail,
+      );
+    };
+    document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("mouseup", onUp);
+    document.addEventListener(
+      TERMINAL_SELECTION_GESTURE_EVENT,
+      onNativeSelection,
+    );
     return () => {
-      document.removeEventListener("mousedown", onDown);
+      controller.dispose();
+      if (popup.current === controller) popup.current = null;
+      document.removeEventListener("pointerdown", onDown, true);
       document.removeEventListener("mouseup", onUp);
+      document.removeEventListener(
+        TERMINAL_SELECTION_GESTURE_EVENT,
+        onNativeSelection,
+      );
     };
   }, [captureActiveSelection]);
 
+  const runSelectionAction = useCallback((action: () => void) => {
+    popup.current?.act(action);
+  }, []);
   const onAskFromSelection = useCallback(() => {
-    askFromSelection();
-    setAskPopup(null);
-  }, [askFromSelection]);
-
+    runSelectionAction(askFromSelection);
+  }, [askFromSelection, runSelectionAction]);
   const onAddToNoteFromSelection = useCallback(() => {
-    addSelectionToNote();
-    setAskPopup(null);
-  }, [addSelectionToNote]);
+    runSelectionAction(addSelectionToNote);
+  }, [addSelectionToNote, runSelectionAction]);
 
   return {
     askPopup,
     setAskPopup,
     onAskFromSelection,
     onAddToNoteFromSelection,
+    runSelectionAction,
   };
 }

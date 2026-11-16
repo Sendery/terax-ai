@@ -1,18 +1,45 @@
-import { TerminalProgress } from "@/modules/terminal/TerminalProgress";
+import { IS_MAC } from "@/lib/platform";
 import { registerNativeCaptureProvider } from "@/modules/capture/lib/captureLease";
-import { captureNativePane } from "@/modules/terminal/gl/nativeCaptureProvider";
-import { minimumTerminalContrast } from "@/modules/terminal/gl/minimumContrast";
-import {
-  RenderCapacityError,
-  RENDER_CAPACITY_MESSAGE,
-} from "@/modules/terminal/gl/renderCapacity";
-import { NativeBlockView } from "@/modules/terminal/gl/nativeBlockView";
+import { registerCanvasSnapshotProvider } from "@/modules/capture/lib/rasterize";
+import { usePreferencesStore } from "@/modules/settings/preferences";
 import { BlockOverlay } from "@/modules/terminal/block/BlockOverlay";
 import { BlockWatermark } from "@/modules/terminal/block/BlockWatermark";
+import type { EngineSession } from "@/modules/terminal/gl/engineSession";
+import { minimumTerminalContrast } from "@/modules/terminal/gl/minimumContrast";
+import { NativeBlockView } from "@/modules/terminal/gl/nativeBlockView";
+import { captureNativePane } from "@/modules/terminal/gl/nativeCaptureProvider";
+import {
+  bindNativeInput,
+  type NativeInputBinding,
+} from "@/modules/terminal/gl/nativeInputBinding";
+import {
+  getNativeLeaf,
+  registerNativeLeaf,
+} from "@/modules/terminal/gl/nativeLeafRegistry";
+import { NativeLeafSession } from "@/modules/terminal/gl/nativeLeafSession";
 import {
   bindNativeLinks,
   type NativeLinkBinding,
 } from "@/modules/terminal/gl/nativeLinkBinding";
+import { nativePaneLayout } from "@/modules/terminal/gl/nativeSurface";
+import { useNativeTerminalSurface } from "@/modules/terminal/gl/nativeSurfaceContext";
+import {
+  RENDER_CAPACITY_MESSAGE,
+  RenderCapacityError,
+} from "@/modules/terminal/gl/renderCapacity";
+import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import { TERMINAL_SELECTION_GESTURE_EVENT } from "@/modules/terminal/lib/selectionGesture";
+import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
+import {
+  markSessionReady,
+  resetSessionReady,
+} from "@/modules/terminal/lib/useTerminalSession";
+import { TerminalContextMenu } from "@/modules/terminal/TerminalContextMenu";
+import type {
+  TerminalPaneHandle,
+  TerminalPaneProps,
+} from "@/modules/terminal/TerminalPane";
+import { TerminalProgress } from "@/modules/terminal/TerminalProgress";
 import {
   forwardRef,
   useEffect,
@@ -21,32 +48,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { registerCanvasSnapshotProvider } from "@/modules/capture/lib/rasterize";
-import type { EngineSession } from "@/modules/terminal/gl/engineSession";
-import {
-  bindNativeInput,
-  type NativeInputBinding,
-} from "@/modules/terminal/gl/nativeInputBinding";
-import {
-  registerNativeLeaf,
-  getNativeLeaf,
-} from "@/modules/terminal/gl/nativeLeafRegistry";
-import { nativePaneLayout } from "@/modules/terminal/gl/nativeSurface";
-import {
-  markSessionReady,
-  resetSessionReady,
-} from "@/modules/terminal/lib/useTerminalSession";
-import { NativeLeafSession } from "@/modules/terminal/gl/nativeLeafSession";
-import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
-import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
-import { IS_MAC } from "@/lib/platform";
-import { usePreferencesStore } from "@/modules/settings/preferences";
-import { useNativeTerminalSurface } from "@/modules/terminal/gl/nativeSurfaceContext";
-import { TerminalContextMenu } from "@/modules/terminal/TerminalContextMenu";
-import type {
-  TerminalPaneHandle,
-  TerminalPaneProps,
-} from "@/modules/terminal/TerminalPane";
 
 const noSubscription = () => () => {};
 
@@ -304,6 +305,7 @@ export const NativeTerminalPane = forwardRef<
             });
             setBlocksView({ view: blockView, session, owner });
           }
+          const selectionPrivacy = latest.current.privateTerminal === true;
           binding = bindNativeInput(session, renderer, element, {
             font: current.font,
             foreground: current.colors.engine.foreground,
@@ -311,6 +313,24 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
+            onSelectionGesture: (gesture) => {
+              const current = () =>
+                !disposed &&
+                latest.current.visible &&
+                latest.current.leafId === leafId &&
+                (latest.current.privateTerminal === true) ===
+                  selectionPrivacy &&
+                controller.current === owner &&
+                engine.current === session &&
+                gesture.current();
+              if (!current()) return;
+              element.dispatchEvent(
+                new CustomEvent(TERMINAL_SELECTION_GESTURE_EVENT, {
+                  bubbles: true,
+                  detail: { ...gesture, current },
+                }),
+              );
+            },
             allowInput: () =>
               owner.exited || (owner.blockInput?.directInput ?? true),
             focusPrompt: () => {

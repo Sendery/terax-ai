@@ -21,7 +21,9 @@ function ActionRow({
   label,
   shortcutKey,
   onClick,
+  disabled,
 }: {
+  disabled: boolean;
   label: string;
   shortcutKey?: string;
   onClick: () => void;
@@ -29,6 +31,7 @@ function ActionRow({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
@@ -83,11 +86,25 @@ export function SelectionAskAi({
       className="fixed z-50 duration-150 ease-out data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-1"
     >
       <div className="flex flex-col overflow-hidden rounded-md border border-border/60 bg-card/95 shadow-lg backdrop-blur-md">
-        <ActionRow label="Ask Terax" shortcutKey="J" onClick={onAsk} />
+        <ActionRow
+          disabled={!open}
+          label="Ask Terax"
+          shortcutKey="J"
+          onClick={onAsk}
+        />
         <div className="h-px bg-border/60" />
-        <ActionRow label="Add to Note" shortcutKey="L" onClick={onAddToNote} />
+        <ActionRow
+          disabled={!open}
+          label="Add to Note"
+          shortcutKey="L"
+          onClick={onAddToNote}
+        />
         <div className="h-px bg-border/60" />
-        <ActionRow label="Open Mermaid" onClick={onOpenMermaid} />
+        <ActionRow
+          disabled={!open}
+          label="Open Mermaid"
+          onClick={onOpenMermaid}
+        />
       </div>
     </div>
   );

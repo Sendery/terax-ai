@@ -961,3 +961,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
   Retained panes stay focusable; PTY input, mouse and focus reports stop at exit.
 - **Verification:** exercise selection/copy/history after healthy exit and
   assert that no new PTY write or mouse report is attempted.
+
+### Native selection popups require completion and gesture ownership
+
+- **Trigger:** adapting a synchronous mouseup selection popup to a native terminal actor.
+- **Failure mode:** primary pointer cancellation suppresses compatibility mouse events, a zero-delay timer races the actual selection, or a late reply revives dismissed UI and acts on a different selection.
+- **Prevention:** propagate the real selection completion promise from pointer release, including block selection. Bind it to session, selection revision, visibility and privacy scope. Invalidate pending popup work on later pointer interaction and revalidate the original text before every action. A stale completion or rejection must not clear a newer popup.
+- **Verification:** defer release and block selection, dismiss or retire the owner before completion, deliver older success/failure after a newer popup, change selected text before an action, and retain the legacy/editor path plus healthy exited-pane selection.

@@ -1,21 +1,22 @@
 import { IS_MAC } from "@/lib/platform";
 import type {
   EngineSession,
-  NativeSelectionCommand,
   NativeMouseEvent,
+  NativeSelectionCommand,
 } from "@/modules/terminal/gl/engineSession";
 import type {
-  TerminalRenderer,
   RendererFont,
+  TerminalRenderer,
 } from "@/modules/terminal/gl/gridRenderer";
 import { wheelRows } from "@/modules/terminal/gl/keyInput";
 import { createNativeComposition } from "@/modules/terminal/gl/nativeComposition";
 import {
-  nativeKeyEvent,
   nativeClipboardAction,
+  nativeKeyEvent,
   nativeReadlineSequence,
 } from "@/modules/terminal/gl/nativeKeyboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import type { TerminalSelectionGesture } from "@/modules/terminal/lib/selectionGesture";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,
@@ -32,6 +33,7 @@ type Options = Appearance & {
   focusPrompt?: () => void;
   onError: (error: unknown) => void;
   onSelection?: (text: string | null) => void;
+  onSelectionGesture?: (gesture: TerminalSelectionGesture) => void;
   onBlockClick?: (seq: number, row: number) => Promise<void>;
 };
 export type NativeInputBinding = {
@@ -587,58 +589,82 @@ export function bindNativeInput(
     const released = select({ kind: "release" });
     const generation = selectionGeneration;
     const revision = session.selectionRevision;
-    watch(
-      released.then(async (text) => {
-        const current = () =>
-          !disposed &&
-          options.isActive() &&
-          document.hasFocus() &&
-          document.activeElement === textarea &&
-          session.exitCode == null &&
-          generation === selectionGeneration &&
-          session.selectionRevision === revision &&
-          session.id === alt?.id &&
-          session.grid.cols === alt?.cols &&
-          session.grid.rows === alt?.rows &&
-          session.cursor?.x === alt?.cursorX &&
-          session.cursor?.y === alt?.cursorY &&
-          renderer.cellSize.width === alt?.width &&
-          renderer.cellSize.height === alt?.height &&
-          canInput();
-        if (
-          alt &&
-          event.altKey &&
-          event.type !== "pointercancel" &&
-          duration < 500 &&
-          (text?.length ?? 0) <= 1 &&
-          Math.hypot(event.clientX - alt.x, event.clientY - alt.y) <= 4 &&
-          current()
-        ) {
-          const { col, row } = point(event.clientX, event.clientY);
-          await session.moveCursor(
-            {
-              col,
-              row,
-              cols: alt.cols,
-              rows: alt.rows,
-              cursorX: alt.cursorX,
-              cursorY: alt.cursorY,
-            },
-            current,
-          );
-          return;
-        }
-        if (
-          !disposed &&
-          click &&
-          generation === selectionGeneration &&
-          session.selectionRevision === revision &&
-          event.type !== "pointercancel" &&
-          Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 4
-        )
-          await options.onBlockClick?.(click.seq, click.row);
-      }),
-    );
+    const ownerId = session.id;
+    let gestureRevision = revision;
+    const completed = released.then(async (text) => {
+      const current = () =>
+        !disposed &&
+        options.isActive() &&
+        document.hasFocus() &&
+        document.activeElement === textarea &&
+        session.exitCode == null &&
+        generation === selectionGeneration &&
+        session.selectionRevision === revision &&
+        session.id === alt?.id &&
+        session.grid.cols === alt?.cols &&
+        session.grid.rows === alt?.rows &&
+        session.cursor?.x === alt?.cursorX &&
+        session.cursor?.y === alt?.cursorY &&
+        renderer.cellSize.width === alt?.width &&
+        renderer.cellSize.height === alt?.height &&
+        canInput();
+      if (
+        alt &&
+        event.altKey &&
+        event.type !== "pointercancel" &&
+        duration < 500 &&
+        (text?.length ?? 0) <= 1 &&
+        Math.hypot(event.clientX - alt.x, event.clientY - alt.y) <= 4 &&
+        current()
+      ) {
+        const { col, row } = point(event.clientX, event.clientY);
+        await session.moveCursor(
+          {
+            col,
+            row,
+            cols: alt.cols,
+            rows: alt.rows,
+            cursorX: alt.cursorX,
+            cursorY: alt.cursorY,
+          },
+          current,
+        );
+        return null;
+      }
+      if (
+        !disposed &&
+        click &&
+        generation === selectionGeneration &&
+        session.selectionRevision === revision &&
+        event.type !== "pointercancel" &&
+        Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 4
+      ) {
+        await options.onBlockClick?.(click.seq, click.row);
+        gestureRevision = session.selectionRevision;
+        return session.getSelection();
+      }
+      return text;
+    });
+    watch(completed);
+    if (event.type === "pointerup" && !alt) {
+      try {
+        options.onSelectionGesture?.({
+          x: event.clientX,
+          y: event.clientY,
+          selection: completed,
+          current: () =>
+            !disposed &&
+            options.isActive() &&
+            document.hasFocus() &&
+            session.id === ownerId &&
+            session.historyAvailable &&
+            generation === selectionGeneration &&
+            session.selectionRevision === gestureRevision,
+        });
+      } catch (error) {
+        report(error);
+      }
+    }
     try {
       host.releasePointerCapture(event.pointerId);
     } catch {
@@ -646,6 +672,7 @@ export function bindNativeInput(
     }
   };
   const onWheel = (event: WheelEvent) => {
+    selectionGeneration++;
     event.preventDefault();
     const delta = wheelRows(
       wheelCarry,
