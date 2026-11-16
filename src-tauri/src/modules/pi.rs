@@ -563,10 +563,16 @@ mod tests {
 
     #[test]
     fn allows_graphx_control_commands() {
-        for command in ["graphx.open", "graphx.read", "graphx.update", "graphx.place"] {
+        for command in [
+            "graphx.open",
+            "graphx.read",
+            "graphx.update",
+            "graphx.place",
+        ] {
             let line = serde_json::json!({"version": 1, "id": "graph", "token": "tok", "command": command, "payload": {}});
             let encoded = serde_json::to_vec(&line).unwrap();
-            let request = decode_request_line(&encoded, "tok").expect("GraphX command must be allowed");
+            let request =
+                decode_request_line(&encoded, "tok").expect("GraphX command must be allowed");
             assert_eq!(request.command, command);
         }
     }
