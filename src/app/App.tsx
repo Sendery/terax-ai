@@ -68,6 +68,7 @@ import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
 import {
+  shouldYieldTerminalShortcut,
   useGlobalShortcuts,
   type ShortcutHandlers,
   type ShortcutId,
@@ -1265,15 +1266,12 @@ export default function App() {
       if (id === "editor.undo" || id === "editor.redo") {
         return activeTab?.kind !== "editor";
       }
-      if (id === "ai.askSelection") {
-        const target =
-          (e.target as HTMLElement | null) ?? document.activeElement;
-        const inTerminal = !!(target as HTMLElement | null)?.closest?.(
-          ".xterm",
-        );
-        if (!inTerminal) return false;
-        const sel = captureActiveSelection();
-        return !sel || !sel.trim();
+      if (id === "ai.askSelection" || id === "sidebar.toggle") {
+        return shouldYieldTerminalShortcut(id, {
+          target: e.target ?? document.activeElement,
+          shiftKey: e.shiftKey,
+          getSelection: captureActiveSelection,
+        });
       }
       if (id === "notes.addSelection" || id === "tts.readSelection") {
         // Only claim the binding when there is a selection to act on;
@@ -1305,14 +1303,6 @@ export default function App() {
         id === "blocks.next"
       ) {
         return !(activeTab?.kind === "terminal" && activeTab.blocks === true);
-      }
-      if (id === "sidebar.toggle") {
-        const target =
-          (e.target as HTMLElement | null) ?? document.activeElement;
-        const inTerminal = !!(target as HTMLElement | null)?.closest?.(
-          ".xterm",
-        );
-        return inTerminal && !e.shiftKey;
       }
       return false;
     },

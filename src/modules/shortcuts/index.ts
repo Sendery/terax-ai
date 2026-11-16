@@ -12,3 +12,4 @@ export {
   type ShortcutHandlers,
 } from "./lib/useGlobalShortcuts";
 export { useShortcutLabel } from "./lib/useShortcutLabel";
+export { shouldYieldTerminalShortcut } from "./lib/terminalShortcutContext";

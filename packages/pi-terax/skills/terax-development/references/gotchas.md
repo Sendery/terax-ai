@@ -933,6 +933,13 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 ## Terminal presentation and native input
 
+### Global shortcut ownership must recognize both terminal input hosts
+
+- **Trigger:** deciding whether an app shortcut should yield to focused terminal input.
+- **Failure mode:** checking only the legacy xterm class lets global capture handlers steal native terminal keys before the encoder receives them. Checking the whole native leaf also claims its sibling block draft and action controls.
+- **Prevention:** use the shared shortcut context policy for legacy xterm and the native grid host. Preserve selection-dependent actions and explicit Shift overrides without broadening terminal focus to overlays.
+- **Verification:** native and legacy cases preserve plain Mod+B and selection-free Mod+J, selected output still opens the selection action, Mod+Shift+B still toggles the explorer, and block drafts/nonterminal targets keep app shortcuts. Exercise actual native Terminal input through the real app.
+
 ### Fractional image slices need nonzero scratch surfaces
 
 - **Trigger:** a native image is distributed across terminal placeholder rows.
