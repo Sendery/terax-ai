@@ -1,3 +1,8 @@
+import {
+  prepareFrameCapture,
+  visibleCaptureFrames,
+  type FrameCaptureLease,
+} from "@/modules/capture/lib/frameCapture";
 import { invoke } from "@tauri-apps/api/core";
 import { rasterizeElement, validateCaptureDimensions } from "./rasterize";
 import {
@@ -108,6 +113,12 @@ export async function captureSurface(
     throw new Error(
       `Capture target ${JSON.stringify(request.target)} is not visible`,
     );
+  if (
+    element.hasAttribute("data-graphx-panel") &&
+    window.getComputedStyle(element).visibility !== "visible"
+  )
+    throw new Error("Open this graph before capturing it.");
+  const frameRoots = visibleCaptureFrames(element);
   const nativeRoots = Array.from(
     element.querySelectorAll<HTMLElement>('[data-terminal-engine="ghostty"]'),
   );
@@ -129,6 +140,10 @@ export async function captureSurface(
       element.isConnected &&
       !captureBlockReason(context.tabs, context.activeTabId, request) &&
       resolveCaptureElement(request, context.activeTabId) === element &&
+      visibleCaptureFrames(element).length === frameRoots.length &&
+      visibleCaptureFrames(element).every(
+        (frame, index) => frame === frameRoots[index],
+      ) &&
       roots.length === nativeRoots.length &&
       roots.every((root, index) => root === nativeRoots[index]) &&
       (frozenGeometry === null || geometry(element) === frozenGeometry) &&
@@ -140,6 +155,7 @@ export async function captureSurface(
     current: baseCurrent,
   };
   const leases: NativeCaptureLease[] = [];
+  const frameLeases: FrameCaptureLease[] = [];
   const pending: Promise<unknown>[] = [];
   try {
     assertCaptureCurrent(scope);
@@ -177,12 +193,25 @@ export async function captureSurface(
       pending.push(...preparations);
       await duringCapture(Promise.all(preparations), scope);
     }
+    const framePreparations = frameRoots.map(async (frame) => {
+      const lease = await prepareFrameCapture(frame, scope);
+      frameLeases.push(lease);
+    });
+    pending.push(...framePreparations);
+    await duringCapture(Promise.all(framePreparations), scope);
     const complete: CaptureScope = {
       signal: controller.signal,
-      current: () => baseCurrent() && leases.every((lease) => lease.current()),
+      current: () =>
+        baseCurrent() &&
+        leases.every((lease) => lease.current()) &&
+        frameLeases.every((lease) => lease.current()),
     };
     assertCaptureCurrent(complete);
-    const raster = rasterizeElement(element, { leases, scope: complete });
+    const raster = rasterizeElement(element, {
+      leases,
+      frameLeases,
+      scope: complete,
+    });
     pending.push(raster);
     const image = await duringCapture(raster, complete);
     const bytes = new Uint8Array(
@@ -207,7 +236,7 @@ export async function captureSurface(
     clearTimeout(deadline);
     controller.abort(new Error("Capture scope closed."));
     await Promise.allSettled(pending);
-    for (const lease of leases) {
+    for (const lease of [...leases, ...frameLeases]) {
       try {
         lease.dispose();
       } catch (error) {

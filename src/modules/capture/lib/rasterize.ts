@@ -1,3 +1,4 @@
+import type { FrameCaptureLease } from "@/modules/capture/lib/frameCapture";
 import {
   assertCaptureCurrent,
   duringCapture,
@@ -129,6 +130,7 @@ async function drawOverlay(
       if (image) image.src = "";
     }
   }
+  if (!overlay.canvas) throw new Error("Capture image is unavailable.");
   try {
     context.drawImage(
       overlay.canvas,
@@ -143,7 +145,8 @@ async function drawOverlay(
 }
 
 export type CanvasOverlay = {
-  canvas: HTMLCanvasElement;
+  canvas?: HTMLCanvasElement;
+  element?: HTMLIFrameElement;
   snapshot?: string | null;
   required?: boolean;
   x: number;
@@ -227,6 +230,7 @@ type ForegroundElement = {
 };
 type ForegroundImage = Omit<ForegroundElement, "element"> & {
   image: CanvasImageSource;
+  overlays?: CanvasOverlay[];
 };
 const FOREGROUND_SELECTOR = [
   "[data-terax-capture-foreground]",
@@ -368,6 +372,8 @@ export async function compositeCaptureLayers(
           foreground.width,
           foreground.height,
         );
+        for (const overlay of foreground.overlays ?? [])
+          await drawOverlay(context, overlay, scope);
       } finally {
         context.restore();
       }
@@ -552,13 +558,18 @@ export async function rasterizeElement(
   element: HTMLElement,
   options: {
     leases?: readonly NativeCaptureLease[];
+    frameLeases?: readonly FrameCaptureLease[];
     scope?: CaptureScope;
   } = {},
 ): Promise<CaptureImage> {
   const leases = options.leases ?? [];
+  const frameLeases = options.frameLeases ?? [];
   const check = () => {
     if (options.scope) assertCaptureCurrent(options.scope);
     assertNativeLeases(element, leases);
+    for (const lease of frameLeases)
+      if (!element.contains(lease.root) || !lease.current())
+        throw new Error("Graph capture is no longer available.");
   };
   const wait = async <T>(work: Promise<T>): Promise<T> => {
     const value = options.scope
@@ -573,8 +584,26 @@ export async function rasterizeElement(
     height = Math.ceil(rect.height);
   const dimensionError = validateCaptureDimensions(width, height);
   if (dimensionError) throw new Error(dimensionError);
-  const excluded = new Set(leases.flatMap((lease) => [...lease.excluded]));
-  const overlays = collectCanvasOverlays(element, rect, leases);
+  const excluded = new Set<Element>([
+    ...leases.flatMap((lease) => [...lease.excluded]),
+    ...frameLeases.map((lease) => lease.root),
+  ]);
+  const frameOverlays: CanvasOverlay[] = frameLeases.map((lease) => {
+    const bounds = lease.root.getBoundingClientRect();
+    return {
+      element: lease.root,
+      snapshot: lease.snapshot,
+      required: true,
+      x: bounds.left - rect.left,
+      y: bounds.top - rect.top,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  });
+  const overlays = [
+    ...collectCanvasOverlays(element, rect, leases),
+    ...frameOverlays,
+  ];
   const clone = freezeElement(element, width, height, undefined, excluded);
   const foregrounds = collectForegroundElements(
     element,
@@ -588,6 +617,10 @@ export async function rasterizeElement(
       item.width,
       item.height,
       item.forceVisible,
+      excluded,
+    ),
+    overlays: frameOverlays.filter(
+      (overlay) => overlay.element && item.element.contains(overlay.element),
     ),
   }));
   let image: HTMLImageElement | null = null;
@@ -617,6 +650,7 @@ export async function rasterizeElement(
           }
           foregroundImages[index] = {
             image: foreground,
+            overlays: item.overlays,
             clip: item.clip,
             x: item.x,
             y: item.y,

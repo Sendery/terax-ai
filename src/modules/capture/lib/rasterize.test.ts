@@ -414,3 +414,50 @@ it("cancels native snapshot image loading without drawing late pixels", async ()
   await rejected;
   expect(context.drawImage).toHaveBeenCalledOnce();
 });
+
+it("restores the floating graph toolbar and opaque frame above terminal pixels, then a menu above both", async () => {
+  const calls: string[] = [];
+  const source = (id: string) => ({ id }) as unknown as CanvasImageSource;
+  vi.stubGlobal(
+    "Image",
+    class {
+      id = "graph";
+      onload: (() => void) | null = null;
+      onerror = null;
+      set src(value: string) {
+        if (value) queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  const context = {
+    drawImage: (image: { id: string }) => calls.push(image.id),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+  } as unknown as CanvasRenderingContext2D;
+  const bounds = { x: 10, y: 20, width: 500, height: 350 };
+  const graph = {
+    snapshot: "data:image/png;base64,graph",
+    required: true,
+    ...bounds,
+  };
+  await compositeCaptureLayers(
+    context,
+    source("base"),
+    [{ canvas: source("terminal") as HTMLCanvasElement, ...bounds }, graph],
+    [
+      { image: source("panel-toolbar"), ...bounds, overlays: [graph] },
+      { image: source("menu"), ...bounds },
+    ],
+  );
+  expect(calls).toEqual([
+    "base",
+    "terminal",
+    "graph",
+    "panel-toolbar",
+    "graph",
+    "menu",
+  ]);
+});

@@ -101,7 +101,12 @@ Pi allowlists and generated MCP surface. A dock reserves terminal workspace widt
 graphs mount no engine. Each visible document revision runs the pinned offline GraphX/ELK
 bundle in an opaque sandbox iframe with a restrictive CSP; graph JSON cannot supply HTML,
 scripts or external links. A fresh frame retires engine timers on updates/theme changes.
-Source, graphId, documentId, revision and panel geometry persist through spaces. No new
+Source, graphId, documentId, revision and panel geometry persist through spaces.
+Visible frames register bounded PNG capture leases with the shared capture scope.
+Their fixed private snapshot protocol binds frame token, incarnation, revision and
+request id; the compositor restores graph panels above native pixels. Retired,
+hidden or unavailable graphs refuse capture rather than returning blank pixels.
+The parent announces actual SVG geometry after layout. No new
 native process or arbitrary shell-input/evaluation endpoint is introduced.
 
 ### Module layout (`src/modules/`)

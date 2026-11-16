@@ -22,7 +22,9 @@ function fixture(id = 2, active = 1) {
   const element = {
     isConnected: true,
     querySelector: () => native,
-    querySelectorAll: () => [native],
+    querySelectorAll: (selector: string) =>
+      selector.startsWith("iframe") ? [] : [native],
+    hasAttribute: () => false,
     getBoundingClientRect: () => bounds,
   } as unknown as HTMLElement;
   vi.stubGlobal("document", {
@@ -215,3 +217,36 @@ it("checks live privacy again after PNG byte conversion immediately before persi
   expect(ipc.invoke).not.toHaveBeenCalled();
   expect(f.lease.dispose).toHaveBeenCalledOnce();
 });
+
+it.each(["privacy", "frame-retired"] as const)(
+  "refuses persistence when a visible graph loses %s after rasterization",
+  async (kind) => {
+    const f = fixture(1, 1);
+    const frame = {
+      isConnected: true,
+      getBoundingClientRect: () => f.bounds,
+    } as unknown as HTMLIFrameElement;
+    Object.assign(f.element, {
+      querySelectorAll: (selector: string) =>
+        selector.startsWith("iframe") ? [frame] : [],
+    });
+    const { registerFrameCaptureProvider } = await import(
+      "@/modules/capture/lib/frameCapture"
+    );
+    const stop = registerFrameCaptureProvider(
+      frame,
+      async () => "data:image/png;base64,aGVsbG8=",
+    );
+    cleanup.push(stop);
+    ipc.rasterize.mockImplementation(async () => {
+      if (kind === "privacy") f.private();
+      else stop();
+      return f.image;
+    });
+    await expect(
+      captureSurface({ target: "window" }, f.context),
+    ).rejects.toThrow();
+    expect(ipc.rasterize.mock.calls[0][1].frameLeases).toHaveLength(1);
+    expect(ipc.invoke).not.toHaveBeenCalled();
+  },
+);

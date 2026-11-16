@@ -9,7 +9,7 @@ ARTIFACTS.mkdir(parents=True,exist_ok=True)
 spec={"title":"Real GraphX test","lang":"en","nodes":[{"id":"group","label":"System"},{"id":"a","label":"Browser","parent":"group","shape":"decision"},{"id":"b","label":"Store","shape":"datastore"}],"edges":[{"id":"edge","from":"a","to":"b","label":"Save"}],"flows":[{"id":"flow","title":"Request","participants":["a","b"],"messages":[{"id":"message","from":"a","to":"b","label":"Write","kind":"sync"}]}]}
 html="""<!doctype html><html><body><pre id="results">WAITING</pre><iframe id="f" sandbox="allow-scripts" style="width:800px;height:600px" src="/graphx/index.html#fixture"></iframe><script>
 const f=document.getElementById("f");const results=[];let sent=false;let revision=1;
-function send(revision){f.contentWindow.postMessage({type:"terax:graphx:render",token:"fixture",revision,theme:"light",spec:SPEC},"*");}
+function send(revision){f.contentWindow.postMessage({type:"terax:graphx:render",token:"fixture",documentId:"http-document",revision,theme:"light",spec:SPEC},"*");}
 addEventListener("message",e=>{
  if(e.source!==f.contentWindow||e.data.token!=="fixture")return;
  results.push(e.data);

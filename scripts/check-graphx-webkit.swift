@@ -11,6 +11,7 @@ let assets = root.appendingPathComponent("public/graphx")
 let token = UUID().uuidString
 let nextToken = UUID().uuidString
 let baseline = CommandLine.arguments.contains("--baseline")
+let composite = CommandLine.arguments.contains("--composite")
 let allowedScripts = "tauri://localhost/graphx/engine.js tauri://localhost/graphx/frame.js"
 let rawConfig = try! Data(contentsOf:root.appendingPathComponent("src-tauri/tauri.conf.json"))
 let settings = try! JSONSerialization.jsonObject(with:rawConfig) as! [String:Any]
@@ -20,26 +21,42 @@ let originalCSP = securitySettings["csp"] as! String
 let responseCSP = baseline ? originalCSP.replacingOccurrences(of:" " + allowedScripts,with:"") : originalCSP
 let fixture = """
 <!doctype html><html><head><meta charset="utf-8"></head><body><div id="results"></div>
-<iframe id="frame" sandbox="allow-scripts" style="width:800px;height:600px" src="tauri://localhost/graphx/index.html#\(token)"></iframe>
+\(composite ? "<canvas id=\"native\" width=\"1000\" height=\"800\" style=\"position:absolute;left:0;top:0;width:1000px;height:800px\"></canvas><section id=\"panel\" data-terax-capture-foreground style=\"position:absolute;left:40px;top:40px;background:white;overflow:hidden\"><div style=\"height:32px;background:rgb(255,165,0)\">Graph panel toolbar</div>" : "")
+<iframe id="frame" sandbox="allow-scripts" style="width:800px;height:600px;border:0;display:block" src="tauri://localhost/graphx/index.html#\(token)"></iframe>
+\(composite ? "<script src=\"tauri://localhost/rasterize-fixture.js\"></script>" : "")
+\(composite ? "</section><div role=\"menu\" style=\"position:absolute;left:60px;top:90px;width:90px;height:30px;background:rgb(0,0,255)\"></div>" : "")
 <script src="tauri://localhost/fixture.js"></script></body></html>
 """
 let fixtureJS = """
 let frame=document.getElementById('frame');
+const native=document.getElementById('native');if(native){const ctx=native.getContext('2d');ctx.fillStyle='rgb(255,0,0)';ctx.fillRect(0,0,1000,800);}
 let token='\(token)',revision=1,retired=null;
 const nextToken='\(nextToken)',received=new Set(),checks=[];
 let sourceRefusals=0,tokenRefusals=0,wrongRevision=false,finished=false;
 const spec={title:'WK GraphX',lang:'en',nodes:[{id:'a',label:'Interface',shape:'decision'},{id:'b',label:'Store',shape:'datastore'}],edges:[{id:'e',from:'a',to:'b',label:'Write'}]};
 function result(passed,reason){if(finished)return;finished=true;window.webkit.messageHandlers.diagnostic.postMessage({kind:'result',passed,reason,checks,sourceRefusals,tokenRefusals,wrongRevision});}
-window.addEventListener('message',e=>{
+window.addEventListener('message',async e=>{
  if(e.source!==frame.contentWindow){sourceRefusals++;return;}
  if(e.data?.token!==token){tokenRefusals++;return;}
  if(e.data.type==='terax:graphx:ready'&&!received.has(revision)){
   received.add(revision);
   frame.contentWindow.postMessage({type:'terax:graphx:render',token:'retired-'+token,revision:999,theme:'light',spec:{...spec,title:'STALE'}},'*');
-  frame.contentWindow.postMessage({type:'terax:graphx:render',token,revision,theme:'light',spec},'*');
+  frame.contentWindow.postMessage({type:'terax:graphx:render',token,documentId:'wk-document-'+revision,revision,theme:'light',spec},'*');
  }
  if(e.data.type==='terax:graphx:rendered'){
   if(e.data.revision!==revision){wrongRevision=true;result(false,'wrong revision acknowledged');return;}
+  for(const stale of [{token:'retired-token'},{documentId:'retired-document'},{revision:revision-1}])
+   frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'retired-request',...stale},'*');
+  frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'capture-'+revision},'*');
+ }
+ if(e.data.type==='terax:graphx:capture-error'){result(false,'frame snapshot failed');}
+ if(e.data.type==='terax:graphx:captured'){
+  if(e.data.requestId!=='capture-'+revision||e.data.documentId!=='wk-document-'+revision||e.data.revision!==revision){result(false,'stale snapshot accepted');return;}
+  window.webkit.messageHandlers.diagnostic.postMessage({kind:'snapshot',revision,width:e.data.width,height:e.data.height,bytes:e.data.png?.length,receipt:e.data.receipt,png:e.data.png});
+  if(!e.data.png?.startsWith('data:image/png;base64,')||e.data.png.length<1000||e.data.receipt?.nodes!==2){result(false,'invalid PNG');return;}
+  if(\(composite ? "true" : "false")){
+   try { await checkComposite(e.data.png); } catch(error) {result(false,'compositor: '+String(error));return;}
+  }
   frame.contentWindow.postMessage({type:'test:inspect',token,revision},'*');
  }
  if(e.data.type==='test:checked'){
@@ -47,10 +64,10 @@ window.addEventListener('message',e=>{
   if(revision===1){
    retired=frame;
    frame=document.createElement('iframe');
-   frame.sandbox='allow-scripts';frame.style='width:500px;height:350px';
+   frame.sandbox='allow-scripts';frame.style='width:500px;height:350px;border:0;display:block';
    token=nextToken;revision=2;
    frame.src='tauri://localhost/graphx/index.html#'+token;
-   document.body.appendChild(frame);
+   (document.getElementById('panel')||document.body).appendChild(frame);
    retired.contentWindow.postMessage({type:'test:late',token},'*');
   }else{
    setTimeout(()=>{
@@ -62,6 +79,25 @@ window.addEventListener('message',e=>{
   }
  }
 });
+async function checkComposite(png){
+ document.body.style='margin:0;width:1000px;height:800px;overflow:hidden';
+ const panel=document.getElementById('panel');
+ if(!panel||frame.parentElement!==panel)throw Error('fixture frame owner changed');
+ if(retired)retired.style.display='none';
+ const lease={root:frame,snapshot:png,current:()=>true,dispose(){}};
+ for(const [target,element] of [['window',document.body],['pane',panel]]){
+  const capture=await TeraxCapture.rasterizeElement(element,{frameLeases:[lease]});
+  const encoded=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(capture.blob);});
+  const image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=encoded;});
+  const sample=document.createElement('canvas');sample.width=capture.width;sample.height=capture.height;
+  const context=sample.getContext('2d');context.drawImage(image,0,0);
+  const scale=capture.width/element.getBoundingClientRect().width;
+  const pixel=(x,y)=>Array.from(context.getImageData(Math.floor(x*scale),Math.floor(y*scale),1,1).data).slice(0,3).join(',');
+  window.webkit.messageHandlers.diagnostic.postMessage({kind:'snapshot',target,revision,png:encoded,width:capture.width,height:capture.height});
+  if(target==='window'&&(pixel(10,10)!=='255,0,0'||pixel(450,60)!=='255,165,0'||pixel(75,110)!=='0,0,255'||pixel(55,180)==='255,0,0'))throw Error('wrong native/panel/frame/menu order '+[pixel(10,10),pixel(450,60),pixel(75,110),pixel(55,180)].join(';'));
+  if(target==='pane'&&(pixel(400,20)!=='255,165,0'||pixel(15,140)==='255,0,0'))throw Error('blank graph pane');
+ }
+}
 frame.addEventListener('load',()=>frame.contentWindow.postMessage({type:'terax:graphx:hello',token},'*'));
 """
 let diagnostics = """
@@ -105,6 +141,7 @@ final class Handler: NSObject, WKURLSchemeHandler, WKScriptMessageHandler, WKNav
   let mime: String
   do {
    if url.path=="/" {data=fixture.data(using:.utf8)!;mime="text/html"}
+   else if url.path=="/rasterize-fixture.js" {data=try Data(contentsOf:root.appendingPathComponent(".terax/pi-development/graphx-capture/rasterize-fixture.js"));mime="text/javascript"}
    else if url.path=="/fixture.js" {data=fixtureJS.data(using:.utf8)!;mime="text/javascript"}
    else if url.path.hasPrefix("/graphx/") {
     let name=String(url.path.dropFirst("/graphx/".count))
@@ -123,7 +160,14 @@ final class Handler: NSObject, WKURLSchemeHandler, WKScriptMessageHandler, WKNav
  }
  func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-  report(message.body)
+  if let body=message.body as? [String:Any], body["kind"] as? String=="snapshot", let png=body["png"] as? String, let data=Data(base64Encoded:String(png.dropFirst("data:image/png;base64,".count))) {
+   let directory=root.appendingPathComponent(".terax/pi-development/graphx-webkit-runtime")
+   try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+   let revision=body["revision"] as? Int ?? 0
+   let target=body["target"] as? String ?? "frame"
+   try? data.write(to:directory.appendingPathComponent("snapshot-\(target)-\(revision).png"))
+   var summary=body;summary.removeValue(forKey:"png");report(summary)
+  } else { report(message.body) }
   guard message.frameInfo.isMainFrame, let body=message.body as? [String:Any], body["kind"] as? String=="result" else {return}
   let passed=body["passed"] as? Bool==true
   DispatchQueue.main.async { exit(passed ? 0 : 1) }

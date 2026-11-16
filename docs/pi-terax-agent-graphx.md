@@ -135,8 +135,8 @@ external links/images/files, code execution, and direct Mermaid import. The exis
 Mermaid tab remains available. Only validated data enters a sandboxed opaque-origin frame.
 Its own CSP blocks network connections, inline scripts, forms and objects; it has no
 same-origin, popup or top-navigation allowance. Parent/child messages are bound to the
-actual frame and a fresh session token. Messages only acknowledge render state; they cannot
-invoke app commands, access files or write terminal input.
+actual frame and a fresh session token. Replies report bounded render geometry or PNG pixels for an owned capture request;
+they cannot invoke app commands, access files or write terminal input.
 
 Packaged macOS WebKit does not match CSP `self` for scripts inside this opaque
 sandbox under `tauri://localhost`. Both the app CSP response header and the frame
@@ -189,3 +189,39 @@ exact CSP sources from both policies and must fail with script CSP violations.
 This isolated WebKit check passed on M2 on 2026-11-16; the baseline reproduced
 the packaged blank-frame failure. It does not replace visible packaged-app
 acceptance, which remains part of the coordinated integration pass.
+
+
+## Capturing a visible graph
+
+Use the existing `app.capture` command for the window or the visible graph pane.
+The capture adapter snapshots the actual GraphX DOM/SVG, including its current
+graph/flow view and controls. It composites the opaque frame PNG and the parent
+panel toolbar above native terminal pixels, preserving foreground menus. It does
+not switch tabs, focus controls, resize a terminal or start a subprocess.
+
+A capture request is bound to the actual frame, fresh frame token, document
+incarnation, revision and one-use request id. Snapshot preparation shares the
+existing capture deadline and privacy guard through persistence. Unmount, hiding,
+source replacement, resize or cancellation invalidates its lease; late responses
+cannot revive it. The trusted adapter has one bounded snapshot operation, with no
+evaluation endpoint. PNG payloads are limited to 12 MiB of base64 text; dimensions
+use the existing capture limits (7680 by 4320 maximum, 16,777,216 total pixels).
+DOM/style/markup limits also bound serialization work. A graph that is still
+loading, hidden, unavailable or over these limits produces an explicit capture
+error, never a successful blank substitute. Open a hidden graph before capturing
+its pane. Existing private-terminal capture refusals still apply.
+
+The parent status announces a render receipt containing the saved revision and
+actual SVG node/path counts and dimensions. Individual node labels need not
+appear as separate accessibility objects: the GraphX SVG has an image role.
+The receipt confirms geometry, while PNG inspection confirms visible content.
+
+On macOS, run `node scripts/check-graphx-capture.mjs` from the repository root
+with existing project dependencies and Swift SDK. It bundles only the rasterizer
+test fixture, then runs an owned, unshown system WKWebView. The fixture checks
+real GraphX PNGs and the actual compositor for both window and pane captures,
+with synthetic native canvas pixels, parent toolbar and overlapping menu.
+It saves PNG evidence under ignored
+`.terax/pi-development/graphx-webkit-runtime/`. No Terax process is started or
+controlled. The frame and composition checks passed on M2; visible packaged-app
+capture acceptance remains with the coordinated integration pass.

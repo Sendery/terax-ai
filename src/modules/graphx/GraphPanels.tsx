@@ -1,3 +1,8 @@
+import { registerFrameCaptureProvider } from "@/modules/capture/lib/frameCapture";
+import {
+  graphRenderReceipt,
+  requestGraphCapture,
+} from "@/modules/graphx/lib/frameCapture";
 import {
   type GraphPlacement,
   parseGraphSource,
@@ -37,6 +42,7 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
   const token = useRef(crypto.randomUUID()).current;
   const [ready, setReady] = useState(false);
   const [state, setState] = useState("Loading GraphX...");
+  const [receipt, setReceipt] = useState("");
   useEffect(() => {
     const timeout = window.setTimeout(
       () =>
@@ -52,10 +58,19 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
       )
         return;
       if (event.data.type === "terax:graphx:ready") setReady(true);
-      if (event.data.revision !== tab.revision) return;
+      if (
+        event.data.revision !== tab.revision ||
+        event.data.documentId !== tab.documentId
+      )
+        return;
       if (event.data.type === "terax:graphx:rendered") {
+        const geometry = graphRenderReceipt(event.data.receipt);
+        if (!geometry) return;
         window.clearTimeout(timeout);
         setState("");
+        setReceipt(
+          `GraphX rendered revision ${tab.revision}: ${geometry.nodes} nodes, ${geometry.paths} paths, ${geometry.width} by ${geometry.height} pixels.`,
+        );
       }
       if (event.data.type === "terax:graphx:error") {
         window.clearTimeout(timeout);
@@ -71,7 +86,18 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
       window.clearTimeout(timeout);
       window.removeEventListener("message", receive);
     };
-  }, [token, tab.revision]);
+  }, [token, tab.revision, tab.documentId]);
+  useEffect(() => {
+    const current = frame.current;
+    if (!current) return;
+    return registerFrameCaptureProvider(current, (scope) =>
+      requestGraphCapture(
+        current,
+        { token, documentId: tab.documentId, revision: tab.revision },
+        scope,
+      ),
+    );
+  }, [token, tab.documentId, tab.revision]);
   useEffect(() => {
     if (!ready) return;
     setState("Laying out graph...");
@@ -81,15 +107,17 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
         token,
         spec: parseGraphSource(tab.source),
         revision: tab.revision,
+        documentId: tab.documentId,
         theme,
       },
       "*",
     );
-  }, [ready, tab.source, tab.revision, token, theme]);
+  }, [ready, tab.source, tab.revision, tab.documentId, token, theme]);
   return (
     <div className="relative min-h-0 flex-1">
       <iframe
         ref={frame}
+        data-terax-capture-frame=""
         title={`${tab.title} interactive graph`}
         sandbox="allow-scripts"
         onLoad={() =>
@@ -102,6 +130,9 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
         src={`/graphx/index.html#${token}`}
         className="h-full w-full border-0"
       />
+      <span role="status" className="sr-only">
+        {receipt}
+      </span>
       {state && (
         <div
           role="status"
@@ -231,6 +262,8 @@ function GraphPanel({
       ref={container}
       aria-label={`${tab.title} GraphX panel`}
       data-capture-target="pane"
+      data-graphx-panel=""
+      data-terax-capture-foreground=""
       data-capture-tab-id={tab.id}
       className={`absolute flex min-h-0 flex-col overflow-hidden border border-border bg-background ${floating ? "z-30 rounded-lg shadow-xl" : "z-10"} ${visible ? "" : "invisible pointer-events-none"}`}
       style={position}
