@@ -293,9 +293,9 @@ geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
 The concrete selection correction is now accepted on M2. GraphX loading, placement, capture and live resize are now accepted in the
-separate Pi-Terax/GraphX report linked below. The ordinary live history-trim
-selection/search case is now accepted in the follow-up below. Remaining
-acceptance includes blocks trim/invalidation and other live preferences; broader
+separate Pi-Terax/GraphX report linked below. The ordinary selection/search and block-search
+live history-trim cases are now accepted in the follow-ups below. Remaining
+acceptance includes other block-output/header cases and live preferences; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
 default and real-workload requirements. Historical completed slices are
@@ -349,7 +349,34 @@ delivery. The successful path used a physical click on the observed control
 with empty modifier flags, then Cmd+F and literal typing. Internal first
 responder was not directly observed; this does not establish a product bug.
 
-Blocks trim and block anchor/output invalidation remain pending. See the
+The subsequent block-search trim case is accepted below; other block-output
+and header cases remain pending. See the
 [current acceptance matrix](2026-11-16-terminal-acceptance-status.md) for the
 twelve categories, earlier accepted slices and ordered remaining cases.
 The global terminal/default/platform/real-workload goal remains open.
+
+## Block history trim and long-command follow-up
+
+Packaged source 2d869a3 passed the scoped block live-trim case. Old block search
+changed from 1/1 before trim to "Block search is no longer available." and zero
+results afterward. Retained-block search remained 1/1; local OCR found the kept
+marker and did not find the old marker. Copy command preserved all 412 characters.
+The four finite old/fill/keep/after fixtures each executed once.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/block-history-2d869a3/block-history-acceptance.json,
+completed 2026-11-16T06:39:36.755Z. The clipboard and effective scrollback 2000
+were restored. Exact metadata of the 13 original tabs and original shell
+PIDs 5549/5550 were preserved; owned tab 42 and zsh PID 88880 were retired.
+
+Earlier HID wheel/blocks-next attempts did not reveal the latest header;
+a new finite command's auto-follow did. The independent geometry audit confirmed
+that capture used the correct pane wrapper and shared-canvas crop. Wheel input
+had targeted the editor/overlay, and Cmd+Down was not native scrolling. The
+explicit tab 42 capture then showed the kept marker and no old marker. These
+automation attempts do not establish a product scrolling defect.
+
+This closes the scoped block-search eviction/retention and long-command copy
+cases, not all block-output/header behavior or either acceptance category.
+Wrapped header geometry, empty/overwritten output, other actions on unavailable
+block output and the wider terminal goal remain open.

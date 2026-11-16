@@ -20,11 +20,11 @@ than repeating them without a relevant change or unresolved concern.
 
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
-| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. The ordinary live-trim case below preserves the clipped selection and invalidates the old search result. | Blocks trim and unavailable anchors/output; cursor blink/focus, font family/weight, zoom, theme and image-background contrast. No all-settings acceptance follows from the two geometry controls. |
+| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. | Other unavailable block-output/header cases; cursor blink/focus, font family/weight, zoom, theme and image-background contrast. No all-settings acceptance follows from the two geometry controls. |
 | 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. OSC52 system-clipboard cases are accepted separately. | Dead-key accents and CJK commit once without submitting candidate Enter; actual multiline paste with/without negotiated brackets; real Claude/Codex navigation, multiline and redraw. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Async context/selection and owner/privacy adapters are implemented. | Mermaid, TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
-| 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. | Commands longer than 256 characters, wrapped header geometry, empty/overwritten output and eviction of tracked anchors. Blocks splitting remains disabled as in baseline. |
+| 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
 | 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. | Real split activity/attention/exit; correct conversation/CWD restoration once after readiness; multiline scheduled delivery once, with unavailable/unchanged buffers never reported as success. Pi draft persistence does not establish these cases. |
 | 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. Native tests cover final output and sticky failures. | Known finite output while another pane remains usable, hidden output conservation, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
@@ -72,8 +72,37 @@ control with explicit empty modifier flags, followed by Cmd+F and literal input,
 did establish it. Internal first-responder state was not directly observed.
 This is an automation limitation, not an established product defect.
 
-This closes the ordinary selection/search live-trim case. Blocks trim,
-block-output/header invalidation and the other preferences remain open.
+This closes the ordinary selection/search live-trim case. The subsequent block
+case is recorded below; other preferences and block-output/header cases remain
+open.
+
+## Block live history trim and long command accepted
+
+The authoritative ignored M2 receipt is
+.terax/pi-development/m2/logs/block-history-2d869a3/block-history-acceptance.json
+in the qa worktree, completed 2026-11-16T06:39:36.755Z. It binds the case to
+packaged source 2d869a3, app PID 5217, owned block tab 42 and zsh PID 88880.
+
+The old block search showed 1/1 before trim. After trim it returned
+"Block search is no longer available." with zero results. The retained block
+still returned 1/1; local OCR found its known marker and did not find the old
+marker. Copy command preserved the full 412-character command. The four finite
+fixtures (old, fill, keep and after) each executed once.
+
+The original clipboard was restored, effective scrollback returned to 2000,
+and the exact metadata of all 13 original tabs and shell PIDs 5549/5550 were
+preserved. Owned tab 42 closed and zsh PID 88880 retired.
+
+Earlier HID wheel/blocks-next attempts did not reveal the latest header;
+a new finite command's auto-follow did. The independent geometry audit confirmed
+that capture used the correct pane wrapper and shared-canvas crop. Wheel input
+had targeted the editor/overlay, and Cmd+Down was not native scrolling. The
+explicit tab 42 capture then showed the kept marker and no old marker. These
+automation attempts do not establish a product scrolling defect.
+
+This accepts the scoped block-search eviction/retention and long-command copy
+cases. Wrapped header geometry, empty/overwritten output, other actions on
+unavailable block output and the broader categories remain open.
 
 ## Platform and rollout boundaries
 
