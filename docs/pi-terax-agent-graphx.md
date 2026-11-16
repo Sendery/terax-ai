@@ -184,10 +184,9 @@ lifetimes, changed dimensions, blocked parent access/network/inline script and a
 Tauri globals. It closes only its own browser/server and saves evidence under ignored
 `.terax/pi-development/graphx-frame-smoke/`.
 
-M2 Chromium acceptance passed on 2026-11-16. Packaged Tauri/WebKit acceptance, real pointer
-drag/docking, restart/space restore in the running app and end-to-end authenticated Pi/MCP
-invocation remain for the root's coordinated integration pass. No running Terax app was
-changed by this implementation pass. Rust changes are limited to the bridge allowlist and
+M2 Chromium acceptance passed on 2026-11-16. The isolated implementation pass did
+not control a running Terax app. Root subsequently completed the coordinated
+packaged application acceptance recorded below. Rust changes are limited to the bridge allowlist and
 its decode test; native checks/build were reserved for the root.
 
 A macOS system WebKit check also covers the packaged custom-scheme CSP behavior:
@@ -255,7 +254,7 @@ continued rejection of unauthorized inline styles. Run its compiled binary with
 with an explicit styles error. It saves PNG evidence under ignored
 `.terax/pi-development/graphx-webkit-runtime/`. No Terax process is started or
 controlled. The frame and composition checks passed on M2; visible packaged-app
-capture acceptance remains with the coordinated integration pass.
+capture acceptance is recorded in the coordinated integration section below.
 
 
 ## Resizing an embedded graph
@@ -269,3 +268,13 @@ Run the compiled `scripts/check-graphx-webkit.swift` fixture with `--panel-fit`
 to check a live resize of the same iframe, token and revision from 640×440 to
 680×700. It verifies SVG width/height growth, unclipped tour content and alignment
 with the bottom of the panel under the packaged nonce policy.
+
+
+## Coordinated M2 application acceptance
+
+The integrated packaged application passed graph/sequence rendering, real panel
+movement/resizing/docking, keyboard placement, terminal focus/session retention,
+restart/geometry restoration, manager tab/note commands, Pi/MCP reads and updates,
+stale-write rejection and private/hidden capture refusal. The last code candidate
+is 2d869a3. See [the acceptance report](plans/2026-11-16-pi-terax-graphx-acceptance.md)
+for artifact identity, evidence and limitations. No model/provider turn was sent.

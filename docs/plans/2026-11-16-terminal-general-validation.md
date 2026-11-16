@@ -148,7 +148,7 @@ from this copy/repeat check.
 The installed Pi0.74.0 ran in the actual left native PTY with offline startup,
 an ephemeral session and the explicit built Terax extension. A real captured
 editor shows two unsent lines entered through Shift+Enter. The pane was hidden
-by focusing the existing public tab9, then restored to tab35. The same Pi PID
+by focusing the existing public tab9, then restored to tab 35. The same Pi PID
 and parent survived, and appending _RESUMED extended the second line without
 losing the first. The restored draft was visually inspected.
 
@@ -248,7 +248,7 @@ remain owned by the same app.
 
 The actual native selection popup now survives its read refreshes. A real
 pointer drag selected the complete TERAX_SELECTION_POPUP_MARKER; all three
-actions appeared. Clicking Add to Note created exactly that text on tab35.
+actions appeared. Clicking Add to Note created exactly that text on tab 35.
 Only that owned note was removed, restoring the original notes. This closes
 the concrete selection-action defect. No clipboard was changed by this case.
 
@@ -262,13 +262,13 @@ without changing data. Passive snapshots contain graph metadata, not source.
 A real owned binary --mcp subprocess initialized, listed the new actions and
 read the same graph. A second subprocess updated it, read the new revision and
 rejected a repeated obsolete write while preserving the new source. Both
-stdio servers exited normally. The owned graph is at revision3. No provider
+stdio servers exited normally. The owned graph is at revision 3. No provider
 request was submitted.
 
 Side-placement calls plus explicit focus on the chosen terminal resized the
 same original PTYs from65 to32 columns; floating restored65 columns. Source
 review and a separate real check found that placement itself switched active
-tab35 to the first public tab7. The explicit-focus workaround is not claimed as
+tab 35 to the first public tab7. The explicit-focus workaround is not claimed as
 a passed placement-focus check; a separate atomic correction preserves the
 current or remembered public terminal. Warming tab7 added two owned idle shells
 without replacing the original pair.
@@ -292,8 +292,8 @@ workspace/readiness checks, marker proofs, two TUI event records, calibrated
 geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
-The concrete selection correction is now accepted on M2. Remaining acceptance
-includes packaged GraphX loading/placement and other live
+The concrete selection correction is now accepted on M2. GraphX loading, placement, capture and live resize are now accepted in the
+separate Pi-Terax/GraphX report linked below. Remaining acceptance includes live
 preferences/history shrink and selection/search/block invalidation; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
@@ -307,3 +307,22 @@ relevant change or unresolved concern. No performance laboratory was run;
 
 No Actions, push, PR, publication, merge commit or protected-original-Mac
 project operation was performed. This is not a claim of complete parity.
+
+
+## Pi-Terax and GraphX follow-up acceptance
+
+The final source candidate 2d869a3 passed packaged M2 graph/sequence rendering,
+pointer move/resize/docking, keyboard placement, stable terminal focus and PTYs,
+persistent graph incarnation/revision/geometry, manager tab/note operations and
+authenticated Pi/MCP updates. Atomic corrections cover packaged script/style
+CSP behavior, owned opaque-frame capture, CLI persona propagation, restored
+custom titles, selected-option capture and full embed height.
+
+The final application preserves all 13 tabs and all 3 editor paths, with the
+owned graph in revision 5 docked left beside native tab 35. Graph and sequence
+pane PNGs were inspected. No provider request was sent. The detailed boundaries,
+actual failures, source checks and artifact identity are recorded in
+[Pi-Terax/GraphX acceptance](2026-11-16-pi-terax-graphx-acceptance.md).
+
+This closes the GraphX-specific items listed at the earlier combined checkpoint;
+it does not close the broader terminal/default/platform acceptance listed above.
