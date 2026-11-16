@@ -1,9 +1,11 @@
 # Native terminal acceptance status
 
 The active goal is a usable Terax with the new terminal and the same or better
-existing capabilities. It is not complete. This checkpoint audits local qa
-b65c96012b89f32127641e075d9beaf983645bd9 and the actual packaged source
-2d869a350465443b4bb860f5d3a9ee098dc2ddff. It changes documentation only.
+existing capabilities. It is not complete. This checkpoint starts from local qa
+5ce928eae9c711ef50667b8e2122416354e47cd7. The current accepted cursor artifact
+contains source b65c96012b89f32127641e075d9beaf983645bd9; earlier cases below
+retain their packaged source 2d869a350465443b4bb860f5d3a9ee098dc2ddff.
+This update changes documentation only.
 
 The [parity inventory](2026-11-14-terminal-parity.md) supplies requirement IDs.
 Its old missing-code descriptions are chronological. The
@@ -20,7 +22,7 @@ than repeating them without a relevant change or unresolved concern.
 
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
-| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. Focused cursor blink has two states when on and one after restoring off. | Other unavailable block-output/header cases; cursor behavior on blur/focus, zoom, theme and image-background contrast. The blurred-cursor case is explicitly not accepted; a separate GPU/software source correction is not runtime acceptance. These scoped cases do not establish all settings or all font combinations. |
+| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. | Other unavailable block-output/header cases; zoom, theme and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
 | 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and real Claude/Codex navigation, multiline and redraw remain open. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
@@ -121,14 +123,45 @@ empty font family and Normal weight recovered the exact original PNG. Focused
 cursor blinking on produced two states confined to a 17 by 37 pixel cursor
 rectangle; restoring the original off preference produced one state.
 
-The blurred-cursor observation produced two states and the receipt explicitly
-sets blurBehaviorAccepted to false. Blur/focus behavior remains open. A separate
-GPU/software source correction is not integrated runtime acceptance here.
+The historical blurred-cursor observation produced two states and its receipt
+sets blurBehaviorAccepted to false. It remains unaccepted on that artifact.
+The later corrected native artifact is accepted separately below.
 No theme, zoom, background-contrast or other font-combination acceptance is
 inferred from these cases.
 
 All 13 original tabs and their exact metadata, plus original shell PIDs
 5549/5550, were preserved. The owned peer, shell and tab were retired.
+
+## Corrected native cursor blur accepted
+
+Source correction 774ba0e48df3a82e563325fce9dc95cab3a5ff74 was integrated as qa
+b65c96012b89f32127641e075d9beaf983645bd9. Its five new behavior regressions
+failed against base source; all 46 focused tests, TypeScript, touched-file
+lint/format and diff checks passed after correction. Independent source review
+is supporting evidence; the separate runtime receipt below establishes the
+scoped visual outcome.
+
+The authoritative ignored M2 receipt is
+.terax/pi-development/m2/logs/cursor-blur-native-b65c960/acceptance.json,
+completed 2026-11-16T07:58:28.388Z. App PID 61121 used the full-commit candidate
+.terax/qa-candidates/b65c96012b89f32127641e075d9beaf983645bd9/Pi-Terax Sandbox.app
+in qa, with executable SHA256
+c56ae98f326930fdfe61a0741762a505c0cba9e98ee78513b120204b1c46a19a.
+The frontend choice was explicitly ghostty and the native feature was
+ghostty-engine. The separate short-directory b65c960 candidate selected xterm;
+it was invalid for native acceptance and supplies none of this evidence.
+
+With actual UI bounds matched, the cursor rectangle was [63, 197, 80, 234].
+Focused GPU and software series each alternated between 629 and zero painted
+pixels. Pane blur and actual window deactivation each retained a visible hollow
+cursor at 288 pixels in all five samples, in both renderers. This is scoped
+physical acceptance of the corrected behavior, separate from AX focus metadata.
+
+The same PTY survived GPU to software to GPU. Original preferences were restored
+to GPU enabled and cursor blink disabled, with the off cursor stable in one
+state. All 13 original tab metadata and shell PIDs 61466/61467 were preserved.
+Owned tab 40, shell 83756 and peer 84374 were retired; unexpected PTY input was
+zero. Theme, zoom, other settings and platform/default gates remain open.
 
 ## Selection to Mermaid accepted
 

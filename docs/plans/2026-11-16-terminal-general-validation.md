@@ -2,7 +2,10 @@
 
 Code candidate: 03a44af64dff5f7e99209d0e417fb3c513c63e75, consolidated in local qa.
 This report records the completed implementation and the first general
-validation block. Functional replacement and default rollout remain open.
+validation block, followed by artifact-specific acceptance updates. The latest
+cursor follow-up uses native packaged source b65c960; earlier 2d869a3 cases
+retain their original provenance. Functional replacement and default rollout
+remain open.
 
 ## General automatic checks
 
@@ -396,10 +399,10 @@ font family and Normal weight recovered the exact original PNG. With the owned
 terminal focused, blinking on produced two states in a 17 by 37 pixel cursor
 rectangle; restoring the original off preference produced one state.
 
-Blur is explicitly not accepted. The blurred observation also had two states,
-and the receipt records blurBehaviorAccepted false and blurReviewPending true.
-A separate focused GPU/software source correction is being handled outside this
-documentation slice; no integrated or physical blur result follows from it.
+Blur was not accepted on this historical 2d869a3 artifact. Its observation had
+two states, and the receipt records blurBehaviorAccepted false and
+blurReviewPending true. The corrected native b65c960 artifact has separate
+physical acceptance below; this earlier case is not reinterpreted.
 
 Evidence is qa's ignored
 .terax/pi-development/m2/logs/preferences-native-2d869a3/acceptance.json,
@@ -446,3 +449,36 @@ that configuration. No attachment or model turn was attempted. TTS had no
 installed engine or downloaded model and was not attempted. These cases,
 other selection/AI consumers and the broader terminal goal remain pending.
 This receipt does not accept the newer cursor correction or another artifact.
+
+## Corrected cursor focus and window deactivation follow-up
+
+Correction 774ba0e48df3a82e563325fce9dc95cab3a5ff74 landed in qa as
+b65c96012b89f32127641e075d9beaf983645bd9. Five new behavior regressions were
+verified failing against base source; all 46 focused tests, TypeScript and
+touched-file lint/format passed after correction. Independent source review
+also completed. These checks are separate from the matching runtime proof.
+
+The accepted native artifact is qa's
+.terax/qa-candidates/b65c96012b89f32127641e075d9beaf983645bd9/Pi-Terax Sandbox.app,
+app PID 61121, executable SHA256
+c56ae98f326930fdfe61a0741762a505c0cba9e98ee78513b120204b1c46a19a.
+It explicitly selects frontend ghostty and native feature ghostty-engine.
+The earlier short-directory b65c960 artifact selected xterm and was invalid
+for native acceptance; none of its observations are used to accept this case.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/cursor-blur-native-b65c960/acceptance.json,
+completed 2026-11-16T07:58:28.388Z. Current UI bounds matched the cursor rectangle
+[63, 197, 80, 234]. In GPU and software, focused blink alternated between 629 and
+zero painted pixels. After pane blur and actual window deactivation, each
+renderer retained a visibly hollow cursor at 288 pixels for all five samples.
+
+The same PTY survived GPU to software to GPU. GPU enabled and cursor blink off
+were restored; the off cursor remained stable in one state. All 13 original
+tab metadata and shell PIDs 61466/61467 were preserved. Owned tab 40, shell 83756
+and peer 84374 retired, with zero unexpected PTY input.
+
+This accepts the corrected pane/window blur case in both renderers. Theme,
+zoom, other pending functional cases, supported-target and default rollout
+gates remain open. This documentation update ran no UI, bridge, model, build
+or suite; its checks are limited to diff and local links.
