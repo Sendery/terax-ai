@@ -419,6 +419,7 @@ export class GridRenderer {
   setPaneFocused(pane: RenderPane, focused: boolean): void {
     if (pane.focused === focused) return;
     pane.focused = focused;
+    this.updateBlink();
     this.requestDraw();
   }
 
@@ -713,7 +714,7 @@ export class GridRenderer {
     const visible =
       style !== CURSOR_HIDDEN &&
       !header.scrolledBack &&
-      (!header.blink || this.blinkOn) &&
+      (!header.blink || !pane.focused || this.blinkOn) &&
       header.cursorX < grid.cols &&
       header.cursorY < grid.rows;
     if (style === CURSOR_BLOCK && !pane.focused) style = CURSOR_HOLLOW_BLOCK;
@@ -924,7 +925,7 @@ export class GridRenderer {
   }
 
   private updateBlink(): void {
-    const any = this.panes.some((pane) => pane.header?.blink === true);
+    const any = this.panes.some((pane) => pane.focused && pane.header?.blink);
     if (any && !this.blinkTimer) {
       this.blinkTimer = setInterval(() => {
         this.blinkOn = !this.blinkOn;

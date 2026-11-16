@@ -140,7 +140,11 @@ export function bindNativeInput(
   updateAppearance(options);
   const reportFocus = (focused: boolean) => {
     focused =
-      focused && canInput() && options.isActive() && document.hasFocus();
+      focused &&
+      canInput() &&
+      options.isActive() &&
+      !document.hidden &&
+      document.hasFocus();
     renderer.setPaneFocused(session.pane, focused);
     if (focused === focusReported || disposed) return;
     focusReported = focused;
@@ -768,6 +772,7 @@ export function bindNativeInput(
   host.addEventListener("contextmenu", onContextMenu);
   window.addEventListener("blur", onBlur);
   window.addEventListener("focus", onWindowFocus);
+  document.addEventListener("visibilitychange", onWindowFocus);
   updateInputPolicy();
   return {
     focus,
@@ -803,6 +808,7 @@ export function bindNativeInput(
       host.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onWindowFocus);
       textarea.remove();
       preedit.remove();
     },

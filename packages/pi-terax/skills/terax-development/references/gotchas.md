@@ -778,6 +778,13 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Verification:** simulate browser default processing after pointerdown, assert textarea focus and untouched secondary default, then click and type in the real app.
 
 
+### An unfocused cursor needs a stable phase as well as an outline
+
+- **Trigger:** a native pane loses textarea/window focus or document visibility while its cursor blink flag remains enabled.
+- **Failure mode:** changing a block cursor to hollow does not stop its disappearance during the shared off phase or retire an unnecessary blink timer.
+- **Prevention:** gate both cursor phase and scheduling on effective pane focus, update scheduling on focus transitions, and keep unfocused cursors visible subject to hidden/scrolled-back rules. Effective focus requires active pane, focused document and visible document; subscribe to visibility changes and remove the listener with the binding.
+- **Verification:** GPU uniforms and software paint retain the unfocused cursor while another pane blinks; fake timers stop after the last focused pane blurs and restart on focus. Binding tests cover window blur/refocus, hidden/visible transitions and a textarea that no longer owns focus. Actual window deactivation still needs runtime evidence.
+
 ### Native block endpoints and row lifetime need separate evidence
 
 - **Trigger:** saving completed output ranges using native tracked references.

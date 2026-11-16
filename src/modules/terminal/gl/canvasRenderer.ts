@@ -160,6 +160,7 @@ export class CanvasRenderer implements TerminalRenderer {
   setPaneFocused(pane: RenderPane, focused: boolean): void {
     if (pane.focused !== focused) {
       pane.focused = focused;
+      this.updateBlink();
       this.requestDraw();
     }
   }
@@ -402,7 +403,7 @@ export class CanvasRenderer implements TerminalRenderer {
     const visible =
       style !== CURSOR_HIDDEN &&
       !h.scrolledBack &&
-      (!h.blink || this.blinkOn) &&
+      (!h.blink || !pane.focused || this.blinkOn) &&
       h.cursorX < g.cols &&
       h.cursorY < g.rows;
     const cursor = visible ? h.cursorY * g.cols + h.cursorX : -1;
@@ -577,7 +578,7 @@ export class CanvasRenderer implements TerminalRenderer {
     this.requestDraw();
   }
   private updateBlink(): void {
-    const any = this.panes.some((p) => p.header?.blink);
+    const any = this.panes.some((pane) => pane.focused && pane.header?.blink);
     if (any && !this.blinkTimer)
       this.blinkTimer = setInterval(() => {
         this.blinkOn = !this.blinkOn;

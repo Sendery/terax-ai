@@ -9,6 +9,8 @@ import {
   ATTR_BOLD,
   ATTR_INVERSE,
   CURSOR_UNDERLINE,
+  CURSOR_BLOCK,
+  FRAME_FLAG_CURSOR_BLINK,
 } from "@/modules/terminal/gl/frameCodec";
 import {
   encodeFrame,
@@ -493,4 +495,38 @@ it("rejects missing full image uploads and stale appearance without returning a 
   );
   expect(h.canvas.width).toBe(200);
   h.renderer.dispose();
+});
+
+it("keeps an unfocused software cursor visible while a focused pane blinks", () => {
+  vi.useFakeTimers();
+  const h = harness();
+  try {
+    const first = h.renderer.addPane(callbacks());
+    const second = h.renderer.addPane(callbacks());
+    const frame = decodeFrame(
+      encodeFrame({
+        cols: 4,
+        rows: 2,
+        flags: FRAME_FLAG_FULL | FRAME_FLAG_CURSOR_BLINK,
+        cursorStyle: CURSOR_BLOCK,
+        rowRecords: [textRow(0, "test")],
+      }),
+    );
+    h.renderer.setPaneRect(first, { x: 0, y: 0, width: 40, height: 40 });
+    h.renderer.setPaneRect(second, { x: 40, y: 0, width: 40, height: 40 });
+    h.renderer.applyFrame(first, frame);
+    h.renderer.applyFrame(second, frame);
+    h.draw();
+    vi.advanceTimersByTime(500);
+    h.renderer.setPaneFocused(first, false);
+    h.context.fillRect.mockClear();
+    h.draw();
+    expect(h.context.fillRect).toHaveBeenCalledWith(0, 0, 8, 2);
+    expect(vi.getTimerCount()).toBe(1);
+    h.renderer.setPaneFocused(second, false);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    h.renderer.dispose();
+    vi.useRealTimers();
+  }
 });

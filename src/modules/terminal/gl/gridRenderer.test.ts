@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
+import { CanvasRenderer } from "@/modules/terminal/gl/canvasRenderer";
 import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
-import { decodeFrame } from "@/modules/terminal/gl/frameCodec";
+import {
+  CURSOR_BLOCK,
+  CURSOR_HIDDEN,
+  CURSOR_HOLLOW_BLOCK,
+  decodeFrame,
+} from "@/modules/terminal/gl/frameCodec";
 import { encodeFrame, textRow } from "@/modules/terminal/gl/frameCodec.testing";
 import {
   GridRenderer,
@@ -33,11 +39,12 @@ function pane(rect: RenderPane["rect"], ready = true): RenderPane {
   };
 }
 
-function draw(panes: RenderPane[], graphics = false) {
+function draw(panes: RenderPane[], graphics = false, blinkOn = true) {
   const drawArraysInstanced = vi.fn();
   const uniform1ui = vi.fn();
+  const uniform1i = vi.fn();
   const gl = new Proxy(
-    { drawArraysInstanced, uniform1ui },
+    { drawArraysInstanced, uniform1ui, uniform1i },
     {
       get(target, key) {
         return Reflect.get(target, key) ?? vi.fn();
@@ -48,14 +55,18 @@ function draw(panes: RenderPane[], graphics = false) {
   const renderer = Object.assign(Object.create(GridRenderer.prototype), {
     gl,
     program: {},
-    uniforms: { uDefaultBg: "default-bg" },
+    uniforms: {
+      uDefaultBg: "default-bg",
+      uCursorIndex: "cursor-index",
+      uCursorStyle: "cursor-style",
+    },
     graphics: graphics ? { has: () => true, draw: vi.fn() } : undefined,
     drawnPanes,
     panes,
     canvas: { width: 100, height: 100 },
     dpr: 1,
     background: 0,
-    blinkOn: true,
+    blinkOn,
     atlas: {
       bind: vi.fn(),
       metrics: { width: 10, height: 20, baseline: 16 },
@@ -64,7 +75,7 @@ function draw(panes: RenderPane[], graphics = false) {
     },
   }) as { draw: () => void };
   renderer.draw();
-  return { drawnPanes, drawArraysInstanced, uniform1ui };
+  return { drawnPanes, drawArraysInstanced, uniform1ui, uniform1i };
 }
 
 describe("GridRenderer display acknowledgement", () => {
@@ -331,3 +342,77 @@ it("applies the same contrast policy to GPU instances and defers hidden-pane ful
   expect(renderer.applyFrame(a, input)).toBe("applied");
   expect(a.grid?.cells[1]).toBe(original);
 });
+
+it("keeps an unfocused GPU cursor visible during another pane's off phase", () => {
+  const target = pane({ x: 0, y: 0, width: 40, height: 40 });
+  const header = target.header;
+  if (!header) throw new Error("missing test header");
+  Object.assign(header, { blink: true, cursorStyle: CURSOR_BLOCK });
+  expect(draw([target], false, false).uniform1i).toHaveBeenCalledWith(
+    "cursor-index",
+    -1,
+  );
+  target.focused = false;
+  const blurred = draw([target], false, false);
+  expect(blurred.uniform1i).toHaveBeenCalledWith("cursor-index", 0);
+  expect(blurred.uniform1i).toHaveBeenCalledWith(
+    "cursor-style",
+    CURSOR_HOLLOW_BLOCK,
+  );
+  header.scrolledBack = true;
+  expect(draw([target], false, false).uniform1i).toHaveBeenCalledWith(
+    "cursor-index",
+    -1,
+  );
+  header.scrolledBack = false;
+  header.cursorStyle = CURSOR_HIDDEN;
+  expect(draw([target], false, false).uniform1i).toHaveBeenCalledWith(
+    "cursor-index",
+    -1,
+  );
+});
+
+it.each([
+  ["GPU", GridRenderer],
+  ["software", CanvasRenderer],
+] as const)(
+  "%s stops blink scheduling on blur and restarts only for a focused pane",
+  (_name, Renderer) => {
+    vi.useFakeTimers();
+    const target = pane({ x: 0, y: 0, width: 40, height: 40 });
+    if (!target.header) throw new Error("missing test header");
+    target.header.blink = true;
+    const other = pane({ x: 40, y: 0, width: 40, height: 40 });
+    if (!other.header) throw new Error("missing test header");
+    other.header.blink = true;
+    other.focused = false;
+    const redraw = vi.fn();
+    const renderer = Object.assign(Object.create(Renderer.prototype), {
+      panes: [target, other],
+      blinkTimer: null,
+      blinkOn: true,
+      requestDraw: redraw,
+    }) as GridRenderer;
+    try {
+      Reflect.get(renderer, "updateBlink").call(renderer);
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersToNextTimer();
+      expect(Reflect.get(renderer, "blinkOn")).toBe(false);
+      renderer.setPaneFocused(target, false);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(Reflect.get(renderer, "blinkOn")).toBe(true);
+      redraw.mockClear();
+      vi.advanceTimersByTime(1500);
+      expect(redraw).not.toHaveBeenCalled();
+      renderer.setPaneFocused(other, true);
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersToNextTimer();
+      expect(Reflect.get(renderer, "blinkOn")).toBe(false);
+      renderer.setPaneFocused(other, false);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  },
+);

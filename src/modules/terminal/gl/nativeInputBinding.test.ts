@@ -27,6 +27,8 @@ it("keeps the terminal textarea focused after primary pointer default processing
   const textarea = node();
   let nodes = 0;
   vi.stubGlobal("document", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     ...documentState,
     get activeElement() {
       return documentState.activeElement;
@@ -173,6 +175,8 @@ it("routes prompt focus to the editor and blocks late direct input until a progr
   const textarea = node();
   let count = 0;
   vi.stubGlobal("document", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     hasFocus: () => true,
     get activeElement() {
       return active;
@@ -264,7 +268,12 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
       inputEvents.set(name, cb),
     removeEventListener: vi.fn(),
   });
-  vi.stubGlobal("document", { hasFocus: () => true, createElement: node });
+  vi.stubGlobal("document", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    hasFocus: () => true,
+    createElement: node,
+  });
   vi.stubGlobal("window", {
     devicePixelRatio: 2,
     addEventListener: vi.fn(),
@@ -407,6 +416,8 @@ function pendingGestureFixture(onBlockClick?: () => Promise<void>) {
   const textarea = node();
   let count = 0;
   vi.stubGlobal("document", {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
     hasFocus: () => focused,
     get activeElement() {
       return active;
@@ -617,4 +628,102 @@ it("keeps the popup token valid across a read-only query revision while rejectin
   f.session.selectionMutationRevision++;
   expect(gesture.current()).toBe(false);
   f.binding.dispose();
+});
+
+it("reports pane focus only while its textarea and window remain active and visible", () => {
+  const windowEvents = new Map<string, () => void>();
+  const documentEvents = new Map<string, () => void>();
+  const textareaEvents = new Map<string, () => void>();
+  const state = {
+    activeElement: null as unknown,
+    hidden: false,
+    focused: true,
+  };
+  const make = () => ({
+    style: {},
+    setAttribute: vi.fn(),
+    remove: vi.fn(),
+    addEventListener: (name: string, handler: () => void) =>
+      textareaEvents.set(name, handler),
+    removeEventListener: vi.fn(),
+    focus() {
+      state.activeElement = this;
+    },
+  });
+  const textarea = make();
+  let count = 0;
+  const removeDocumentListener = vi.fn();
+  vi.stubGlobal("document", {
+    get activeElement() {
+      return state.activeElement;
+    },
+    get hidden() {
+      return state.hidden;
+    },
+    hasFocus: () => state.focused,
+    createElement: () => (count++ === 0 ? textarea : make()),
+    addEventListener: (name: string, handler: () => void) =>
+      documentEvents.set(name, handler),
+    removeEventListener: removeDocumentListener,
+  });
+  vi.stubGlobal("window", {
+    addEventListener: (name: string, handler: () => void) =>
+      windowEvents.set(name, handler),
+    removeEventListener: vi.fn(),
+  });
+  const setPaneFocused = vi.fn();
+  const session = {
+    pane: {},
+    exitCode: null,
+    cursor: null,
+    setInputFocused: vi.fn(async () => {}),
+  };
+  const binding = bindNativeInput(
+    session as unknown as EngineSession,
+    {
+      cellSize: { width: 8, height: 16 },
+      setPaneFocused,
+    } as unknown as GridRenderer,
+    {
+      append: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLElement,
+    {
+      font: { family: "mono", size: 14, weight: "normal", letterSpacing: 0 },
+      foreground: "#fff",
+      background: "#000",
+      isActive: () => true,
+      onError: vi.fn(),
+    },
+  );
+  try {
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, true);
+    state.focused = false;
+    windowEvents.get("blur")?.();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, false);
+    binding.focus();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, false);
+    state.focused = true;
+    windowEvents.get("focus")?.();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, true);
+    state.hidden = true;
+    documentEvents.get("visibilitychange")?.();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, false);
+    binding.focus();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, false);
+    state.hidden = false;
+    documentEvents.get("visibilitychange")?.();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, true);
+    state.activeElement = {};
+    textareaEvents.get("blur")?.();
+    windowEvents.get("focus")?.();
+    expect(setPaneFocused).toHaveBeenLastCalledWith(session.pane, false);
+  } finally {
+    binding.dispose();
+  }
+  expect(removeDocumentListener).toHaveBeenCalledWith(
+    "visibilitychange",
+    documentEvents.get("visibilitychange"),
+  );
 });
