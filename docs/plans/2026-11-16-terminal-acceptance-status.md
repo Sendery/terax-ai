@@ -500,3 +500,41 @@ The local manifest is .terax/releases/qa/8ddb224-dev-arm64/manifest.json.
 This is a functional QA build for Apple Silicon/macOS 13+, without Developer ID
 or notarization. It does not close the remaining parity cases above. FPS and
 Japanese IME remain deferred. No Actions, push or public release was performed.
+
+## Native macOS paste gesture accepted: 1084aca
+
+The 8ddb224 physical Cmd+V attempt delivered no bytes to the known raw peer.
+The own app's sampled stack proved WebKit requestDOMPasteAccess waiting in an
+NSMenu tracking loop. Closing that observed menu recovered the bridge; the peer
+timed out, restored termios and exited. The owned terminal tab autoclosure
+matched the original app policy. Original 13 tab metadata were restored.
+
+Atomic fix 1084aca preserves macOS Cmd+V's browser default and obtains text
+from its paste event instead of programmatic readText. Non-mac helper behavior
+is retained. Focus, visibility, disposed/exited session and async owner guards
+have directed regression coverage: 4 suites, 52 tests; types/lint/diff pass.
+
+A newly compiled, signed and frozen 1084aca Ghostty sandbox (M2 PID 99067)
+passed both real Cmd+V phases. The receiver compared all 78 bracketed bytes
+and all 66 unbracketed bytes exactly, including Unicode, LF, CRLF and CR.
+Both helper invocations restored the original clipboard formats from RAM;
+no raw external clipboard content was persisted. The receiver exited zero and
+the original 13 tabs and metadata were restored. No DOM paste menu blocked the
+same bridge after the gestures. Evidence:
+.terax/pi-development/m2/logs/multiline-exit-1084aca/acceptance.json and
+.terax/pi-development/m2/fixtures/native-multiline-exit/run-02.
+
+Native's existing bracketed-paste encoding preserves LF after CRLF-to-LF
+normalization. Pinned xterm normalizes those LFs to CR even with brackets.
+The native protocol semantics are accepted as recorded, not claimed byte-for-
+byte equal to xterm. This check used one ordinary pane; split paste isolation
+and the other remaining functional categories are not inferred from it.
+
+The 8ddb224 document follow-up additionally accepted actual .graphx file
+formatting in Side by side with the disk unchanged and dirty state set,
+followed by exact single-Undo restoration. Markdown Rendered and Side by side
+exposed known content; a real edit updated the preview and Cmd+S saved the
+exact expected bytes and cleared dirty state. Mermaid Rendered exposed both
+known nodes and Side by side retained its editor. Each owned editor was closed
+cleanly and original metadata restored. Receipts remain in the ignored M2
+directory .terax/pi-development/m2/logs/editor-edit-8ddb224.
