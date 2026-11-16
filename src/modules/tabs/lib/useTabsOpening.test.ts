@@ -121,3 +121,18 @@ it("reuses stable GraphX ids and rejects stale writes before React commits", () 
   expect(()=>api.updateGraph("owned-graph",first.tab.documentId,1,source)).toThrow(/replaced/);
   expect(api.readGraph("owned-graph").revision).toBe(1);
 });
+
+it("keeps a dirty Markdown document and metadata while changing views or reopening the file", () => {
+  const api = TestHarness();
+  const id = api.newMarkdownTab("/repo/readme.md");
+  expect(id).not.toBeNull();
+  if (id === null) throw new Error("Missing Markdown tab");
+  api.updateTab(id, {dirty:true, customTitle:"My notes"});
+  for (const mode of ["raw", "side-by-side", "rendered"] as const) api.setRenderableView(id, mode);
+  expect(api.openFileTab("/repo/readme.md")).toBe(id);
+  const current = flush();
+  expect(current.tabs.filter(t => t.kind === "markdown")).toHaveLength(1);
+  expect(current.tabs.find(t => t.id === id)).toMatchObject({kind:"markdown",dirty:true,customTitle:"My notes",viewMode:"rendered"});
+  current.updateTab(id, {path:"/repo/renamed.md"});
+  expect(flush().tabs.find(t => t.id === id)).toMatchObject({path:"/repo/renamed.md",dirty:true});
+});

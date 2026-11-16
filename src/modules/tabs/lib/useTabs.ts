@@ -1,3 +1,4 @@
+import { applyRenderableView, type ViewMode } from "@/modules/renderable/viewMode";
 import {
   findGraph,
   graphIdSchema,
@@ -36,6 +37,7 @@ import type { TabColor } from "./tabColors";
 export const MAX_PANES_PER_TAB = 4;
 
 type TabBase = {
+  viewMode?: ViewMode;
   spaceId: string;
   /** Restored from disk, not yet activated: rendered as a placeholder, not mounted. */
   cold?: boolean;
@@ -83,6 +85,7 @@ export type PreviewTab = TabBase & {
 export type MarkdownTab = TabBase & {
   id: number;
   kind: "markdown";
+  dirty?: boolean;
   title: string;
   path: string;
 };
@@ -231,6 +234,8 @@ export function applyTabPatch(tab: Tab, patch: TabPatch): Tab {
   if (tab.kind === "markdown") {
     return {
       ...tab,
+      ...(patch.dirty !== undefined && { dirty: patch.dirty }),
+      ...(patch.path !== undefined && { path: patch.path }),
       ...(patch.title !== undefined && { title: patch.title }),
       ...customTitlePatch,
       ...colorPatch,
@@ -655,7 +660,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
       if (pin) {
         // Persistent open: find any existing editor tab, pin it if needed.
         const existing = curr.find(
-          (t) => t.kind === "editor" && t.path === path,
+          (t) => (t.kind === "editor" || t.kind === "markdown") && t.path === path,
         );
         if (existing) {
           targetId = existing.id;
@@ -684,7 +689,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
         // Preview open: persistent tab for this path takes priority.
         const persistent = curr.find(
           (t) =>
-            t.kind === "editor" && t.path === path && !(t as EditorTab).preview,
+            (t.kind === "editor" || t.kind === "markdown") && t.path === path && !(t as EditorTab).preview,
         );
         if (persistent) {
           targetId = persistent.id;
@@ -831,7 +836,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     let targetId: number | null = null;
     setTabs((curr) => {
       const existing = curr.find(
-        (t) => t.kind === "markdown" && t.path === path,
+        (t) => (t.kind === "markdown" || t.kind === "editor") && t.path === path,
       );
       if (existing) {
         targetId = existing.id;
@@ -975,10 +980,10 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     [setTabs],
   );
 
-  const setMarkdownView = useCallback(
-    (id: number, mode: "rendered" | "raw") => {
+  const setRenderableView = useCallback(
+    (id: number, mode: ViewMode) => {
       setTabs((curr) =>
-        curr.map((t) => (t.id !== id ? t : applyMarkdownView(t, mode))),
+        curr.map((t) => (t.id !== id ? t : applyRenderableView(t, mode))),
       );
     },
     [setTabs],
@@ -1447,7 +1452,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     updateMermaidSource,
     replaceMermaidTabContent,
     updateMermaidVisualLayout,
-    setMarkdownView,
+    setRenderableView,
     openAiDiffTab,
     openGitDiffTab,
     openCommitHistoryTab,

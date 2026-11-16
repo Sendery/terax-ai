@@ -45,7 +45,9 @@ with their authorized file tools. The in-app tool names are not external MCP too
 ## Graph tabs and panels
 
 Choose **New GraphX diagram** from the new-tab menu or command palette. The starter diagram
-includes a playable sequence. Use **JSON** to edit or import a JSON file, then **Apply JSON**.
+includes a playable sequence. Use **Raw** or **Side by side** to edit or import JSON, then **Apply JSON**.
+**Rendered** shows the graph alone. The preview follows the unsaved draft; switching
+views retains it, and only Apply commits a new revision.
 Invalid input leaves the last saved graph intact. **Reload current** recovers after an
 agent changed the graph while you were editing. **Copy JSON** exports the saved source to
 the clipboard.

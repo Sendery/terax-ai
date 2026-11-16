@@ -241,6 +241,7 @@ describe("buildAppSnapshot", () => {
     expect(snapshot.tabs[0]).toEqual({
       id: 9,
       kind: "mermaid",
+      viewMode: "side-by-side",
       spaceId: "default",
       title: "Architecture",
       sourceCharacters: source.length,

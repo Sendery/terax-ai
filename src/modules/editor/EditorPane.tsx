@@ -1,3 +1,7 @@
+import { RenderableLayout } from "@/modules/renderable/RenderableLayout";
+import { ViewModeToggle } from "@/modules/renderable/ViewModeToggle";
+import { fileRenderKind, type ViewMode } from "@/modules/renderable/viewMode";
+import { SourcePreview } from "@/modules/renderable/SourcePreview";
 import { editorLocationOffset } from "@/modules/editor/lib/locationOffset";
 import { getKey } from "@/modules/ai/lib/keyring";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -20,6 +24,7 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { languageIdOf, useLspExtension } from "@/modules/lsp";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -57,6 +62,9 @@ export type EditorPaneHandle = {
 
 type Props = {
   path: string;
+  viewMode?: ViewMode;
+  visible?: boolean;
+  onSetView?: (mode: ViewMode) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void;
   onClose?: () => void;
@@ -69,14 +77,26 @@ function formatBytes(n: number): string {
 }
 
 export const EditorPane = forwardRef<EditorPaneHandle, Props>(
-  function EditorPane({ path, onDirtyChange, onSaved, onClose }, ref) {
-    const { doc, onChange, save, reload } = useDocument({
+  function EditorPane(
+    { path, viewMode = "raw", visible = true, onSetView, onDirtyChange, onSaved, onClose },
+    ref,
+  ) {
+    const { doc, dirty, onChange, save, reload } = useDocument({
       path,
       onDirtyChange,
     });
+    const [saveError, setSaveError] = useState("");
+    const saveDocument = () => {
+      void save()
+        .then(() => { setSaveError(""); onSaved?.(); })
+        .catch(error => setSaveError(String(error)));
+    };
     const reloadRef = useRef(reload);
     reloadRef.current = reload;
     const cmRef = useRef<ReactCodeMirrorRef>(null);
+    const presentation = useRef({ viewMode, visible, onSetView });
+    presentation.current = { viewMode, visible, onSetView };
+    const pendingFocus = useRef(false);
     const themeExt = useEditorThemeExt();
     const vimMode = usePreferencesStore((s) => s.vimMode);
     const editorWordWrap = usePreferencesStore((s) => s.editorWordWrap);
@@ -135,8 +155,16 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
 
     const applyPendingGoto = useCallback((createdView?: EditorView) => {
       const view = createdView ?? cmRef.current?.view;
+      if (
+        !view || statusRef.current !== "ready" ||
+        !presentation.current.visible || presentation.current.viewMode === "rendered"
+      ) return;
+      if (pendingFocus.current) {
+        pendingFocus.current = false;
+        view.focus();
+      }
       const line = pendingLineRef.current;
-      if (!view || line == null || statusRef.current !== "ready") return;
+      if (line == null) return;
       const at = editorLocationOffset(view.state.doc, line.line, line.column);
       view.dispatch({
         selection: { anchor: at },
@@ -147,8 +175,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
     }, []);
 
     useEffect(() => {
-      if (doc.status === "ready") applyPendingGoto();
-    }, [doc.status, applyPendingGoto]);
+      if (doc.status === "ready" && visible && viewMode !== "rendered") applyPendingGoto();
+    }, [doc.status, visible, viewMode, applyPendingGoto]);
 
     const extensions = useMemo(
       () => [
@@ -306,7 +334,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           });
         },
         focus: () => {
-          cmRef.current?.view?.focus();
+          pendingFocus.current = true;
+          if (presentation.current.viewMode === "rendered") presentation.current.onSetView?.("raw");
+          else applyPendingGoto();
         },
         getSelection: () => {
           const view = cmRef.current?.view;
@@ -319,6 +349,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
         reload: () => reloadRef.current(),
         gotoLine: (line: number, column?: number) => {
           pendingLineRef.current = { line, column };
+          if (presentation.current.viewMode === "rendered") presentation.current.onSetView?.("raw");
           applyPendingGoto();
         },
         undo: () => {
@@ -412,7 +443,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
       );
     }
 
-    return (
+    const raw = (
       <div className="flex h-full min-h-0 flex-col zoom-exempt">
         <CodeMirror
           ref={cmRef}
@@ -436,6 +467,40 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           }}
         />
       </div>
+    );
+    if (!fileRenderKind(path) || !onSetView) return raw;
+    return (
+      <section
+        aria-label="File document"
+        className="flex h-full min-h-0 flex-col"
+        onKeyDown={event => {
+          if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+            event.preventDefault();
+            saveDocument();
+          }
+        }}
+      >
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-border/60 p-1.5">
+          <span role="status" className="mr-auto text-[11px] text-muted-foreground">
+            {dirty ? "Unsaved changes" : "Saved"}
+          </span>
+          <button
+            type="button"
+            disabled={!dirty}
+            onClick={saveDocument}
+            className="rounded px-2 py-1 text-xs hover:bg-accent disabled:opacity-40"
+          >
+            Save
+          </button>
+          <ViewModeToggle mode={viewMode} onChange={onSetView} />
+        </div>
+        {saveError && <p role="alert" className="px-3 py-1 text-xs text-destructive">{saveError}</p>}
+        <RenderableLayout
+          mode={viewMode}
+          raw={raw}
+          rendered={visible && <SourcePreview source={doc.content} path={path} />}
+        />
+      </section>
     );
   },
 );

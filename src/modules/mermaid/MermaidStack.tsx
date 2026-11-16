@@ -1,8 +1,6 @@
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import { RenderableLayout } from "@/modules/renderable/RenderableLayout";
+import { ViewModeToggle } from "@/modules/renderable/ViewModeToggle";
+import { resolveViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import { useEditorThemeExt } from "@/modules/editor/lib/useEditorThemeExt";
 import type { MermaidTab } from "@/modules/tabs";
 import { useTheme } from "@/modules/theme";
@@ -34,6 +32,7 @@ import { MermaidVisualEditorLazy } from "./MermaidVisualEditorLazy";
 
 type MermaidPaneProps = {
   active: boolean;
+  onSetView: (id: number, mode: ViewMode) => void;
   tab: MermaidTab;
   onSourceChange: (tabId: number, source: string) => void;
   onVisualLayoutChange: (
@@ -47,8 +46,10 @@ function MermaidPane({
   tab,
   onSourceChange,
   onVisualLayoutChange,
+  onSetView,
 }: MermaidPaneProps) {
   const editorTheme = useEditorThemeExt();
+  const viewMode = resolveViewMode(tab);
   const { resolvedMode } = useTheme();
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [draftSource, setDraftSource] = useState(tab.source);
@@ -61,7 +62,7 @@ function MermaidPane({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
   const [zoom, setZoom] = useState(1);
-  const [mode, setMode] = useState<"source" | "visual">("source");
+  const [mode, setMode] = useState<"preview" | "visual">("preview");
   const svgUrl = useMemo(() => (svg ? svgToDataUrl(svg) : ""), [svg]);
   const livePreviewEnabled = useMemo(
     () => canLivePreviewMermaidSource(draftSource),
@@ -138,7 +139,7 @@ function MermaidPane({
       setPending(false);
       return () => renderer.invalidate();
     }
-    if (!active) {
+    if (!active || viewMode === "raw" || mode === "visual") {
       setPending(false);
       return () => renderer.invalidate();
     }
@@ -149,7 +150,7 @@ function MermaidPane({
       window.clearTimeout(timer);
       renderer.invalidate();
     };
-  }, [active, draftSource, renderer]);
+  }, [active, draftSource, renderer, viewMode, mode]);
 
   const updateSource = (source: string) => {
     if (mermaidSourceByteLength(source) > MAX_MERMAID_SOURCE_BYTES) {
@@ -183,13 +184,104 @@ function MermaidPane({
     [resolvedMode],
   );
 
+  const raw = (
+    <section
+      className="h-full min-h-0 border-r border-border/50 zoom-exempt"
+      aria-label="Mermaid source editor"
+    >
+      {useLightweightEditor ? (
+        <textarea
+          aria-label="Large Mermaid source"
+          className="h-full w-full resize-none bg-background p-3 font-mono text-xs text-foreground outline-none"
+          onBlur={commitDraft}
+          onChange={(event) => updateSource(event.currentTarget.value)}
+          placeholder="flowchart LR\n  A --> B"
+          spellCheck={false}
+          value={draftSource}
+        />
+      ) : (
+        <CodeMirror
+          value={draftSource}
+          onBlur={commitDraft}
+          onChange={updateSource}
+          theme={editorTheme}
+          height="100%"
+          className="h-full min-h-0 overflow-hidden"
+          placeholder="flowchart LR\n  A --> B"
+          basicSetup={{
+            lineNumbers: true,
+            highlightActiveLineGutter: true,
+            foldGutter: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            autocompletion: false,
+            highlightActiveLine: true,
+            highlightSelectionMatches: true,
+            searchKeymap: true,
+          }}
+        />
+      )}
+    </section>
+  );
+  const preview = (
+    <section
+      className="relative flex h-full min-h-0 flex-col bg-muted/15"
+      aria-label="Mermaid diagram preview"
+    >
+      <div
+        className="flex h-7 shrink-0 items-center gap-2 border-b border-border/50 px-3 text-[11px] text-muted-foreground"
+        aria-live="polite"
+      >
+        {pending
+          ? "Rendering…"
+          : error
+            ? svg
+              ? "Preview from last valid source"
+              : "Render failed"
+            : !livePreviewEnabled
+              ? svg
+                ? `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB: showing last rendered source`
+                : `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB`
+              : "Preview up to date"}
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-6">
+        {svg ? (
+          <img
+            alt="Rendered Mermaid diagram"
+            className="mx-auto block h-auto max-w-none origin-top-left"
+            style={{ transform: `scale(${zoom})` }}
+            src={svgUrl}
+          />
+        ) : !livePreviewEnabled && !error ? (
+          <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
+            Live preview is paused for large sources to keep the editor
+            responsive.
+          </div>
+        ) : pending ? (
+          <div className="grid h-full place-items-center text-sm text-muted-foreground">
+            Rendering diagram…
+          </div>
+        ) : null}
+        {!svg && error ? (
+          <div className="mx-auto mt-8 max-w-xl rounded-md border border-destructive/40 bg-destructive/5 p-4 font-mono text-xs text-destructive">
+            {error}
+          </div>
+        ) : null}
+      </div>
+      {error && svg ? (
+        <div className="shrink-0 border-t border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-[11px] text-destructive">
+          {error}
+        </div>
+      ) : null}
+    </section>
+  );
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden bg-background"
       data-mermaid-editor
       data-mermaid-tab-id={tab.id}
     >
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3 text-xs">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-1 text-xs">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="font-medium">Mermaid</span>
@@ -197,14 +289,14 @@ function MermaidPane({
           </div>
           <fieldset
             className="m-0 flex shrink-0 rounded-md border-0 bg-muted/50 p-0.5"
-            aria-label="Mermaid editor mode"
+            aria-label="Mermaid rendered tools"
           >
-            {(["source", "visual"] as const).map((option) => (
+            {(["preview", "visual"] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 aria-pressed={mode === option}
-                onClick={() => setMode(option)}
+                onClick={() => { setMode(option); if (viewMode === "raw") onSetView(tab.id, "side-by-side"); }}
                 className={`rounded px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
                   mode === option
                     ? "bg-background text-foreground shadow-sm"
@@ -216,6 +308,7 @@ function MermaidPane({
             ))}
           </fieldset>
         </div>
+        <ViewModeToggle mode={viewMode} onChange={(next) => onSetView(tab.id, next)} />
         <fieldset
           className="m-0 flex items-center gap-1 border-0 p-0"
           aria-label="Diagram zoom controls"
@@ -247,110 +340,19 @@ function MermaidPane({
         </fieldset>
       </div>
 
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-        <ResizablePanel defaultSize={42} minSize={25}>
-          <section
-            className="h-full min-h-0 border-r border-border/50 zoom-exempt"
-            aria-label="Mermaid source editor"
-          >
-            {mode === "visual" ? (
-              <MermaidVisualEditorLazy
-                source={draftSource}
-                visualLayout={tab.visualLayout}
-                onSourceChange={updateSource}
-                onVisualLayoutChange={(layout) =>
-                  onVisualLayoutChange(tab.id, layout)
-                }
-                validateGeneratedSource={validateGeneratedSource}
-              />
-            ) : useLightweightEditor ? (
-              <textarea
-                aria-label="Large Mermaid source"
-                className="h-full w-full resize-none bg-background p-3 font-mono text-xs text-foreground outline-none"
-                onBlur={commitDraft}
-                onChange={(event) => updateSource(event.currentTarget.value)}
-                placeholder="flowchart LR\n  A --> B"
-                spellCheck={false}
-                value={draftSource}
-              />
-            ) : (
-              <CodeMirror
-                value={draftSource}
-                onBlur={commitDraft}
-                onChange={updateSource}
-                theme={editorTheme}
-                height="100%"
-                className="h-full min-h-0 overflow-hidden"
-                placeholder="flowchart LR\n  A --> B"
-                basicSetup={{
-                  lineNumbers: true,
-                  highlightActiveLineGutter: true,
-                  foldGutter: true,
-                  bracketMatching: true,
-                  closeBrackets: true,
-                  autocompletion: false,
-                  highlightActiveLine: true,
-                  highlightSelectionMatches: true,
-                  searchKeymap: true,
-                }}
-              />
-            )}
-          </section>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={58} minSize={25}>
-          <section
-            className="relative flex h-full min-h-0 flex-col bg-muted/15"
-            aria-label="Mermaid diagram preview"
-          >
-            <div
-              className="flex h-7 shrink-0 items-center gap-2 border-b border-border/50 px-3 text-[11px] text-muted-foreground"
-              aria-live="polite"
-            >
-              {pending
-                ? "Rendering…"
-                : error
-                  ? svg
-                    ? "Preview from last valid source"
-                    : "Render failed"
-                  : !livePreviewEnabled
-                    ? svg
-                      ? `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB: showing last rendered source`
-                      : `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB`
-                    : "Preview up to date"}
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto p-6">
-              {svg ? (
-                <img
-                  alt="Rendered Mermaid diagram"
-                  className="mx-auto block h-auto max-w-none origin-top-left"
-                  style={{ transform: `scale(${zoom})` }}
-                  src={svgUrl}
-                />
-              ) : !livePreviewEnabled && !error ? (
-                <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
-                  Live preview is paused for large sources to keep the editor
-                  responsive.
-                </div>
-              ) : pending ? (
-                <div className="grid h-full place-items-center text-sm text-muted-foreground">
-                  Rendering diagram…
-                </div>
-              ) : null}
-              {!svg && error ? (
-                <div className="mx-auto mt-8 max-w-xl rounded-md border border-destructive/40 bg-destructive/5 p-4 font-mono text-xs text-destructive">
-                  {error}
-                </div>
-              ) : null}
-            </div>
-            {error && svg ? (
-              <div className="shrink-0 border-t border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-[11px] text-destructive">
-                {error}
-              </div>
-            ) : null}
-          </section>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      <RenderableLayout
+        mode={viewMode}
+        raw={raw}
+        rendered={mode === "visual" ? (
+          <MermaidVisualEditorLazy
+            source={draftSource}
+            visualLayout={tab.visualLayout}
+            onSourceChange={updateSource}
+            onVisualLayoutChange={(layout) => onVisualLayoutChange(tab.id, layout)}
+            validateGeneratedSource={validateGeneratedSource}
+          />
+        ) : preview}
+      />
     </div>
   );
 }
@@ -358,6 +360,7 @@ function MermaidPane({
 type MermaidStackProps = {
   tabs: MermaidTab[];
   activeId: number | null;
+  onSetView: (id: number, mode: ViewMode) => void;
   onSourceChange: (tabId: number, source: string) => void;
   onVisualLayoutChange: (
     tabId: number,
@@ -368,6 +371,7 @@ type MermaidStackProps = {
 export function MermaidStack({
   tabs,
   activeId,
+  onSetView,
   onSourceChange,
   onVisualLayoutChange,
 }: MermaidStackProps) {
@@ -384,6 +388,7 @@ export function MermaidStack({
         >
           <MermaidPane
             active={tab.id === activeId}
+            onSetView={onSetView}
             tab={tab}
             onSourceChange={onSourceChange}
             onVisualLayoutChange={onVisualLayoutChange}

@@ -33,7 +33,7 @@ export function useEditorFileSync({ tabs, tabsRef, editorRefs }: Params) {
       if (appliedDiffsRef.current.has(t.approvalId)) continue;
       appliedDiffsRef.current.add(t.approvalId);
       for (const e of tabs) {
-        if (e.kind !== "editor") continue;
+        if (e.kind !== "editor" && e.kind !== "markdown") continue;
         if (e.path !== t.path) continue;
         editorRefs.current.get(e.id)?.reload();
       }
@@ -50,7 +50,7 @@ export function useEditorFileSync({ tabs, tabsRef, editorRefs }: Params) {
           const normalizedPath = event.payload.path.replace(/\\/g, "/");
           const currentTabs = tabsRef.current;
           for (const t of currentTabs) {
-            if (t.kind !== "editor") continue;
+            if (t.kind !== "editor" && t.kind !== "markdown") continue;
             if (t.path.replace(/\\/g, "/") === normalizedPath) {
               editorRefs.current.get(t.id)?.reload();
             }
@@ -65,7 +65,9 @@ export function useEditorFileSync({ tabs, tabsRef, editorRefs }: Params) {
   const editorWatchRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const want = new Set<string>();
-    for (const t of tabs) if (t.kind === "editor") want.add(parentDir(t.path));
+    for (const t of tabs) {
+      if (t.kind === "editor" || t.kind === "markdown") want.add(parentDir(t.path));
+    }
     const prev = editorWatchRef.current;
     const toAdd = [...want].filter((d) => !prev.has(d));
     const toRemove = [...prev].filter((d) => !want.has(d));
@@ -80,7 +82,7 @@ export function useEditorFileSync({ tabs, tabsRef, editorRefs }: Params) {
     void listenFsChanged((paths) => {
       const changed = new Set(paths.map((p) => p.replace(/\\/g, "/")));
       for (const t of tabsRef.current) {
-        if (t.kind !== "editor") continue;
+        if (t.kind !== "editor" && t.kind !== "markdown") continue;
         if (changed.has(t.path.replace(/\\/g, "/"))) {
           editorRefs.current.get(t.id)?.reload();
         }

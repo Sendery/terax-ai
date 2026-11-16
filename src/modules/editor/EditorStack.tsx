@@ -1,6 +1,6 @@
-import { cn, isMarkdownPath } from "@/lib/utils";
-import { MarkdownViewToggle } from "@/modules/markdown";
-import type { EditorTab, Tab } from "@/modules/tabs";
+import { cn } from "@/lib/utils";
+import { resolveViewMode, type ViewMode } from "@/modules/renderable/viewMode";
+import type { EditorTab, MarkdownTab, Tab } from "@/modules/tabs";
 import { useEffect, useRef } from "react";
 import { EditorPane, type EditorPaneHandle } from "./EditorPane";
 
@@ -10,7 +10,7 @@ type Props = {
   onDirtyChange: (id: number, dirty: boolean) => void;
   registerHandle: (id: number, handle: EditorPaneHandle | null) => void;
   onCloseTab: (id: number) => void;
-  onSetMarkdownView: (id: number, mode: "rendered" | "raw") => void;
+  onSetRenderableView: (id: number, mode: ViewMode) => void;
 };
 
 export function EditorStack({
@@ -19,10 +19,10 @@ export function EditorStack({
   onDirtyChange,
   registerHandle,
   onCloseTab,
-  onSetMarkdownView,
+  onSetRenderableView,
 }: Props) {
   const editors = tabs.filter(
-    (t): t is EditorTab => t.kind === "editor" && !t.cold,
+    (t): t is EditorTab | MarkdownTab => (t.kind === "editor" || t.kind === "markdown") && !t.cold,
   );
 
   // Stable per-tab callbacks. Inline arrows in `ref` and `onDirtyChange`
@@ -104,17 +104,12 @@ export function EditorStack({
             aria-hidden={!visible}
           >
             <div className="relative h-full overflow-hidden rounded-md border border-border/60 bg-background">
-              {isMarkdownPath(t.path) && (
-                <MarkdownViewToggle
-                  mode="raw"
-                  onChange={(mode) => onSetMarkdownView(t.id, mode)}
-                  renderedDisabled={t.dirty}
-                  renderedHint="Save to preview"
-                />
-              )}
               <EditorPane
                 ref={getRefCallback(t.id)}
                 path={t.path}
+                viewMode={resolveViewMode(t)}
+                visible={visible}
+                onSetView={(mode) => onSetRenderableView(t.id, mode)}
                 onDirtyChange={getDirtyCallback(t.id)}
                 onClose={getCloseCallback(t.id)}
               />

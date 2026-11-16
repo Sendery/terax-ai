@@ -1,9 +1,9 @@
 # Mermaid diagrams
 
-Terax has a first-class Mermaid tab: a split view with a source editor on the
-left and a live diagram preview on the right. The same tab offers two editing
-modes, **Source** and **Visual**, selectable from the `Mermaid editor mode`
-control in the tab toolbar.
+Terax has a first-class Mermaid tab with **Raw**, **Rendered** and **Side by side**
+views. Raw keeps the source editor; Side by side shows it beside the rendered
+surface. The `Mermaid rendered tools` control selects **Preview** or **Visual**
+for that surface, preserving the raw editor and its selection.
 
 Mermaid source is the canonical representation. Visual mode never becomes a
 second source of truth: every visual mutation is serialized back to Mermaid,
@@ -36,9 +36,9 @@ message above it.
 Rendered fences are read-only. To edit one, switch the markdown tab to its raw
 view, select the snippet and choose **Open Mermaid**.
 
-## Source mode
+## Raw source
 
-Source mode supports **every** Mermaid format the bundled Mermaid 11 understands.
+Raw source supports **every** Mermaid format the bundled Mermaid 11 understands.
 Nothing in this document restricts what you can write; the restrictions below
 apply only to Visual mode.
 
@@ -115,5 +115,9 @@ These parse and render fine, but keep Visual mode read-only:
 - Every other diagram type, including class, state, ER, Gantt, pie, git graph,
   mindmap, timeline, and quadrant charts.
 
-To edit any of these, switch back to Source mode. Switching modes never rewrites
+To edit any of these, switch back to Raw or Side by side. Switching modes never rewrites
 the source on its own.
+
+## Shared document views
+
+Use Raw / Rendered / Side by side to arrange source and rendered content. The source editor stays mounted across those changes. Preview / Visual selects the rendered-side surface; choosing Visual while Raw is selected reveals Side by side. Visual editing retains the supported subset and validation described above. Mermaid files (`.mmd`, `.mermaid`) use the same safe renderer without creating another tab, and save through the file editor. See [renderable views](renderable-views.md).

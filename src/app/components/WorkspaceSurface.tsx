@@ -4,7 +4,6 @@ import type { GraphPanelProps } from "@/modules/graphx/GraphPanels";
 import { cn } from "@/lib/utils";
 import { AiDiffStack, EditorStack, GitDiffStack } from "@/modules/editor";
 import { GitHistoryStack } from "@/modules/git-history";
-import { MarkdownStack } from "@/modules/markdown";
 import { MermaidStack } from "@/modules/mermaid";
 import { PrReviewStack } from "@/modules/pr-review";
 import { PreviewStack } from "@/modules/preview";
@@ -46,7 +45,7 @@ type Props = {
   onOpenCommitFile: GitHistoryStackProps["onOpenCommitFile"];
   onPrReviewBaseChange: (tabId: number, base: string) => void;
   onGitHistorySearchHandle: GitHistoryStackProps["onSearchHandle"];
-  onSetMarkdownView: EditorStackProps["onSetMarkdownView"];
+  onSetRenderableView: EditorStackProps["onSetRenderableView"];
   onMermaidSourceChange: MermaidStackProps["onSourceChange"];
   onMermaidVisualLayoutChange: MermaidStackProps["onVisualLayoutChange"];
 };
@@ -83,15 +82,14 @@ export function WorkspaceSurface({
   onOpenCommitFile,
   onPrReviewBaseChange,
   onGitHistorySearchHandle,
-  onSetMarkdownView,
+  onSetRenderableView,
   onMermaidSourceChange,
   onMermaidVisualLayoutChange,
 }: Props) {
   const kind = activeTab?.kind;
   const isTerminalTab = kind === "terminal";
-  const isEditorTab = kind === "editor";
+  const isEditorTab = kind === "editor" || kind === "markdown";
   const isPreviewTab = kind === "preview";
-  const isMarkdownTab = kind === "markdown";
   const isMermaidTab = kind === "mermaid";
   const isAiDiffTab = kind === "ai-diff";
   const isGitDiffTab = kind === "git-diff" || kind === "git-commit-file";
@@ -139,7 +137,7 @@ export function WorkspaceSurface({
             registerHandle={registerEditorHandle}
             onDirtyChange={onEditorDirtyChange}
             onCloseTab={onEditorCloseTab}
-            onSetMarkdownView={onSetMarkdownView}
+            onSetRenderableView={onSetRenderableView}
           />
         </div>
         <div
@@ -159,19 +157,6 @@ export function WorkspaceSurface({
         <div
           className={cn(
             "absolute inset-0 px-3 pt-2 pb-2",
-            !isMarkdownTab && "invisible pointer-events-none",
-          )}
-          aria-hidden={!isMarkdownTab}
-        >
-          <MarkdownStack
-            tabs={tabs}
-            activeId={activeId}
-            onSetMarkdownView={onSetMarkdownView}
-          />
-        </div>
-        <div
-          className={cn(
-            "absolute inset-0 px-3 pt-2 pb-2",
             !isMermaidTab && "invisible pointer-events-none",
           )}
           aria-hidden={!isMermaidTab}
@@ -181,6 +166,7 @@ export function WorkspaceSurface({
             activeId={activeId}
             onSourceChange={onMermaidSourceChange}
             onVisualLayoutChange={onMermaidVisualLayoutChange}
+            onSetView={onSetRenderableView}
           />
         </div>
         <div
@@ -241,6 +227,7 @@ export function WorkspaceSurface({
         onUpdate={onGraphUpdate}
         onPlace={onGraphPlace}
         onPanel={onGraphPanel}
+        onSetView={onSetRenderableView}
       />
     </div>
   );

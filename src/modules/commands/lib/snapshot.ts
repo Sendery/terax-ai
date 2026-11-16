@@ -1,3 +1,4 @@
+import { fileRenderKind, resolveViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import { leafIds } from "@/modules/terminal";
 import type { SidebarViewId } from "@/modules/sidebar";
 import type { Tab, TabColor } from "@/modules/tabs";
@@ -13,6 +14,7 @@ export type SnapshotTab =
   | {
       id: number;
       kind: "graphx";
+      viewMode?: ViewMode;
       spaceId: string;
       title: string;
       graphId: string;
@@ -39,6 +41,7 @@ export type SnapshotTab =
   | {
       id: number;
       kind: "editor";
+      viewMode?: ViewMode;
       spaceId: string;
       title: string;
       path: string;
@@ -57,6 +60,8 @@ export type SnapshotTab =
   | {
       id: number;
       kind: "markdown";
+      dirty: boolean;
+      viewMode?: ViewMode;
       spaceId: string;
       title: string;
       path: string;
@@ -65,6 +70,7 @@ export type SnapshotTab =
   | {
       id: number;
       kind: "mermaid";
+      viewMode?: ViewMode;
       spaceId: string;
       title: string;
       sourceCharacters: number;
@@ -276,6 +282,7 @@ function serializeTab(tab: Tab): SnapshotTab {
     return {
       id: tab.id,
       kind: "editor",
+      ...(fileRenderKind(tab.path) ? { viewMode: resolveViewMode(tab) } : {}),
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       path: tab.path,
@@ -300,6 +307,8 @@ function serializeTab(tab: Tab): SnapshotTab {
     return {
       id: tab.id,
       kind: "markdown",
+      dirty: !!tab.dirty,
+      viewMode: resolveViewMode(tab),
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       path: tab.path,
@@ -311,6 +320,7 @@ function serializeTab(tab: Tab): SnapshotTab {
     return {
       id: tab.id,
       kind: "graphx",
+      viewMode: resolveViewMode(tab),
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       graphId: tab.graphId,
@@ -324,6 +334,7 @@ function serializeTab(tab: Tab): SnapshotTab {
     return {
       id: tab.id,
       kind: "mermaid",
+      viewMode: resolveViewMode(tab),
       spaceId: tab.spaceId,
       title: displayTitle(tab),
       sourceCharacters: tab.source.length,

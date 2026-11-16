@@ -1015,7 +1015,7 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 - **Trigger:** formatting inserted regions in a file containing repeated JSX or hook bodies.
 - **Failure mode:** selecting a subset of line-diff formatter edits can align repeated blocks across distant regions, drop siblings or duplicate surrounding declarations.
-- **Prevention:** format complete syntax units or complete files; never apply selected sequence-matcher opcodes as formatting edits. Review unexpected deletions before running the app.
+- **Prevention:** format complete syntax units or complete files; never apply selected sequence-matcher opcodes as formatting edits or simplify nested parentheses with a lexical pattern. Type assertions and same-line function calls need syntax-aware handling. Review unexpected deletions before running the app.
 - **Verification:** typecheck, lint and affected behavior tests after formatting; inspect the complete diff for unchanged sibling views.
 
 ### Graph renderer lifetime is separate from document lifetime
@@ -1067,3 +1067,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** the stage's 58vh rule wins over the inherited mount height; resizing the panel leaves unused space even though the outer frame resizes.
 - **Prevention:** use the embed's own static CSS to make the stage consume remaining flex height, with min-height zero and nonshrinking toolbar/tour. Keep vendor code and engine lifecycle unchanged.
 - **Verification:** resize one already-rendered iframe at two widths below the media breakpoint. Assert actual SVG growth, unchanged frame/token/revision, natural tour height and no clipped tour content; replacing frames at different sizes does not prove live resize.
+
+### Preview presentation must not replace the document owner
+
+- **Trigger:** adding Raw / Rendered / Side by side views to a file or revisioned document.
+- **Failure mode:** changing tab kinds/remounting the editor loses drafts and selection; rereading disk previews stale text. Debouncing source while taking current metadata can label old graph pixels with a new revision.
+- **Prevention:** keep a single file buffer and stable editor location, conditionally mount only renderers, and debounce source plus document identity together. Keep dirty metadata, rename targets and location-reveal behavior aligned for legacy tab kinds. Scope resizable panel IDs with useId: the library exposes them as DOM IDs, so repeated generic IDs break multi-document accessibility. Guard asynchronous save/reload completion by document generation and edit revision.
+- **Verification:** mode and persistence round-trips, dirty Markdown reopen/rename, save/edit and reload/edit/path races, raw renderer-unmount tests and existing revision/capture invariants. Real selection, resize and WebKit appearance remain separate acceptance.
+
+### Static HTML isolation also needs navigation removal and bounded parsing
+
+- **Trigger:** rendering an arbitrary local HTML file inside the privileged app.
+- **Failure mode:** a sandbox alone still permits some frame-local navigation; asset URLs can bypass a narrow file-reader boundary, and deeply nested source can exhaust recursive sanitization.
+- **Prevention:** parse inert template contents, rebuild a namespace-aware allowlist, remove navigation/resource attributes and active elements, bound structure depth/node count and catch preview failures locally. Use an empty sandbox and independent restrictive CSP; never reuse trusted engine nonces or bridge protocols. Relative resources stay disabled unless a separately authorized reader is designed.
+- **Verification:** real HTML5 parser payloads cover scripts, events, meta refresh, SVG/MathML, URL schemes and reparsing of escaped values; depth/width limits reject safely. Source tests do not establish actual WebKit enforcement.

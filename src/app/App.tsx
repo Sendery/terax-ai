@@ -251,7 +251,7 @@ export default function App() {
     updateMermaidSource,
     replaceMermaidTabContent,
     updateMermaidVisualLayout,
-    setMarkdownView,
+    setRenderableView,
     openAiDiffTab,
     closeAiDiffTab,
     openGitDiffTab,
@@ -562,7 +562,7 @@ export default function App() {
   notesApiRef.current = tabNotes;
   const isTerminalTab = activeTab?.kind === "terminal";
   const isBlockTab = activeTerminalTab?.blocks === true;
-  const isEditorTab = activeTab?.kind === "editor";
+  const isEditorTab = activeTab?.kind === "editor" || activeTab?.kind === "markdown";
   const isGitHistoryTab = activeTab?.kind === "git-history";
 
   useEditorFileSync({ tabs, tabsRef, editorRefs });
@@ -610,7 +610,7 @@ export default function App() {
       // the effect below as the pane tree changes; only the tab-id-keyed
       // handles need explicit cleanup here.
       const tab = tabsRef.current.find((tab) => tab.id === id);
-      if (tab?.kind === "editor") pendingGotoLocation.current.delete(tab.path);
+      if (tab?.kind === "editor" || tab?.kind === "markdown") pendingGotoLocation.current.delete(tab.path);
       editorRefs.current.delete(id);
       previewRefs.current.delete(id);
       closeTab(id);
@@ -680,7 +680,7 @@ export default function App() {
       const lid = t.activeLeafId;
       return terminalRefs.current.get(lid)?.getSelection() ?? null;
     }
-    if (t.kind === "editor") {
+    if (t.kind === "editor" || t.kind === "markdown") {
       return editorRefs.current.get(activeId)?.getSelection() ?? null;
     }
     return null;
@@ -733,7 +733,7 @@ export default function App() {
         return;
       }
       const source: "terminal" | "editor" =
-        activeTab?.kind === "editor" ? "editor" : "terminal";
+        (activeTab?.kind === "editor" || activeTab?.kind === "markdown") ? "editor" : "terminal";
       attachSelection(selection, source);
     },
     [hasComposer, focusInput, attachSelection, activeTab],
@@ -1128,7 +1128,7 @@ export default function App() {
   const handlePathRenamed = useCallback(
     (from: string, to: string) => {
       for (const t of tabs) {
-        if (t.kind !== "editor") continue;
+        if (t.kind !== "editor" && t.kind !== "markdown") continue;
         if (t.path === from) {
           const i = to.lastIndexOf("/");
           updateTab(t.id, { path: to, title: i === -1 ? to : to.slice(i + 1) });
@@ -1154,7 +1154,7 @@ export default function App() {
       : null;
 
   const activeFilePath = (() => {
-    if (activeTab?.kind === "editor") return activeTab.path;
+    if (activeTab?.kind === "editor" || activeTab?.kind === "markdown") return activeTab.path;
     if (activeTab?.kind === "git-diff") {
       if (/^([A-Za-z]:|\/|\\)/.test(activeTab.path)) return activeTab.path;
       const root = activeTab.repoRoot.replace(/[\\/]+$/, "");
@@ -1323,7 +1323,7 @@ export default function App() {
   const shortcutsDisabled = useCallback(
     (id: ShortcutId, e: KeyboardEvent) => {
       if (id === "editor.undo" || id === "editor.redo") {
-        return activeTab?.kind !== "editor";
+        return activeTab?.kind !== "editor" && activeTab?.kind !== "markdown";
       }
       if (id === "ai.askSelection" || id === "sidebar.toggle") {
         return shouldYieldTerminalShortcut(id, {
@@ -2453,7 +2453,7 @@ export default function App() {
                       onOpenCommitFile={openCommitFileDiffTab}
                       onPrReviewBaseChange={handlePrReviewBaseChange}
                       onGitHistorySearchHandle={setGitHistoryHandle}
-                      onSetMarkdownView={setMarkdownView}
+                      onSetRenderableView={setRenderableView}
                       onMermaidSourceChange={updateMermaidSource}
                       onMermaidVisualLayoutChange={updateMermaidVisualLayout}
                     />

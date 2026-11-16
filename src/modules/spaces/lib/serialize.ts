@@ -1,3 +1,4 @@
+import { isViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import {
   parseGraphSource,
   graphIdSchema,
@@ -29,7 +30,7 @@ export type SerializedNode =
   | { kind: "leaf"; cwd?: string; active?: boolean }
   | { kind: "split"; dir: SplitDir; children: SerializedNode[] };
 
-type SerializedTabBase = { color?: TabColor; notes?: NoteCard[] };
+type SerializedTabBase = { viewMode?: ViewMode; color?: TabColor; notes?: NoteCard[] };
 
 export type SerializedTab =
   | (SerializedTabBase & {
@@ -232,6 +233,7 @@ export function serializeTabs(tabs: Tab[]): SerializedTab[] {
   for (const tab of tabs) {
     const s = serializeTab(tab);
     if (!s) continue;
+    if (["editor", "markdown", "mermaid", "graphx"].includes(tab.kind) && isViewMode(tab.viewMode)) s.viewMode = tab.viewMode;
     if (tab.notes?.length) {
       const valid = tab.notes.filter(isNoteCard);
       if (valid.length) s.notes = valid;
@@ -315,6 +317,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "editor",
+        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
         spaceId,
         cold: true,
         title: basename(s.path),
@@ -337,6 +340,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "markdown",
+        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
         spaceId,
         cold: true,
         title: basename(s.path),
@@ -397,6 +401,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "graphx",
+        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
         spaceId,
         cold: true,
         title: spec.title,
@@ -425,6 +430,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "mermaid",
+        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
         spaceId,
         cold: true,
         title,
