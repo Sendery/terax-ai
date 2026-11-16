@@ -2,10 +2,11 @@
 
 Code candidate: 03a44af64dff5f7e99209d0e417fb3c513c63e75, consolidated in local qa.
 This report records the completed implementation and the first general
-validation block, followed by artifact-specific acceptance updates. The latest
-Codex follow-up uses native packaged source 3228447; cursor b65c960 and earlier
-2d869a3 cases retain their original provenance. Functional replacement and default rollout
-remain open.
+validation block, followed by artifact-specific acceptance updates. Actual OS
+file drops use packaged source 1f80a0b, document modes use 7c9d1b3, and Codex
+plus grouped image/Unicode/hidden-output checks use 3228447. Cursor b65c960 and
+earlier 2d869a3 cases retain their original provenance. Functional replacement
+and default rollout remain open.
 
 ## Japanese composition validation deferred
 
@@ -311,15 +312,17 @@ workspace/readiness checks, marker proofs, two TUI event records, calibrated
 geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
-The concrete selection correction is now accepted on M2. GraphX loading, placement, capture and live resize are now accepted in the
-separate Pi-Terax/GraphX report linked below. The ordinary selection/search and block-search
-live history-trim cases are now accepted in the follow-ups below. Remaining
-acceptance includes other block-output/header cases, cursor blur/focus, zoom,
-theme and background-contrast preferences; broader
-blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
-and failure scenarios; physical mixed-DPI and applicable supported-platform/
-default and real-workload requirements. Historical completed slices are
-retained as evidence, not substituted for the scope of a new check.
+The concrete selection correction is accepted on M2. GraphX loading,
+placement, capture and live resize are accepted in the separate Pi-Terax/GraphX
+report. Follow-ups below accept ordinary/block live history trim, cursor
+focus/blur, scoped fonts/theme/zoom, Codex handoff/startup context, exact Unicode
+copy/reflow, finite hidden output, image reconstruction, basic HTML modes and
+actual two-split macOS file drops. Remaining acceptance includes other
+block-output/header cases and background-image contrast; broader document,
+AI/agent/task consumers; additional privacy/stale-owner and failure scenarios;
+actual renderer recovery triggers, physical mixed-DPI and applicable supported
+platform/default/real-workload requirements. Retain accepted slices without
+promoting them to untested categories.
 
 Concrete product failures found after this general sweep use atomic worktrees
 and directed checks. Already-passed whole floors are not repeated without a
@@ -585,3 +588,72 @@ restored. Current app PID 92065 retains original fixture shells 43247/43246.
 This accepts scoped A08 startup, CWD and conversation context for Codex;
 persistent task linkage, other agents, Terax AI context tools and the broader
 terminal/default/platform goal remain open.
+
+## Grouped images, Unicode reflow and hidden-output follow-up
+
+Source 3228447, app PID 92065 and owned ordinary tab 42/peer 64137 passed the
+ignored visual-unicode-hidden-3228447/acceptance.json case under
+.terax/pi-development/m2/logs/. Direct red RGBA and green virtual Kitty images
+retained exact color pixels and geometry after hiding and revealing the tab.
+The same peer's combining/CJK/clustered-emoji selection matched exactly
+632 UTF-8 bytes and 351 codepoints before narrowing, after narrowing and after
+growing, without normalization or soft-wrap breaks in copied text.
+
+A finite 34-line batch completed while hidden, before reshow. The selected
+complete result then matched 1629 UTF-8 bytes; unexpected PTY input was zero
+and every copy restored the full original clipboard. Captures stayed on M2.
+The peer reached its bounded fixture deadline after the checks. Retained
+healthy-shell-exit behavior remains unverified by this case.
+
+The original individual split width was not restored: the receipt records
+773 versus 260 and originalSplitWidthRestored false. The later cleanup.json
+closed the owned tab, restored GraphX placement left and recovered all 13
+original tabs' exact public metadata. This is scoped cleanup, not a successful
+divider rollback. See the
+[accepted case and original image-protocol audit](2026-11-16-terminal-acceptance-status.md#unicode-reflow-and-hidden-output-accepted).
+
+The audited original xterm at 3c5eedb/369b0e1/0c573d8 and its current path load
+Fit, Search, Serialize, WebLinks and Webgl, with no ImageAddon or custom
+Sixel/IIP/Kitty graphics path. Native Kitty is an added app capability; this
+does not introduce a requirement to match all Ghostty desktop image protocols.
+
+## Basic document view-mode follow-up
+
+The ignored qa-view-smoke-7c9d1b3/acceptance.json and docs-mode-state.json
+receipts bind this case to source 7c9d1b3 and app PID 89212. The actual WebKit
+HTML cycle Raw, Rendered, Side by side, Raw displayed the known heading and
+omitted the script marker in Rendered. The marker visible as source in Raw
+and Side by side is not rendered script output.
+
+Markdown, Mermaid-file and .graphx mode controls were clicked and their states
+recorded. This is control/state evidence only, not full pixels, save or undo
+acceptance for those formats. All 13 original tabs and exact metadata were
+restored. See the
+[scoped document result](2026-11-16-terminal-acceptance-status.md#document-view-mode-smoke-accepted).
+
+## macOS Retina OS file-drop follow-up
+
+The ignored dropfix-1f80/acceptance.json receipt records a real NSDraggingSession
+on source 1f80a0b, app PID 92525 and owned tab 40. The source offered both
+public.file-url and NSFilenamesPboardType as Finder does. An earlier source
+offering only file URLs yielded zero paths because pinned Wry reads the
+legacy representation; it did not establish a product drop failure.
+
+A separate real product defect divided AppKit point coordinates by DPR before
+DOM hit testing. The shared hook now preserves macOS points, with the other
+physical-coordinate path retained. Two focused cases were red before the
+correction; all 14 directed hook checks passed afterward.
+
+Actual left/right drops then delivered exactly 174 bracketed and 162 plain
+bytes respectively, one correct path each, once. The right receiver remained
+empty after the first drop; neither path crossed to the other split. Spaces,
+shell metacharacters and apostrophes matched exactly, and the macOS NFD path
+identified the same canonical Unicode file. Original metadata for all 13 tabs
+and GraphX placement left were restored.
+
+This closes the two-split Retina OS-drop slice, not every drag-source format,
+platform or clipboard/pointer scenario. The complete
+[scoped OS-drop result](2026-11-16-terminal-acceptance-status.md#actual-os-file-drops-to-both-splits-accepted)
+retains artifact provenance. FPS and Japanese composition remain deferred
+under the user's explicit backlog order. This documentation update ran no UI,
+bridge, model, Cargo, build, Actions or broad test suite.

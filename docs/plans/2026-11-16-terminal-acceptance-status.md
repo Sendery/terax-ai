@@ -1,10 +1,11 @@
 # Native terminal acceptance status
 
 The active goal is a usable Terax with the new terminal and the same or better
-existing capabilities. It is not complete. This checkpoint starts from local qa
-3228447f7731420c8a0bcda6b2ba8717651baf57, the packaged source used for the
-current Codex acceptance. Cursor and earlier cases retain their own b65c960
-and 2d869a3 artifact provenance below.
+existing capabilities. It is not complete. This documentation checkpoint starts
+from local qa 1f80a0b1c908dccc7d215141c34e3a86a2f5a085, the packaged source
+used for the actual OS file-drop acceptance. Document views use 7c9d1b3;
+Codex and the grouped image/Unicode/hidden-output cases use 3228447.
+Cursor and earlier cases retain their own b65c960 and 2d869a3 provenance.
 This update changes documentation only.
 
 The [parity inventory](2026-11-14-terminal-parity.md) supplies requirement IDs.
@@ -27,13 +28,13 @@ after 60 FPS. Neither item blocks the M2 migration.
 | --- | --- | --- |
 | 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. On native 3228447, Kanagawa persists with the Codex pane visible, and 110 percent zoom keeps its composer legible; both restore to their originals with the same PTY. | Other unavailable block-output/header cases; remaining theme/settings combinations and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
 | 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | Japanese composition/IME and candidate-confirming Enter are deferred after the optional 60 FPS goal, outside M2 migration gates. The later CG-event attempt is inconclusive, not accepted or a confirmed native failure. Other dead-key/composition cases, actual multiline paste with/without negotiated brackets, and remaining real Claude/Codex navigation and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
-| 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
-| 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
+| 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. Actual OS drops on macOS Retina 1f80a0b deliver one correctly quoted path to each split, with bracketed paste only on the negotiated left receiver; the other split receives nothing during the first drop. Spaces, Unicode canonical file identity, metacharacters and apostrophes are preserved. Cmd+A/right-click preserves the selection in the Mermaid case. | Word/line/rectangle selection, off-pane autoscroll and remaining hover-overlay/physical mixed-DPI cases. The accepted two-split Retina drop does not establish other platforms or all drag-source formats. |
+| 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Basic HTML Raw/Rendered/Side by side switching has real WebKit evidence on 7c9d1b3; Markdown, Mermaid-file and .graphx mode controls have recorded state only. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. Full document-format pixels, save and undo remain unverified by the mode-control smoke. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
 | 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. On native 3228447, Codex is detected in its owned monitor row before a turn. One manual three-line task reuses that target and runs exactly once. An actual Always-policy restart restores one Codex TUI in its CWD; a second gpt-6.1-sol turn recalls the earlier context without repeating its identifier in the question. | Remaining split activity/attention/exit; timer-driven delivery, unavailable/unchanged buffers and retry/owner cases. Task-to-tab persistence across restart remains a separate baseline follow-up. Terax AI context consumers and authenticated Claude remain open; these Codex cases do not establish the whole scheduled lifecycle. |
-| 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. Native tests cover final output and sticky failures. | Known finite output while another pane remains usable, hidden output conservation, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. No throughput experiment is needed. |
+| 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. On 3228447, a finite 34-line output batch completes while the owned tab is hidden; revealing the same peer preserves all 1629 expected UTF-8 bytes with no unexpected PTY input. Native tests cover final output and sticky failures. | Concurrent input in another pane during bounded output, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. The fixture deadline after completed checks does not establish retained shell-exit behavior. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
-| 9. Unicode and inline graphics, T07/D04 | Mode 2027 clusters, direct PNG/RGB/RGBA/z layers, and virtual one-pixel placeholders spanning rows have real pixel evidence, including GPU/software. | Reflow/search/copy for complex text, cropped edges and image scroll/history interactions. These paths have implementation/native tests; remaining pixels are not absent code. |
+| 9. Unicode and inline graphics, T07/D04 | Mode 2027 clusters, direct PNG/RGB/RGBA/z layers, and virtual one-pixel placeholders spanning rows have real pixel evidence, including GPU/software. The 3228447 follow-up preserves exact direct/virtual RGBA pixels and geometry across tab hide/reveal. Combining/CJK/emoji text copies exactly as 632 UTF-8 bytes and 351 codepoints before narrowing, after narrowing and after growing the same pane. | Complex-text search, cropped edges and image scroll/history interactions. These paths have implementation/native tests; remaining pixels are not absent code. Sixel/iTerm protocols were not enabled in the original app and are not new parity gates. |
 | 10. Capture and privacy, A11/A14 | Active/inactive ordinary captures preserve focus and PTYs. Private active/hidden surfaces refuse scoped/window captures; an explicit inactive public pane remains capturable. GraphX capture is accepted separately. | Inactive blocks/images/graphemes and software capture together; retired owner and mid-capture privacy changes; unchanged viewport and focus. |
 | 11. Explicit notifications and progress, A07/D04 | Pane-owned progress 42 appears and clears; hidden multipart OSC 99 reaches the bell without inventing an agent session. | OS banner title/body, OSC9, error/paused/indeterminate progress and private/stale-owner behavior. A bell row displaying the body does not prove the banner title. |
 | 12. Shells and supported targets, A01/A12/D01/D05 | Ordinary zsh CWD/readiness, pane isolation and spoof rejection are accepted. Real zsh/bash integration and verified arm64 prebuilt consumers have scoped evidence. | Fish/PowerShell/WSL and supported target environments; matching extended-core target artifacts, runtime failure behavior and rollout gates below. M2 tests do not stand in for those systems. |
@@ -299,6 +300,102 @@ zoom 100 percent were restored. The current app remains PID 92065 with original
 fixture zsh PIDs 43247/43246. This accepts the scoped A08 Codex startup/CWD and
 conversation-context case, alongside the first manual task; it does not accept
 all agents, task-link persistence, Terax context tools or total terminal parity.
+
+## Unicode, reflow and hidden output accepted
+
+The ignored M2 receipts are
+.terax/pi-development/m2/logs/visual-unicode-hidden-3228447/acceptance.json
+and cleanup.json in qa. They bind the case to source
+3228447f7731420c8a0bcda6b2ba8717651baf57, app PID 92065, owned ordinary tab 42
+and peer PID 64137.
+
+The tiny direct red RGBA placement and green virtual Unicode placeholders were
+visible before hiding. After hide/reveal, exact color pixels and geometry were
+preserved for both images. The same peer then produced combining accents,
+CJK wide text and clustered emoji with mode 2027. Copying the selected text
+matched the expected UTF-8 bytes exactly before narrowing, after narrowing and
+after growing the pane: 632 bytes and 351 codepoints, without Unicode
+normalization or inserted soft-wrap breaks.
+
+A separate finite batch of 34 lines completed while the tab was hidden, before
+it was shown again. The complete selected text then matched 1629 expected
+UTF-8 bytes. Unexpected PTY input was zero, every clipboard copy restored all
+original formats, and terminal captures remained local to M2. Clipboard
+comparison used byte equality, not canonically equivalent string equality.
+The peer finished after the checks at its bounded fixture deadline; this is
+not a retained healthy-shell-exit acceptance case.
+
+The receipt explicitly records originalSplitWidthRestored false. It does not
+claim that the owned divider returned to its earlier width. Subsequent cleanup
+closed owned tab 42, restored GraphX placement to left and preserved the exact
+public metadata of all 13 original tabs. Complex-text search, image
+scroll/history and other renderer recovery triggers remain separate cases.
+
+### Original inline-image baseline
+
+Source audit at pre-native 3c5eedb, handoff 369b0e1 and baseline 0c573d8 found
+only Fit, Search, Serialize, WebLinks and Webgl addons in
+[rendererPool.ts](../../src/modules/terminal/lib/rendererPool.ts); the current
+xterm path retains that list. [package.json](../../package.json) has no
+@xterm/addon-image dependency, and those source trees contain no ImageAddon,
+Sixel/IIP implementation or custom Kitty-graphics parser. Their Kitty mentions
+describe keyboard handling. The native direct/virtual Kitty path therefore
+adds capability to this app; absent Sixel/iTerm/animation support is not a loss
+of an enabled original image protocol or a requirement to match all Ghostty
+desktop capabilities.
+
+## Document view-mode smoke accepted
+
+The ignored receipts
+.terax/pi-development/m2/logs/qa-view-smoke-7c9d1b3/acceptance.json
+and docs-mode-state.json bind this case to source
+7c9d1b311b027aa36e2e2dfe0ed83138eb520df3 and app PID 89212.
+
+The real WebKit HTML cycle was Raw, Rendered, Side by side, then Raw. The known
+heading was visible in Rendered, where the script marker was absent. Raw and
+Side by side show that marker as literal source text; this is not evidence of
+script execution or a failed rendered preview.
+
+Markdown, .mmd and .graphx mode controls were also clicked and their resulting
+states recorded: Markdown Raw, and the Mermaid/GraphX files Side by side. This
+establishes those control/state transitions only. It supplies no full preview
+pixel, save or undo acceptance for those formats. All 13 original tabs and
+their exact metadata were restored. Broader document-format and terminal
+consumer acceptance remains open.
+
+## Actual OS file drops to both splits accepted
+
+The ignored qa receipt
+.terax/pi-development/m2/logs/dropfix-1f80/acceptance.json binds this case to
+source 1f80a0b1c908dccc7d215141c34e3a86a2f5a085, app PID 92525 and owned tab 40.
+The source used a real NSDraggingSession with Finder-style public.file-url and
+NSFilenamesPboardType representations, rather than a DOM drag event or direct
+paste call. Pinned Wry 0.55.1 reads the legacy filename representation.
+An earlier file-URL-only fixture delivered zero paths; that was a drag-source
+fixture limitation, not proof of a destination product failure.
+
+The real product defect was coordinate conversion in
+[useTerminalFileDrop.ts](../../src/modules/terminal/lib/useTerminalFileDrop.ts):
+the pinned macOS backend supplies AppKit points despite the PhysicalPosition
+type label. Dividing by DPR hit the wrong split or accepted an outside point.
+The correction preserves macOS points and retains the physical-pixel conversion
+for the other path. Two focused regressions failed first; all 14 directed
+hook tests passed after correction. Those checks support the separately
+observed packaged-app result below.
+
+On macOS Retina, the left receiver got exactly 174 bytes with bracketed paste;
+the right got exactly 162 bytes without brackets. Each received its own single
+path once. After the first drop the right receiver still had zero bytes, and
+the final receipt confirms no cross-pane input. Quoting preserved shell
+metacharacters and apostrophes exactly. The macOS Unicode NFD spelling
+resolved to the same canonical file; this does not apply Unicode normalization
+to the independent exact-copy acceptance above.
+
+Cleanup preserved all 13 original tabs' exact metadata and restored GraphX
+placement left. This accepts OS file-drop targeting and paste negotiation for
+these two ordinary native splits. Other platform/drag-source formats and the
+broader pointer/clipboard categories remain open. The 1f80a0b coordinate fix is
+not attributed to the earlier 7c9d1b3 view-smoke artifact.
 
 ## Platform and rollout boundaries
 
