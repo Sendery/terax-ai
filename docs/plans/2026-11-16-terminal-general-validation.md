@@ -130,6 +130,40 @@ only the requested public split pane. Only the newly created private tab was
 closed. All twelve original tabs, three editors, three shell identities and
 active35 were restored and rechecked.
 
+## Blocks and a real Pi session
+
+Actual Cmd+Shift+T created one owned Blocks tab41. Shift+Enter inserted a
+newline in its command editor; Enter executed the complete two-line command
+once. Copy output returned both expected markers. Copy command returned the
+exact original multiline text. Each clipboard check restored all original
+pasteboard items and representations without printing their content.
+
+Run again executed the same full command once more: the program-owned counter
+changed from one to two. The captured pane shows both finished blocks, both
+output markers and their independent toolbars. Only the owned idle tab41 was
+closed. The original twelve tabs, three editors, three shells and active35
+were rechecked. Block-specific search and attachment actions are not inferred
+from this copy/repeat check.
+
+The installed Pi0.74.0 ran in the actual left native PTY with offline startup,
+an ephemeral session and the explicit built Terax extension. A real captured
+editor shows two unsent lines entered through Shift+Enter. The pane was hidden
+by focusing the existing public tab9, then restored to tab35. The same Pi PID
+and parent survived, and appending _RESUMED extended the second line without
+losing the first. The restored draft was visually inspected.
+
+Ctrl+C cleared the draft and Ctrl+D exited Pi normally with code0. No provider
+request was submitted. Original shells and workspace metadata remained intact.
+This accepts real Pi TUI input/hide/continue, not model responses, tool calls,
+managed restore or scheduled delivery.
+
+The first Pi fixture used a 120-second safety bound and was terminated by that
+bound after its successful multiline capture, before hide/restore. Its forced
+exit record remains. A second directed fixture used a 300-second safety bound
+and completed through normal application controls before that bound. The
+timeout is a test-harness limit, not evidence of a terminal crash or a passed
+graceful-exit check.
+
 ## Concrete defects after the general sweep
 
 A source review identified two legacy-only focus assumptions. The global
@@ -141,10 +175,11 @@ Shift override are documented in shortcuts.ts.
 
 The selection-action popup hook also only recognizes .xterm and .cm-editor,
 and its zero-delay read does not await native selection completion. The
-existing native context menu remains a separate working path. These concrete
-defects are being corrected in two exclusive atomic worktrees, with directed
-checks. No corrected runtime acceptance is claimed for the still-frozen
-03a44af artifact.
+existing native context menu remains a separate working path. The shortcut correction was committed as c502951 and integrated into qa
+as a89ce6d after review and 34 focused checks, types and scoped lint. The
+selection popup correction remains in its separate exclusive atomic worktree.
+No corrected runtime acceptance is claimed for the still-frozen 03a44af
+artifact.
 
 ## Evidence and remaining sweep
 
