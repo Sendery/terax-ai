@@ -32,7 +32,7 @@ after 60 FPS. Neither item blocks the M2 migration.
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Basic HTML Raw/Rendered/Side by side switching has real WebKit evidence on 7c9d1b3; Markdown, Mermaid-file and .graphx mode controls have recorded state only. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. Full document-format pixels, save and undo remain unverified by the mode-control smoke. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
 | 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. On native 3228447, Codex is detected in its owned monitor row before a turn. One manual three-line task reuses that target and runs exactly once. An actual Always-policy restart restores one Codex TUI in its CWD; a second gpt-6.1-sol turn recalls the earlier context without repeating its identifier in the question. | Remaining split activity/attention/exit; timer-driven delivery, unavailable/unchanged buffers and retry/owner cases. Task-to-tab persistence across restart remains a separate baseline follow-up. Terax AI context consumers and authenticated Claude remain open; these Codex cases do not establish the whole scheduled lifecycle. |
-| 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. On 3228447, a finite 34-line output batch completes while the owned tab is hidden; revealing the same peer preserves all 1629 expected UTF-8 bytes with no unexpected PTY input. Native tests cover final output and sticky failures. | Concurrent input in another pane during bounded output, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. The fixture deadline after completed checks does not establish retained shell-exit behavior. No throughput experiment is needed. |
+| 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. On 3228447, a finite 34-line output batch completes while the owned tab is hidden; revealing the same peer preserves all 1629 expected UTF-8 bytes with no unexpected PTY input. Native tests cover final output and sticky failures. The shared App handler preserves the original shell-exit UI policy described below. | Concurrent input in another pane during bounded output and failure that visibly invalidates the correct owner. Final-frame/exit ordering and retained-core queries keep their own evidence; a closed ordinary pane is not expected to remain available for UI copy/search/history. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
 | 9. Unicode and inline graphics, T07/D04 | Mode 2027 clusters, direct PNG/RGB/RGBA/z layers, and virtual one-pixel placeholders spanning rows have real pixel evidence, including GPU/software. The 3228447 follow-up preserves exact direct/virtual RGBA pixels and geometry across tab hide/reveal. Combining/CJK/emoji text copies exactly as 632 UTF-8 bytes and 351 codepoints before narrowing, after narrowing and after growing the same pane. | Complex-text search, cropped edges and image scroll/history interactions. These paths have implementation/native tests; remaining pixels are not absent code. Sixel/iTerm protocols were not enabled in the original app and are not new parity gates. |
 | 10. Capture and privacy, A11/A14 | Active/inactive ordinary captures preserve focus and PTYs. Private active/hidden surfaces refuse scoped/window captures; an explicit inactive public pane remains capturable. GraphX capture is accepted separately. | Inactive blocks/images/graphemes and software capture together; retired owner and mid-capture privacy changes; unchanged viewport and focus. |
@@ -322,8 +322,9 @@ it was shown again. The complete selected text then matched 1629 expected
 UTF-8 bytes. Unexpected PTY input was zero, every clipboard copy restored all
 original formats, and terminal captures remained local to M2. Clipboard
 comparison used byte equality, not canonically equivalent string equality.
-The peer finished after the checks at its bounded fixture deadline; this is
-not a retained healthy-shell-exit acceptance case.
+The peer finished after the checks at its bounded fixture deadline. This case
+does not establish final-frame/exit ordering; existing directed core evidence
+retains its own scope.
 
 The receipt explicitly records originalSplitWidthRestored false. It does not
 claim that the owned divider returned to its earlier width. Subsequent cleanup
@@ -396,6 +397,28 @@ placement left. This accepts OS file-drop targeting and paste negotiation for
 these two ordinary native splits. Other platform/drag-source formats and the
 broader pointer/clipboard categories remain open. The 1f80a0b coordinate fix is
 not attributed to the earlier 7c9d1b3 view-smoke artifact.
+
+## Shell-exit UI policy and retained-core scope
+
+A source comparison of baseline 0c573d8 and this checkpoint found the same
+handleLeafExit policy in [App.tsx](../../src/app/App.tsx). When a PTY shell
+exits, its leaf closes unless it is the last leaf of the last terminal tab;
+that last terminal respawns. The handler has no Blocks-specific exception.
+A foreground command returning while its parent shell stays alive is a
+different case: its output and completed command blocks remain usable.
+
+Keeping an exited shell's ordinary pane open for copy/search/history was not
+an enabled baseline capability. It is therefore not an M2 migration gate.
+This source audit establishes the policy comparison, not a new graphical
+acceptance case or a claim that a final output frame was observed before
+every close.
+
+The [engine contract](../architecture/terminal-engine.md) still requires ordered
+final output, honest failure reporting, and retained core text/selection
+queries until explicit close. Existing native final-frame/exit, post-exit-query
+and sticky-failure evidence remains valid within its recorded scope. App
+closing a leaf deliberately retires that core; it does not imply those
+contracts were removed or that the UI must keep the retired leaf visible.
 
 ## Platform and rollout boundaries
 

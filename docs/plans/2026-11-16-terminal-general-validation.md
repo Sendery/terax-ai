@@ -602,8 +602,9 @@ growing, without normalization or soft-wrap breaks in copied text.
 A finite 34-line batch completed while hidden, before reshow. The selected
 complete result then matched 1629 UTF-8 bytes; unexpected PTY input was zero
 and every copy restored the full original clipboard. Captures stayed on M2.
-The peer reached its bounded fixture deadline after the checks. Retained
-healthy-shell-exit behavior remains unverified by this case.
+The peer reached its bounded fixture deadline after the checks. This fixture
+does not establish final-frame/exit ordering; the directed core lifecycle
+evidence retains its own scope.
 
 The original individual split width was not restored: the receipt records
 773 versus 260 and originalSplitWidthRestored false. The later cleanup.json
@@ -657,3 +658,17 @@ platform or clipboard/pointer scenario. The complete
 retains artifact provenance. FPS and Japanese composition remain deferred
 under the user's explicit backlog order. This documentation update ran no UI,
 bridge, model, Cargo, build, Actions or broad test suite.
+
+## Shell-exit parity scope correction
+
+Comparing [App.tsx](../../src/app/App.tsx) at baseline 0c573d8 and this checkpoint
+shows the same handleLeafExit handler: shell completion closes the leaf, except
+the last leaf of the last terminal tab, which respawns. Blocks use the same
+handler. Normal completed command output remains available while its parent
+shell is alive; that is distinct from retaining a whole exited shell's pane.
+
+UI copy/search/history after that deliberate close is not an original-capability
+gate. This source-only correction accepts no new runtime case. It preserves the
+recorded native final-output ordering, retained-core query and failure contracts
+until explicit close. See the
+[policy and core-scope distinction](2026-11-16-terminal-acceptance-status.md#shell-exit-ui-policy-and-retained-core-scope).
