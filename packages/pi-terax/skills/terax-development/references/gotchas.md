@@ -1097,3 +1097,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** JSON.parse/stringify rounds large integers and removes duplicate keys; replacing the entire document collapses selection. A formatting transaction can trigger the normal autosave timer despite the toolbar promising draft-only changes.
 - **Prevention:** validate with the installed strict JSON grammar, edit only whitespace gaps, and isolate the transaction in history. Mark formatting transactions and cancel/suppress autosave for that update. Keep GraphX schema validation and explicit Apply/Save ownership unchanged.
 - **Verification:** exact large-number/duplicate/escape retention, forward/backward multiple selection mapping, one-step undo between typed edits, invalid-input no-op, stable parser line/column, and fake-timer coverage proving a pending autosave is cancelled while later typing resumes it.
+
+
+### Preserve native browser paste gestures on WebKit
+
+- **Trigger:** intercepting macOS Cmd+V in a custom terminal input host.
+- **Failure mode:** preventing default and calling navigator.clipboard.readText enters WebKit's modal paste-access menu instead of delivering text to the terminal; app/bridge work can appear stalled while the native menu tracks.
+- **Prevention:** preserve the normal key gesture and consume plaintext once from the paste event. Keep non-Mac helper shortcuts explicitly cancelled to avoid dual delivery. Recheck focused/visible/live ownership and session identity after asynchronous helper reads.
+- **Verification:** event tests assert uncancelled Cmd+V, zero programmatic reads, one paste delivery, unchanged mixed line endings at the input boundary and stale-owner rejection. Real WebKit acceptance must separately demonstrate received bytes and no modal menu.

@@ -198,8 +198,16 @@ export function bindNativeInput(
     clearForInput();
     watch(session.sendKey({ code: "Unidentified", text }));
   };
+  const canPaste = () =>
+    !disposed &&
+    canInput() &&
+    session.exitCode == null &&
+    options.isActive() &&
+    !document.hidden &&
+    document.hasFocus() &&
+    document.activeElement === textarea;
   const paste = async (text: string) => {
-    if (disposed || !text || !canInput() || session.exitCode != null) return;
+    if (!text || !canPaste()) return;
     clearForInput();
     await session.paste(text);
   };
@@ -229,8 +237,20 @@ export function bindNativeInput(
       return;
     }
     if (nativeClipboardAction(event, IS_MAC) === "paste") {
+      if (!canPaste()) {
+        event.preventDefault();
+        return;
+      }
+      // WebKit must receive the Cmd+V gesture; readText can open a modal
+      // permission menu. Its paste event supplies the text exactly once.
+      if (IS_MAC) return;
       event.preventDefault();
-      watch(readTerminalClipboard().then(paste));
+      const owner = session.id;
+      watch(
+        readTerminalClipboard().then((text) => {
+          if (session.id === owner) return paste(text);
+        }),
+      );
       return;
     }
     if (
@@ -327,7 +347,9 @@ export function bindNativeInput(
     }, 0);
   };
   const onPaste = (event: ClipboardEvent) => {
+    if (event.defaultPrevented) return;
     event.preventDefault();
+    if (!canPaste()) return;
     watch(paste(event.clipboardData?.getData("text/plain") ?? ""));
   };
   const point = (clientX: number, clientY: number) => {
