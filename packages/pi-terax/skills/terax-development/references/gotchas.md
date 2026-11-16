@@ -288,6 +288,13 @@ A row is complete only when implementation and verification evidence both exist.
 
 ## Accessibility and UI
 
+### Companion panel placement must preserve the user's working tab
+
+- **Trigger:** docking or floating a document beside an existing terminal, including a drag-start placement change.
+- **Failure mode:** choosing the first terminal switches the user's working tab. A remembered ID can later refer to a closed, moved or private tab.
+- **Prevention:** keep the current valid public terminal first, then use the last public choice for the document's space, revalidating both against current tabs. Remember only internal IDs, prune invalid entries, and retain the document tab when no public terminal exists.
+- **Verification:** exercise placement from a non-first terminal and from the full document tab; cover per-space memory, closed/moved/private targets, explicit tab placement and absence of a suitable terminal without creating one.
+
 ### Parent accessible labels replace descendant announcements
 
 - **Trigger:** setting `aria-label` on a tab or composite control to include new metadata.

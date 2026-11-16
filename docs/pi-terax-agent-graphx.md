@@ -49,6 +49,10 @@ tabs; copy its JSON first when you want a separate file.
 
 The placement selector offers **Tab**, **Dock left**, **Dock right** and **Float**.
 A side dock reserves workspace width beside an existing public terminal in the same space.
+Docking, floating and moving keep the current public terminal selected. From the full graph
+tab, they return to the last public terminal used in that space, falling back to another
+public terminal only when that choice is no longer available. This focus memory lasts for
+the current app session and never records a private terminal.
 The terminal keeps its real session and stays interactive. A floating panel lives within
 the workspace, rather than creating an OS window. Drag **Move** to reposition it; releasing
 near the left or right workspace edge docks it. The resize corner supports pointer drag

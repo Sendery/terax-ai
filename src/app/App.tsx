@@ -1,5 +1,9 @@
 import { STARTER_GRAPH } from "@/modules/graphx/lib/document";
 import type { GraphPlacement } from "@/modules/graphx/lib/document";
+import {
+  graphPlacementTarget,
+  rememberGraphTerminalFocus,
+} from "@/modules/graphx/lib/placementFocus";
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   ResizableHandle,
@@ -276,6 +280,14 @@ export default function App() {
   tabsRef.current = tabs;
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
+  const graphTerminalFocus = useRef<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    graphTerminalFocus.current = rememberGraphTerminalFocus(
+      tabs,
+      activeId,
+      graphTerminalFocus.current,
+    );
+  }, [tabs, activeId]);
 
   const activeTerminalTab = useMemo(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -804,15 +816,25 @@ export default function App() {
   }, [openGraph]);
   const placeGraphPanel = useCallback(
     (graphId: string, placement: GraphPlacement) => {
+      const currentTabs = tabsRef.current;
+      const currentActiveId = activeIdRef.current;
       const graph = setGraphPlacement(graphId, placement);
-      useSpaces.getState().setActive(graph.spaceId);
-      const terminal = tabsRef.current.find(
-        (t) =>
-          t.kind === "terminal" && t.spaceId === graph.spaceId && !t.private,
+      const remembered = rememberGraphTerminalFocus(
+        currentTabs,
+        currentActiveId,
+        graphTerminalFocus.current,
       );
-      const targetId =
-        placement === "tab" ? graph.id : (terminal?.id ?? graph.id);
+      graphTerminalFocus.current = remembered;
+      const targetId = graphPlacementTarget(
+        currentTabs,
+        graph,
+        placement,
+        currentActiveId,
+        remembered,
+      );
+      useSpaces.getState().setActive(graph.spaceId);
       warmTab(targetId);
+      activeIdRef.current = targetId;
       setActiveId(targetId);
       return graph;
     },
