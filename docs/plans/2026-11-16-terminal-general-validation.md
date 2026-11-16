@@ -223,6 +223,66 @@ The records and captures distinguish these assumptions from the subsequent
 real zero-note outcome. The next exact-marker drag will also use the exclusive
 selection endpoint after the final character.
 
+## Combined terminal, manager and GraphX candidate
+
+The selection refresh correction was integrated as ce2f328. Astra's new
+Pi-Terax manager and GraphX feature, including its two source follow-ups, were
+consolidated as178c656, ec2cccb and b6ce5e3. The final build code664d589 adds only
+formatting to the new Rust bridge test. Source details and deliberate GraphX
+subset limits are in docs/pi-terax-agent-graphx.md.
+
+Combined checks passed475 tests in40 files, TypeScript, SDK build and14 focused
+Rust Pi bridge tests. One sandbox app build passed. The first native-test
+invocation was stopped by an omitted manifest path after the prebuilt wrapper
+changed directory; the directed retry with explicit manifest and target passed.
+The app build was not repeated for that invocation error. Rustfmt exposed
+three pre-existing formatting hunks; only the newly added test was formatted.
+
+The frozen664d589 sandbox executable has SHA256
+2e1f59e83afd010e17b974eeb4eb02422ed22c1a6eef36546878d26e93743549.
+Its running PID is67750. The prior candidate closed normally after backup,
+public/clean/idle checks and preservation of all three editors. Discovery,
+mapped executable and app.buildInfo verify the new candidate. Twelve original
+tabs and editor paths were preserved. Initial ordinary shell PIDs68066/68067
+remain owned by the same app.
+
+The actual native selection popup now survives its read refreshes. A real
+pointer drag selected the complete TERAX_SELECTION_POPUP_MARKER; all three
+actions appeared. Clicking Add to Note created exactly that text on tab35.
+Only that owned note was removed, restoring the original notes. This closes
+the concrete selection-action defect. No clipboard was changed by this case.
+
+Pi-Terax Agente is present in actual Settings > Agents on the existing profile.
+The exact app catalog offers graphx.open/read/update/place. An owned graph was
+created and read through the authenticated Pi bridge. Reopening its stable id
+did not duplicate or overwrite it. A valid update advanced the revision;
+stale revision, invalid endpoint and wrong document incarnation each refused
+without changing data. Passive snapshots contain graph metadata, not source.
+
+A real owned binary --mcp subprocess initialized, listed the new actions and
+read the same graph. A second subprocess updated it, read the new revision and
+rejected a repeated obsolete write while preserving the new source. Both
+stdio servers exited normally. The owned graph is at revision3. No provider
+request was submitted.
+
+Side-placement calls plus explicit focus on the chosen terminal resized the
+same original PTYs from65 to32 columns; floating restored65 columns. Source
+review and a separate real check found that placement itself switched active
+tab35 to the first public tab7. The explicit-focus workaround is not claimed as
+a passed placement-focus check; a separate atomic correction preserves the
+current or remembered public terminal. Warming tab7 added two owned idle shells
+without replacing the original pair.
+
+Packaged WKWebView exposed a real GraphX load failure: the iframe HTML and
+toolbar exist, but both scripts were blocked by script-src self under the
+opaque custom-scheme origin. The parent timed out and the child remained at
+Waiting for graph. An isolated system-WK fixture reproduced this exact error.
+The reviewed correction was integrated as b3414cd: both CSP layers allow only
+the two bundled tauri://localhost/graphx scripts. Sandbox origin isolation and
+all other restrictions remain. System-WK layout/token/boundary checks and the
+existing Chromium check pass. Packaged visible acceptance and real pointer
+docking remain pending the next exact candidate.
+
 ## Evidence and remaining sweep
 
 Ignored M2 evidence lives under
@@ -232,7 +292,8 @@ workspace/readiness checks, marker proofs, two TUI event records, calibrated
 geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
-Remaining acceptance includes the selection refresh correction; other live
+The concrete selection correction is now accepted on M2. Remaining acceptance
+includes packaged GraphX loading/placement and other live
 preferences/history shrink and selection/search/block invalidation; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
