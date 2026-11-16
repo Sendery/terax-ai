@@ -276,7 +276,13 @@ impl AgentDetector {
                     }
                     ESC => self.state = State::OscEsc,
                     _ => {
-                        if self.osc.len() < OSC_MAX {
+                        let limit = self.osc_limit();
+                        if self.osc.len() < limit {
+                            if self.osc.len() == self.osc.capacity() {
+                                let growth =
+                                    self.osc.capacity().max(8).min(limit - self.osc.capacity());
+                                self.osc.reserve_exact(growth);
+                            }
                             self.osc.push(b);
                         } else {
                             self.osc.clear();
@@ -321,6 +327,14 @@ impl AgentDetector {
                 },
             }
         }
+    }
+
+    fn osc_limit(&self) -> usize {
+        #[cfg(any(test, feature = "ghostty-engine"))]
+        if self.shell_token.is_some() && self.osc.starts_with(b"133;") {
+            return super::engine::shell::MAX_MARK_BYTES;
+        }
+        OSC_MAX
     }
 
     /// Called when the underlying PTY closes. Reports the agent as exited so the
@@ -594,6 +608,134 @@ mod tests {
                 "blocks={blocks}",
             );
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_encoded_instructions_preserve_legacy_agent_detection() {
+        use super::super::engine::shell::{ShellEvent, ShellIntegration};
+
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("zshrc");
+        std::fs::write(&profile, include_str!("scripts/zshrc.zsh")).unwrap();
+        let command = format!("codex -c instructions='{}'", "?!;".repeat(1000));
+        let legacy = osc(&format!("133;C;{command}"));
+        assert!(legacy.len() < OSC_MAX);
+        assert_eq!(
+            run(&mut AgentDetector::new(), &legacy),
+            vec![started("codex")]
+        );
+        let output = std::process::Command::new("/bin/zsh")
+            .args([
+                "-f",
+                "-c",
+                r#"source "$1"; _terax_preexec "$2""#,
+                "terax-agent-test",
+            ])
+            .arg(&profile)
+            .arg(&command)
+            .env("TERAX_USER_ZDOTDIR", root.path())
+            .env("TERAX_SHELL_INTEGRATION_TOKEN", SHELL_TOKEN)
+            .env("TERAX_BLOCKS", "1")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let begin = output
+            .stdout
+            .windows(7)
+            .position(|bytes| bytes == b"\x1b]133;C")
+            .unwrap();
+        assert!(output.stdout.len() - begin > OSC_MAX);
+        let mut shell = ShellIntegration::new(Some(SHELL_TOKEN.into()));
+        let mut commands = Vec::new();
+        shell
+            .ingest_segments(&output.stdout, |_, event| {
+                if let Some(ShellEvent::CommandStart { command, .. }) = event {
+                    commands.push(command);
+                }
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(commands, vec![command]);
+        let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        assert_eq!(run(&mut detector, &output.stdout), vec![started("codex")]);
+    }
+
+    #[test]
+    fn expanded_native_marker_waits_for_the_complete_token() {
+        let prefix = format!("\x1b]133;C;cmdline_url=codex%20{}", "%3F".repeat(3000));
+        assert!(prefix.len() > OSC_MAX);
+        for token in ["wrong", SHELL_TOKEN] {
+            let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+            assert!(run(&mut detector, prefix.as_bytes()).is_empty());
+            let tail = format!(";aid={token}\x07");
+            let expected = if token == SHELL_TOKEN {
+                vec![started("codex")]
+            } else {
+                vec![]
+            };
+            assert_eq!(run(&mut detector, tail.as_bytes()), expected);
+        }
+    }
+
+    #[test]
+    fn oversized_native_marker_is_discarded_whole_before_recovery() {
+        use super::super::engine::shell::MAX_MARK_BYTES;
+        let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        let input = osc(&format!(
+            "133;C;cmdline_url=codex%20{};aid={SHELL_TOKEN}",
+            "x".repeat(MAX_MARK_BYTES)
+        ));
+        for chunk in input.chunks(4096) {
+            assert!(run(&mut detector, chunk).is_empty());
+            assert!(detector.osc.capacity() <= MAX_MARK_BYTES);
+        }
+        assert_eq!(
+            run(
+                &mut detector,
+                &osc(&format!("133;C;aid={SHELL_TOKEN};cmdline_url=codex"))
+            ),
+            vec![started("codex")]
+        );
+    }
+
+    #[test]
+    fn native_budget_does_not_accept_a_truncated_overlong_decoded_command() {
+        use super::super::engine::shell::MAX_COMMAND_BYTES;
+        let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        let input = osc(&format!(
+            "133;C;aid={SHELL_TOKEN};cmdline_url=codex%20{}",
+            "x".repeat(MAX_COMMAND_BYTES)
+        ));
+        assert!(run(&mut detector, &input).is_empty());
+    }
+
+    #[test]
+    fn legacy_and_other_native_osc_keep_the_eight_kib_limit() {
+        let mut legacy = AgentDetector::new();
+        assert!(run(
+            &mut legacy,
+            &osc(&format!("133;C;codex {}", "x".repeat(OSC_MAX)))
+        )
+        .is_empty());
+        assert_eq!(
+            run(&mut legacy, &osc("133;C;codex")),
+            vec![started("codex")]
+        );
+        let mut native = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        assert!(run(
+            &mut native,
+            &osc(&format!(
+                "777;notify;Terax;codex;finished;{}",
+                "x".repeat(OSC_MAX)
+            ))
+        )
+        .is_empty());
+        assert_eq!(
+            run(&mut native, &osc("777;notify;Terax;codex;working")),
+            vec![started("codex")]
+        );
     }
 
     #[test]

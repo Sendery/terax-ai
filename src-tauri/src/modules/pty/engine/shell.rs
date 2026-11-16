@@ -3,7 +3,7 @@ use serde::Serialize;
 pub const MAX_CWD_BYTES: usize = 128 * 1024;
 const MAX_OSC_BYTES: usize = MAX_CWD_BYTES * 3 + 512;
 pub const MAX_COMMAND_BYTES: usize = 1024 * 1024;
-const MAX_MARK_BYTES: usize = MAX_COMMAND_BYTES * 3 + 512;
+pub(crate) const MAX_MARK_BYTES: usize = MAX_COMMAND_BYTES * 3 + 512;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
