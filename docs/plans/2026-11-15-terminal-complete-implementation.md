@@ -116,10 +116,13 @@ c390cf1908007dc0ab9f1c6914384532c8482cbd6fbe5aea2752e610425e09ae.
 Consumers stay prebuilt-only with no Zig fallback.
 
 M2 source tests do not establish Intel/Linux/Windows/ConPTY runtime, physical
-mixed-DPI behavior, runtime on macOS 11, matching native-core-v1 target archives,
-canonical publication, release panic isolation or the real-workload soak.
-The app minimum and archive minimum must be reconciled before a native default
-on each supported target. The unchanged production fallback remains necessary.
+mixed-DPI behavior, runtime on the supported macOS minimum, matching
+native-core-v1 target archives, canonical publication, release panic isolation
+or the real-workload soak. The app minimum macOS 13.0 already existed at baseline
+0c573d8; the current arm64 core minimum 11.0 is compatible. Do not require
+unsupported app macOS 11 acceptance. Other targets still need matching artifacts
+and runtime validation before a native default. The production fallback remains
+necessary.
 60 FPS is optional and no further performance laboratory was run.
 
 The next step is root's single general sweep: full repository gates, one

@@ -108,10 +108,12 @@ No full Rust sweep or new performance benchmark was run for this closing block.
 
 ## Limits and handoff
 
-This local archive supports arm64 macOS only. macOS 11 runtime was not exercised;
-object deployment gates do not establish that acceptance. Intel, Linux and Windows
-need matching extended artifacts before enabling this backend there. Stable row
-retention is exact, but it is not a byte ceiling or a reflow peak-memory promise.
+This local archive supports arm64 macOS only. Its object minimum macOS 11.0
+is compatible with the app minimum macOS 13.0, already present at baseline
+0c573d8. Object deployment gates do not prove runtime on the supported minimum;
+macOS 11 is not a required app target. Intel, Linux and Windows need matching
+extended artifacts before enabling this backend there. Stable row retention is
+exact, but it is not a byte ceiling or a reflow peak-memory promise.
 
 This block does not claim physical Cmd+K, screenshot or frontend capture acceptance.
 The root integrates the parallel frontend into qa and validates the assembled app.

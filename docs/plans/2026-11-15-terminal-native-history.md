@@ -39,8 +39,10 @@ invariants and test commands.
   efa0706adf79151111af8a0605121126b02056310abe44dda9cd062a66ca97c6.
 - Archive 2798832 bytes, static library 8885840 bytes.
 - All 11 observed Mach-O build-version records have minimum macOS 13.0.
-  This is an experimental M2/macOS 13+ artifact. It does not establish the
-  application's broader macOS 10.15 or arm64 11 deployment compatibility.
+  This is an experimental M2/macOS 13+ artifact. The app's minimum is also
+  macOS 13.0, already at baseline 0c573d8; the earlier app 10.15/arm64 11
+  compatibility statement was inaccurate. Object inspection does not establish
+  runtime acceptance on the supported minimum or other architectures.
 - The producer uses checksum-pinned Zig 0.15.2 and real Apple CLT 16.2/SDK 15.2,
   selected by DEVELOPER_DIR only for that process. Package signatures,
   compressed-XAR-TOC digests and full SHA256 hashes were verified first.

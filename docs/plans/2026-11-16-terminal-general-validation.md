@@ -293,8 +293,9 @@ geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
 The concrete selection correction is now accepted on M2. GraphX loading, placement, capture and live resize are now accepted in the
-separate Pi-Terax/GraphX report linked below. Remaining acceptance includes live
-preferences/history shrink and selection/search/block invalidation; broader
+separate Pi-Terax/GraphX report linked below. The ordinary live history-trim
+selection/search case is now accepted in the follow-up below. Remaining
+acceptance includes blocks trim/invalidation and other live preferences; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
 default and real-workload requirements. Historical completed slices are
@@ -326,3 +327,29 @@ actual failures, source checks and artifact identity are recorded in
 
 This closes the GraphX-specific items listed at the earlier combined checkpoint;
 it does not close the broader terminal/default/platform acceptance listed above.
+
+## Ordinary history trim follow-up
+
+Packaged source 2d869a3 now has real ordinary-pane live-trim acceptance.
+The public selection changed from 2307 to 2040 copied lines without reselecting:
+the old marker was removed and the kept marker survived. The old search match
+had 7364 active-highlight pixels before trim; after trim and Enter it had zero
+active/inactive pixels and no old marker in local OCR. A fresh kept-marker query
+had 7785 active pixels with its marker found by OCR.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/history-live-2d869a3/ordinary-history-acceptance.json.
+No terminal PNG was transferred from M2 and the full original clipboard was
+restored. Effective scrollback 2000, all 13 original tabs, active tab 35, all three
+editors and original shells 5549/5550 were restored or preserved. Owned tab 40
+and shell 61416 were retired.
+
+AX focus metadata and SetFocused after closing Settings did not establish key
+delivery. The successful path used a physical click on the observed control
+with empty modifier flags, then Cmd+F and literal typing. Internal first
+responder was not directly observed; this does not establish a product bug.
+
+Blocks trim and block anchor/output invalidation remain pending. See the
+[current acceptance matrix](2026-11-16-terminal-acceptance-status.md) for the
+twelve categories, earlier accepted slices and ordered remaining cases.
+The global terminal/default/platform/real-workload goal remains open.

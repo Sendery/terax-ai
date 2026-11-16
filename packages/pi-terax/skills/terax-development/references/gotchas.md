@@ -852,10 +852,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 
 ### UI acknowledgements and current window bounds are authoritative
 
-- **Trigger:** HMR or window state changes the sandbox size while automation reuses a screenshot coordinate; a sent key returns before the shell accepts it.
-- **Failure mode:** clicks miss real controls, or an immediate missing-file read is misclassified as a terminal failure.
-- **Prevention:** resolve known controls within the authenticated Terax PID and current AX window bounds. Poll the same owned public acknowledgement without resending the command. Verify the actual editor value before retargeting. Read the existing tab capabilities before attempting a split; blocks intentionally retain their single-leaf baseline.
-- **Verification:** actual menu/search controls, two independent native block drafts, foreground read reply and separate ordinary split cwd acknowledgements on M2. Capture only Terax surfaces and inspect private-capture rejection without recording private pixels.
+- **Trigger:** HMR or window state changes the sandbox size while automation reuses a screenshot coordinate, or keyboard automation resumes after closing Settings.
+- **Failure mode:** clicks miss controls, or an immediate missing-file read is misclassified as a terminal failure. AXFocusedUIElement and a successful SetFocused request alone do not prove HID key delivery.
+- **Prevention:** resolve known controls within the authenticated Terax PID and current AX window bounds. Before sending shortcuts after a focus transition, use a physical click on the observed control with explicit empty modifier flags and verify the resulting editor value or public acknowledgement. Poll the same owned acknowledgement without resending. Do not claim internal first-responder state was observed from AX metadata. Read existing capabilities before attempting a split; blocks retain their single-leaf baseline.
+- **Verification:** actual menu/search controls, independent native block drafts, foreground read reply and ordinary split cwd acknowledgements on M2. After Settings, the physical-focus path delivered Cmd+F and literal search input where AX focus metadata alone had not established delivery. This is an automation limitation, not evidence of a product defect. Capture only Terax surfaces and inspect private-capture rejection without recording private pixels.
 
 
 ### A header anchor must still identify a reserved row
