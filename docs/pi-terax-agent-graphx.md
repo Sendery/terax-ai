@@ -134,6 +134,12 @@ same-origin, popup or top-navigation allowance. Parent/child messages are bound 
 actual frame and a fresh session token. Messages only acknowledge render state; they cannot
 invoke app commands, access files or write terminal input.
 
+Packaged macOS WebKit does not match CSP `self` for scripts inside this opaque
+sandbox under `tauri://localhost`. Both the app CSP response header and the frame
+meta policy therefore allow exactly `tauri://localhost/graphx/engine.js` and
+`tauri://localhost/graphx/frame.js`. Keep both policies aligned; a scheme-wide
+allowance or `allow-same-origin` is unnecessary.
+
 ## Verification and acceptance
 
 Focused tests cover schema rejection, parent/endpoint validation, snapshot redaction,
@@ -157,3 +163,25 @@ drag/docking, restart/space restore in the running app and end-to-end authentica
 invocation remain for the root's coordinated integration pass. No running Terax app was
 changed by this implementation pass. Rust changes are limited to the bridge allowlist and
 its decode test; native checks/build were reserved for the root.
+
+A macOS system WebKit check also covers the packaged custom-scheme CSP behavior:
+
+```sh
+mkdir -p .terax/pi-development/graphx-webkit-runtime
+swiftc scripts/check-graphx-webkit.swift -o .terax/pi-development/graphx-webkit-runtime/check-graphx-webkit
+.terax/pi-development/graphx-webkit-runtime/check-graphx-webkit
+```
+
+Run from the repository root. It reads the real app CSP and bundled frame assets,
+serves them through an owned `WKURLSchemeHandler`, and uses a nonpersistent,
+unshown WebKit view without activating any app. It checks two fresh-token frame
+lifetimes and revisions, layout/shapes, changed dimensions, stale source/token
+rejection in the fixture, and blocked parent access, network, inline and unlisted
+scripts. Its diagnostic user script selects the engine's supported reduced-motion
+branch because an unshown WK view does not service animation frames. No production
+script, frame privileges or Tauri APIs are injected. `--baseline` removes the two
+exact CSP sources from both policies and must fail with script CSP violations.
+
+This isolated WebKit check passed on M2 on 2026-11-16; the baseline reproduced
+the packaged blank-frame failure. It does not replace visible packaged-app
+acceptance, which remains part of the coordinated integration pass.

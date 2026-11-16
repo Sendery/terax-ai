@@ -982,3 +982,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** updating a graph can retain old renderer closures or allow a late reply to affect a new document.
 - **Prevention:** persist the document outside the renderer; key the sandbox frame by immutable document incarnation, revision and theme. Validate actual frame identity and its session token on replies. Compare both incarnation and revision before source mutation.
 - **Verification:** stale revision and close/recreate tests reject writes; the standalone browser check completes layout in two separate frame lifetimes while blocking parent access, network and inline script.
+
+### Opaque WebKit frames do not match custom-scheme CSP self
+
+- **Trigger:** a sandboxed `allow-scripts` frame loads bundled scripts under `tauri://localhost`.
+- **Failure mode:** WebKit blocks those scripts against `script-src 'self'`, leaving static HTML visible and no ready acknowledgement. An HTTP Chromium check misses this packaged-only failure.
+- **Prevention:** allow only the exact trusted script asset URLs in both the frame meta CSP and the app CSP response header. Keep the opaque sandbox and all other frame restrictions; changing just one policy still blocks the scripts.
+- **Verification:** run `scripts/check-graphx-webkit.swift` with system WebKit and the actual custom scheme/header/meta policies. Confirm completed render acknowledgements plus blocked inline/unlisted scripts, network and parent DOM access. The unshown fixture uses the engine's reduced-motion branch; visible packaged-app acceptance still verifies normal animation.
