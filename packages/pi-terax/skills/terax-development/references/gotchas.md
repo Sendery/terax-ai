@@ -1089,3 +1089,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** Wry 0.55.1 emits AppKit points; tauri-runtime-wry wraps them as PhysicalPosition without scaling. Dividing those values by DPR targets the wrong pane or turns an outside drop into an inside drop. The shared terminal hook affects both terminal engines.
 - **Prevention:** check the pinned backend implementation, not only the API type. Preserve macOS points for DOM hit testing, retain physical-pixel conversion where applicable, and never infer units from whether a point fits the viewport. Revisit this boundary when upgrading Wry. A source drag reporting Copy also does not establish nonempty paths: this Wry version reads NSFilenamesPboardType.
 - **Verification:** directed hook tests cover both macOS panes and outside-drop exclusion at DPR 2, alongside existing physical-coordinate and listener-lifecycle cases. Real acceptance still requires observed destination bytes from the exact packaged candidate.
+
+
+### JSON formatting must preserve tokens and isolate draft updates
+
+- **Trigger:** formatting a controlled CodeMirror draft that also feeds live preview and file autosave.
+- **Failure mode:** JSON.parse/stringify rounds large integers and removes duplicate keys; replacing the entire document collapses selection. A formatting transaction can trigger the normal autosave timer despite the toolbar promising draft-only changes.
+- **Prevention:** validate with the installed strict JSON grammar, edit only whitespace gaps, and isolate the transaction in history. Mark formatting transactions and cancel/suppress autosave for that update. Keep GraphX schema validation and explicit Apply/Save ownership unchanged.
+- **Verification:** exact large-number/duplicate/escape retention, forward/backward multiple selection mapping, one-step undo between typed edits, invalid-input no-op, stable parser line/column, and fake-timer coverage proving a pending autosave is cancelled while later typing resumes it.

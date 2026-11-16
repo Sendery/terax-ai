@@ -48,6 +48,12 @@ Choose **New GraphX diagram** from the new-tab menu or command palette. The star
 includes a playable sequence. Use **Raw** or **Side by side** to edit or import JSON, then **Apply JSON**.
 **Rendered** shows the graph alone. The preview follows the unsaved draft; switching
 views retains it, and only Apply commits a new revision.
+
+The Raw editor includes **Format JSON** (two spaces, one Undo) and live JSON syntax
+diagnostics with line/column, alongside GraphX schema validation. Formatting preserves
+number spellings, duplicate keys and selection, and only changes the draft. The same
+tools are available for `.graphx` files; Save remains separate from formatting.
+See [renderable views](renderable-views.md#format-and-validate-graphx-json) for limits.
 Invalid input leaves the last saved graph intact. **Reload current** recovers after an
 agent changed the graph while you were editing. **Copy JSON** exports the saved source to
 the clipboard.

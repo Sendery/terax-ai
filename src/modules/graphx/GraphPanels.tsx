@@ -1,3 +1,4 @@
+import { GraphJsonEditor } from "./GraphJsonEditor";
 import { RenderableLayout } from "@/modules/renderable/RenderableLayout";
 import { ViewModeToggle } from "@/modules/renderable/ViewModeToggle";
 import { GraphSourcePreview } from "@/modules/renderable/GraphSourcePreview";
@@ -162,14 +163,7 @@ function GraphPanel({
   const raw = (
 
     <div className="flex h-full min-h-0 flex-col p-2">
-      <textarea
-        aria-label="GraphX JSON source"
-        className="min-h-0 flex-1 resize-none rounded border border-border bg-background p-2 font-mono text-xs"
-        value={draft}
-        maxLength={49152}
-        spellCheck={false}
-        onChange={(e) => setDraft(e.target.value)}
-      />
+      <GraphJsonEditor source={draft} onChange={setDraft} />
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"

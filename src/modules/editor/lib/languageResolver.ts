@@ -53,6 +53,7 @@ const loaders: Record<string, LanguageLoader> = {
   rs: () => import("@codemirror/lang-rust").then((m) => m.rust()),
   go: () => import("@codemirror/lang-go").then((m) => m.go()),
   py: () => import("@codemirror/lang-python").then((m) => m.python()),
+  graphx: () => import("@/modules/graphx/lib/jsonEditing").then((m) => m.graphJsonExtensions()),
   json: jsonLoader,
   jsonc: jsonLoader,
   json5: jsonLoader,

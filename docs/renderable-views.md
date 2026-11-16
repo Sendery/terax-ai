@@ -21,6 +21,14 @@ File previews keep their original file tab and save path. Opening `.mmd`, Markdo
 
 The view choice survives space/app restoration. Older stored tabs keep their previous defaults, and malformed choices fall back safely. Unsaved file buffers have the existing session lifetime; this change does not add disk draft recovery. Snapshots report view mode and Markdown dirty state, without source text. Existing Pi/MCP command IDs and payload enums are unchanged.
 
+## Format and validate GraphX JSON
+
+In **Raw** or **Side by side**, both GraphX documents and `.graphx` files offer **Format JSON**. It uses two spaces, preserves property order, duplicate keys, number spellings and string escapes, and keeps your selection. One Undo restores the pre-format draft; switching views keeps the same editor history. The preview follows the formatted draft.
+
+Syntax errors are underlined and announced with a 1-based line and column. The status also distinguishes syntactically valid JSON from GraphX schema/reference errors. Invalid JSON is left untouched. Format never applies a GraphX revision or saves a file, even with autosave enabled; it cancels a pending autosave timer. Use **Apply JSON** for a GraphX document or **Save** for a `.graphx` file. Later typing resumes your autosave setting.
+
+The existing 48 KiB GraphX validation limit still applies. Drafts can remain editable beyond it; JSON tooling stops at 512 KiB, and formatting refuses nesting beyond 128 levels or output beyond 1 MiB without changing the draft. Generic `.json` files retain their existing editor.
+
 ## Mermaid and GraphX
 
 Mermaid's **Preview / Visual** tools select the rendered-side surface. Raw always shows source. Visual retains the existing supported flowchart/sequence editing subset, validation, private layout and history. Unsupported Mermaid syntax stays readable in Preview and source-editable in Raw. Raw mode pauses diagram rendering.

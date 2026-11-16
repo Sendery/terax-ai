@@ -19,6 +19,8 @@ import { vim } from "@replit/codemirror-vim";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import {
   forwardRef,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -40,6 +42,8 @@ import { resolveLanguage } from "./lib/languageResolver";
 import { useEditorThemeExt } from "./lib/useEditorThemeExt";
 import { useDocument } from "./lib/useDocument";
 import { initVimGlobals, vimHandlersExtension } from "./lib/vim";
+
+const GraphJsonTools = lazy(() => import("@/modules/graphx/GraphJsonTools").then(m => ({ default: m.GraphJsonTools })));
 
 initVimGlobals();
 
@@ -445,10 +449,17 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
 
     const raw = (
       <div className="flex h-full min-h-0 flex-col zoom-exempt">
+        {fileRenderKind(path) === "graphx" && (
+          <Suspense fallback={null}>
+            <GraphJsonTools source={doc.content} getView={() => cmRef.current?.view} />
+          </Suspense>
+        )}
         <CodeMirror
           ref={cmRef}
           value={doc.content}
-          onChange={onChange}
+          onChange={(next, update) => onChange(next, {
+            autoSave: !update.transactions.some(transaction => transaction.isUserEvent("input.format.graphx")),
+          })}
           onCreateEditor={applyPendingGoto}
           theme={themeExt}
           extensions={extensions}

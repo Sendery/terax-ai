@@ -159,7 +159,7 @@ export function useDocument({ path, onDirtyChange }: Options) {
   }, [clearAutoSaveTimer, saveNow]);
 
   const onChange = useCallback(
-    (next: string) => {
+    (next: string, options?: { autoSave?: boolean }) => {
       edits.current++;
       bufferRef.current = next;
       setDoc(current =>
@@ -172,7 +172,7 @@ export function useDocument({ path, onDirtyChange }: Options) {
       clearAutoSaveTimer();
 
       const { autoSave: active, autoSaveDelay: delay } = autoSaveRef.current;
-      if (active && isDirty) {
+      if (active && isDirty && options?.autoSave !== false) {
         timeoutRef.current = setTimeout(() => {
           saveNow().catch((e) => console.error("[autosave]", e));
         }, delay);

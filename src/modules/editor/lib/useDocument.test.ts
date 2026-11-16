@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const harness = vi.hoisted(() => ({
+  autoSave: false,
   cursor: 0,
   slots: [] as { value: unknown; deps?: unknown[]; cleanup?: () => void }[],
   effects: [] as (() => void)[],
@@ -45,7 +46,7 @@ vi.mock("@/modules/workspace", () => ({
 }));
 vi.mock("@/modules/settings/preferences", () => ({
   usePreferencesStore: (select: (s: unknown) => unknown) =>
-    select({ editorAutoSave: false, editorAutoSaveDelay: 1000 }),
+    select({ editorAutoSave: harness.autoSave, editorAutoSaveDelay: 1000 }),
 }));
 import { useDocument } from "@/modules/editor/lib/useDocument";
 function TestHarness(path = "/index.html") {
@@ -72,6 +73,7 @@ async function load() {
   return TestHarness();
 }
 beforeEach(() => {
+  harness.autoSave = false;
   harness.cursor = 0;
   harness.slots = [];
   harness.effects = [];
@@ -158,4 +160,23 @@ it("serializes overlapping saves so an older write cannot finish after the newer
       .map((call) => call[1].content),
   ).toEqual(["first", "second"]);
   expect(TestHarness().dirty).toBe(false);
+});
+
+it("keeps formatting as an unsaved draft and cancels a pending autosave", async () => {
+  vi.useFakeTimers();
+  try {
+    harness.autoSave = true;
+    const doc = await load();
+    doc.onChange("typing");
+    TestHarness().onChange("formatted", { autoSave: false });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(harness.invoke).toHaveBeenCalledTimes(1);
+    expect(TestHarness().dirty).toBe(true);
+    expect(TestHarness().doc).toMatchObject({ content: "formatted" });
+    TestHarness().onChange("later typing");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(harness.invoke).toHaveBeenLastCalledWith(
+      "fs_write_file", expect.objectContaining({ content: "later typing" }),
+    );
+  } finally { vi.useRealTimers(); }
 });
