@@ -27,10 +27,10 @@ after 60 FPS. Neither item blocks the M2 migration.
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
 | 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. On native 3228447, Kanagawa persists with the Codex pane visible, and 110 percent zoom keeps its composer legible; both restore to their originals with the same PTY. | Other unavailable block-output/header cases; remaining theme/settings combinations and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
-| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | Japanese composition/IME and candidate-confirming Enter are deferred after the optional 60 FPS goal, outside M2 migration gates. The later CG-event attempt is inconclusive, not accepted or a confirmed native failure. Other dead-key/composition cases, actual multiline paste with/without negotiated brackets, and remaining real Claude/Codex navigation and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
-| 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. Actual OS drops on macOS Retina 1f80a0b deliver one correctly quoted path to each split, with bracketed paste only on the negotiated left receiver; the other split receives nothing during the first drop. Spaces, Unicode canonical file identity, metacharacters and apostrophes are preserved. Cmd+A/right-click preserves the selection in the Mermaid case. | Word/line/rectangle selection, off-pane autoscroll and remaining hover-overlay/physical mixed-DPI cases. The accepted two-split Retina drop does not establish other platforms or all drag-source formats. |
+| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | Japanese composition/IME and candidate-confirming Enter are deferred after the optional 60 FPS goal, outside M2 migration gates. The later CG-event attempt is inconclusive, not accepted or a confirmed native failure. Real 1084aca Cmd+V now accepts exact 78 bracketed bytes and 66 unbracketed bytes, including Unicode and mixed line endings. Other dead-key/composition cases and remaining real Claude/Codex navigation and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
+| 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. Actual OS drops on macOS Retina 1f80a0b deliver one correctly quoted path to each split, with bracketed paste only on the negotiated left receiver; the other split receives nothing during the first drop. Spaces, Unicode canonical file identity, metacharacters and apostrophes are preserved. Cmd+A/right-click preserves the selection in the Mermaid case. | Double-click word, triple-click line, Alt-drag rectangle and off-pane autoscroll now have physical known-text acceptance on 1084aca. Remaining hover-overlay and physical mixed-DPI combinations were not exercised. The accepted two-split Retina drop does not establish other platforms or all drag-source formats. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Basic HTML Raw/Rendered/Side by side switching has real WebKit evidence on 7c9d1b3; Markdown, Mermaid-file and .graphx mode controls have recorded state only. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. Full document-format pixels, save and undo remain unverified by the mode-control smoke. |
-| 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
+| 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Valid empty-output copy and command-only attachment now have live UI acceptance on 1084aca. Source callback tests reject unavailable output and pending privacy/owner changes. Wrapped-header combinations and other unavailable-output UI states are not inferred from these scoped checks. Blocks splitting remains disabled as in baseline. |
 | 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. On native 3228447, Codex is detected in its owned monitor row before a turn. One manual three-line task reuses that target and runs exactly once. An actual Always-policy restart restores one Codex TUI in its CWD; a second gpt-6.1-sol turn recalls the earlier context without repeating its identifier in the question. | Remaining split activity/attention/exit; timer-driven delivery, unavailable/unchanged buffers and retry/owner cases. Task-to-tab persistence across restart remains a separate baseline follow-up. Terax AI context consumers and authenticated Claude remain open; these Codex cases do not establish the whole scheduled lifecycle. |
 | 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. On 3228447, a finite 34-line output batch completes while the owned tab is hidden; revealing the same peer preserves all 1629 expected UTF-8 bytes with no unexpected PTY input. Native tests cover final output and sticky failures. The shared App handler preserves the original shell-exit UI policy described below. | Concurrent input in another pane during bounded output and failure that visibly invalidates the correct owner. Final-frame/exit ordering and retained-core queries keep their own evidence; a closed ordinary pane is not expected to remain available for UI copy/search/history. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
@@ -538,3 +538,80 @@ exact expected bytes and cleared dirty state. Mermaid Rendered exposed both
 known nodes and Side by side retained its editor. Each owned editor was closed
 cleanly and original metadata restored. Receipts remain in the ignored M2
 directory .terax/pi-development/m2/logs/editor-edit-8ddb224.
+
+
+## Physical advanced selection accepted: 1084aca
+
+The owned M2 fixture used double click for ALPHA (5 copied bytes), triple
+click for a complete known history line (21 bytes), and Alt-drag for exactly
+12345 plus newline plus 67890 (11 bytes). Holding a drag above the pane
+revealed history from first-visible index 100 back to 60. Copy matched the
+80 complete known lines 60 through 139 exactly as 1759 bytes. Each copy
+restored every original clipboard format from RAM. Captures stayed on M2.
+
+The line case used a history row below the selection toolbar. An earlier
+top-row gesture hit the shared popup's Open Mermaid action; both owned
+five-character Mermaid tabs were identified and closed, and that interrupted
+gesture was not accepted as a line test. This does not establish a new native
+regression in the popup, which is shared with the original engine.
+
+The own peer retired after the successful selection checks. Its 600-second
+lifetime limit was reached before the final completion receipt, so clean peer
+exit is not claimed. There was no unexpected-input receipt. The original
+13 tabs and exact metadata were restored. Evidence:
+.terax/pi-development/m2/logs/selection-1084aca/acceptance.json.
+
+## Block attachment and valid empty output accepted: 1084aca
+
+In the actual M2 Blocks UI, a completed command with three known output lines
+created one Terminal selection attachment with four visible lines including
+the command. The own attachment was removed. A valid empty-output command
+copied empty text over a known clipboard sentinel, then restored all original
+clipboard formats. Attaching that block produced a command-only one-line
+chip, which was also removed. No provider or model call was used, and the own
+tab/shell retired with all original 13 tab metadata restored.
+
+The public UI exposes attachment name, line count and Remove, not pending
+payload bytes. Accordingly, this UI check does not claim exact attachment
+UTF-8. A separately scoped harness executes the real BlockOverlay callback
+with known values and checks its exact serialization, valid empty branch,
+unavailable-output refusal, and pending private/hidden/owner guards. Together
+with existing native-compatible readTerminalContext and SDK tool.execute
+tests, its persisted JSON result is 31 passed, zero failed. It uses no app,
+provider, credential or clipboard access. Logical callback results do not
+claim a live SDK model received terminal context.
+
+Evidence is in .terax/pi-development/m2/logs/blocks-consumers-1084aca/,
+including acceptance.json, empty-copy.json, cleanup.json and
+logical-results.json. Discarded headers were not forced into click targets.
+
+## M4 prebuilt development consumer accepted: QA 6f4fd47
+
+A primary-thread-created detached worktree from exact QA
+6f4fd47d918801cf05a432411ceb149d7ec61ae4 passed the user's M4 phases A-E:
+TypeScript and frontend build; native Sandbox compilation using the M2
+native-core-v1 archive; a visible React label rebuild; a minimal Rust
+recompilation; and actual terminal input, window resize and rendered HTML.
+
+The existing complete Rust 1.97.1 toolchain was selected per process because
+the inherited 1.96.0 selection was incomplete. No toolchain global setting,
+endpoint-protection setting or exclusion was changed. The verified archive,
+headers, arm64 architecture, ABI exports and Cargo prebuilt link path were
+checked. Missing archive failed before its child command, without source
+fallback. Zig was not installed or executed. No alert was reported and the
+protection process remained running. No Actions, push or publication occurred.
+
+The native build took 115.462 seconds; the Rust iteration took 25.642 seconds,
+using two Cargo jobs, debug symbols disabled and incremental compilation off
+in a dedicated target directory. The UI controller had long delays: the first
+own runtime reached its 2400-second monitor deadline after input and resize.
+Its termination and intact executable were confirmed before resuming only
+HTML with the same build. That is a harness timeout, not evidence of an
+endpoint-protection block.
+
+Both temporary source changes were reverted, the detached worktree returned
+clean, the original checkout's HEAD/status hash stayed unchanged, and the
+unique test Sandbox profile and GUI processes were retired. Prior builds
+were not deleted. The copied non-secret report and manifest are in
+.terax/pi-development/m2/logs/m4-consumer-6f4fd47/. The iterated test binary
+contains identified temporary markers and is not a published release.
