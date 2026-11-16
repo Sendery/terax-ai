@@ -184,11 +184,14 @@ pub fn spawn(
         OutputSink::Raw(on_data) => Pipeline::Raw(on_data),
         #[cfg(feature = "ghostty-engine")]
         OutputSink::Engine { on_frame, colors, cursor_blink, scrollback_rows, slot, on_failure, on_state, on_clipboard } => {
-            let engine = start_engine(cols, rows, engine::EngineOptions { appearance: engine::Appearance { colors, cursor_blink }, scrollback_rows: Some(scrollback_rows) }, engine::ShellConfig { token: shell_token.take().ok_or("native shell marker is missing")?, blocks }, on_frame, on_state, writer.clone())?;
+            let token = shell_token.take().ok_or("native shell marker is missing")?;
+            let agent_detector = AgentDetector::with_shell_token(token.as_str().to_owned());
+            let engine = start_engine(cols, rows, engine::EngineOptions { appearance: engine::Appearance { colors, cursor_blink }, scrollback_rows: Some(scrollback_rows) }, engine::ShellConfig { token, blocks }, on_frame, on_state, writer.clone())?;
             if let Some(channel) = on_clipboard {
                 engine.handle.on_clipboard(move || channel.send(1).is_ok());
             }
             Pipeline::Engine(EnginePipeline {
+                agent_detector,
                 core: slot.install(engine)?,
                 slot,
                 on_failure: Arc::new(move |message| { let _ = on_failure.send(message); }),
@@ -477,6 +480,7 @@ fn notify_engine_failure(observer: &EngineFailureObserver, message: String) {
 
 #[cfg(feature = "ghostty-engine")]
 struct EnginePipeline {
+    agent_detector: AgentDetector,
     core: ProcessCore,
     slot: Arc<CoreSlot>,
     on_failure: EngineFailureObserver,
@@ -517,7 +521,7 @@ fn run_engine_pipeline(
     mut signal: impl FnMut(super::agent_detect::Transition) + Send + 'static,
     on_exit: impl FnOnce(i32) + Send + 'static,
 ) -> thread::JoinHandle<()> {
-    let EnginePipeline { core, slot, on_failure } = engine;
+    let EnginePipeline { core, slot, on_failure, mut agent_detector } = engine;
     let ProcessCore { input, handle } = &core;
     let exit = Arc::new(EngineExit { exited: exited.clone(), callback: Mutex::new(Some(Box::new(on_exit))) });
     let failure_exit = exit.clone();
@@ -541,7 +545,6 @@ fn run_engine_pipeline(
         .name("terax-pty-reader".into())
         .spawn(move || {
             let mut buf = [0u8; READ_BUF];
-            let mut agent_detect = AgentDetector::new();
             let mut first_byte = true;
             loop {
                 match reader.read(&mut buf) {
@@ -554,7 +557,7 @@ fn run_engine_pipeline(
                                 spawn_at.elapsed().as_millis()
                             );
                         }
-                        agent_detect.process(&buf[..n], &mut signal);
+                        agent_detector.process(&buf[..n], &mut signal);
                         if !reader_input.feed(buf[..n].to_vec()) {
                             reader_exit.report(engine::ENGINE_FAILED_EXIT);
                             break;
@@ -566,7 +569,7 @@ fn run_engine_pipeline(
                     }
                 }
             }
-            agent_detect.finish(&mut signal);
+            agent_detector.finish(&mut signal);
         })
         .expect("spawn pty reader thread");
 
@@ -722,7 +725,12 @@ mod engine_pipeline_tests {
 
     fn pipeline(engine: engine::Engine) -> EnginePipeline {
         let slot = CoreSlot::new();
-        EnginePipeline { core: slot.install(engine).unwrap(), slot, on_failure: Arc::new(|_| {}) }
+        EnginePipeline {
+            agent_detector: AgentDetector::with_shell_token(engine::shell::ShellToken::for_test().as_str().to_owned()),
+            core: slot.install(engine).unwrap(),
+            slot,
+            on_failure: Arc::new(|_| {}),
+        }
     }
 
     #[cfg(target_os = "macos")]

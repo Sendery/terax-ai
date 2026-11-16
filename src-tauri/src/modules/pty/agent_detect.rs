@@ -205,6 +205,8 @@ fn attention_reason(detail: &[u8]) -> Option<&'static str> {
 
 pub struct AgentDetector {
     agents: Vec<String>,
+    #[cfg(any(test, feature = "ghostty-engine"))]
+    shell_token: Option<String>,
     state: State,
     osc: Vec<u8>,
     armed: bool,
@@ -221,6 +223,8 @@ impl AgentDetector {
     pub fn with_agents(agents: Vec<String>) -> Self {
         Self {
             agents,
+            #[cfg(any(test, feature = "ghostty-engine"))]
+            shell_token: None,
             state: State::Ground,
             osc: Vec::new(),
             armed: false,
@@ -228,6 +232,13 @@ impl AgentDetector {
             session_id: None,
             terminal_signals: TerminalSignals::default(),
         }
+    }
+
+    #[cfg(any(test, feature = "ghostty-engine"))]
+    pub fn with_shell_token(token: String) -> Self {
+        let mut detector = Self::new();
+        detector.shell_token = Some(token);
+        detector
     }
 
     /// Feed a chunk of raw PTY output. Transitions come only from OSC sequences
@@ -407,12 +418,41 @@ impl AgentDetector {
     }
 
     fn handle_osc133<F: FnMut(Transition)>(&mut self, pt: &[u8], emit: &mut F) {
+        #[cfg(any(test, feature = "ghostty-engine"))]
+        let native_command = if let Some(token) = self.shell_token.as_deref() {
+            let Ok(payload) = std::str::from_utf8(pt) else {
+                return;
+            };
+            let mut parts = payload.split(';');
+            let action = parts.next().unwrap_or("");
+            if !matches!(action, "C" | "D") {
+                return;
+            }
+            let mut aids = parts.clone().filter_map(|part| part.strip_prefix("aid="));
+            if aids.next() != Some(token) || aids.next().is_some() {
+                return;
+            }
+            if action == "D"
+                && parts
+                    .clone()
+                    .next()
+                    .and_then(|code| code.parse::<i32>().ok())
+                    .is_none()
+            {
+                return;
+            }
+            Some(super::engine::shell::parse_command(parts))
+        } else {
+            None
+        };
         match pt.first() {
             Some(b'C') => {
                 if self.armed {
                     return;
                 }
                 let cmd = pt.strip_prefix(b"C;").unwrap_or(b"");
+                #[cfg(any(test, feature = "ghostty-engine"))]
+                let cmd = native_command.as_deref().map_or(cmd, str::as_bytes);
                 if let Some(agent) = self.match_agent(cmd) {
                     self.armed = true;
                     self.status = Status::Working;
@@ -519,6 +559,117 @@ mod tests {
                 title: "ready".into(),
                 body: String::new()
             }]
+        );
+    }
+
+    const SHELL_TOKEN: &str = "1234567890abcdef1234567890abcdef";
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn real_zsh_profile_detects_codex_before_any_agent_turn() {
+        for blocks in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let profile = root.path().join("zshrc");
+            std::fs::write(&profile, include_str!("scripts/zshrc.zsh")).unwrap();
+            let output = std::process::Command::new("/bin/zsh")
+                .args([
+                    "-f",
+                    "-c",
+                    r#"source "$1"; _terax_preexec "$2"; printf 'TERAX_AGENT_READY\n'; _terax_precmd"#,
+                    "terax-agent-test",
+                ])
+                .arg(&profile)
+                .arg("codex -s read-only -a never")
+                .env("TERAX_USER_ZDOTDIR", root.path())
+                .env("TERAX_SHELL_INTEGRATION_TOKEN", SHELL_TOKEN)
+                .env("TERAX_BLOCKS", if blocks { "1" } else { "" })
+                .current_dir(root.path())
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+            assert_eq!(
+                run(&mut detector, &output.stdout),
+                vec![started("codex"), Transition::Exited],
+                "blocks={blocks}",
+            );
+        }
+    }
+
+    #[test]
+    fn native_command_metadata_survives_every_chunk_boundary_once() {
+        let marker = osc(&format!(
+            "133;C;aid={SHELL_TOKEN};cmdline_url=/opt/tools/codex%20-s%20read-only%20-a%20never"
+        ));
+        for split in 0..=marker.len() {
+            let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+            let mut events = run(&mut detector, &marker[..split]);
+            events.extend(run(&mut detector, &marker[split..]));
+            assert_eq!(events, vec![started("codex")], "split={split}");
+            assert!(run(&mut detector, &marker).is_empty());
+            assert_eq!(
+                run(&mut detector, &osc(&format!("133;D;0;aid={SHELL_TOKEN}"))),
+                vec![Transition::Exited]
+            );
+        }
+    }
+
+    #[test]
+    fn native_detection_rejects_unowned_or_malformed_command_metadata() {
+        let payloads = [
+            "133;C;codex".to_string(),
+            "133;C;cmdline_url=codex".to_string(),
+            "133;C;aid=wrong;cmdline_url=codex".to_string(),
+            format!("133;C;aid={SHELL_TOKEN};aid={SHELL_TOKEN};cmdline_url=codex"),
+            format!("133;C;aid={SHELL_TOKEN};cmdline_url=codex;cmdline_url=pi"),
+            format!("133;C;aid={SHELL_TOKEN};cmdline_url=codex%GG"),
+            format!("133;C;aid={SHELL_TOKEN};cmdline_url=codex%20%FF"),
+            format!("133;C;aid={SHELL_TOKEN};cmdline_url=codex%00"),
+            format!("133;C;aid={SHELL_TOKEN};cmdline_url=printf%20hello"),
+            format!("133;Cat;aid={SHELL_TOKEN};cmdline_url=codex"),
+        ];
+        for payload in payloads {
+            let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+            assert!(run(&mut detector, &osc(&payload)).is_empty(), "{payload}");
+        }
+    }
+
+    #[test]
+    fn native_detection_requires_the_owned_command_end() {
+        let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        assert_eq!(
+            run(
+                &mut detector,
+                &osc(&format!("133;C;cmdline_url=codex;aid={SHELL_TOKEN}"))
+            ),
+            vec![started("codex")]
+        );
+        for payload in [
+            "133;D;0".to_string(),
+            "133;D;0;aid=wrong".to_string(),
+            format!("133;D;0;aid={SHELL_TOKEN};aid={SHELL_TOKEN}"),
+            format!("133;Done;0;aid={SHELL_TOKEN}"),
+            format!("133;D;invalid;aid={SHELL_TOKEN}"),
+        ] {
+            assert!(run(&mut detector, &osc(&payload)).is_empty());
+        }
+        assert_eq!(
+            run(&mut detector, &osc(&format!("133;D;0;aid={SHELL_TOKEN}"))),
+            vec![Transition::Exited]
+        );
+        assert!(run(&mut detector, &osc(&format!("133;D;0;aid={SHELL_TOKEN}"))).is_empty());
+    }
+
+    #[test]
+    fn native_mode_preserves_explicit_agent_hooks_without_shell_metadata() {
+        let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+        assert_eq!(
+            run(&mut detector, &osc("777;notify;Terax;codex;working")),
+            vec![started("codex")]
+        );
+        assert_eq!(
+            run(&mut detector, &osc("777;notify;Terax;codex;finished")),
+            vec![Transition::Finished { text: None }]
         );
     }
 

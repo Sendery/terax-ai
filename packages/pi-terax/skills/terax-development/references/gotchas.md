@@ -726,6 +726,13 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Verification:** regress source exclusion, crop coordinates, unavailable required providers and tab-switch timing; inspect whole-window and pane captures with multiple panes and a visible divider. Restore frozen visible foreground DOM over native pixels, preserving computed visibility and each ancestor overflow clip; bound count/area and deduplicate nested roots. Freeze before any await. Successful interaction or paint mocks alone do not prove captured appearance.
 
 
+### Agent detection must consume the active shell marker format
+
+- **Trigger:** native shells encode preexec command metadata as OSC 133 C with aid and cmdline_url, while the agent detector still expects the legacy raw command.
+- **Failure mode:** a real agent TUI starts but no monitor/store session appears, so task dispatch can mistake an occupied pane for an unstarted agent. A transcript or first model turn is not the start contract.
+- **Prevention:** give the native detector the same per-session shell token, require a unique matching aid for command start/end, and reuse the strict command decoder. Preserve raw-command detection for legacy and explicit agent-hook handling; do not infer identity from screen text or inject synthetic lifecycle signals as a workaround.
+- **Verification:** feed actual ordinary and block zsh profile output without executing an agent; assert start/exit, every byte split, malformed/duplicate metadata rejection, token ownership and unchanged explicit hooks. Validate the matching rebuilt app separately before accepting the monitor or task handoff.
+
 ### Shell state is not engine acquisition or arbitrary OSC output
 
 - **Trigger:** native terminals need CWD/readiness or a process is replaced while state delivery is pending.

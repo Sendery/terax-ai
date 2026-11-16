@@ -380,7 +380,7 @@ impl ShellIntegration {
         self.buffer.clear();
     }
 }
-fn parse_command<'a>(parts: impl Iterator<Item = &'a str>) -> String {
+pub(crate) fn parse_command<'a>(parts: impl Iterator<Item = &'a str>) -> String {
     let mut commands = parts.filter_map(|part| part.strip_prefix("cmdline_url="));
     let Some(encoded) = commands.next() else {
         return String::new();
