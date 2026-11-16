@@ -2,9 +2,9 @@
 
 The active goal is a usable Terax with the new terminal and the same or better
 existing capabilities. It is not complete. This checkpoint starts from local qa
-5ce928eae9c711ef50667b8e2122416354e47cd7. The current accepted cursor artifact
-contains source b65c96012b89f32127641e075d9beaf983645bd9; earlier cases below
-retain their packaged source 2d869a350465443b4bb860f5d3a9ee098dc2ddff.
+3228447f7731420c8a0bcda6b2ba8717651baf57, the packaged source used for the
+current Codex acceptance. Cursor and earlier cases retain their own b65c960
+and 2d869a3 artifact provenance below.
 This update changes documentation only.
 
 The [parity inventory](2026-11-14-terminal-parity.md) supplies requirement IDs.
@@ -22,12 +22,12 @@ than repeating them without a relevant change or unresolved concern.
 
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
-| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. | Other unavailable block-output/header cases; zoom, theme and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
-| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and real Claude/Codex navigation, multiline and redraw remain open. |
+| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. On native 3228447, Kanagawa persists with the Codex pane visible, and 110 percent zoom keeps its composer legible; both restore to their originals with the same PTY. | Other unavailable block-output/header cases; remaining theme/settings combinations and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
+| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and remaining real Claude/Codex navigation, composition and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
-| 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. Official Codex 0.169.0 starts in the native TUI with the correct CWD; exact positive login status in the same PTY is recorded, but onboarding remains visible and its composer is not ready. | Real split activity/attention/exit; correct conversation/CWD restoration once after readiness; multiline scheduled delivery once, with unavailable/unchanged buffers never reported as success. Codex has no model turn or task-delivery acceptance and awaits user action on M2. Neither Pi draft persistence nor Codex startup establishes these cases. |
+| 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. On native 3228447, Codex is detected in its owned monitor row before a turn. One manual three-line task reuses that target and runs exactly once. An actual Always-policy restart restores one Codex TUI in its CWD; a second gpt-6.1-sol turn recalls the earlier context without repeating its identifier in the question. | Remaining split activity/attention/exit; timer-driven delivery, unavailable/unchanged buffers and retry/owner cases. Task-to-tab persistence across restart remains a separate baseline follow-up. Terax AI context consumers and authenticated Claude remain open; these Codex cases do not establish the whole scheduled lifecycle. |
 | 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. Native tests cover final output and sticky failures. | Known finite output while another pane remains usable, hidden output conservation, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
 | 9. Unicode and inline graphics, T07/D04 | Mode 2027 clusters, direct PNG/RGB/RGBA/z layers, and virtual one-pixel placeholders spanning rows have real pixel evidence, including GPU/software. | Reflow/search/copy for complex text, cropped edges and image scroll/history interactions. These paths have implementation/native tests; remaining pixels are not absent code. |
@@ -161,7 +161,9 @@ The same PTY survived GPU to software to GPU. Original preferences were restored
 to GPU enabled and cursor blink disabled, with the off cursor stable in one
 state. All 13 original tab metadata and shell PIDs 61466/61467 were preserved.
 Owned tab 40, shell 83756 and peer 84374 were retired; unexpected PTY input was
-zero. Theme, zoom, other settings and platform/default gates remain open.
+zero. This cursor case does not establish theme or zoom; the later scoped
+3228447 checks are recorded below. Other settings and platform/default gates
+remain open.
 
 ## Selection to Mermaid accepted
 
@@ -184,6 +186,101 @@ TTS was not attempted. Those consumer cases remain pending.
 All 13 original tabs and their exact metadata were restored. Owned terminal 48,
 diagram 50 and processes 54247/54839 were retired. This accepts selection to
 Mermaid only; it does not close the selection/AI consumer category or the goal.
+
+## Native Codex detection and first task accepted
+
+Native preexec changed from a raw command to authenticated aid/cmdline_url
+metadata, while the shared agent detector still expected the raw form. This
+regression hid a running Codex TUI from the monitor/store before any turn;
+a first model turn was never the start contract. Qa 683a63a binds detection to
+the same shell token, validates a unique aid and reuses the strict decoder.
+Qa 3228447 also shares the native shell parser's encoded OSC 133 budget:
+a 3024-byte legacy-valid command remains detectable after encoding beyond
+8 KiB. Legacy and other OSC retain 8 KiB; oversized markers are discarded
+whole, and decoded commands retain their existing 1 MiB limit.
+
+The corrections passed independent source review, 37 then 42 focused detector
+tests, strict plain Clippy and touched-file formatting. The additional native
+budget regression was red first; the actual zsh fixture proved both legacy
+detection and exact core decoding before the detector fix. These source checks
+are distinct from the real packaged acceptance below.
+
+The ignored M2 receipts are under
+.terax/pi-development/m2/logs/codex-acceptance-3228447/:
+first-turn-acceptance.json, monitor-owned.json, task-created.json and
+task-state.json. They bind this case to packaged source
+3228447f7731420c8a0bcda6b2ba8717651baf57, app PID 26283, owned tab 40,
+shell 24043 and Codex PID 24677, in
+/private/tmp/terax-codex-acceptance-20261116.
+
+The monitor showed one Codex row belonging to the owned tab. A manual task
+created through app commands sent three lines to that existing target and
+ran exactly once, with no duplicate agent process. The expected response marker
+TERAX_NATIVE_TASK_OK appeared twice, in user and assistant content; the first
+response was observed and the task returned idle. The successful turn used
+gpt-6.1-sol, with no authentication or model error.
+
+An earlier gpt-5.2-codex selection was unsupported by the current ChatGPT-backed
+CLI. Selecting the available gpt-6.1-sol through Codex recovered the turn;
+this was a CLI model-availability boundary, not a Terax authentication defect.
+This first-turn case alone does not establish startup restoration. The later
+real restart and recalled conversation context are accepted below. Terax AI
+context consumers, remaining agent lifecycle/timer cases and authenticated
+Claude remain open.
+
+## Scoped theme and zoom accepted with Codex
+
+The ignored M2 receipt
+.terax/pi-development/m2/logs/codex-acceptance-3228447/theme-zoom-acceptance.json
+binds this case to source 3228447, app PID 26283 and owned tab 40. Selecting
+Kanagawa through the real Settings UI persisted the theme ID and kept the
+native Codex composer and response visible. The original terax-default theme
+was restored.
+
+Real arrow keys on the focused General zoom slider selected 110 percent.
+The native composer remained legible, and zoom was restored to 100 percent.
+The same PTY and Codex PID 24677 survived both preference changes; captures
+remain local to M2. An earlier AXSetValue attempt changed no state and was
+corrected in the ignored helper, with no demonstrated product failure.
+
+This accepts those two settings transitions only. Complete image/background
+contrast, other theme combinations and CJK composition remain unaccepted.
+
+## Codex startup restoration and conversation context accepted
+
+The final ignored receipts in the same codex-acceptance-3228447 directory are
+acceptance.json and restored-context-classification.json. The final acceptance
+completed 2026-11-16T10:10:40.223266+00:00 and reports passed true. The actual
+Always-policy startup restarted app PID 26283 as PID 92065 using the same
+3228447 executable, SHA256
+b3c762f913e562038c065ca50b0c4a5f44b4807ba3f653b3901f5fc79c8d69f0.
+
+Exactly one restored Codex TUI used the owned CWD. The tab moved from ID 40 to
+41 while retaining index 13: existing workspace hydration allocates new IDs,
+so this is not evidence of persistent numeric tab identity. A second successful
+gpt-6.1-sol turn recalled TERAX_NATIVE_CONTEXT_20261116 from the earlier
+three-line prompt without the identifier being repeated in the question.
+The assistant response region was verified locally, including OCR wrapped at
+width 462; the classification reports assistantRegionContextVerified true
+with no authentication, model, usage-limit or request failure. Captures stayed
+on M2.
+
+The task's run count stayed exactly one before and after restart; no extra
+Codex TUI was observed. Its old tabId 40 link was not accepted as persistent.
+This is pre-existing behavior in the xterm baseline 0c573d8 and 03a44af:
+[workspace hydration](../../src/modules/spaces/lib/serialize.ts) allocates IDs,
+[task serialization](../../src/modules/tasks/lib/store.ts) retains tabId, and
+[ensureTaskTab](../../src/app/App.tsx) creates a new tab when that ID is absent.
+The owned task had exhausted maxRuns 1 and was not rerun. Persistent task
+linkage needs a separate follow-up; it is not a native migration regression.
+
+Cleanup retired the owned task, tab, Codex and shell. All 13 original tabs'
+public metadata, three clean editors and the graph's identity, revision and
+source were preserved exactly. Recovery policy Ask, theme terax-default and
+zoom 100 percent were restored. The current app remains PID 92065 with original
+fixture zsh PIDs 43247/43246. This accepts the scoped A08 Codex startup/CWD and
+conversation-context case, alongside the first manual task; it does not accept
+all agents, task-link persistence, Terax context tools or total terminal parity.
 
 ## Platform and rollout boundaries
 
@@ -227,13 +324,14 @@ Bounded version/help checks pass. The ignored M2 receipt
 2026-11-16T06:50:48.140717+00:00, records native TUI startup and the correct CWD.
 A bounded login-status probe in that same PTY exited zero and matched the exact
 positive ChatGPT status. Nevertheless, onboarding remained visible and the
-composer was not ready. User action on M2 remains pending.
+composer was not ready at that earlier checkpoint.
 
-No model turn was sent and no task was added. Conversation restoration,
-multiline handoff and functional Codex turns are not accepted by startup or
-authentication status. Original tabs were preserved; only owned tab 44 and its
-shell were retired. This leaves A07-A10 open. No credential, private session or
-raw clipboard data is recorded here.
+That startup check sent no model turn and added no task. Its original tabs
+were preserved; only owned tab 44 and its shell were retired. The later
+3228447 first-turn/manual-task and actual Codex startup/context cases are
+accepted separately above. Broader A07-A10 cases and persistent task linkage
+remain open. No credential, private session or raw clipboard data is recorded
+here.
 
 [Pi-Terax/GraphX acceptance](2026-11-16-pi-terax-graphx-acceptance.md) closes that
 feature's listed M2 cases, not the terminal migration. This documentation slice

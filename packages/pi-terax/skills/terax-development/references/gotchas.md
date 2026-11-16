@@ -346,6 +346,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** qualify the preset with its provider (`provider/pattern`), which stays version agnostic while resolving to one model. Keep a custom free-text value available for anything the presets do not cover.
 - **Verification:** run one real non-interactive invocation per preset shape and confirm the CLI resolved a model instead of rejecting the pattern.
 
+### CLI authentication does not establish model availability
+
+- **Trigger:** an authenticated agent CLI starts with a model selected by an older preset or previous configuration.
+- **Failure mode:** the account cannot use that model, so a rejected turn is mistaken for terminal transport or authentication failure.
+- **Prevention:** distinguish positive login status from a successful turn with the installed CLI's available model choices. Preserve the user's explicit choice; use an authorized CLI model selection to correct a setup mismatch rather than changing credentials or injecting input workarounds.
+- **Verification:** bind the result to the CLI version, selected model, owned terminal and actual response. A recovered turn accepts that model/account combination only; it does not establish other providers or CLIs.
+
 ### Session pinning differs per agent CLI and cannot be assumed
 
 - **Trigger:** launching pi, claude, or codex on behalf of a scheduled or automated run and expecting the same session to continue.

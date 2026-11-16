@@ -3,8 +3,8 @@
 Code candidate: 03a44af64dff5f7e99209d0e417fb3c513c63e75, consolidated in local qa.
 This report records the completed implementation and the first general
 validation block, followed by artifact-specific acceptance updates. The latest
-cursor follow-up uses native packaged source b65c960; earlier 2d869a3 cases
-retain their original provenance. Functional replacement and default rollout
+Codex follow-up uses native packaged source 3228447; cursor b65c960 and earlier
+2d869a3 cases retain their original provenance. Functional replacement and default rollout
 remain open.
 
 ## General automatic checks
@@ -416,8 +416,8 @@ zoom, background contrast or every font-family/weight combination.
 Official Codex 0.169.0 started its TUI in an owned native pane with the correct
 CWD. A bounded login-status check in that same PTY exited zero and matched the
 exact positive ChatGPT status. Its TUI nevertheless remained on onboarding;
-the composer was not ready and user action on M2 is pending. No model turn was
-sent and no task was added. Startup and positive authentication status do not
+the composer was not ready at that checkpoint. No model turn was sent and no
+task was added during that historical startup case. Startup and positive authentication status do not
 accept a functional Codex conversation, restoration or multiline task handoff.
 
 Evidence is qa's ignored
@@ -478,7 +478,93 @@ were restored; the off cursor remained stable in one state. All 13 original
 tab metadata and shell PIDs 61466/61467 were preserved. Owned tab 40, shell 83756
 and peer 84374 retired, with zero unexpected PTY input.
 
-This accepts the corrected pane/window blur case in both renderers. Theme,
-zoom, other pending functional cases, supported-target and default rollout
-gates remain open. This documentation update ran no UI, bridge, model, build
+This accepts the corrected pane/window blur case in both renderers. Theme
+and zoom are addressed only by the later scoped 3228447 follow-up. Other
+pending functional cases, supported-target and default rollout gates remain
+open. This documentation update ran no UI, bridge, model, build
 or suite; its checks are limited to diff and local links.
+
+## Native Codex detection and first manual task follow-up
+
+Qa 683a63a corrects a native regression: preexec emits authenticated
+aid/cmdline_url metadata, but agent detection previously expected the legacy
+raw command. Detection now uses the same session token and strict decoder.
+Qa 3228447 preserves the shared native encoded-marker budget, including a
+legacy-valid 3024-byte command expanding beyond 8 KiB. Legacy/other OSC stay
+at 8 KiB, decoded commands retain the 1 MiB cap and oversized markers are
+discarded in full. Source review, 37 then 42 focused detector tests, strict
+plain Clippy and touched-file formatting passed before packaged acceptance.
+
+The ignored receipts under
+.terax/pi-development/m2/logs/codex-acceptance-3228447/ are
+first-turn-acceptance.json, monitor-owned.json, task-created.json and
+task-state.json. The actual native app is source
+3228447f7731420c8a0bcda6b2ba8717651baf57, PID 26283. The owned tab is 40,
+shell 24043, Codex PID 24677, with acknowledged CWD
+/private/tmp/terax-codex-acceptance-20261116.
+
+The monitor displayed one matching Codex row. A manual three-line task created
+and run through app commands reused that target, recorded runCount 1 and
+returned idle without launching a second CLI. TERAX_NATIVE_TASK_OK appeared
+in the user and assistant content, two occurrences, with the first response
+observed. This successful gpt-6.1-sol turn showed no auth/model error.
+
+The earlier gpt-5.2-codex choice was unsupported by the ChatGPT-backed CLI;
+selecting gpt-6.1-sol in Codex recovered the turn without an authentication
+repair. Do not classify that setup mismatch as a product authentication defect.
+This accepts detection, one real first turn and one manual multiline handoff.
+Actual startup restoration and recalled conversation context are accepted in
+the later follow-up below; timer/retry/owner cases, Terax context tools and
+authenticated Claude remain open. The broader terminal/default/platform goal
+remains open.
+
+## Codex theme and zoom follow-up
+
+The ignored receipt
+.terax/pi-development/m2/logs/codex-acceptance-3228447/theme-zoom-acceptance.json
+records source 3228447, app PID 26283 and owned tab 40. Kanagawa was selected
+through the real UI, its theme ID persisted, and the native Codex composer and
+response remained visible. The original terax-default theme was restored.
+
+Real arrow keys on the focused General slider selected zoom 110 percent;
+the composer remained legible. Zoom was restored to 100 percent, preserving
+the same PTY and Codex PID 24677 throughout. Captures stayed on M2. An initial
+AXSetValue attempt changed no state; correcting that ignored helper established
+the real input path without demonstrating a product defect.
+
+This accepts the scoped theme/zoom transitions. Full background/image contrast,
+other setting combinations and CJK composition remain open.
+
+## Actual Codex startup restore and context follow-up
+
+Final receipts in
+.terax/pi-development/m2/logs/codex-acceptance-3228447/ are acceptance.json and
+restored-context-classification.json. Acceptance completed
+2026-11-16T10:10:40.223266+00:00 with passed true. With recovery policy Always,
+an actual restart changed app PID 26283 to 92065, using the same source 3228447
+executable with SHA256
+b3c762f913e562038c065ca50b0c4a5f44b4807ba3f653b3901f5fc79c8d69f0.
+
+One Codex TUI resumed in the owned CWD. Tab ID 40 became 41 at the same index 13,
+consistent with existing hydration assigning new IDs. A second gpt-6.1-sol turn
+recalled TERAX_NATIVE_CONTEXT_20261116 from the managed three-line prompt,
+without repeating the identifier in the new question. The assistant region,
+including locally wrapped OCR at width 462, was checked separately from the
+question/editor. assistantRegionContextVerified is true; auth/model/request
+errors and usage-limit notices are false. Two successful model turns are now
+accepted, with captures remaining on M2.
+
+Task runCount stayed one across restart, with no duplicate Codex TUI. Its stale
+tabId 40 link was not accepted as persistent. The xterm baseline 0c573d8 and
+03a44af already combine regenerated workspace tab IDs, Tasks serialization
+retaining tabId, and ensureTaskTab creating another tab if that ID is absent.
+This requires a separate task-link follow-up, not a native regression. The
+owned task had maxRuns 1 exhausted and was not rerun.
+
+Cleanup removed the owned task/tab/Codex/shell. Exactly 13 original tabs'
+public metadata, three clean editors and graph identity/revision/source were
+preserved. Recovery policy Ask, terax-default and zoom 100 percent were
+restored. Current app PID 92065 retains original fixture shells 43247/43246.
+This accepts scoped A08 startup, CWD and conversation context for Codex;
+persistent task linkage, other agents, Terax AI context tools and the broader
+terminal/default/platform goal remain open.
