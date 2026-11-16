@@ -7,6 +7,22 @@ Codex follow-up uses native packaged source 3228447; cursor b65c960 and earlier
 2d869a3 cases retain their original provenance. Functional replacement and default rollout
 remain open.
 
+## Japanese composition validation deferred
+
+The user's 2026-11-16 instruction places Japanese composition/IME validation
+after the optional 60 FPS goal in the
+[ordered priority backlog](2026-11-14-terminal-migration-priority.md#optional-backlog-order).
+Both remain deferred and neither is a gate for functional migration on M2.
+Existing IME production code, including keyCode 229 and Process guards, remains
+unchanged.
+
+The initial CG-event Japanese attempt observed four bytes before Enter, but the
+control harness was inconclusive. It provides no accepted Japanese-composition
+result and establishes no native product failure. TIS and termios were restored;
+the owned control app was closed. Historical Spanish dead-key acceptance below
+retains its original scope. Further Japanese validation waits for the backlog
+order rather than another input experiment in the current sweep.
+
 ## General automatic checks
 
 All checks ran once on M2 against the complete candidate:
@@ -308,7 +324,8 @@ retained as evidence, not substituted for the scope of a new check.
 Concrete product failures found after this general sweep use atomic worktrees
 and directed checks. Already-passed whole floors are not repeated without a
 relevant change or unresolved concern. No performance laboratory was run;
-60FPS remains optional.
+60 FPS remains optional. Japanese composition/IME validation follows it in the
+ordered backlog above; neither deferred item blocks the M2 migration.
 
 No Actions, push, PR, publication, merge commit or protected-original-Mac
 project operation was performed. This is not a claim of complete parity.

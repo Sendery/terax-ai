@@ -25,9 +25,11 @@ or measured, and no red test scaffold remains in the tracked source.
    a shared TerminalEngine/session facade, retaining the existing xterm path
    while migration is incomplete. Exercise a real shell in the normal sandbox
    UI, not Terminal Lab.
-2. Complete negotiated keyboard input, IME/dead keys, paste, focus, selection,
-   history/reflow and current terminal settings. Preserve the shared renderer
-   and hidden-pane lifecycle without losing output or running agents.
+2. Complete negotiated keyboard input, dead keys, paste, focus, selection,
+   history/reflow and current terminal settings. Preserve existing IME support;
+   Japanese composition/IME validation follows the optional backlog below.
+   Preserve the shared renderer and hidden-pane lifecycle without losing
+   output or running agents.
 3. Connect cwd/shell readiness, blocks, search/links, selection actions, agent
    restoration, scheduled handoff, AI context and Pi/MCP consumers to the new
    session surface. Use the parity matrix to verify each observable behavior.
@@ -38,6 +40,26 @@ or measured, and no red test scaffold remains in the tracked source.
 The completion condition is a runnable normal-terminal version with current
 capabilities preserved or improved. Compilation, fixtures, a basic shell,
 FPS results or an adapter alone do not establish that outcome. The full
-parity matrix remains the acceptance inventory, with FPS as informational.
+parity matrix remains the acceptance inventory, subject to the explicit
+Japanese-validation deferral below and with FPS as informational.
 All native work stays on M2; no native build on the protected original Mac,
 no antivirus bypass and no GitHub Actions. Commits use Sendery only.
+
+## Optional backlog order
+
+On 2026-11-16 the user explicitly asked to defer Japanese integration until
+after reaching 60 FPS. For the existing implementation, the deferred work is
+Japanese composition/IME validation, including candidate-confirming Enter:
+
+1. Pursue the optional 60 FPS optimization target when performance work is
+   resumed under the user's priorities.
+2. After that target, resume Japanese composition/IME validation and address
+   any product defect that a conclusive comparison establishes.
+
+Both are backlog items, not prerequisites for the current functional migration
+on M2. This ordering does not make 60 FPS mandatory or authorize new performance
+laboratories now. It does not remove existing production IME support or treat
+the inconclusive CG-event Japanese attempt as a confirmed native failure.
+The [acceptance status](2026-11-16-terminal-acceptance-status.md#japanese-composition-validation-deferred)
+and [general validation](2026-11-16-terminal-general-validation.md#japanese-composition-validation-deferred)
+record the attempt's limits and restored input state.

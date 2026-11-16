@@ -18,12 +18,15 @@ is inferred solely from an unrun acceptance case.
 ## Current cases and next work
 
 The order continues the functional sweep. Retain earlier accepted cases rather
-than repeating them without a relevant change or unresolved concern.
+than repeating them without a relevant change or unresolved concern. Japanese
+composition/IME validation is deferred by the user to the
+[ordered optional backlog](2026-11-14-terminal-migration-priority.md#optional-backlog-order)
+after 60 FPS. Neither item blocks the M2 migration.
 
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
 | 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. On the corrected native b65c960 artifact, GPU and software cursors blink while focused and remain visibly hollow and stable after pane or window blur; restoring blink off is stable. On native 3228447, Kanagawa persists with the Codex pane visible, and 110 percent zoom keeps its composer legible; both restore to their originals with the same PTY. | Other unavailable block-output/header cases; remaining theme/settings combinations and image-background contrast. These scoped cases do not establish all settings or all font combinations. |
-| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and remaining real Claude/Codex navigation, composition and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
+| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | Japanese composition/IME and candidate-confirming Enter are deferred after the optional 60 FPS goal, outside M2 migration gates. The later CG-event attempt is inconclusive, not accepted or a confirmed native failure. Other dead-key/composition cases, actual multiline paste with/without negotiated brackets, and remaining real Claude/Codex navigation and redraw remain open. The scoped three-line Codex task handoff is recorded in category 6. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
@@ -44,6 +47,20 @@ Source boundaries for the still-open consumer scenarios are documented in
 [agent restoration](2026-11-15-terminal-native-agent-restore.md),
 [scheduled handoff](2026-11-15-terminal-native-task-handoff.md) and
 [inactive capture](2026-11-15-terminal-native-inactive-capture.md).
+
+## Japanese composition validation deferred
+
+On 2026-11-16 the user explicitly moved Japanese composition/IME validation
+after the optional 60 FPS goal in the
+[priority backlog](2026-11-14-terminal-migration-priority.md#optional-backlog-order).
+Both items are deferred and neither blocks functional migration on M2.
+
+The first CG-event Japanese attempt observed four bytes before Enter, but its
+control harness did not establish a conclusive comparison. It is neither
+accepted Japanese composition nor a confirmed native regression. The input
+source (TIS) and termios state were restored, and the owned control app closed.
+Existing production IME handling, including keyCode 229 and Process guards,
+remains intact; this decision changes validation priority, not input support.
 
 ## Ordinary live history trim accepted
 
@@ -115,8 +132,9 @@ packaged source 2d869a3, app PID 5217, owned tab 46, shell 48007 and peer 59640.
 
 Physical Spanish-ISO keycodes 39 then 0 delivered one UTF-8 c3a1 commit, with
 no Enter delivered. This accepts that dead-key accent case only. A CJK input
-source was not enabled, so CJK composition, candidate-confirming Enter and
-broader IME behavior remain unaccepted.
+source was not enabled in that historical case, so it did not accept CJK
+composition, candidate-confirming Enter or broader IME behavior. The later
+Japanese attempt and user deferral are recorded above.
 
 Selecting Menlo and Semi-Bold changed the terminal PNG. Restoring the original
 empty font family and Normal weight recovered the exact original PNG. Focused
