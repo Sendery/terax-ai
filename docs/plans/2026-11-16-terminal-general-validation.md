@@ -295,7 +295,8 @@ cache; selected public images were inspected.
 The concrete selection correction is now accepted on M2. GraphX loading, placement, capture and live resize are now accepted in the
 separate Pi-Terax/GraphX report linked below. The ordinary selection/search and block-search
 live history-trim cases are now accepted in the follow-ups below. Remaining
-acceptance includes other block-output/header cases and live preferences; broader
+acceptance includes other block-output/header cases, cursor blur/focus, zoom,
+theme and background-contrast preferences; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
 default and real-workload requirements. Historical completed slices are
@@ -380,3 +381,49 @@ This closes the scoped block-search eviction/retention and long-command copy
 cases, not all block-output/header behavior or either acceptance category.
 Wrapped header geometry, empty/overwritten output, other actions on unavailable
 block output and the wider terminal goal remain open.
+
+
+## Font, focused cursor and Spanish dead-key follow-up
+
+Packaged source 2d869a3 passed three additional bounded native-pane cases.
+Physical Spanish-ISO keycodes 39 then 0 delivered exactly one UTF-8 c3a1
+commit and no Enter. A CJK input source was not enabled. This accepts one
+physical dead-key accent case, not CJK composition, candidate-confirming Enter
+or general IME coverage.
+
+Menlo with Semi-Bold changed the terminal PNG. Restoring the original empty
+font family and Normal weight recovered the exact original PNG. With the owned
+terminal focused, blinking on produced two states in a 17 by 37 pixel cursor
+rectangle; restoring the original off preference produced one state.
+
+Blur is explicitly not accepted. The blurred observation also had two states,
+and the receipt records blurBehaviorAccepted false and blurReviewPending true.
+A separate focused GPU/software source correction is being handled outside this
+documentation slice; no integrated or physical blur result follows from it.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/preferences-native-2d869a3/acceptance.json,
+completed 2026-11-16T07:03:58.384446+00:00. App PID 5217 and all 13 original tab
+metadata, plus original shell PIDs 5549/5550, were preserved. Only owned tab 46,
+shell 48007 and peer 59640 were retired. These cases do not accept theme,
+zoom, background contrast or every font-family/weight combination.
+
+## Codex startup boundary
+
+Official Codex 0.169.0 started its TUI in an owned native pane with the correct
+CWD. A bounded login-status check in that same PTY exited zero and matched the
+exact positive ChatGPT status. Its TUI nevertheless remained on onboarding;
+the composer was not ready and user action on M2 is pending. No model turn was
+sent and no task was added. Startup and positive authentication status do not
+accept a functional Codex conversation, restoration or multiline task handoff.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/codex-native-2d869a3/startup-result.json,
+completed 2026-11-16T06:50:48.140717+00:00. Original tabs were preserved; owned
+tab 44 and its shell were retired. No authentication material or private
+session content is included in this report.
+
+The [current acceptance matrix](2026-11-16-terminal-acceptance-status.md)
+separates these accepted cases from the remaining functional, supported-target
+and rollout requirements. This update is documentation only, with diff and
+local-link checks; it ran no UI, bridge, model, build or test suite.

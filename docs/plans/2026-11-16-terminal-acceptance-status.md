@@ -2,7 +2,7 @@
 
 The active goal is a usable Terax with the new terminal and the same or better
 existing capabilities. It is not complete. This checkpoint audits local qa
-5cbd0e61991c4af0ada8cdedd6dea02d935d9fa0 and the actual packaged source
+788f0fb910d822ec4d087fae652dd86a2949f286 and the actual packaged source
 2d869a350465443b4bb860f5d3a9ee098dc2ddff. It changes documentation only.
 
 The [parity inventory](2026-11-14-terminal-parity.md) supplies requirement IDs.
@@ -20,12 +20,12 @@ than repeating them without a relevant change or unresolved concern.
 
 | Order and requirements | Accepted cases and implementation evidence on M2 | Next cases still open |
 | --- | --- | --- |
-| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. | Other unavailable block-output/header cases; cursor blink/focus, font family/weight, zoom, theme and image-background contrast. No all-settings acceptance follows from the two geometry controls. |
-| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. OSC52 system-clipboard cases are accepted separately. | Dead-key accents and CJK commit once without submitting candidate Enter; actual multiline paste with/without negotiated brackets; real Claude/Codex navigation, multiline and redraw. |
+| 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. Focused cursor blink has two states when on and one after restoring off. | Other unavailable block-output/header cases; cursor behavior on blur/focus, zoom, theme and image-background contrast. The blurred-cursor case is explicitly not accepted; a separate GPU/software source correction is not runtime acceptance. These scoped cases do not establish all settings or all font combinations. |
+| 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and real Claude/Codex navigation, multiline and redraw remain open. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
 | 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Async context/selection and owner/privacy adapters are implemented. | Mermaid, TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
-| 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. | Real split activity/attention/exit; correct conversation/CWD restoration once after readiness; multiline scheduled delivery once, with unavailable/unchanged buffers never reported as success. Pi draft persistence does not establish these cases. |
+| 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. Official Codex 0.169.0 starts in the native TUI with the correct CWD; exact positive login status in the same PTY is recorded, but onboarding remains visible and its composer is not ready. | Real split activity/attention/exit; correct conversation/CWD restoration once after readiness; multiline scheduled delivery once, with unavailable/unchanged buffers never reported as success. Codex has no model turn or task-delivery acceptance and awaits user action on M2. Neither Pi draft persistence nor Codex startup establishes these cases. |
 | 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. Native tests cover final output and sticky failures. | Known finite output while another pane remains usable, hidden output conservation, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. No throughput experiment is needed. |
 | 8. Renderer recovery, T10 | GPU to Canvas2D to GPU preserves image pixels and original PTYs. | Actual context loss/display wake and manual redraw across several panes. Preference switching alone does not prove those recovery triggers. |
 | 9. Unicode and inline graphics, T07/D04 | Mode 2027 clusters, direct PNG/RGB/RGBA/z layers, and virtual one-pixel placeholders spanning rows have real pixel evidence, including GPU/software. | Reflow/search/copy for complex text, cropped edges and image scroll/history interactions. These paths have implementation/native tests; remaining pixels are not absent code. |
@@ -104,6 +104,32 @@ This accepts the scoped block-search eviction/retention and long-command copy
 cases. Wrapped header geometry, empty/overwritten output, other actions on
 unavailable block output and the broader categories remain open.
 
+## Live font, cursor and Spanish dead-key cases accepted
+
+The authoritative ignored M2 receipt is
+.terax/pi-development/m2/logs/preferences-native-2d869a3/acceptance.json in the qa
+worktree, completed 2026-11-16T07:03:58.384446+00:00. It binds these cases to
+packaged source 2d869a3, app PID 5217, owned tab 46, shell 48007 and peer 59640.
+
+Physical Spanish-ISO keycodes 39 then 0 delivered one UTF-8 c3a1 commit, with
+no Enter delivered. This accepts that dead-key accent case only. A CJK input
+source was not enabled, so CJK composition, candidate-confirming Enter and
+broader IME behavior remain unaccepted.
+
+Selecting Menlo and Semi-Bold changed the terminal PNG. Restoring the original
+empty font family and Normal weight recovered the exact original PNG. Focused
+cursor blinking on produced two states confined to a 17 by 37 pixel cursor
+rectangle; restoring the original off preference produced one state.
+
+The blurred-cursor observation produced two states and the receipt explicitly
+sets blurBehaviorAccepted to false. Blur/focus behavior remains open. A separate
+GPU/software source correction is not integrated runtime acceptance here.
+No theme, zoom, background-contrast or other font-combination acceptance is
+inferred from these cases.
+
+All 13 original tabs and their exact metadata, plus original shell PIDs
+5549/5550, were preserved. The owned peer, shell and tab were retired.
+
 ## Platform and rollout boundaries
 
 The app's minimum macOS version is 13.0 in
@@ -141,10 +167,18 @@ screenReaderMode was enabled in this baseline.
 
 Codex 0.169.0 was separately staged from the official distribution, verified for
 integrity, OpenAI signature and notarization, and activated reversibly on M2.
-Bounded version/help checks pass and the existing ChatGPT authentication status
-is positive. Tool receipts remain outside repository source. No model request
-or agent turn was sent, so this enables the next cases without closing A07-A10.
-No credential, private session or raw clipboard data is recorded here.
+Bounded version/help checks pass. The ignored M2 receipt
+.terax/pi-development/m2/logs/codex-native-2d869a3/startup-result.json, completed
+2026-11-16T06:50:48.140717+00:00, records native TUI startup and the correct CWD.
+A bounded login-status probe in that same PTY exited zero and matched the exact
+positive ChatGPT status. Nevertheless, onboarding remained visible and the
+composer was not ready. User action on M2 remains pending.
+
+No model turn was sent and no task was added. Conversation restoration,
+multiline handoff and functional Codex turns are not accepted by startup or
+authentication status. Original tabs were preserved; only owned tab 44 and its
+shell were retired. This leaves A07-A10 open. No credential, private session or
+raw clipboard data is recorded here.
 
 [Pi-Terax/GraphX acceptance](2026-11-16-pi-terax-graphx-acceptance.md) closes that
 feature's listed M2 cases, not the terminal migration. This documentation slice
