@@ -25,7 +25,7 @@ c390cf1908007dc0ab9f1c6914384532c8482cbd6fbe5aea2752e610425e09ae.
 
 ## Exact running version
 
-The frozen M2 artifact is
+The broad-sweep frozen M2 artifact was
 .terax/qa-candidates/03a44af/Pi-Terax Sandbox.app in the qa worktree.
 Its executable SHA256 is
 0095e4d0f72ec9c86ca99dc2f41112441ce261db09b156ac4e8dab02fc373ab6.
@@ -35,13 +35,13 @@ mapped executable verify commit03a44af, branchqa and Sendery/terax-ai.
 The old sandbox closed normally through its own observed close button after
 public/clean/idle checks and a workspace backup. A transient SSH and ping outage
 interrupted the handoff; its cause remains unproven. Connectivity recovered.
-The current app is PID30102, with a temporary bounded awake assertion tied to
-that PID. The normal environment has no temporary ZDOTDIR override.
+That broad-sweep app was PID30102, with a temporary bounded awake assertion
+tied to that PID. It has since been retired normally for the atomic candidate. The normal environment has no temporary ZDOTDIR override.
 
 All twelve tabs, active35 and all three editor paths were restored and checked
 against the workspace backup. The unrelated editor38 was preserved and its
 contents were not inspected. The original tested left/right shell PIDs30695
-and30696 remain unchanged. Focusing the existing public tab9 added owned idle
+and30696 remained unchanged throughout that broad-sweep runtime. Focusing the existing public tab9 added owned idle
 shell5391 without replacing them.
 
 ## Real ordinary-pane interaction
@@ -176,10 +176,52 @@ Shift override are documented in shortcuts.ts.
 The selection-action popup hook also only recognizes .xterm and .cm-editor,
 and its zero-delay read does not await native selection completion. The
 existing native context menu remains a separate working path. The shortcut correction was committed as c502951 and integrated into qa
-as a89ce6d after review and 34 focused checks, types and scoped lint. The
-selection popup correction remains in its separate exclusive atomic worktree.
-No corrected runtime acceptance is claimed for the still-frozen 03a44af
-artifact.
+as a89ce6d after review and 34 focused checks, types and scoped lint. The selection popup
+source correction was integrated as ced062b. Its post-sweep runtime result and
+the next concrete correction are recorded below.
+
+## Post-sweep atomic candidate
+
+The two reviewed source corrections were integrated into local qa as a89ce6d
+(shortcut ownership) and ced062b (native selection popup). The combined
+candidate passed 73 directed tests in nine files and TypeScript. One matching
+sandbox build passed with the same verified archive and explicit Cargo target.
+No already-passed general frontend/Rust floor was repeated.
+
+The new frozen artifact is .terax/qa-candidates/ced062b/Pi-Terax Sandbox.app.
+Its executable SHA256 is
+203a0feaad994227b95fb09d021e5739c59c1b475e7ccb3993af4f6c2d2200f6.
+The old 03a44af app and owned process tree closed normally after fresh
+public/clean/idle checks and another workspace backup. Its bounded awake
+process had expired into a verified owned zombie before retirement; no
+unrecognized process was accepted or killed.
+
+The exact new runtime is PID58221, verified by discovery, app.buildInfo and
+mapped executable. All twelve tabs and all three editor paths were restored,
+including unrelated editor38 without reading its contents. Its two initial
+ordinary shell PIDs are58664 and58665. A new bounded awake process58222 is tied
+to the app and owned by the launch wrapper. The matching GUI is unlocked.
+
+Actual plain Cmd+B now preserves the explorer state, Cmd+Shift+B still toggles
+it, and selection-free Cmd+J keeps native input focus without opening another
+window. This closes the concrete shortcut defect in the actual application.
+
+The corrected native selection gesture does display all three popup actions.
+A real Add to Note click then dismisses the popup without creating a note;
+the same active-tab API and the visible notes panel confirm the failure.
+Read-only investigation found that routine selection refreshes call
+session.select(read), which increments the query-order revision captured by
+the popup. The original selection can therefore remain highlighted while its
+action token becomes invalid. A new atomic correction separates semantic
+selection/history mutations from read/cache ordering. This behavior remains
+open; no passed action acceptance is claimed.
+
+Two automation assumptions were corrected before this product finding:
+a pointer without explicit empty flags inherited Control and opened the
+existing context menu; the actual popup labels include their shortcut suffix.
+The records and captures distinguish these assumptions from the subsequent
+real zero-note outcome. The next exact-marker drag will also use the exclusive
+selection endpoint after the final character.
 
 ## Evidence and remaining sweep
 
@@ -190,7 +232,7 @@ workspace/readiness checks, marker proofs, two TUI event records, calibrated
 geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
-Remaining acceptance includes the two atomic corrections; other live
+Remaining acceptance includes the selection refresh correction; other live
 preferences/history shrink and selection/search/block invalidation; broader
 blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
 and failure scenarios; physical mixed-DPI and applicable supported-platform/
