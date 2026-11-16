@@ -453,3 +453,27 @@ feature's listed M2 cases, not the terminal migration. This documentation slice
 ran no UI, bridge, model call, Cargo, app build or test suite. Validation is
 limited to diff/links/scope checks. Concrete product failures return to atomic
 worktrees; accepted broad floors are not repeated without cause.
+
+## Consolidated QA DMG: 8ddb224 (M2, 2026-11-16)
+
+The user's requested QA cut is built from exact code commit
+8ddb2245288c329bae3b2443b45868d2fb10b2ee. This includes the Retina OS file-drop
+fix 1f80a0b and GraphX JSON tools. The real GraphX side-by-side check accepted
+two-space formatting with preserved JSON semantics, one Undo restoring the
+exact source, visible invalid-JSON line/column feedback and refusal to change
+an invalid draft. Apply was never pressed; source, document identity and
+revision 5 remained unchanged. The original 13 tabs and active tab 35 were
+restored. Evidence is in the ignored M2 directory
+.terax/pi-development/m2/logs/json-tools-8ddb224.
+
+The native Ghostty candidate compiled, started and restored the existing
+workspace. The development-profile arm64 artifact
+Pi-Terax-QA-0.8.0-8ddb224-arm64-dev.dmg passed hdiutil verification,
+read-only mount, deep strict ad-hoc signature verification and comparison of
+the mounted executable with the frozen tested candidate. Its SHA-256 is
+f25c65081429731fe0b4a09abf3714c3e3323cf7b0fa19bceacc4735d04c3c1d.
+The local manifest is .terax/releases/qa/8ddb224-dev-arm64/manifest.json.
+
+This is a functional QA build for Apple Silicon/macOS 13+, without Developer ID
+or notarization. It does not close the remaining parity cases above. FPS and
+Japanese IME remain deferred. No Actions, push or public release was performed.
