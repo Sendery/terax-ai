@@ -2,14 +2,15 @@ import type { NativeCaptureLease } from "@/modules/capture/lib/captureLease";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSvgMarkup,
+  captureScaleFor,
+  collectCanvasOverlays,
   collectForegroundElements,
   compositeCaptureLayers,
-  collectCanvasOverlays,
-  registerCanvasSnapshotProvider,
-  captureScaleFor,
   MAX_CAPTURE_HEIGHT,
   MAX_CAPTURE_PIXELS,
   MAX_CAPTURE_WIDTH,
+  rasterizeElement,
+  registerCanvasSnapshotProvider,
   validateCaptureDimensions,
 } from "./rasterize";
 
@@ -460,4 +461,184 @@ it("restores the floating graph toolbar and opaque frame above terminal pixels, 
     "graph",
     "menu",
   ]);
+});
+
+class CaptureElement {
+  attributes = new Map<string, string>();
+  children: CaptureElement[] = [];
+  style = {} as Record<string, string>;
+  textContent = "";
+  setAttribute(name: string, value: string) {
+    this.attributes.set(name, value);
+  }
+  removeAttribute(name: string) {
+    this.attributes.delete(name);
+  }
+  querySelectorAll(_selector: string): CaptureElement[] {
+    return [];
+  }
+}
+class CaptureOption extends CaptureElement {
+  constructor(
+    readonly selected = false,
+    defaultSelected = false,
+    readonly value = "",
+  ) {
+    super();
+    if (defaultSelected) this.setAttribute("selected", "selected");
+  }
+}
+class CaptureSelect extends CaptureElement {
+  readonly ownerDocument = {
+    createElement: (name: string) => {
+      expect(name).toBe("option");
+      return new CaptureOption();
+    },
+  };
+  constructor(
+    readonly options: CaptureOption[],
+    readonly multiple = false,
+    readonly size = 0,
+  ) {
+    super();
+    this.children = options;
+  }
+  get selectedIndex() {
+    return this.options.findIndex((option) => option.selected);
+  }
+  appendChild(option: CaptureOption) {
+    this.options.push(option);
+    return option;
+  }
+}
+async function frozenSelect(
+  selected: boolean[],
+  defaults: boolean[],
+  multiple = false,
+  size = 0,
+) {
+  const original = new CaptureSelect(
+    selected.map(
+      (value, index) =>
+        new CaptureOption(value, defaults[index], "duplicate-value"),
+    ),
+    multiple,
+    size,
+  );
+  const cloned = new CaptureSelect(
+    selected.map(
+      (value, index) =>
+        new CaptureOption(value, defaults[index], "duplicate-value"),
+    ),
+    multiple,
+    size,
+  );
+  const forms = (select: CaptureSelect, selector: string) =>
+    selector === "input, textarea, select" ? [select] : [];
+  const clone = Object.assign(new CaptureElement(), {
+    children: [cloned],
+    querySelectorAll: (selector: string) => forms(cloned, selector),
+  });
+  const source = Object.assign(new CaptureElement(), {
+    children: [original],
+    cloneNode: () => clone,
+    querySelectorAll: (selector: string) => forms(original, selector),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 180 }),
+  });
+  let serialized: unknown;
+  vi.stubGlobal("HTMLElement", CaptureElement);
+  vi.stubGlobal("SVGElement", class {});
+  vi.stubGlobal("HTMLInputElement", class {});
+  vi.stubGlobal("HTMLTextAreaElement", class {});
+  vi.stubGlobal("HTMLSelectElement", CaptureSelect);
+  vi.stubGlobal("window", {
+    getComputedStyle: () => ({
+      length: 0,
+      visibility: "visible",
+      display: "block",
+    }),
+  });
+  vi.stubGlobal("document", { styleSheets: [] });
+  vi.stubGlobal(
+    "XMLSerializer",
+    class {
+      serializeToString(element: unknown) {
+        serialized = element;
+        throw new Error("Frozen form reached XML serialization");
+      }
+    },
+  );
+  await expect(
+    rasterizeElement(source as unknown as HTMLElement),
+  ).rejects.toThrow("Frozen form reached XML serialization");
+  expect(serialized).toBe(clone);
+  expect(original.options.map((option) => option.selected)).toEqual(selected);
+  expect(
+    original.options.map((option) => option.attributes.has("selected")),
+  ).toEqual(defaults);
+  return cloned;
+}
+describe("freezing current select state for serialized capture", () => {
+  it("serializes the current option rather than the initial default without mutating source", async () => {
+    const clone = await frozenSelect(
+      [false, true, false],
+      [true, false, false],
+    );
+    expect(
+      clone.options.map((option) => option.attributes.has("selected")),
+    ).toEqual([false, true, false]);
+  });
+  it("uses selected option indices even when option values are identical", async () => {
+    const clone = await frozenSelect(
+      [false, false, true],
+      [true, false, false],
+    );
+    expect(
+      clone.options.map((option) => option.attributes.has("selected")),
+    ).toEqual([false, false, true]);
+  });
+  it("serializes every selected option in a multiple select", async () => {
+    const clone = await frozenSelect(
+      [true, false, true],
+      [false, true, false],
+      true,
+    );
+    expect(
+      clone.options.map((option) => option.attributes.has("selected")),
+    ).toEqual([true, false, true]);
+  });
+  it("keeps an explicitly empty dropdown blank when markup is reparsed", async () => {
+    const clone = await frozenSelect([false, false], [true, false]);
+    expect(clone.options.length).toBe(3);
+    expect(
+      clone.options
+        .slice(0, 2)
+        .every((option) => !option.attributes.has("selected")),
+    ).toBe(true);
+    expect(clone.options[2].attributes.has("hidden")).toBe(true);
+    expect(clone.options[2].attributes.has("selected")).toBe(true);
+    expect(clone.options[2].textContent).toBe("");
+  });
+  it.each([
+    { multiple: true, size: 0 },
+    { multiple: false, size: 4 },
+  ])(
+    "keeps no selection in a listbox %j without adding a placeholder",
+    async ({ multiple, size }) => {
+      const clone = await frozenSelect(
+        [false, false],
+        [true, true],
+        multiple,
+        size,
+      );
+      expect(clone.options).toHaveLength(2);
+      expect(
+        clone.options.every((option) => !option.attributes.has("selected")),
+      ).toBe(true);
+    },
+  );
+  it("does not add an option to an empty dropdown", async () => {
+    const clone = await frozenSelect([], []);
+    expect(clone.options).toHaveLength(0);
+  });
 });

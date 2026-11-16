@@ -441,6 +441,13 @@ A row is complete only when implementation and verification evidence both exist.
 
 ## In-App Rasterization Capture
 
+### Serialized captures must freeze live select state
+
+- **Trigger:** capturing a controlled select after its current value differs from its initial markup.
+- **Failure mode:** cloneNode selectedness is not represented by serialized selected attributes, so a captured dropdown shows its first/default option.
+- **Prevention:** copy each live option's selectedness by index into attributes on the clone and remove stale defaults. Preserve duplicate values and multiple selection. A single-line dropdown with no selection needs an empty hidden selected clone option; append it to preserve child alignment during style freezing. Never mutate the live control or evaluate option HTML.
+- **Verification:** inspect frozen capture markup for changed selection, duplicate values, multiple selection, explicit no-selection and empty controls; compare the captured selector with the actual running UI.
+
 ### Canvas pixels must be composited live, from a readable buffer
 
 - **Trigger:** rendering a DOM clone through SVG foreignObject onto a canvas, and compositing WebGL-backed canvases (the xterm webgl renderer) into that capture.

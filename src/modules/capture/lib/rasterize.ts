@@ -1,10 +1,10 @@
-import type { FrameCaptureLease } from "@/modules/capture/lib/frameCapture";
 import {
   assertCaptureCurrent,
-  duringCapture,
   type CaptureScope,
+  duringCapture,
   type NativeCaptureLease,
 } from "@/modules/capture/lib/captureLease";
+import type { FrameCaptureLease } from "@/modules/capture/lib/frameCapture";
 
 export const MAX_CAPTURE_WIDTH = 7_680;
 export const MAX_CAPTURE_HEIGHT = 4_320;
@@ -454,6 +454,28 @@ function syncInputState(source: Element, clone: Element): void {
       cloned instanceof HTMLTextAreaElement
     ) {
       cloned.textContent = original.value;
+    } else if (
+      original instanceof HTMLSelectElement &&
+      cloned instanceof HTMLSelectElement
+    ) {
+      const options = Array.from(original.options);
+      for (const [index, option] of Array.from(cloned.options).entries()) {
+        if (options[index]?.selected)
+          option.setAttribute("selected", "selected");
+        else option.removeAttribute("selected");
+      }
+      if (
+        !original.multiple &&
+        original.size <= 1 &&
+        original.selectedIndex < 0 &&
+        options.length > 0
+      ) {
+        // Reparsed dropdown markup otherwise selects its first option.
+        const empty = cloned.ownerDocument.createElement("option");
+        empty.setAttribute("hidden", "hidden");
+        empty.setAttribute("selected", "selected");
+        cloned.appendChild(empty);
+      }
     }
   }
 }
