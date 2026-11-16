@@ -1010,3 +1010,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a runner that flattens only chat messages silently loses the selected persona, while tool descriptions may incorrectly imply SDK tools are available to the CLI.
 - **Prevention:** include persona and custom instructions in the existing runner prompt without modifying stored user messages or execution options. Keep Pi's system append singular, and discover the actual Pi/MCP capabilities instead of assuming SDK-only tools.
 - **Verification:** test planned argv and stdin for each runner without invoking an LLM; verify instruction presence, unchanged history/options, empty-context compatibility and no Pi duplication.
+
+### Persist custom labels separately from document titles
+
+- **Trigger:** a document tab has both a source-derived title and a user rename, then is restored before a source update.
+- **Failure mode:** serializing only the displayed label loses the custom-title marker; an update overwrites the rename and resetting cannot recover the source title.
+- **Prevention:** persist the base title and custom label separately. Hydrate the source title as canonical; migrate legacy flattened labels only when distinguishable, and ignore invalid explicit custom fields.
+- **Verification:** rename, serialize/hydrate, update the document, then reset and repeat. Include a custom label equal to the original title, legacy entries and malformed stored fields.

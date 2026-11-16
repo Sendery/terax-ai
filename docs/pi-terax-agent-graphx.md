@@ -53,7 +53,12 @@ the clipboard.
 The graph is a persistent space tab. Its source, identity, revision, title/color, notes,
 panel position and panel size survive normal space/app restoration. It can be reordered,
 renamed and colored like other tabs. Closing it removes it from the space, as with other
-tabs; copy its JSON first when you want a separate file.
+tabs; copy its JSON first when you want a separate file. A renamed tab label is stored
+separately from the graph source title and survives later graph updates. Resetting
+the label restores the source title. Older saved labels that differ from the
+source title are migrated as custom names; restored custom names are bounded to
+80 characters. If an older flattened label equals the source title, no separate
+rename can be inferred.
 
 The placement selector offers **Tab**, **Dock left**, **Dock right** and **Float**.
 A side dock reserves workspace width beside an existing public terminal in the same space.

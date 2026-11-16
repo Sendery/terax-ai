@@ -35,6 +35,7 @@ export type SerializedTab =
   | (SerializedTabBase & {
       kind: "graphx";
       title: string;
+      customTitle?: string;
       graphId: string;
       documentId: string;
       source: string;
@@ -201,7 +202,8 @@ function serializeTab(tab: Tab): SerializedTab | null {
     case "graphx":
       return {
         kind: "graphx",
-        title: tab.customTitle ?? tab.title,
+        title: tab.title,
+        ...(tab.customTitle !== undefined && { customTitle: tab.customTitle }),
         graphId: tab.graphId,
         documentId: tab.documentId,
         source: tab.source,
@@ -366,6 +368,18 @@ function hydrateTab(
     }
     case "graphx": {
       const spec = parseGraphSource(s.source);
+      const storedCustomTitle = Object.getOwnPropertyDescriptor(
+        s,
+        "customTitle",
+      )
+        ? s.customTitle
+        : s.title !== spec.title
+          ? s.title
+          : undefined;
+      const customTitle =
+        typeof storedCustomTitle === "string"
+          ? storedCustomTitle.trim().slice(0, 80)
+          : undefined;
       if (
         !graphIdSchema.safeParse(s.graphId).success ||
         !graphDocumentIdSchema.safeParse(s.documentId).success
@@ -385,7 +399,8 @@ function hydrateTab(
         kind: "graphx",
         spaceId,
         cold: true,
-        title: typeof s.title === "string" ? s.title.slice(0, 80) : spec.title,
+        title: spec.title,
+        ...(customTitle && { customTitle }),
         graphId: s.graphId,
         documentId: s.documentId,
         source: s.source,
