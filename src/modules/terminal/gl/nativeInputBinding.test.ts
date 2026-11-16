@@ -433,6 +433,7 @@ function pendingGestureFixture(onBlockClick?: () => Promise<void>) {
     cursor: null,
     exitCode: null as number | null,
     selectionRevision: 0,
+    selectionMutationRevision: 0,
     historyAvailable: true,
     scroll: vi.fn(),
     grid: { cols: 10, rows: 2 },
@@ -441,6 +442,7 @@ function pendingGestureFixture(onBlockClick?: () => Promise<void>) {
     getSelection: () => selected,
     select: vi.fn((command: NativeSelectionCommand) => {
       session.selectionRevision++;
+      if (command.kind !== "read") session.selectionMutationRevision++;
       if (command.kind === "release")
         return new Promise<string | null>((resolve) => {
           finish = (text) => {
@@ -492,6 +494,7 @@ function pendingGestureFixture(onBlockClick?: () => Promise<void>) {
     finish: (text: string | null) => finish(text),
     selectText: (text: string) => {
       session.selectionRevision++;
+      session.selectionMutationRevision++;
       selected = text;
     },
     wheel: () =>
@@ -544,7 +547,10 @@ it.each([
     expect(f.onGesture).toHaveBeenCalledTimes(1);
     const gesture = f.onGesture.mock.calls[0][0];
     if (change === "owner") f.session.id++;
-    if (change === "history") f.session.selectionRevision++;
+    if (change === "history") {
+      f.session.selectionRevision++;
+      f.session.selectionMutationRevision++;
+    }
     if (change === "unavailable") f.session.historyAvailable = false;
     if (change === "wheel") f.wheel();
     if (change === "hidden") f.hide();
@@ -596,5 +602,19 @@ it("waits for block selection to finish before offering its final text", async (
   finishBlock();
   expect(await gesture.selection).toBe("completed block");
   expect(gesture.current()).toBe(true);
+  f.binding.dispose();
+});
+
+it("keeps the popup token valid across a read-only query revision while rejecting a semantic mutation", async () => {
+  const f = pendingGestureFixture();
+  f.press();
+  f.release();
+  f.finish("selected marker");
+  const gesture = f.onGesture.mock.calls[0][0];
+  await gesture.selection;
+  f.session.selectionRevision++;
+  expect(gesture.current()).toBe(true);
+  f.session.selectionMutationRevision++;
+  expect(gesture.current()).toBe(false);
   f.binding.dispose();
 });

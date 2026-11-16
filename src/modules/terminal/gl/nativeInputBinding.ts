@@ -590,7 +590,7 @@ export function bindNativeInput(
     const generation = selectionGeneration;
     const revision = session.selectionRevision;
     const ownerId = session.id;
-    let gestureRevision = revision;
+    let gestureRevision = session.selectionMutationRevision;
     const completed = released.then(async (text) => {
       const current = () =>
         !disposed &&
@@ -640,7 +640,7 @@ export function bindNativeInput(
         Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 4
       ) {
         await options.onBlockClick?.(click.seq, click.row);
-        gestureRevision = session.selectionRevision;
+        gestureRevision = session.selectionMutationRevision;
         return session.getSelection();
       }
       return text;
@@ -659,7 +659,7 @@ export function bindNativeInput(
             session.id === ownerId &&
             session.historyAvailable &&
             generation === selectionGeneration &&
-            session.selectionRevision === gestureRevision,
+            session.selectionMutationRevision === gestureRevision,
         });
       } catch (error) {
         report(error);

@@ -2,52 +2,52 @@ import {
   TERMINAL_SCROLLBACK_DEFAULT,
   validateScrollbackRows,
 } from "@/modules/settings/terminalScrollback";
-import { NativeClipboardRelay } from "@/modules/terminal/gl/nativeClipboard";
-import { writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
-import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
-import {
-  blockActionSelects,
-  decodeNativeBlockAction,
-  validateNativeBlockCommand,
-  type NativeBlockCommand,
-  type NativeBlockReply,
-} from "@/modules/terminal/gl/nativeBlockActions";
-import {
-  decodeNativeBlocks,
-  decodeNativeBlockOutput,
-  validateNativeBlockId,
-  type NativeBlockSnapshot,
-} from "@/modules/terminal/gl/nativeBlocks";
-import {
-  decodeNativeLinkContext,
-  type NativeLinkContext,
-} from "@/modules/terminal/gl/nativeLinks";
-import {
-  validateSearchCommand,
-  type NativeSearchCommand,
-} from "@/modules/terminal/gl/nativeSearch";
-import {
-  decodeNativeState,
-  type NativeState,
-} from "@/modules/terminal/gl/nativeState";
-import { labJson, awaitLabWrite } from "@/terminal-lab/lib/labReport";
 import {
   type DecodedFrame,
   decodeFrame,
   peekSeq,
 } from "@/modules/terminal/gl/frameCodec";
 import type {
-  TerminalRenderer,
   RenderPane,
+  TerminalRenderer,
 } from "@/modules/terminal/gl/gridRenderer";
 import {
   encodeKey,
   encodePaste,
   wheelRows,
 } from "@/modules/terminal/gl/keyInput";
+import {
+  blockActionSelects,
+  decodeNativeBlockAction,
+  type NativeBlockCommand,
+  type NativeBlockReply,
+  validateNativeBlockCommand,
+} from "@/modules/terminal/gl/nativeBlockActions";
+import {
+  decodeNativeBlockOutput,
+  decodeNativeBlocks,
+  type NativeBlockSnapshot,
+  validateNativeBlockId,
+} from "@/modules/terminal/gl/nativeBlocks";
+import { NativeClipboardRelay } from "@/modules/terminal/gl/nativeClipboard";
+import {
+  decodeNativeLinkContext,
+  type NativeLinkContext,
+} from "@/modules/terminal/gl/nativeLinks";
+import {
+  type NativeSearchCommand,
+  validateSearchCommand,
+} from "@/modules/terminal/gl/nativeSearch";
+import {
+  decodeNativeState,
+  type NativeState,
+} from "@/modules/terminal/gl/nativeState";
+import { RenderCapacityError } from "@/modules/terminal/gl/renderCapacity";
+import { writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import { currentWorkspaceEnv } from "@/modules/workspace";
-import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AutorunConfig } from "@/terminal-lab/lib/autorun";
+import { awaitLabWrite, labJson } from "@/terminal-lab/lib/labReport";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 export const ENGINE_FAILED_EXIT = -2;
 const MAX_QUEUED_INPUT_BYTES = 1024 * 1024;
@@ -283,6 +283,7 @@ export class EngineSession {
   private queuedInputBytes = 0;
   private closing: Promise<void> | null = null;
   private selectionVersion = 0;
+  private selectionMutationVersion = 0;
   private selectionSnapshotVersion = 0;
   private selectionQueries: Promise<void> = Promise.resolve();
   private selectionPending = 0;
@@ -663,6 +664,7 @@ export class EngineSession {
   private failCore(message: string): void {
     if (this.closed || this.failed) return;
     this.failed = true;
+    this.selectionMutationVersion++;
     this.captureConsumer?.cancel(new Error(message));
     this.selectionSnapshot = null;
     this.inputStateValue = null;
@@ -1100,6 +1102,7 @@ export class EngineSession {
     );
     if (this.selectionSnapshot !== null) this.selectionRefreshNeeded = true;
     this.selectionVersion++;
+    this.selectionMutationVersion++;
     this.selectionSnapshot = null;
     this.notifyHistoryChange();
   }
@@ -1318,6 +1321,10 @@ export class EngineSession {
     return this.selectionVersion;
   }
 
+  get selectionMutationRevision(): number {
+    return this.selectionMutationVersion;
+  }
+
   getSelection(): string | null {
     return this.historyAvailable ? this.selectionSnapshot : null;
   }
@@ -1337,6 +1344,7 @@ export class EngineSession {
     }
     const snapshot = { ...command };
     const version = ++this.selectionVersion;
+    if (snapshot.kind !== "read") this.selectionMutationVersion++;
     if (command.kind !== "read" && command.kind !== "release")
       this.selectionSnapshot = null;
     this.selectionPending++;
@@ -1361,16 +1369,22 @@ export class EngineSession {
           )
             throw new Error("invalid terminal selection reply");
           if (version === this.selectionVersion) {
-            this.selectionSnapshot =
+            const selected =
               typeof text === "string" && text.length > 0 ? text : null;
+            if (snapshot.kind === "read" && this.selectionSnapshot !== selected)
+              this.selectionMutationVersion++;
+            this.selectionSnapshot = selected;
             this.selectionSnapshotVersion = version;
           }
           return text;
         } catch (error) {
           // A native mutation can succeed before formatting fails. Never copy
           // text from the previous selection after an unsuccessful query.
-          if (this.selectionSnapshotVersion <= version)
+          if (this.selectionSnapshotVersion <= version) {
+            if (snapshot.kind === "read" && this.selectionSnapshot !== null)
+              this.selectionMutationVersion++;
             this.selectionSnapshot = null;
+          }
           throw error;
         }
       })
@@ -1481,7 +1495,10 @@ export class EngineSession {
     const version = blockActionSelects(snapshot)
       ? ++this.selectionVersion
       : null;
-    if (version !== null) this.selectionSnapshot = null;
+    if (version !== null) {
+      this.selectionMutationVersion++;
+      this.selectionSnapshot = null;
+    }
     return this.blockQuery(
       "gterm_block_action",
       { command: snapshot },
@@ -1613,6 +1630,7 @@ export class EngineSession {
 
   private release(): void {
     this.closed = true;
+    this.selectionMutationVersion++;
     this.captureConsumer?.cancel(
       new Error("Terminal capture is no longer available."),
     );
