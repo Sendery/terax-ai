@@ -88,6 +88,22 @@ Single-window React app. Path alias `@/*` → `src/*`. Tabs are a tagged union (
 
 `App.tsx` wires modules together - keep it a coordinator. New features go inside the appropriate `modules/<area>/`.
 
+### Pi-Terax manager and GraphX
+
+The built-in selectable **Pi-Terax Agente** discovers the existing in-app command tools and
+offers validated custom action data from workspace `.terax/pi-terax-commands.json` through
+`terax_manager_actions`. Actions still execute via the ordinary command registry and its
+approval policy. See `docs/pi-terax-agent-graphx.md` for the user workflow and starter config.
+
+`modules/graphx/` owns bounded JSON validation, persistent `graphx` tabs, revision/incarnation
+checks and movable in-window panels. `graphx.open/read/update/place` share the registry,
+Pi allowlists and generated MCP surface. A dock reserves terminal workspace width; hidden
+graphs mount no engine. Each visible document revision runs the pinned offline GraphX/ELK
+bundle in an opaque sandbox iframe with a restrictive CSP; graph JSON cannot supply HTML,
+scripts or external links. A fresh frame retires engine timers on updates/theme changes.
+Source, graphId, documentId, revision and panel geometry persist through spaces. No new
+native process or arbitrary shell-input/evaluation endpoint is introduced.
+
 ### Module layout (`src/modules/`)
 
 Each module is self-contained, exports a thin barrel via `index.ts`, and owns its hooks under `lib/`.

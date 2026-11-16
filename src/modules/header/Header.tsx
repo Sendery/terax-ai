@@ -35,6 +35,7 @@ type Props = {
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
+  onNewGraph: () => void;
   onNewMermaid: () => void;
   onNewGitGraph: () => void;
   onClose: (id: number) => void;
@@ -81,6 +82,7 @@ export function Header({
   onNewPrivate,
   onNewPreview,
   onNewEditor,
+  onNewGraph,
   onNewMermaid,
   onNewGitGraph,
   onClose,
@@ -282,6 +284,7 @@ export function Header({
           onNewPrivate={onNewPrivate}
           onNewPreview={onNewPreview}
           onNewEditor={onNewEditor}
+          onNewGraph={onNewGraph}
           onNewMermaid={onNewMermaid}
           onNewGitGraph={onNewGitGraph}
           onClose={onClose}

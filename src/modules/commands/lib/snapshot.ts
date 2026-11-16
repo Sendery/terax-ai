@@ -12,6 +12,18 @@ import type { TtsStatus } from "@/modules/tts/lib/native";
 export type SnapshotTab =
   | {
       id: number;
+      kind: "graphx";
+      spaceId: string;
+      title: string;
+      graphId: string;
+      documentId: string;
+      revision: number;
+      placement: string;
+      sourceCharacters: number;
+      color?: TabColor;
+    }
+  | {
+      id: number;
       kind: "terminal";
       spaceId: string;
       title: string;
@@ -295,6 +307,19 @@ function serializeTab(tab: Tab): SnapshotTab {
     };
   }
 
+  if (tab.kind === "graphx")
+    return {
+      id: tab.id,
+      kind: "graphx",
+      spaceId: tab.spaceId,
+      title: displayTitle(tab),
+      graphId: tab.graphId,
+      documentId: tab.documentId,
+      revision: tab.revision,
+      placement: tab.placement,
+      sourceCharacters: tab.source.length,
+      ...(tab.color ? { color: tab.color } : {}),
+    };
   if (tab.kind === "mermaid") {
     return {
       id: tab.id,

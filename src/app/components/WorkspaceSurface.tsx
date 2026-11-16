@@ -1,3 +1,6 @@
+import { graphDockMargins } from "@/modules/graphx/lib/presentation";
+import { GraphPanels } from "@/modules/graphx";
+import type { GraphPanelProps } from "@/modules/graphx/GraphPanels";
 import { cn } from "@/lib/utils";
 import { AiDiffStack, EditorStack, GitDiffStack } from "@/modules/editor";
 import { GitHistoryStack } from "@/modules/git-history";
@@ -17,6 +20,9 @@ type AiDiffStackProps = ComponentProps<typeof AiDiffStack>;
 type GitHistoryStackProps = ComponentProps<typeof GitHistoryStack>;
 
 type Props = {
+  onGraphUpdate: GraphPanelProps["onUpdate"];
+  onGraphPlace: GraphPanelProps["onPlace"];
+  onGraphPanel: GraphPanelProps["onPanel"];
   tabs: Tab[];
   activeId: number;
   activeTab: Tab | undefined;
@@ -51,6 +57,9 @@ type Props = {
  * buffers, editor scroll, ...) when switching tabs.
  */
 export function WorkspaceSurface({
+  onGraphUpdate,
+  onGraphPlace,
+  onGraphPanel,
   tabs,
   activeId,
   activeTab,
@@ -92,134 +101,147 @@ export function WorkspaceSurface({
   return (
     <div className="relative h-full min-h-0">
       <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isTerminalTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isTerminalTab}
+        className="relative h-full min-h-0"
+        style={graphDockMargins(tabs, activeTab)}
       >
-        <TerminalStack
-          tabs={tabs}
-          activeId={activeId}
-          registerHandle={registerTerminalHandle}
-          onSearchReady={onSearchReady}
-          onCwd={onCwd}
-          onExit={onExit}
-          onFocusLeaf={onFocusLeaf}
-          onOpenFileLink={onOpenFileLink}
-          onReadAloud={onReadAloud}
-          onStopReading={onStopReading}
-          selectionActions={selectionActions}
-          homePath={homePath}
-        />
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isTerminalTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isTerminalTab}
+        >
+          <TerminalStack
+            tabs={tabs}
+            activeId={activeId}
+            registerHandle={registerTerminalHandle}
+            onSearchReady={onSearchReady}
+            onCwd={onCwd}
+            onExit={onExit}
+            onFocusLeaf={onFocusLeaf}
+            onOpenFileLink={onOpenFileLink}
+            onReadAloud={onReadAloud}
+            onStopReading={onStopReading}
+            selectionActions={selectionActions}
+            homePath={homePath}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isEditorTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isEditorTab}
+        >
+          <EditorStack
+            tabs={tabs}
+            activeId={activeId}
+            registerHandle={registerEditorHandle}
+            onDirtyChange={onEditorDirtyChange}
+            onCloseTab={onEditorCloseTab}
+            onSetMarkdownView={onSetMarkdownView}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isPreviewTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isPreviewTab}
+        >
+          <PreviewStack
+            tabs={tabs}
+            activeId={activeId}
+            registerHandle={registerPreviewHandle}
+            onUrlChange={onPreviewUrlChange}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isMarkdownTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isMarkdownTab}
+        >
+          <MarkdownStack
+            tabs={tabs}
+            activeId={activeId}
+            onSetMarkdownView={onSetMarkdownView}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isMermaidTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isMermaidTab}
+        >
+          <MermaidStack
+            tabs={tabs.filter((tab) => tab.kind === "mermaid")}
+            activeId={activeId}
+            onSourceChange={onMermaidSourceChange}
+            onVisualLayoutChange={onMermaidVisualLayoutChange}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isAiDiffTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isAiDiffTab}
+        >
+          <AiDiffStack
+            tabs={tabs}
+            activeId={activeId}
+            onAccept={onAiDiffAccept}
+            onReject={onAiDiffReject}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isGitDiffTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isGitDiffTab}
+        >
+          <GitDiffStack tabs={tabs} activeId={activeId} />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0",
+            !isGitHistoryTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isGitHistoryTab}
+        >
+          <GitHistoryStack
+            tabs={tabs}
+            activeId={activeId}
+            onOpenCommitFile={onOpenCommitFile}
+            onSearchHandle={onGitHistorySearchHandle}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 px-3 pt-2 pb-2",
+            !isPrReviewTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isPrReviewTab}
+        >
+          <PrReviewStack
+            tabs={tabs}
+            activeId={activeId}
+            onBaseChange={onPrReviewBaseChange}
+          />
+        </div>
       </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isEditorTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isEditorTab}
-      >
-        <EditorStack
-          tabs={tabs}
-          activeId={activeId}
-          registerHandle={registerEditorHandle}
-          onDirtyChange={onEditorDirtyChange}
-          onCloseTab={onEditorCloseTab}
-          onSetMarkdownView={onSetMarkdownView}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isPreviewTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isPreviewTab}
-      >
-        <PreviewStack
-          tabs={tabs}
-          activeId={activeId}
-          registerHandle={registerPreviewHandle}
-          onUrlChange={onPreviewUrlChange}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isMarkdownTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isMarkdownTab}
-      >
-        <MarkdownStack
-          tabs={tabs}
-          activeId={activeId}
-          onSetMarkdownView={onSetMarkdownView}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isMermaidTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isMermaidTab}
-      >
-        <MermaidStack
-          tabs={tabs.filter((tab) => tab.kind === "mermaid")}
-          activeId={activeId}
-          onSourceChange={onMermaidSourceChange}
-          onVisualLayoutChange={onMermaidVisualLayoutChange}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isAiDiffTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isAiDiffTab}
-      >
-        <AiDiffStack
-          tabs={tabs}
-          activeId={activeId}
-          onAccept={onAiDiffAccept}
-          onReject={onAiDiffReject}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isGitDiffTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isGitDiffTab}
-      >
-        <GitDiffStack tabs={tabs} activeId={activeId} />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0",
-          !isGitHistoryTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isGitHistoryTab}
-      >
-        <GitHistoryStack
-          tabs={tabs}
-          activeId={activeId}
-          onOpenCommitFile={onOpenCommitFile}
-          onSearchHandle={onGitHistorySearchHandle}
-        />
-      </div>
-      <div
-        className={cn(
-          "absolute inset-0 px-3 pt-2 pb-2",
-          !isPrReviewTab && "invisible pointer-events-none",
-        )}
-        aria-hidden={!isPrReviewTab}
-      >
-        <PrReviewStack
-          tabs={tabs}
-          activeId={activeId}
-          onBaseChange={onPrReviewBaseChange}
-        />
-      </div>
+      <GraphPanels
+        tabs={tabs}
+        activeId={activeId}
+        activeTab={activeTab}
+        onUpdate={onGraphUpdate}
+        onPlace={onGraphPlace}
+        onPanel={onGraphPanel}
+      />
     </div>
   );
 }

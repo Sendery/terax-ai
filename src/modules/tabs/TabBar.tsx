@@ -65,6 +65,7 @@ type Props = {
   onNewPrivate: () => void;
   onNewPreview: () => void;
   onNewEditor: () => void;
+  onNewGraph: () => void;
   onNewMermaid: () => void;
   onNewGitGraph: () => void;
   onClose: (id: number) => void;
@@ -88,6 +89,7 @@ export function TabBar({
   onNewPrivate,
   onNewPreview,
   onNewEditor,
+  onNewGraph,
   onNewMermaid,
   onNewGitGraph,
   onClose,
@@ -568,6 +570,10 @@ export function TabBar({
                 {fmtShortcut(MOD_KEY, "P")}
               </span>
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onNewGraph()}>
+              <HugeiconsIcon icon={Flowchart01Icon} size={14} />
+              New GraphX diagram
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewMermaid()}>
               <HugeiconsIcon
                 icon={Flowchart01Icon}
@@ -615,7 +621,7 @@ export function TabIcon({ tab }: { tab: Tab }) {
       />
     );
   }
-  if (tab.kind === "mermaid") {
+  if (tab.kind === "mermaid" || tab.kind === "graphx") {
     return (
       <HugeiconsIcon
         icon={Flowchart01Icon}

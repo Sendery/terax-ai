@@ -428,3 +428,9 @@ describe("local speech in the snapshot", () => {
     expect(snapshot.tts).toBeUndefined();
   });
 });
+
+it("reports GraphX coordination without exposing its source", () => {
+  const snapshot=buildAppSnapshot({tabs:[{id:1,kind:"graphx",spaceId:"s",title:"Map",graphId:"map",documentId:"00000000-0000-4000-8000-000000000001",revision:4,source:"private source details",placement:"floating"}],activeTabId:1,activeSpaceId:"s"});
+  expect(snapshot.tabs[0]).toMatchObject({graphId:"map",revision:4,placement:"floating",sourceCharacters:22});
+  expect(JSON.stringify(snapshot)).not.toContain("private source details");
+});

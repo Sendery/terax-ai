@@ -23,6 +23,7 @@ export {
   type GitHistoryTab,
   MAX_PANES_PER_TAB,
   type MarkdownTab,
+  type GraphTab,
   type MermaidTab,
   type MermaidVisualLayout,
   nextActiveInSpace,

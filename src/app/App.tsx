@@ -1,3 +1,5 @@
+import { STARTER_GRAPH } from "@/modules/graphx/lib/document";
+import type { GraphPlacement } from "@/modules/graphx/lib/document";
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import {
   ResizableHandle,
@@ -236,6 +238,11 @@ export default function App() {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    openGraph,
+    readGraph,
+    updateGraph,
+    setGraphPlacement,
+    setGraphPanel,
     newMermaidTab,
     updateMermaidSource,
     replaceMermaidTabContent,
@@ -786,7 +793,32 @@ export default function App() {
     [newMermaidTab, setAskPopup],
   );
 
-  /** A Mermaid tab started from scratch, from the new-tab menu or the palette. */
+  const openNewGraphTab = useCallback(() => {
+    try {
+      openGraph(STARTER_GRAPH);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not open GraphX",
+      );
+    }
+  }, [openGraph]);
+  const placeGraphPanel = useCallback(
+    (graphId: string, placement: GraphPlacement) => {
+      const graph = setGraphPlacement(graphId, placement);
+      useSpaces.getState().setActive(graph.spaceId);
+      const terminal = tabsRef.current.find(
+        (t) =>
+          t.kind === "terminal" && t.spaceId === graph.spaceId && !t.private,
+      );
+      const targetId =
+        placement === "tab" ? graph.id : (terminal?.id ?? graph.id);
+      warmTab(targetId);
+      setActiveId(targetId);
+      return graph;
+    },
+    [setGraphPlacement, warmTab, setActiveId],
+  );
+
   const openNewMermaidTab = useCallback(
     () => newMermaidTab(NEW_MERMAID_SOURCE, "Untitled diagram"),
     [newMermaidTab],
@@ -1611,6 +1643,7 @@ export default function App() {
             openNewPrivate: openNewPrivateTab,
             openNewEditor: () => setNewEditorOpen(true),
             openNewPreview: () => openPreviewTab(""),
+            openNewGraph: openNewGraphTab,
             openNewMermaid: openNewMermaidTab,
             openGitGraph: openGitGraphFromContext,
             toggleSourceControl,
@@ -1654,6 +1687,7 @@ export default function App() {
       openNewBlockTab,
       openNewPrivateTab,
       openPreviewTab,
+      openNewGraphTab,
       openNewMermaidTab,
       openGitGraphFromContext,
       toggleSourceControl,
@@ -1763,6 +1797,39 @@ export default function App() {
         const customTitle = title?.trim();
         if (customTitle) updateTab(tabId, { customTitle });
         return { tabId, url, created: !existing };
+      },
+      openGraph: ({ source, graphId }) => {
+        const { tab, created } = openGraph(source, graphId);
+        useSpaces.getState().setActive(tab.spaceId);
+        warmTab(tab.id);
+        setActiveId(tab.id);
+        return {
+          tabId: tab.id,
+          graphId: tab.graphId,
+          documentId: tab.documentId,
+          revision: tab.revision,
+          placement: tab.placement,
+          created,
+        };
+      },
+      readGraph: ({ graphId }) => {
+        const tab = readGraph(graphId);
+        return {
+          tabId: tab.id,
+          graphId,
+          documentId: tab.documentId,
+          revision: tab.revision,
+          source: tab.source,
+          placement: tab.placement,
+        };
+      },
+      updateGraph: ({ graphId, documentId, expectedRevision, source }) => {
+        const tab = updateGraph(graphId, documentId, expectedRevision, source);
+        return { tabId: tab.id, graphId, revision: tab.revision };
+      },
+      placeGraph: ({ graphId, placement }) => {
+        const tab = placeGraphPanel(graphId, placement);
+        return { tabId: tab.id, graphId, placement: tab.placement };
       },
       openMermaid: async ({ source, title }) => {
         const tabId = newMermaidTab(source, title ?? "Mermaid diagram");
@@ -2164,6 +2231,11 @@ export default function App() {
       hideSidebar,
       openGitDiffTab,
       openPreviewTab,
+      openGraph,
+      readGraph,
+      updateGraph,
+      placeGraphPanel,
+      warmTab,
       newMermaidTab,
       setActiveId,
       showSidebar,
@@ -2229,6 +2301,7 @@ export default function App() {
               onNewPrivate={openNewPrivateTab}
               onNewPreview={() => openPreviewTab("")}
               onNewEditor={() => setNewEditorOpen(true)}
+              onNewGraph={openNewGraphTab}
               onNewMermaid={openNewMermaidTab}
               onNewGitGraph={openGitGraphFromContext}
               onClose={handleClose}
@@ -2332,6 +2405,9 @@ export default function App() {
                 <div className="flex h-full min-h-0 flex-col">
                   <div className="relative min-h-0 flex-1">
                     <WorkspaceSurface
+                      onGraphUpdate={updateGraph}
+                      onGraphPlace={placeGraphPanel}
+                      onGraphPanel={setGraphPanel}
                       tabs={tabs}
                       activeId={activeId}
                       activeTab={activeTab}

@@ -1,3 +1,4 @@
+import { PI_TERAX_MANAGER_INSTRUCTIONS } from "@/modules/ai/lib/piTeraxManager";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
 export type AgentIconId =
@@ -76,6 +77,15 @@ export const BUILTIN_AGENTS: readonly Agent[] = [
 - Critique on: hierarchy, spacing, density, contrast, motion, affordance, empty/error states.
 - Propose concrete changes, with Tailwind/CSS values when helpful. Keep consistent with the surrounding design system.
 - Avoid generic "make it pop" advice. Be specific about what's wrong and why.`,
+  },
+  {
+    id: "builtin:pi-terax-manager",
+    name: "Pi-Terax Agente",
+    description:
+      "Organizes Terax tabs, content and interactive GraphX diagrams through discovered Pi-Terax commands.",
+    icon: "spark",
+    builtIn: true,
+    instructions: PI_TERAX_MANAGER_INSTRUCTIONS,
   },
 ] as const;
 

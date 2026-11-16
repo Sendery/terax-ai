@@ -1,3 +1,10 @@
+import {
+  parseGraphSource,
+  graphIdSchema,
+  graphDocumentIdSchema,
+  GRAPH_PLACEMENTS,
+  type GraphPlacement,
+} from "@/modules/graphx/lib/document";
 import { validateMermaidDraftSource } from "@/modules/mermaid";
 import { isNoteCard, type NoteCard } from "@/modules/notes/lib/cards";
 import {
@@ -25,6 +32,16 @@ export type SerializedNode =
 type SerializedTabBase = { color?: TabColor; notes?: NoteCard[] };
 
 export type SerializedTab =
+  | (SerializedTabBase & {
+      kind: "graphx";
+      title: string;
+      graphId: string;
+      documentId: string;
+      source: string;
+      revision: number;
+      placement: GraphPlacement;
+      panel?: { x: number; y: number; width: number; height: number };
+    })
   | (SerializedTabBase & {
       kind: "terminal";
       tree: SerializedNode;
@@ -135,6 +152,7 @@ export function isSerializableTab(tab: Tab): boolean {
     case "editor":
     case "preview":
     case "markdown":
+    case "graphx":
     case "mermaid":
     case "pr-review":
       return true;
@@ -179,6 +197,18 @@ function serializeTab(tab: Tab): SerializedTab | null {
         head: tab.head,
         base: tab.base,
         ...(tab.color !== undefined && { color: tab.color }),
+      };
+    case "graphx":
+      return {
+        kind: "graphx",
+        title: tab.customTitle ?? tab.title,
+        graphId: tab.graphId,
+        documentId: tab.documentId,
+        source: tab.source,
+        revision: tab.revision,
+        placement: tab.placement,
+        panel: tab.panel,
+        ...(tab.color && { color: tab.color }),
       };
     case "mermaid": {
       const visualLayout = validateMermaidVisualLayout(tab.visualLayout);
@@ -334,6 +364,38 @@ function hydrateTab(
         ...color,
       } satisfies PrReviewTab;
     }
+    case "graphx": {
+      const spec = parseGraphSource(s.source);
+      if (
+        !graphIdSchema.safeParse(s.graphId).success ||
+        !graphDocumentIdSchema.safeParse(s.documentId).success
+      )
+        return null;
+      const panel = s.panel;
+      const validPanel =
+        panel &&
+        [panel.x, panel.y, panel.width, panel.height].every(
+          (v) =>
+            typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 10000,
+        ) &&
+        panel.width >= 280 &&
+        panel.height >= 220;
+      return {
+        id: allocId(),
+        kind: "graphx",
+        spaceId,
+        cold: true,
+        title: typeof s.title === "string" ? s.title.slice(0, 80) : spec.title,
+        graphId: s.graphId,
+        documentId: s.documentId,
+        source: s.source,
+        revision:
+          Number.isSafeInteger(s.revision) && s.revision > 0 ? s.revision : 1,
+        placement: GRAPH_PLACEMENTS.includes(s.placement) ? s.placement : "tab",
+        ...(validPanel ? { panel } : {}),
+        ...color,
+      };
+    }
     case "mermaid": {
       if (typeof s.source !== "string") return null;
       const source = validateMermaidDraftSource(s.source);
@@ -390,6 +452,11 @@ export function hydrateTabs(
     try {
       const tab = hydrateTab(s, spaceId, allocId);
       if (!tab) continue;
+      if (
+        tab.kind === "graphx" &&
+        out.some((t) => t.kind === "graphx" && t.graphId === tab.graphId)
+      )
+        continue;
       const rawNotes = (s as { notes?: unknown }).notes;
       if (Array.isArray(rawNotes)) {
         const valid = rawNotes.filter(isNoteCard);

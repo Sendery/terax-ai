@@ -45,7 +45,7 @@ export function buildAppTools() {
 
     terax_app_command: tool({
       description:
-        "Run a Terax app command: focus, rename, colour, move or close tabs; open files, previews, Mermaid diagrams, git diffs and history; show or hide the sidebar, notes, tasks, session history and agent monitor; manage notes and scheduled tasks; open settings; search content; speak through local TTS; capture a surface as PNG. Call it with command app.commands first to read every command's arguments, types and enum values. Commands that schedule or run agents, install software or delete data ask the user first.",
+        "Run a Terax app command: focus, rename, colour, move or close tabs; open files, previews, Mermaid and persistent GraphX diagrams (create, read, revision-checked update, dock or float), git diffs and history; show or hide the sidebar, notes, tasks, session history and agent monitor; manage notes and scheduled tasks; open settings; search content; speak through local TTS; capture a surface as PNG. Call it with command app.commands first to read every command's arguments, types and enum values. Commands that schedule or run agents, install software or delete data ask the user first.",
       inputSchema: z.object({
         command: z.enum(COMMAND_IDS),
         payload: z

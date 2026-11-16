@@ -1,4 +1,11 @@
 import {
+  parseGraphSource,
+  graphIdSchema,
+  graphDocumentIdSchema,
+  GRAPH_PLACEMENTS,
+  type GraphPlacement,
+} from "@/modules/graphx/lib/document";
+import {
   CAPTURE_TARGETS,
   type CaptureOutcome,
   type CaptureRequest,
@@ -46,6 +53,11 @@ export const COMMAND_IDS = [
   "preview.open",
   "mermaid.open",
   "mermaid.update",
+  "graphx.open",
+  "graphx.read",
+  "graphx.update",
+  "graphx.place",
+
   "tab.focus",
   "tab.close",
   "tab.rename",
@@ -128,6 +140,15 @@ export type CommandPayloads = {
   "preview.open": { url: string; title?: string };
   "mermaid.open": { source: string; title?: string };
   "mermaid.update": { tabId: number; source: string; title?: string };
+  "graphx.open": { source: string; graphId?: string };
+  "graphx.read": { graphId: string };
+  "graphx.update": {
+    graphId: string;
+    documentId: string;
+    expectedRevision: number;
+    source: string;
+  };
+  "graphx.place": { graphId: string; placement: GraphPlacement };
   "tab.focus": { tabId: number };
   "tab.close": { tabId?: number };
   "tab.rename": { tabId: number; title: string };
@@ -493,6 +514,95 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         name: "title",
         required: false,
         type: "string",
+      },
+    ],
+  },
+  "graphx.open": {
+    id: "graphx.open",
+    description:
+      "Create a persistent offline GraphX tab. An existing graphId is focused without replacing content; use graphx.update with its revision to edit.",
+    params: [
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description:
+          "GraphX JSON text, at most 48 KiB, 160 nodes and 500 edges. Supports hierarchy, shapes, flows and plain-text tour body. HTML, scripts and external links are rejected.",
+      },
+      {
+        name: "graphId",
+        type: "string",
+        required: false,
+        description:
+          "Stable document key: starts with a letter, up to 64 letters/digits/_/-. Omit to allocate one.",
+      },
+    ],
+  },
+  "graphx.read": {
+    id: "graphx.read",
+    description:
+      "Explicitly read one graph's JSON, stable id, current revision and placement before editing.",
+    params: [
+      {
+        name: "graphId",
+        type: "string",
+        required: true,
+        description:
+          "Stable document key returned by graphx.open or app.snapshot.",
+      },
+    ],
+  },
+  "graphx.update": {
+    id: "graphx.update",
+    description:
+      "Atomically replace graph JSON only if expectedRevision matches; stale writers cannot overwrite a newer graph. Returns the new revision.",
+    params: [
+      {
+        name: "graphId",
+        type: "string",
+        required: true,
+        description: "Stable GraphX document key.",
+      },
+      {
+        name: "documentId",
+        type: "string",
+        required: true,
+        description:
+          "Document incarnation returned by graphx.read or graphx.open. Prevents writing to a closed and recreated graph.",
+      },
+      {
+        name: "expectedRevision",
+        type: "integer",
+        required: true,
+        description:
+          "Current revision returned by graphx.read, graphx.open or the last successful update.",
+      },
+      {
+        name: "source",
+        type: "string",
+        required: true,
+        description: "Validated GraphX JSON text, max 48 KiB.",
+      },
+    ],
+  },
+  "graphx.place": {
+    id: "graphx.place",
+    description:
+      "Move a persistent graph into its tab, dock it beside a terminal, or float it within the workspace. One panel per space; no process is started.",
+    params: [
+      {
+        name: "graphId",
+        type: "string",
+        required: true,
+        description: "Stable GraphX document key.",
+      },
+      {
+        name: "placement",
+        type: "enum",
+        required: true,
+        description:
+          "Panel location. Dock/float selects an available terminal in the graph's space.",
+        values: GRAPH_PLACEMENTS,
       },
     ],
   },
@@ -1204,6 +1314,18 @@ export type CommandHandlers = {
   openPreview: (
     payload: CommandPayloads["preview.open"],
   ) => Promise<unknown> | unknown;
+  openGraph: (
+    payload: CommandPayloads["graphx.open"],
+  ) => Promise<unknown> | unknown;
+  readGraph: (
+    payload: CommandPayloads["graphx.read"],
+  ) => Promise<unknown> | unknown;
+  updateGraph: (
+    payload: CommandPayloads["graphx.update"],
+  ) => Promise<unknown> | unknown;
+  placeGraph: (
+    payload: CommandPayloads["graphx.place"],
+  ) => Promise<unknown> | unknown;
   openMermaid: (
     payload: CommandPayloads["mermaid.open"],
   ) => Promise<unknown> | unknown;
@@ -1509,6 +1631,82 @@ export function validateCommandRequest(
     return {
       ok: true,
       value: { id, payload: { url: obj.url, title: title.value } },
+    };
+  }
+
+  if (
+    id === "graphx.open" ||
+    id === "graphx.read" ||
+    id === "graphx.update" ||
+    id === "graphx.place"
+  ) {
+    const graphId = obj.graphId;
+    if (
+      (id !== "graphx.open" || graphId !== undefined) &&
+      !graphIdSchema.safeParse(graphId).success
+    )
+      return invalidPayload("Invalid GraphX graphId");
+    if (id === "graphx.read")
+      return {
+        ok: true,
+        value: { id, payload: { graphId: graphId as string } },
+      };
+    if (id === "graphx.place") {
+      if (!GRAPH_PLACEMENTS.includes(obj.placement as GraphPlacement))
+        return invalidPayload("Invalid GraphX placement");
+      return {
+        ok: true,
+        value: {
+          id,
+          payload: {
+            graphId: graphId as string,
+            placement: obj.placement as GraphPlacement,
+          },
+        },
+      };
+    }
+    const source = requireString(obj, "source", id);
+    if (!source.ok) return source;
+    try {
+      parseGraphSource(source.value);
+    } catch (error) {
+      return invalidPayload(
+        error instanceof Error ? error.message : "Invalid GraphX JSON",
+      );
+    }
+    if (id === "graphx.open")
+      return {
+        ok: true,
+        value: {
+          id,
+          payload: {
+            source: source.value,
+            graphId: graphId as string | undefined,
+          },
+        },
+      };
+    if (!graphDocumentIdSchema.safeParse(obj.documentId).success)
+      return invalidPayload(
+        "GraphX update requires documentId from the current graphx.read",
+      );
+    if (
+      !Number.isSafeInteger(obj.expectedRevision) ||
+      (obj.expectedRevision as number) < 1
+    )
+      return invalidPayload(
+        "GraphX update requires a positive integer expectedRevision",
+      );
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          graphId: graphId as string,
+          documentId: obj.documentId as string,
+          source: source.value,
+          expectedRevision: obj.expectedRevision as number,
+        },
+      },
     };
   }
 
@@ -2050,6 +2248,14 @@ async function dispatchCommand(
       return handlers.openFile(request.payload);
     case "preview.open":
       return handlers.openPreview(request.payload);
+    case "graphx.open":
+      return handlers.openGraph(request.payload);
+    case "graphx.read":
+      return handlers.readGraph(request.payload);
+    case "graphx.update":
+      return handlers.updateGraph(request.payload);
+    case "graphx.place":
+      return handlers.placeGraph(request.payload);
     case "mermaid.open":
       return handlers.openMermaid(request.payload);
     case "mermaid.update":

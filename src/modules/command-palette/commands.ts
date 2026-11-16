@@ -53,6 +53,7 @@ export type CommandPaletteActionContext = {
   openNewPrivate: () => void;
   openNewEditor: () => void;
   openNewPreview: () => void;
+  openNewGraph: () => void;
   openNewMermaid: () => void;
   openGitGraph: () => void;
   toggleSourceControl: () => void;
@@ -200,6 +201,14 @@ export function createCommandItems(
       icon: Globe02Icon,
       shortcutId: "tab.newPreview",
       run: ctx.openNewPreview,
+    },
+    {
+      id: "tab.newGraph",
+      title: "New GraphX diagram",
+      group: "Tabs",
+      keywords: ["graphx", "interactive", "diagram", "pi-terax", "graph"],
+      icon: Flowchart01Icon,
+      run: ctx.openNewGraph,
     },
     {
       id: "tab.newMermaid",

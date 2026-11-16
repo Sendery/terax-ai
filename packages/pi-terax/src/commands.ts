@@ -9,6 +9,11 @@ export const TERAX_COMMAND_IDS = [
   "preview.open",
   "mermaid.open",
   "mermaid.update",
+  "graphx.open",
+  "graphx.read",
+  "graphx.update",
+  "graphx.place",
+
   "tab.focus",
   "tab.close",
   "tab.rename",

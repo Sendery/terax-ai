@@ -85,3 +85,39 @@ it("preserves an earlier pending tab mutation while opening an editor", () => {
   expect(committed.tabs.find((tab) => tab.id === 1)?.title).toBe("kept");
   expect(committed.activeId).toBe(id);
 });
+
+it("reuses stable GraphX ids and rejects stale writes before React commits", () => {
+  const api = TestHarness();
+  const source = JSON.stringify({
+    title: "Graph",
+    nodes: [{ id: "a", label: "A" }],
+    edges: [],
+  });
+  const first = api.openGraph(source, "owned-graph");
+  const second = api.openGraph(source, "owned-graph");
+  expect(second).toMatchObject({ created: false, tab: { id: first.tab.id } });
+  const update = api.updateGraph(
+    "owned-graph",
+    first.tab.documentId,
+    1,
+    source,
+  );
+  expect(update.revision).toBe(2);
+  expect(() =>
+    api.updateGraph("owned-graph", first.tab.documentId, 1, source),
+  ).toThrow(/revision/);
+  expect(api.readGraph("owned-graph").revision).toBe(2);
+  api.setGraphPlacement("owned-graph", "left");
+  const committed = flush();
+  expect(committed.tabs.filter((t) => t.kind === "graphx")).toHaveLength(1);
+  expect(committed.readGraph("owned-graph")).toMatchObject({
+    placement: "left",
+    revision: 2,
+  });
+  expect(committed.tabs.some((t) => t.kind === "terminal")).toBe(true);
+  api.closeTab(first.tab.id);
+  const reopened=api.openGraph(source,"owned-graph");
+  expect(reopened.tab.documentId).not.toBe(first.tab.documentId);
+  expect(()=>api.updateGraph("owned-graph",first.tab.documentId,1,source)).toThrow(/replaced/);
+  expect(api.readGraph("owned-graph").revision).toBe(1);
+});

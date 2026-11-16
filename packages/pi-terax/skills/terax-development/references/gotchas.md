@@ -968,3 +968,17 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** primary pointer cancellation suppresses compatibility mouse events, a zero-delay timer races the actual selection, or a late reply revives dismissed UI and acts on a different selection.
 - **Prevention:** propagate the real selection completion promise from pointer release, including block selection. Bind it to session, semantic selection mutation revision, visibility and privacy scope. Keep read-only query/cache sequencing separate: a normal frame refresh can reread unchanged selected text without invalidating the gesture. Invalidate pending popup work on later pointer interaction and revalidate the original text before every action. A stale completion or rejection must not clear a newer popup.
 - **Verification:** defer release and block selection, dismiss or retire the owner before completion, deliver older success/failure after a newer popup, change selected text before an action, and retain the legacy/editor path plus healthy exited-pane selection.
+
+### Format complete syntax units
+
+- **Trigger:** formatting inserted regions in a file containing repeated JSX or hook bodies.
+- **Failure mode:** selecting a subset of line-diff formatter edits can align repeated blocks across distant regions, drop siblings or duplicate surrounding declarations.
+- **Prevention:** format complete syntax units or complete files; never apply selected sequence-matcher opcodes as formatting edits. Review unexpected deletions before running the app.
+- **Verification:** typecheck, lint and affected behavior tests after formatting; inspect the complete diff for unchanged sibling views.
+
+### Graph renderer lifetime is separate from document lifetime
+
+- **Trigger:** embedding an engine whose destroy method does not cancel every internal animation timer.
+- **Failure mode:** updating a graph can retain old renderer closures or allow a late reply to affect a new document.
+- **Prevention:** persist the document outside the renderer; key the sandbox frame by immutable document incarnation, revision and theme. Validate actual frame identity and its session token on replies. Compare both incarnation and revision before source mutation.
+- **Verification:** stale revision and close/recreate tests reject writes; the standalone browser check completes layout in two separate frame lifetimes while blocking parent access, network and inline script.

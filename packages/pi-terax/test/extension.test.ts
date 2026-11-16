@@ -515,3 +515,11 @@ describe("Pi extension", () => {
     vi.useRealTimers();
   });
 });
+
+
+it("exposes persistent GraphX control commands", () => {
+  for (const id of ["graphx.open","graphx.read","graphx.update","graphx.place"]) {
+    expect(isTeraxCommandId(id)).toBe(true);
+    expect(TERAX_COMMAND_IDS).toContain(id);
+  }
+});

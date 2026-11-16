@@ -1,3 +1,4 @@
+import { buildManagerTools } from "@/modules/ai/tools/manager";
 import { buildManagedAgentTools } from "./agent";
 import { buildAppTools } from "./app";
 import { buildEditTools } from "./edit";
@@ -43,6 +44,7 @@ export function buildTools(ctx: import("./context").ToolContext) {
     ...buildTodoTools(ctx),
     ...buildManagedAgentTools(ctx),
     ...buildAppTools(),
+    ...buildManagerTools(ctx),
   } as const;
 }
 

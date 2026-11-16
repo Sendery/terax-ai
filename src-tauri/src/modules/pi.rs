@@ -178,6 +178,10 @@ fn is_allowed_command(command: &str) -> bool {
             | "preview.open"
             | "mermaid.open"
             | "mermaid.update"
+            | "graphx.open"
+            | "graphx.read"
+            | "graphx.update"
+            | "graphx.place"
             | "tab.focus"
             | "tab.close"
             | "tab.rename"
@@ -555,6 +559,16 @@ mod tests {
         let request = decode_request_line(line, "tok").expect("tab.setColor must be allowed");
 
         assert_eq!(request.command, "tab.setColor");
+    }
+
+    #[test]
+    fn allows_graphx_control_commands() {
+        for command in ["graphx.open", "graphx.read", "graphx.update", "graphx.place"] {
+            let line = serde_json::json!({"version": 1, "id": "graph", "token": "tok", "command": command, "payload": {}});
+            let encoded = serde_json::to_vec(&line).unwrap();
+            let request = decode_request_line(&encoded, "tok").expect("GraphX command must be allowed");
+            assert_eq!(request.command, command);
+        }
     }
 
     #[test]

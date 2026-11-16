@@ -21,6 +21,7 @@ function context(
     openNewPrivate: noop,
     openNewEditor: noop,
     openNewPreview: noop,
+    openNewGraph: vi.fn(),
     openNewMermaid: noop,
     openGitGraph: noop,
     toggleSourceControl: noop,

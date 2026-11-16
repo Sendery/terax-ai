@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "actions": [
+    {"id": "organize", "label": "Move selected tab to the front", "steps": [{"command": "tab.move", "payload": {"tabId": "$tabId", "index": 0}}]},
+    {"id": "classify", "label": "Classify selected tab with a color", "steps": [{"command": "tab.setColor", "payload": {"tabId": "$tabId", "color": "$color"}}]},
+    {"id": "label", "label": "Name selected tab", "steps": [{"command": "tab.rename", "payload": {"tabId": "$tabId", "title": "$title"}}]},
+    {"id": "manage-notes", "label": "Show notes", "steps": [{"command": "notes.show"}]},
+    {"id": "graph-beside-terminal", "label": "Dock selected graph", "steps": [{"command": "graphx.place", "payload": {"graphId": "$graphId", "placement": "right"}}]}
+  ]
+}

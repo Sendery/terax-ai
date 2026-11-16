@@ -1,3 +1,11 @@
+import {
+  findGraph,
+  graphIdSchema,
+  parseGraphSource,
+  placeGraph,
+  replaceGraph,
+  type GraphPlacement,
+} from "@/modules/graphx/lib/document";
 import { isMarkdownPath } from "@/lib/utils";
 import type { NoteCard } from "@/modules/notes/lib/cards";
 import {
@@ -92,6 +100,18 @@ export type MermaidTab = TabBase & {
   visualLayout?: MermaidVisualLayout;
 };
 
+export type GraphTab = TabBase & {
+  id: number;
+  kind: "graphx";
+  title: string;
+  graphId: string;
+  documentId: string;
+  source: string;
+  revision: number;
+  placement: GraphPlacement;
+  panel?: { x: number; y: number; width: number; height: number };
+};
+
 export type AiDiffStatus = "pending" | "approved" | "rejected";
 
 export type AiDiffTab = TabBase & {
@@ -156,6 +176,7 @@ export type Tab =
   | PreviewTab
   | MarkdownTab
   | MermaidTab
+  | GraphTab
   | AiDiffTab
   | GitDiffTab
   | GitHistoryTab
@@ -833,6 +854,75 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     return targetId;
   }, [setTabs]);
 
+  const openGraph = useCallback(
+    (source: string, requestedId?: string) => {
+      const spec = parseGraphSource(source);
+      if (
+        requestedId !== undefined &&
+        !graphIdSchema.safeParse(requestedId).success
+      )
+        throw new Error("Invalid GraphX document key");
+      const graphId = requestedId ?? `graph-${crypto.randomUUID()}`;
+      const existing = tabsRef.current.find(
+        (t) => t.kind === "graphx" && t.graphId === graphId,
+      );
+      if (existing) return { tab: existing as GraphTab, created: false };
+      if (tabsRef.current.filter((t) => t.kind === "graphx").length >= 24)
+        throw new Error("Close a GraphX tab before opening more (limit 24)");
+      const tab: GraphTab = {
+        id: nextIdRef.current++,
+        kind: "graphx",
+        spaceId: activeSpaceIdRef.current,
+        title: spec.title,
+        graphId,
+        documentId: crypto.randomUUID(),
+        source,
+        revision: 1,
+        placement: "tab",
+      };
+      setTabs((curr) => [...curr, tab]);
+      setActiveId(tab.id);
+      return { tab, created: true };
+    },
+    [setTabs],
+  );
+  const readGraph = useCallback(
+    (graphId: string) => findGraph(tabsRef.current, graphId),
+    [],
+  );
+  const updateGraph = useCallback(
+    (graphId: string, documentId: string, revision: number, source: string) => {
+      const next = replaceGraph(
+        tabsRef.current,
+        graphId,
+        documentId,
+        revision,
+        source,
+      );
+      setTabs(next);
+      return findGraph(next, graphId);
+    },
+    [setTabs],
+  );
+  const setGraphPlacement = useCallback(
+    (graphId: string, placement: GraphPlacement) => {
+      const next = placeGraph(tabsRef.current, graphId, placement);
+      setTabs(next);
+      return findGraph(next, graphId);
+    },
+    [setTabs],
+  );
+  const setGraphPanel = useCallback(
+    (graphId: string, panel: GraphTab["panel"]) => {
+      setTabs((curr) =>
+        curr.map((t) =>
+          t.kind === "graphx" && t.graphId === graphId ? { ...t, panel } : t,
+        ),
+      );
+    },
+    [setTabs],
+  );
+
   const newMermaidTab = useCallback(
     (source: string, title = "Mermaid diagram") => {
       const id = nextIdRef.current++;
@@ -1348,6 +1438,11 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     pinTab,
     newPreviewTab,
     newMarkdownTab,
+    openGraph,
+    readGraph,
+    updateGraph,
+    setGraphPlacement,
+    setGraphPanel,
     newMermaidTab,
     updateMermaidSource,
     replaceMermaidTabContent,

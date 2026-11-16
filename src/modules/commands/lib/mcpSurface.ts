@@ -62,6 +62,10 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       openWorldHint: false,
     },
     actions: {
+      read_graphx: {
+        command: "graphx.read",
+        summary: "Read a GraphX document source and revision explicitly.",
+      },
       status: {
         local: "status",
         summary:
@@ -121,14 +125,29 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
     argDescriptions: {
       path: "open_file: absolute or workspace path. Git actions: path relative to repoRoot.",
       title: "Optional custom tab title (80 characters max for Mermaid tabs).",
-      source: "Mermaid source, with or without a fenced mermaid block.",
+      source:
+        "Mermaid source for Mermaid actions; JSON text for GraphX actions (48 KiB max).",
       originalPath: "Previous path when the file was renamed.",
     },
     actions: {
       open_file: { command: "tab.openFile", summary: "Open a file in an editor tab." },
       open_preview: {
         command: "preview.open",
-        summary: "Open a loopback URL (localhost, 127.0.0.1, [::1]) in a preview tab.",
+        summary:
+          "Open a loopback URL (localhost, 127.0.0.1, [::1]) in a preview tab.",
+      },
+      open_graphx: {
+        command: "graphx.open",
+        summary: "Create or reopen a stable offline GraphX document from JSON.",
+      },
+      update_graphx: {
+        command: "graphx.update",
+        summary: "Update the same GraphX document using its expected revision.",
+      },
+      place_graphx: {
+        command: "graphx.place",
+        summary:
+          "Dock GraphX beside a terminal, float it or return it to its tab.",
       },
       open_mermaid: {
         command: "mermaid.open",

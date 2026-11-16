@@ -9,7 +9,7 @@
     {
       "name": "terax_inspect",
       "title": "Inspect Terax",
-      "description": "Read the running Terax app without changing it: window layout, tabs, notes, scheduled tasks, speech, the command catalog, file content search and PNG captures of a surface.\n\nActions:\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
+      "description": "Read the running Terax app without changing it: window layout, tabs, notes, scheduled tasks, speech, the command catalog, file content search and PNG captures of a surface.\n\nActions:\n- read_graphx(graphId): Read a GraphX document source and revision explicitly.\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
       "annotations": {
         "title": "Inspect Terax",
         "readOnlyHint": true,
@@ -23,6 +23,7 @@
           "action": {
             "type": "string",
             "enum": [
+              "read_graphx",
               "status",
               "snapshot",
               "list_commands",
@@ -36,6 +37,10 @@
               "wait"
             ],
             "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
+          },
+          "graphId": {
+            "type": "string",
+            "description": "Stable document key returned by graphx.open or app.snapshot."
           },
           "query": {
             "type": "string",
@@ -83,6 +88,12 @@
         "additionalProperties": false
       },
       "actions": {
+        "read_graphx": {
+          "command": "graphx.read",
+          "params": [
+            "graphId"
+          ]
+        },
         "status": {
           "local": "status",
           "params": []
@@ -142,7 +153,7 @@
     {
       "name": "terax_open_view",
       "title": "Open views in Terax",
-      "description": "Put something in front of the user in a Terax tab: a file in the editor, a local web preview, a Mermaid diagram, a git diff, the commit graph or a file at a commit. An existing tab for the same target is focused instead of duplicated where the command supports it.\n\nActions:\n- open_file(path, pin?): Open a file in an editor tab.\n- open_preview(url, title?): Open a loopback URL (localhost, 127.0.0.1, [::1]) in a preview tab.\n- open_mermaid(source, title?): Open Mermaid source (48 KiB max) in a new diagram tab.\n- update_mermaid(tabId, source, title?): Replace the source of an existing Mermaid tab.\n- open_git_diff(repoRoot, path, mode, originalPath?, title?): Open the working-tree (+) or staged (-) diff of one file.\n- open_git_history(repoRoot, branch?): Open the commit graph of a repository.\n- open_commit_file(repoRoot, sha, path, originalPath?, subject?): Open one file as changed by one commit.",
+      "description": "Put something in front of the user in a Terax tab: a file in the editor, a local web preview, a Mermaid diagram, a git diff, the commit graph or a file at a commit. An existing tab for the same target is focused instead of duplicated where the command supports it.\n\nActions:\n- open_file(path, pin?): Open a file in an editor tab.\n- open_preview(url, title?): Open a loopback URL (localhost, 127.0.0.1, [::1]) in a preview tab.\n- open_graphx(source, graphId?): Create or reopen a stable offline GraphX document from JSON.\n- update_graphx(graphId, documentId, expectedRevision, source): Update the same GraphX document using its expected revision.\n- place_graphx(graphId, placement): Dock GraphX beside a terminal, float it or return it to its tab.\n- open_mermaid(source, title?): Open Mermaid source (48 KiB max) in a new diagram tab.\n- update_mermaid(tabId, source, title?): Replace the source of an existing Mermaid tab.\n- open_git_diff(repoRoot, path, mode, originalPath?, title?): Open the working-tree (+) or staged (-) diff of one file.\n- open_git_history(repoRoot, branch?): Open the commit graph of a repository.\n- open_commit_file(repoRoot, sha, path, originalPath?, subject?): Open one file as changed by one commit.",
       "annotations": {
         "title": "Open views in Terax",
         "readOnlyHint": false,
@@ -158,6 +169,9 @@
             "enum": [
               "open_file",
               "open_preview",
+              "open_graphx",
+              "update_graphx",
+              "place_graphx",
               "open_mermaid",
               "update_mermaid",
               "open_git_diff",
@@ -184,7 +198,29 @@
           },
           "source": {
             "type": "string",
-            "description": "Mermaid source, with or without a fenced mermaid block."
+            "description": "Mermaid source for Mermaid actions; JSON text for GraphX actions (48 KiB max)."
+          },
+          "graphId": {
+            "type": "string",
+            "description": "open_graphx: Stable document key: starts with a letter, up to 64 letters/digits/_/-. Omit to allocate one. update_graphx, place_graphx: Stable GraphX document key."
+          },
+          "documentId": {
+            "type": "string",
+            "description": "Document incarnation returned by graphx.read or graphx.open. Prevents writing to a closed and recreated graph."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "description": "Current revision returned by graphx.read, graphx.open or the last successful update."
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "tab",
+              "left",
+              "right",
+              "floating"
+            ],
+            "description": "Panel location. Dock/float selects an available terminal in the graph's space."
           },
           "tabId": {
             "type": "integer",
@@ -240,6 +276,29 @@
           "params": [
             "url",
             "title"
+          ]
+        },
+        "open_graphx": {
+          "command": "graphx.open",
+          "params": [
+            "source",
+            "graphId"
+          ]
+        },
+        "update_graphx": {
+          "command": "graphx.update",
+          "params": [
+            "graphId",
+            "documentId",
+            "expectedRevision",
+            "source"
+          ]
+        },
+        "place_graphx": {
+          "command": "graphx.place",
+          "params": [
+            "graphId",
+            "placement"
           ]
         },
         "open_mermaid": {

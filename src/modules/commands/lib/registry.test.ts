@@ -31,6 +31,10 @@ function handlers(): CommandHandlers {
       url: "http://localhost:19432/",
       created: true,
     })),
+    openGraph: vi.fn(() => ({})),
+    readGraph: vi.fn(() => ({})),
+    updateGraph: vi.fn(() => ({})),
+    placeGraph: vi.fn(() => ({})),
     openMermaid: vi.fn(async () => ({
       tabId: 13,
       title: "Mermaid diagram",
@@ -690,6 +694,11 @@ describe("command registry", () => {
       "preview.open",
       "mermaid.open",
       "mermaid.update",
+      "graphx.open",
+      "graphx.read",
+      "graphx.update",
+      "graphx.place",
+
       "tab.focus",
       "tab.close",
       "tab.rename",
@@ -1519,5 +1528,92 @@ describe("local speech commands", () => {
       .commands.find((c) => c.id === "settings.open")
       ?.params.find((p) => p.name === "tab");
     expect(tab?.values).toContain("voice");
+  });
+});
+
+describe("GraphX command boundary", () => {
+  const source = JSON.stringify({
+    title: "Map",
+    nodes: [{ id: "a", label: "A" }],
+    edges: [],
+  });
+  it("dispatches validated JSON and stable revision updates", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    expect(
+      (
+        await registry.call({
+          id: "graphx.open",
+          payload: { source, graphId: "map" },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(h.openGraph).toHaveBeenCalledWith({ source, graphId: "map" });
+    expect(
+      (
+        await registry.call({
+          id: "graphx.update",
+          payload: {
+            source,
+            graphId: "map",
+            documentId: "00000000-0000-4000-8000-000000000001",
+            expectedRevision: 3,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(h.updateGraph).toHaveBeenCalledWith({
+      source,
+      graphId: "map",
+      documentId: "00000000-0000-4000-8000-000000000001",
+      expectedRevision: 3,
+    });
+  });
+  it("rejects unsafe source, invalid placement and revisions without invoking handlers", async () => {
+    const h = handlers();
+    const registry = createCommandRegistry(h);
+    for (const request of [
+      {
+        id: "graphx.open",
+        payload: {
+          source: JSON.stringify({
+            nodes: [
+              { id: "x", label: "X", details_html: "<script>bad</script>" },
+            ],
+          }),
+        },
+      },
+      {
+        id: "graphx.update",
+        payload: {
+          source,
+          graphId: "map",
+          documentId: "00000000-0000-4000-8000-000000000001",
+          expectedRevision: 0,
+        },
+      },
+      {
+        id: "graphx.update",
+        payload: {
+          source,
+          graphId: "map",
+          documentId: "00000000-0000-4000-8000-000000000001",
+          expectedRevision: 1.2,
+        },
+      },
+      { id: "graphx.read", payload: { graphId: "../secret" } },
+      {
+        id: "graphx.place",
+        payload: { graphId: "map", placement: "window.eval" },
+      },
+    ])
+      expect((await registry.call(request)).ok).toBe(false);
+    for (const handler of [
+      h.openGraph,
+      h.updateGraph,
+      h.readGraph,
+      h.placeGraph,
+    ])
+      expect(handler).not.toHaveBeenCalled();
   });
 });
