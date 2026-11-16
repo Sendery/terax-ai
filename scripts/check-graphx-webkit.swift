@@ -12,6 +12,8 @@ let token = UUID().uuidString
 let nextToken = UUID().uuidString
 let baseline = CommandLine.arguments.contains("--baseline")
 let composite = CommandLine.arguments.contains("--composite")
+let rawCSP = CommandLine.arguments.contains("--raw-csp")
+let baselineStyles = CommandLine.arguments.contains("--baseline-styles")
 let allowedScripts = "tauri://localhost/graphx/engine.js tauri://localhost/graphx/frame.js"
 let rawConfig = try! Data(contentsOf:root.appendingPathComponent("src-tauri/tauri.conf.json"))
 let settings = try! JSONSerialization.jsonObject(with:rawConfig) as! [String:Any]
@@ -33,7 +35,7 @@ const native=document.getElementById('native');if(native){const ctx=native.getCo
 let token='\(token)',revision=1,retired=null;
 const nextToken='\(nextToken)',received=new Set(),checks=[];
 let sourceRefusals=0,tokenRefusals=0,wrongRevision=false,finished=false;
-const spec={title:'WK GraphX',lang:'en',nodes:[{id:'a',label:'Interface',shape:'decision'},{id:'b',label:'Store',shape:'datastore'}],edges:[{id:'e',from:'a',to:'b',label:'Write'}]};
+const spec={title:'WK GraphX',lang:'en',nodes:[{id:'a',label:'Interface',shape:'decision',kind:'service',fill:'#cc8844',color:'#008855'},{id:'b',label:'Store',shape:'datastore'}],edges:[{id:'e',from:'a',to:'b',label:'Write',color:'#008855'}],flows:[{id:'flow',title:'Request',participants:['a','b'],messages:[{id:'m',from:'a',to:'b',label:'Write',kind:'sync'}]}]};
 function result(passed,reason){if(finished)return;finished=true;window.webkit.messageHandlers.diagnostic.postMessage({kind:'result',passed,reason,checks,sourceRefusals,tokenRefusals,wrongRevision});}
 window.addEventListener('message',async e=>{
  if(e.source!==frame.contentWindow){sourceRefusals++;return;}
@@ -41,7 +43,7 @@ window.addEventListener('message',async e=>{
  if(e.data.type==='terax:graphx:ready'&&!received.has(revision)){
   received.add(revision);
   frame.contentWindow.postMessage({type:'terax:graphx:render',token:'retired-'+token,revision:999,theme:'light',spec:{...spec,title:'STALE'}},'*');
-  frame.contentWindow.postMessage({type:'terax:graphx:render',token,documentId:'wk-document-'+revision,revision,theme:'light',spec},'*');
+  frame.contentWindow.postMessage({type:'terax:graphx:render',token,documentId:'wk-document-'+revision,revision,theme:'light',spec:revision===2?{...spec,initialView:'flow:flow'}:spec},'*');
  }
  if(e.data.type==='terax:graphx:rendered'){
   if(e.data.revision!==revision){wrongRevision=true;result(false,'wrong revision acknowledged');return;}
@@ -49,11 +51,12 @@ window.addEventListener('message',async e=>{
    frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'retired-request',...stale},'*');
   frame.contentWindow.postMessage({type:'terax:graphx:capture',token,documentId:'wk-document-'+revision,revision,requestId:'capture-'+revision},'*');
  }
+ if(e.data.type==='terax:graphx:error'){setTimeout(()=>result(false,'render: '+e.data.reason),700);}
  if(e.data.type==='terax:graphx:capture-error'){result(false,'frame snapshot failed');}
  if(e.data.type==='terax:graphx:captured'){
   if(e.data.requestId!=='capture-'+revision||e.data.documentId!=='wk-document-'+revision||e.data.revision!==revision){result(false,'stale snapshot accepted');return;}
   window.webkit.messageHandlers.diagnostic.postMessage({kind:'snapshot',revision,width:e.data.width,height:e.data.height,bytes:e.data.png?.length,receipt:e.data.receipt,png:e.data.png});
-  if(!e.data.png?.startsWith('data:image/png;base64,')||e.data.png.length<1000||e.data.receipt?.nodes!==2){result(false,'invalid PNG');return;}
+  if(!e.data.png?.startsWith('data:image/png;base64,')||e.data.png.length<1000||e.data.receipt?.nodes!==(revision===2?4:2)){result(false,'invalid PNG');return;}
   if(\(composite ? "true" : "false")){
    try { await checkComposite(e.data.png); } catch(error) {result(false,'compositor: '+String(error));return;}
   }
@@ -71,8 +74,8 @@ window.addEventListener('message',async e=>{
    retired.contentWindow.postMessage({type:'test:late',token},'*');
   }else{
    setTimeout(()=>{
-    const valid=checks.length===2&&checks.every(c=>c.parentBlocked&&c.networkBlocked&&!c.inlineExecuted&&!c.unlistedExecuted&&c.tauri==='undefined'&&c.nodeCount===2&&c.pathCount>5&&c.title==='WK GraphX');
-    const resized=checks[0]?.width===800&&checks[0]?.height===600&&checks[1]?.width===500&&checks[1]?.height===350;
+    const valid=checks.length===2&&checks.every(c=>c.parentBlocked&&c.networkBlocked&&!c.inlineExecuted&&!c.unlistedExecuted&&c.tauri==='undefined'&&c.nodeCount===(c.revision===2?4:2)&&c.pathCount>5&&c.title==='WK GraphX'&&c.svgWidth>c.width*0.8&&c.svgHeight>100&&c.buttonRadius>=4&&!c.fontFamily.includes('Times')&&c.nodeFill==='rgb(204, 136, 68)'&&(c.revision===1?c.lateFlowFill==='color(srgb 0.9 0.953333 0.933333)':c.visibleFill==='color(srgb 0.9 0.953333 0.933333)')&&(\(rawCSP ? "true" : "false")||c.unauthorizedStyle===''));
+    const resized=checks[0]?.flow===false&&checks[1]?.flow===true&&checks[0]?.width===800&&checks[0]?.height===600&&checks[1]?.width===500&&checks[1]?.height===350;
     result(valid&&resized&&sourceRefusals>0&&tokenRefusals>0&&!wrongRevision,'opaque WK custom-scheme renderer, CSP and stale messages');
     retired?.remove();frame.remove();
    },150);
@@ -113,19 +116,43 @@ let diagnostics = """
  if(window===top)return;
  window.addEventListener('message',async e=>{
   if(e.source!==parent)return;
+  // Unshown WK views pause CSS transitions too; finish only fixture animations
+  // before sampling pixels so their initial interpolation is not mistaken for CSS failure.
+  if(e.data?.type==='terax:graphx:capture')
+   for(const animation of document.getAnimations())try{animation.finish();}catch{}
   if(e.data?.type==='test:late'){parent.postMessage({type:'terax:graphx:rendered',token:e.data.token,revision:2},'*');return;}
   if(e.data?.type!=='test:inspect'||e.data.token!==location.hash.slice(1))return;
   let parentBlocked=false,networkBlocked=false;
   try{parent.document.body.innerHTML;}catch{parentBlocked=true;}
   try{await fetch('https://example.com/graphx-boundary');}catch{networkBlocked=true;}
+  const unauthorizedStyle=document.createElement('style');unauthorizedStyle.textContent='.gx{--untrusted-csp-test:injected}';document.head.appendChild(unauthorizedStyle);
   const inline=document.createElement('script');inline.textContent='window.BAD_INLINE=true';document.head.appendChild(inline);
   const other=document.createElement('script');other.src='tauri://localhost/graphx/not-allowed.js';document.head.appendChild(other);
   parent.postMessage({type:'terax:graphx:rendered',token:'retired-token',revision:e.data.revision},'*');
+  const visibleSVG=Array.from(document.querySelectorAll('.gx-svg')).find(svg=>getComputedStyle(svg).display!=='none');
+  const initialNodeCount=document.querySelectorAll('.gx-node').length;
+  let lateFlowFill=null;
+  if(e.data.revision===1){
+   document.querySelector('[data-view="flow:flow"]').click();
+   await new Promise(resolve=>setTimeout(resolve,0));
+   for(const animation of document.getAnimations())try{animation.finish();}catch{}
+   lateFlowFill=getComputedStyle(document.querySelector('.gx-seq .gx-node .gx-card')).fill;
+   document.querySelector('[data-view="graph"]').click();
+   for(const animation of document.getAnimations())try{animation.finish();}catch{}
+  }
   setTimeout(()=>parent.postMessage({
    type:'test:checked',token:e.data.token,revision:e.data.revision,parentBlocked,networkBlocked,
    inlineExecuted:!!window.BAD_INLINE,unlistedExecuted:!!window.BAD_UNLISTED,tauri:typeof window.__TAURI_INTERNALS__,
-   nodeCount:document.querySelectorAll('.gx-node').length,pathCount:document.querySelectorAll('svg path').length,
-   title:document.querySelector('.gx-svg')?.getAttribute('aria-label'),width:innerWidth,height:innerHeight
+   nodeCount:initialNodeCount,lateFlowFill,pathCount:document.querySelectorAll('svg path').length,
+   title:document.querySelector('.gx-svg')?.getAttribute('aria-label'),width:innerWidth,height:innerHeight,
+   svgWidth:visibleSVG?.getBoundingClientRect().width,
+   svgHeight:visibleSVG?.getBoundingClientRect().height,
+   flow:visibleSVG?.classList.contains('gx-seq'),
+   visibleFill:getComputedStyle(visibleSVG.querySelector('.gx-node .gx-card')||visibleSVG.querySelector('.gx-node path, .gx-node rect, .gx-node polygon')).fill,
+   nodeFill:getComputedStyle(document.querySelector('.gx-node .gx-card')||document.querySelector('.gx-node path, .gx-node rect, .gx-node polygon')).fill,
+   unauthorizedStyle:getComputedStyle(document.querySelector('.gx')).getPropertyValue('--untrusted-csp-test'),
+   buttonRadius:parseFloat(getComputedStyle(document.querySelector('.gx button')).borderRadius),
+   fontFamily:getComputedStyle(document.querySelector('.gx')).fontFamily
   },'*'),100);
  });
 })();
@@ -152,8 +179,25 @@ final class Handler: NSObject, WKURLSchemeHandler, WKScriptMessageHandler, WKNav
     let html=String(data:data,encoding:.utf8)!
     data=html.replacingOccurrences(of:" " + allowedScripts,with:"").data(using:.utf8)!
    }
+   if baselineStyles && url.path=="/graphx/index.html" {
+    data=String(data:data,encoding:.utf8)!.replacingOccurrences(of:"data-terax-graphx-base",with:"data-terax-graphx-base-disabled").data(using:.utf8)!
+   }
    var headers=["Content-Type":mime]
-   if mime=="text/html" {headers["Content-Security-Policy"]=responseCSP}
+   if mime=="text/html" {
+    var policy=responseCSP
+    // Tauri codegen html2::inject_nonce_token marks static style tags, then
+    // manager::set_csp replaces each token and adds its nonce to the header.
+    // With a nonce present, WebKit ignores unsafe-inline for style-src.
+    if !rawCSP {
+     let html=String(data:data,encoding:.utf8)!
+     if html.contains("<style") {
+      let nonce=UUID().uuidString
+      data=html.replacingOccurrences(of:"<style",with:"<style nonce=\"\(nonce)\"").data(using:.utf8)!
+      policy=policy.replacingOccurrences(of:"style-src ",with:"style-src 'nonce-\(nonce)' ")
+     }
+    }
+    headers["Content-Security-Policy"]=policy
+   }
    let response=HTTPURLResponse(url:url,statusCode:200,httpVersion:"HTTP/1.1",headerFields:headers)!
    urlSchemeTask.didReceive(response);urlSchemeTask.didReceive(data);urlSchemeTask.didFinish()
   } catch {urlSchemeTask.didFailWithError(error)}

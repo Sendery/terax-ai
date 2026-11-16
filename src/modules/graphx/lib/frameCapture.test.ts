@@ -41,7 +41,7 @@ function fixture() {
     width: 500,
     height: 350,
     png: "data:image/png;base64,aGVsbG8=",
-    receipt: { nodes: 3, paths: 8, width: 498, height: 306 },
+    receipt: { styled: true, nodes: 3, paths: 8, width: 498, height: 306 },
   };
   const reply = (data = result, source: unknown = target) => {
     for (const listener of listeners)
@@ -108,12 +108,33 @@ it.each([
 });
 it("validates actual SVG geometry receipts without accepting arbitrary markup", () => {
   expect(
-    graphRenderReceipt({ nodes: 3, paths: 12, width: 700, height: 400 }),
-  ).toEqual({ nodes: 3, paths: 12, width: 700, height: 400 });
+    graphRenderReceipt({
+      styled: true,
+      nodes: 3,
+      paths: 12,
+      width: 700,
+      height: 400,
+    }),
+  ).toEqual({ styled: true, nodes: 3, paths: 12, width: 700, height: 400 });
   expect(
     graphRenderReceipt({ nodes: "<script>", paths: 0, width: 1, height: 2 }),
   ).toBeNull();
   expect(
     graphRenderReceipt({ nodes: 1, paths: 2, width: 0, height: 2 }),
+  ).toBeNull();
+});
+
+it("rejects an unstyled default-size SVG even when it contains graph geometry", () => {
+  expect(
+    graphRenderReceipt({ nodes: 3, paths: 24, width: 300, height: 150 }),
+  ).toBeNull();
+  expect(
+    graphRenderReceipt({
+      styled: false,
+      nodes: 3,
+      paths: 24,
+      width: 300,
+      height: 150,
+    }),
   ).toBeNull();
 });

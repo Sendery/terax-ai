@@ -1024,3 +1024,10 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** serializing only the displayed label loses the custom-title marker; an update overwrites the rename and resetting cannot recover the source title.
 - **Prevention:** persist the base title and custom label separately. Hydrate the source title as canonical; migrate legacy flattened labels only when distinguishable, and ignore invalid explicit custom fields.
 - **Verification:** rename, serialize/hydrate, update the document, then reset and repeat. Include a custom label equal to the original title, legacy entries and malformed stored fields.
+
+### Packaged style nonces change dynamic stylesheet authorization
+
+- **Trigger:** Tauri codegen marks static HTML styles and its asset response adds their nonces to `style-src`.
+- **Failure mode:** the nonce disables `unsafe-inline`; an engine's later injected stylesheet is blocked even though scripts run and SVG nodes exist. A raw-config WebKit fixture misses this transformation, and a 300-by-150 default SVG can look like a successful layout receipt.
+- **Prevention:** authorize only known trusted engine styles with the real nonce from the frame's own static style, reprocessing their text after assignment. Do not disable asset CSP modification or add general style observers. Check computed styling and the visible graph/flow SVG before declaring ready.
+- **Verification:** model installed Tauri HTML nonce injection and response-policy processing in system WebKit. Assert responsive SVG geometry, styled controls/fonts, generated color fills and rejection of unauthorized CSS, then inspect graph and flow capture pixels. A missing static nonce marker must fail readiness explicitly.

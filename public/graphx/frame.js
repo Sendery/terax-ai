@@ -10,11 +10,24 @@
   let capture = null;
   const reply = (type, extra = {}) => parent.postMessage({ type, token, ...owner, ...extra }, "*");
   const escape = value => value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const authorizeEngineStyle = style => {
+    const nonce = document.querySelector("style[data-terax-graphx-base]")?.nonce;
+    if (!nonce || !(style instanceof HTMLStyleElement) || style.nonce === nonce) return;
+    style.nonce = nonce;
+    // Tauri nonces static styles; reprocess only this trusted engine stylesheet.
+    style.textContent = style.textContent;
+  };
   const receipt = () => {
-    const svg = host.querySelector(".gx-svg");
+    const svg = Array.from(host.querySelectorAll(".gx-svg")).find(item => getComputedStyle(item).display !== "none");
     const rect = svg?.getBoundingClientRect();
-    return { nodes: host.querySelectorAll(".gx-node").length, paths: host.querySelectorAll("svg path").length,
-      width: Math.round(rect?.width || 0), height: Math.round(rect?.height || 0) };
+    const root = host.matches(".gx") ? host : host.querySelector(".gx"), stage = host.querySelector(".gx-stage"), button = host.querySelector(".gx-btn");
+    const styled = Boolean(svg && root && stage && button &&
+      getComputedStyle(svg).position === "absolute" && getComputedStyle(stage).position === "relative" &&
+      getComputedStyle(root).fontFamily.includes("system-ui") && parseFloat(getComputedStyle(button).borderRadius) >= 4 &&
+      rect.width > 0 && rect.height > 0);
+    if (!styled) throw Error("styles");
+    return { styled, nodes: host.querySelectorAll(".gx-node").length, paths: host.querySelectorAll("svg path").length,
+      width: Math.round(rect.width), height: Math.round(rect.height) };
   };
   const cancelCapture = () => { capture?.cancel(); capture = null; };
   async function snapshot(requestId) {
@@ -86,18 +99,22 @@
       if (spec.tour) spec.tour.steps = spec.tour.steps.map(step => ({ ...step, body_html: escape(step.body || "") }));
       document.documentElement.dataset.theme = data.theme === "dark" ? "dark" : "light";
       GraphX.injectCSS();
+      authorizeEngineStyle(document.querySelector("style[data-gx-css]"));
       graph = GraphX.mount(host, spec, { height: Math.max(180, innerHeight), lang: spec.lang || "en" });
+      for (const style of host.querySelectorAll("style")) authorizeEngineStyle(style);
       status.hidden = true;
       await graph.ready;
       if (generation === own) {
+        const geometry = receipt();
         rendered = true;
-        reply("terax:graphx:rendered", { receipt: receipt() });
+        reply("terax:graphx:rendered", { receipt: geometry });
       }
-    } catch {
+    } catch (error) {
       if (generation !== own) return;
       status.hidden = false;
-      status.textContent = "Graph layout failed. Edit the JSON and apply again.";
-      reply("terax:graphx:error");
+      const reason = error?.message === "styles" ? "styles" : "layout";
+      status.textContent = reason === "styles" ? "Graph styles are unavailable. Reopen this tab." : "Graph layout failed. Edit the JSON and apply again.";
+      reply("terax:graphx:error", { reason });
     }
   });
   new ResizeObserver(() => host.style.setProperty("--gx-h", Math.max(180, innerHeight) + "px")).observe(document.body);

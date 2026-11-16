@@ -74,7 +74,11 @@ function GraphFrameSession({ tab, theme }: { tab: GraphTab; theme: string }) {
       }
       if (event.data.type === "terax:graphx:error") {
         window.clearTimeout(timeout);
-        setState("Layout failed. Edit the JSON and apply again.");
+        setState(
+          event.data.reason === "styles"
+            ? "GraphX styles are unavailable. Reopen this tab."
+            : "Layout failed. Edit the JSON and apply again.",
+        );
       }
     };
     window.addEventListener("message", receive);

@@ -9,6 +9,7 @@ export type GraphFrameOwner = {
   revision: number;
 };
 export type GraphRenderReceipt = {
+  styled: true;
   nodes: number;
   paths: number;
   width: number;
@@ -18,6 +19,7 @@ export type GraphRenderReceipt = {
 export function graphRenderReceipt(value: unknown): GraphRenderReceipt | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
+  if (item.styled !== true) return null;
   for (const key of ["nodes", "paths", "width", "height"] as const)
     if (
       !Number.isSafeInteger(item[key]) ||

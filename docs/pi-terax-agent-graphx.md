@@ -157,6 +157,15 @@ meta policy therefore allow exactly `tauri://localhost/graphx/engine.js` and
 `tauri://localhost/graphx/frame.js`. Keep both policies aligned; a scheme-wide
 allowance or `allow-same-origin` is unnecessary.
 
+Tauri also adds real nonces to static style elements and its response CSP. A nonce
+makes `unsafe-inline` ineffective for later dynamic styles. The trusted frame
+adapter reads the nonce from its marked static base style and applies it only to
+the pinned engine stylesheet and styles synchronously created by the validated
+GraphX mount. It then reprocesses their text, preserving generated node/edge
+colors. There is no general style observer, invented nonce, CSP relaxation or
+change to the upstream engine. In HTTP development, where Tauri adds no nonce,
+the adapter preserves the existing stylesheet behavior.
+
 ## Verification and acceptance
 
 Focused tests cover schema rejection, parent/endpoint validation, snapshot redaction,
@@ -190,12 +199,15 @@ swiftc scripts/check-graphx-webkit.swift -o .terax/pi-development/graphx-webkit-
 ```
 
 Run from the repository root. It reads the real app CSP and bundled frame assets,
-serves them through an owned `WKURLSchemeHandler`, and uses a nonpersistent,
+serves them through an owned `WKURLSchemeHandler`, models Tauri's static-style
+nonce injection and response-policy transformation, and uses a nonpersistent,
 unshown WebKit view without activating any app. It checks two fresh-token frame
 lifetimes and revisions, layout/shapes, changed dimensions, stale source/token
 rejection in the fixture, and blocked parent access, network, inline and unlisted
 scripts. Its diagnostic user script selects the engine's supported reduced-motion
-branch because an unshown WK view does not service animation frames. No production
+branch because an unshown WK view does not service animation frames. The diagnostic
+also finishes only fixture CSS transitions before sampling pixels; otherwise an
+unshown view can retain the initial black color interpolation. No production
 script, frame privileges or Tauri APIs are injected. `--baseline` removes the two
 exact CSP sources from both policies and must fail with script CSP violations.
 
@@ -225,7 +237,9 @@ error, never a successful blank substitute. Open a hidden graph before capturing
 its pane. Existing private-terminal capture refusals still apply.
 
 The parent status announces a render receipt containing the saved revision and
-actual SVG node/path counts and dimensions. Individual node labels need not
+actual SVG node/path counts and dimensions only after computed engine styles
+and visible SVG geometry are valid. The receipt follows the visible graph or
+flow SVG. Default unstyled 300-by-150 SVGs cannot claim successful readiness. Individual node labels need not
 appear as separate accessibility objects: the GraphX SVG has an image role.
 The receipt confirms geometry, while PNG inspection confirms visible content.
 
@@ -234,7 +248,11 @@ with existing project dependencies and Swift SDK. It bundles only the rasterizer
 test fixture, then runs an owned, unshown system WKWebView. The fixture checks
 real GraphX PNGs and the actual compositor for both window and pane captures,
 with synthetic native canvas pixels, parent toolbar and overlapping menu.
-It saves PNG evidence under ignored
+The packaged-policy fixture verifies responsive SVG sizing, system fonts,
+styled controls, generated color fills, graph and initial-flow views, plus
+continued rejection of unauthorized inline styles. Run its compiled binary with
+`--baseline-styles` to remove the adapter's static nonce marker; this must fail
+with an explicit styles error. It saves PNG evidence under ignored
 `.terax/pi-development/graphx-webkit-runtime/`. No Terax process is started or
 controlled. The frame and composition checks passed on M2; visible packaged-app
 capture acceptance remains with the coordinated integration pass.
