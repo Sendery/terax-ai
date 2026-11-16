@@ -111,7 +111,7 @@ do not create an unowned graph subprocess. Graph JSON never executes commands.
 
 The bundled engine is Sendery/graphx 1.7.0, pinned to
 `919e2408f62d04241b12df7920cf23746da6424b`. It includes offline ELK; no CDN or server is
-needed. The upstream bundle, with trailing whitespace normalized, is in `public/graphx/engine.js`, with its SHA-256,
+needed. The upstream bundle, with literal trailing whitespace escaped without changing its values, is in `public/graphx/engine.js`, with its SHA-256,
 copyright/provenance and the actual ELK license in that directory. Upstream has no LICENSE
 file; this integration follows the owner's request and does not invent an upstream license.
 

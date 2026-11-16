@@ -3,9 +3,10 @@
 Source: https://github.com/Sendery/graphx
 Pinned commit: 919e2408f62d04241b12df7920cf23746da6424b
 Upstream package version: 1.7.0. The supplied bundle header still says 1.4.
-engine.js is upstream dist/graphx.bundle.min.js with trailing whitespace removed.
-The two affected lines are inside bundled ELK warning text; only trailing spaces change.
-Bundled SHA-256: 2c309e3d8029a54862208fd21bd6c737b88d2f7dc7dd11d8231fa9a556d32351
+engine.js is upstream dist/graphx.bundle.min.js with three trailing-whitespace
+sequences inside JavaScript template literals encoded as escapes. Their string
+values are unchanged (two ELK parser literals and one warning string).
+Bundled SHA-256: 01843c5890c952c7221fe69e479ed7947826ac006d4ad3db4c013330b63f89d3
 Upstream SHA-256: 211f5848f3c4ae0867d7716b082679d4663fe626eee8dde1ca19b1170cfeddd7
 
 Integration requested by the owner of Sendery/graphx. Upstream contains no LICENSE file
