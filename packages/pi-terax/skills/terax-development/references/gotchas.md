@@ -376,6 +376,13 @@ A row is complete only when implementation and verification evidence both exist.
 - **Prevention:** before trusting an observation, confirm exactly one app process is running. Copy the discovery file before starting a dev instance and restore it after cleanup. When restarting deliberately, kill the previous instance and the dev runner, then wait for a fresh discovery file.
 - **Verification:** count the running app processes and compare the discovery file's pid against them; the restored file's pid matches the still-running release process and a bridge call reaches it.
 
+### Resolving a native archive does not select the frontend terminal engine
+
+- **Trigger:** packaging a native-terminal sandbox through a verified prebuilt wrapper and the ghostty-engine Cargo feature.
+- **Failure mode:** the archive resolves and Rust compiles, but the frontend still selects xterm when its build-time engine choice is unset.
+- **Prevention:** pass VITE_TERAX_TERMINAL_ENGINE=ghostty to the frontend build environment as well as the native feature and prebuilt configuration. A wrapper such as with-ghostty resolves the archive; it does not choose the UI engine. Record explicit source repository, branch and commit provenance with that build.
+- **Verification:** inspect the frontend engine-choice source and packaged choice before assigning native acceptance to the artifact. Build success or archive identity alone does not establish which terminal path was exercised.
+
 ### A dev build shares persisted state with the installed app
 
 - **Trigger:** running `tauri dev` for a feature that persists anything.

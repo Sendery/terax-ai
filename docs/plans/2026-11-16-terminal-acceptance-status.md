@@ -2,7 +2,7 @@
 
 The active goal is a usable Terax with the new terminal and the same or better
 existing capabilities. It is not complete. This checkpoint audits local qa
-788f0fb910d822ec4d087fae652dd86a2949f286 and the actual packaged source
+b65c96012b89f32127641e075d9beaf983645bd9 and the actual packaged source
 2d869a350465443b4bb860f5d3a9ee098dc2ddff. It changes documentation only.
 
 The [parity inventory](2026-11-14-terminal-parity.md) supplies requirement IDs.
@@ -23,7 +23,7 @@ than repeating them without a relevant change or unresolved concern.
 | 1. History and preferences, T08/T09 | Physical Cmd+K preserves the PTY; font size and letter spacing update visible and hidden panes. Ordinary live trim preserves the clipped selection and invalidates the old search result. Block live trim invalidates evicted search and preserves retained-block search. Menlo plus Semi-Bold changes pixels; restoring empty family and Normal recovers the exact original PNG. Focused cursor blink has two states when on and one after restoring off. | Other unavailable block-output/header cases; cursor behavior on blur/focus, zoom, theme and image-background contrast. The blurred-cursor case is explicitly not accepted; a separate GPU/software source correction is not runtime acceptance. These scoped cases do not establish all settings or all font combinations. |
 | 2. Keyboard, composition and paste, T02/T03/T04 | Real peer proves Kitty press/repeat/release, Shift+Enter and focus reports. Real Pi preserves a multiline draft through hide/continue. One physical Spanish-ISO dead-key case, keycodes 39 then 0, delivers exactly UTF-8 c3a1 once with no Enter. OSC52 system-clipboard cases are accepted separately. | CJK composition and candidate-confirming Enter remain untested because a CJK input source was not enabled; broader dead-key/composition cases, actual multiline paste with/without negotiated brackets, and real Claude/Codex navigation, multiline and redraw remain open. |
 | 3. Pointer, links and file drops, T05/T11/T12 | SGR cell/pixel reports, alternate-screen wheel and short Alt-click are accepted. Earlier native-link cases cover plain/OSC8/wrapped URLs and quoted file line/column routing. | Actual OS file drop to both splits with Unicode/space/metacharacter paths; word/line/rectangle selection, off-pane autoscroll and selection-preserving right-click; remaining hover-overlay and physical DPI cases. |
-| 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Async context/selection and owner/privacy adapters are implemented. | Mermaid, TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
+| 4. Selection, AI and app consumers, A04/A10/A14 | Native popup Add to Note is accepted after the semantic-revision correction. Cmd+A/right-click Open Mermaid preserves the exact 54-character normalized selection and renders the known nodes in the preview. Async context/selection and owner/privacy adapters are implemented. | TTS, Ask Terax and block attachment with the captured selection; bounded active/history AI context and managed-agent input; privacy/owner changes during pending work. |
 | 5. Blocks, A02 | Independent drafts, foreground input, scoped Find/next/Escape, Unicode output copy, rerun and controls after reveal were exercised in the block-overlay slice. The general sweep verifies complete multiline copy and once-only rerun. A 412-character command copies completely; live trim rejects the evicted block search while retained-block search still works. | Wrapped header geometry, empty/overwritten output and other actions on unavailable block output. Blocks splitting remains disabled as in baseline. |
 | 6. Agents, restore and handoff, A07/A08/A09 | Owner-bound capture, readiness/submission and task-delivery logic have directed source tests. Real Pi hide/continue is accepted. Official Codex 0.169.0 starts in the native TUI with the correct CWD; exact positive login status in the same PTY is recorded, but onboarding remains visible and its composer is not ready. | Real split activity/attention/exit; correct conversation/CWD restoration once after readiness; multiline scheduled delivery once, with unavailable/unchanged buffers never reported as success. Codex has no model turn or task-delivery acceptance and awaits user action on M2. Neither Pi draft persistence nor Codex startup establishes these cases. |
 | 7. Lifecycle and busy hidden panes, T01/A06/A13 | Ordinary startup/split/focus/surviving-pane close, hide/reveal and renderer replacement have real evidence. Native tests cover final output and sticky failures. | Known finite output while another pane remains usable, hidden output conservation, healthy exited output with copy/search/history, and failure that visibly invalidates the correct owner. No throughput experiment is needed. |
@@ -129,6 +129,28 @@ inferred from these cases.
 
 All 13 original tabs and their exact metadata, plus original shell PIDs
 5549/5550, were preserved. The owned peer, shell and tab were retired.
+
+## Selection to Mermaid accepted
+
+The authoritative ignored M2 receipt is
+.terax/pi-development/m2/logs/selection-consumers-2d869a3/acceptance.json
+in the qa worktree, completed 2026-11-16T07:29:31.954Z. This case exercised
+packaged source 2d869a3 and app PID 5217, not the newer cursor correction.
+
+Cmd+A followed by right-click and Open Mermaid preserved the selected fixture:
+the normalized source matched exactly, with 54 characters. Preview reported
+up to date. Local OCR found both known nodes in the preview region starting at
+45 percent of the image width; source-editor text was excluded from that proof.
+The action accessed no clipboard and produced no unexpected PTY input.
+
+Ask Terax opened its panel, but that configuration had no available composer;
+the panel was closed again. No attachment was attempted and no model turn was
+submitted. Speech had neither an installed engine nor a downloaded model, so
+TTS was not attempted. Those consumer cases remain pending.
+
+All 13 original tabs and their exact metadata were restored. Owned terminal 48,
+diagram 50 and processes 54247/54839 were retired. This accepts selection to
+Mermaid only; it does not close the selection/AI consumer category or the goal.
 
 ## Platform and rollout boundaries
 

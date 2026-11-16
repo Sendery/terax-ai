@@ -427,3 +427,22 @@ The [current acceptance matrix](2026-11-16-terminal-acceptance-status.md)
 separates these accepted cases from the remaining functional, supported-target
 and rollout requirements. This update is documentation only, with diff and
 local-link checks; it ran no UI, bridge, model, build or test suite.
+
+## Selection to Mermaid follow-up
+
+On packaged source 2d869a3, Cmd+A and the native right-click Open Mermaid action
+preserved the exact normalized selection of 54 characters. Preview was up to
+date, and local OCR found both known nodes within the preview region starting
+at 45 percent of the image width, excluding the source editor. No clipboard
+was accessed and no unexpected PTY input occurred.
+
+Evidence is qa's ignored
+.terax/pi-development/m2/logs/selection-consumers-2d869a3/acceptance.json,
+completed 2026-11-16T07:29:31.954Z on app PID 5217. Owned tabs 48/50 and processes
+54247/54839 were retired; the 13 original tabs and exact metadata were restored.
+
+Ask Terax's panel was opened and closed, but its composer was unavailable in
+that configuration. No attachment or model turn was attempted. TTS had no
+installed engine or downloaded model and was not attempted. These cases,
+other selection/AI consumers and the broader terminal goal remain pending.
+This receipt does not accept the newer cursor correction or another artifact.
