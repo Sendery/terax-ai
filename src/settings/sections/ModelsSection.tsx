@@ -46,7 +46,11 @@ import {
   type OAuthAccount,
 } from "@/modules/ai/lib/oauth";
 import { useChatStore } from "@/modules/ai/store/chatStore";
-import { detectCliAgents } from "@/modules/ai/cli/bridge";
+import {
+  cliProviderInstalled,
+  refreshCliAvailability,
+  useCliAvailabilityStore,
+} from "@/modules/ai/cli/availability";
 import { CLI_AGENTS } from "@/modules/ai/cli/registry";
 import type { CliAgentId } from "@/modules/ai/cli/types";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
@@ -150,12 +154,11 @@ export function ModelsSection() {
   const [keys, setKeys] = useState<KeysMap | null>(null);
   const [epKeys, setEpKeys] = useState<CustomEndpointKeys>({});
   const [adding, setAdding] = useState<Set<ProviderId>>(new Set());
-  const [cliPaths, setCliPaths] = useState<Record<string, string | null>>({});
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
   const [oauthAccounts, setOauthAccounts] = useState<OAuthAccount[]>([]);
 
   useEffect(() => {
-    const bins = Object.values(CLI_PROVIDERS).map((id) => CLI_AGENTS[id].bin);
-    void detectCliAgents(bins).then(setCliPaths);
+    void refreshCliAvailability();
   }, []);
 
   const reloadOAuth = useCallback(() => {
@@ -169,10 +172,8 @@ export function ModelsSection() {
     return oauthAccounts.some((a) => a.provider === oauthId && a.connected);
   };
 
-  const cliInstalled = (id: ProviderId): boolean => {
-    const cliId = CLI_PROVIDERS[id];
-    return !!cliId && !!cliPaths[CLI_AGENTS[cliId].bin];
-  };
+  const cliInstalled = (id: ProviderId): boolean =>
+    cliProviderInstalled(id, cliPaths);
 
   const defaultModel = usePreferencesStore((s) => s.defaultModelId);
   const lmstudioBaseURL = usePreferencesStore((s) => s.lmstudioBaseURL);
@@ -762,6 +763,7 @@ function CliAgentsBlock({
   cliPaths: Record<string, string | null>;
 }) {
   const permission = usePreferencesStore((s) => s.cliAgentPermission);
+  const detectionStatus = useCliAvailabilityStore((s) => s.status);
   const current =
     CLI_PERMISSION_OPTIONS.find((o) => o.value === permission) ??
     CLI_PERMISSION_OPTIONS[1];
@@ -770,6 +772,19 @@ function CliAgentsBlock({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <Label>Local CLI agents</Label>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto mr-2 h-7 text-[11px]"
+          disabled={detectionStatus === "loading"}
+          onClick={() => {
+            void refreshCliAvailability({invalidate: true})
+              .then(() => emitKeysChanged())
+              .catch(() => {});
+          }}
+        >
+          {detectionStatus === "loading" ? "Checking..." : "Refresh"}
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -812,6 +827,11 @@ function CliAgentsBlock({
         model menu.
       </p>
 
+      {detectionStatus === "error" && (
+        <p role="status" className="text-xs text-muted-foreground">
+          Could not detect CLI agents. Refresh to retry.
+        </p>
+      )}
       <div className="flex flex-col gap-2">
         {(
           Object.entries(CLI_PROVIDERS) as [
@@ -821,7 +841,7 @@ function CliAgentsBlock({
         ).map(([providerId, cliId]) => {
           const def = CLI_AGENTS[cliId];
           const path = cliPaths[def.bin] ?? null;
-          const installed = !!path;
+          const installed = cliProviderInstalled(providerId, cliPaths);
           return (
             <div
               key={providerId}
@@ -846,7 +866,9 @@ function CliAgentsBlock({
                   variant="outline"
                   className="ml-1 h-4 px-1.5 text-[10px] font-normal text-muted-foreground/70"
                 >
-                  Not installed
+                  {detectionStatus === "loading" || detectionStatus === "idle"
+                    ? "Checking..."
+                    : detectionStatus === "error" ? "Unavailable" : "Not installed"}
                 </Badge>
               )}
               {installed ? (

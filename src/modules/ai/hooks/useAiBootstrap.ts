@@ -1,3 +1,8 @@
+import {
+  hasInstalledCli,
+  refreshCliAvailability,
+  useCliAvailabilityStore,
+} from "@/modules/ai/cli/availability";
 import { useEffect, useState } from "react";
 import { firePendingReviewForSession } from "@/modules/agents/lib/review";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -59,7 +64,9 @@ export function useAiBootstrap(): {
   // composer on its own.
   const [oauthAccounts, setOauthAccounts] = useState<OAuthAccount[]>([]);
   const hasOAuthAccount = oauthAccounts.some((a) => a.connected);
-  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel || hasOAuthAccount;
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
+  const hasComposer =
+    hasAnyKey(apiKeys) || hasLocalModel || hasOAuthAccount || hasInstalledCli(cliPaths);
 
   const prefsHydrated = usePreferencesStore((s) => s.hydrated);
   const [keysLoaded, setKeysLoaded] = useState(false);
@@ -76,6 +83,7 @@ export function useAiBootstrap(): {
         setOauthAccounts(accounts);
       });
       if (!prefsHydrated) return;
+      void refreshCliAvailability();
       void getAllCustomEndpointKeys(
         usePreferencesStore.getState().customEndpoints,
       ).then((epKeys) => {
@@ -84,7 +92,10 @@ export function useAiBootstrap(): {
       });
     };
     reload();
-    const unlistenP = onKeysChanged(reload);
+    const unlistenP = onKeysChanged(() => {
+      if (prefsHydrated) void refreshCliAvailability({invalidate: true});
+      reload();
+    });
     return () => {
       alive = false;
       void unlistenP.then((fn) => fn());
@@ -101,6 +112,7 @@ export function useAiBootstrap(): {
   useEffect(() => {
     if (!prefsHydrated) return;
     setSelectedModelId(prefDefaultModel);
+    void refreshCliAvailability();
   }, [prefsHydrated, prefDefaultModel, setSelectedModelId]);
 
   useEffect(() => {

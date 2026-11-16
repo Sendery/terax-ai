@@ -1,3 +1,4 @@
+import { CLI_BINARIES } from "./binaries";
 import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { ParserFactory } from "./parsers/emitter";
 import { createClaudeParser } from "./parsers/claude";
@@ -65,7 +66,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
   claude: {
     id: "claude",
     label: "Claude Code",
-    bin: "claude",
+    bin: CLI_BINARIES.claude,
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
     planRun: transcriptRun((prompt, { model, permission }) => {
       const a = [
@@ -88,7 +89,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
   codex: {
     id: "codex",
     label: "Codex",
-    bin: "codex",
+    bin: CLI_BINARIES.codex,
     docsUrl: "https://github.com/openai/codex",
     planRun: transcriptRun((prompt, { model, permission }) => {
       const a = ["codex", "exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[permission]];
@@ -101,7 +102,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
   cursor: {
     id: "cursor",
     label: "Cursor Agent",
-    bin: "cursor-agent",
+    bin: CLI_BINARIES.cursor,
     docsUrl: "https://docs.cursor.com/cli",
     planRun: transcriptRun((prompt, { model, permission }) => {
       const a = [
@@ -123,7 +124,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
   opencode: {
     id: "opencode",
     label: "OpenCode",
-    bin: "opencode",
+    bin: CLI_BINARIES.opencode,
     docsUrl: "https://opencode.ai/docs",
     planRun: transcriptRun((prompt, { model }) => {
       const a = ["opencode", "run", "--format", "json"];
@@ -136,7 +137,7 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
   pi: {
     id: "pi",
     label: "Pi",
-    bin: "pi",
+    bin: CLI_BINARIES.pi,
     docsUrl: "https://pi.dev",
     planRun: planPiRun,
     createParser: createPiParser,

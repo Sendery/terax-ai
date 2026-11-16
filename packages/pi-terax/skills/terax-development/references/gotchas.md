@@ -1105,3 +1105,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** preventing default and calling navigator.clipboard.readText enters WebKit's modal paste-access menu instead of delivering text to the terminal; app/bridge work can appear stalled while the native menu tracks.
 - **Prevention:** preserve the normal key gesture and consume plaintext once from the paste event. Keep non-Mac helper shortcuts explicitly cancelled to avoid dual delivery. Recheck focused/visible/live ownership and session identity after asynchronous helper reads.
 - **Verification:** event tests assert uncancelled Cmd+V, zero programmatic reads, one paste delivery, unchanged mixed line endings at the input boundary and stale-owner rejection. Real WebKit acceptance must separately demonstrate received bytes and no modal menu.
+
+
+### Keyless providers need availability beyond API-key gates
+
+- **Trigger:** a local CLI model is selectable in Settings while the shell decides whether its AI composer exists.
+- **Failure mode:** a gate that only counts SDK keys, local endpoints and OAuth hides a usable CLI composer; treating every keyless CLI as installed makes picker state disagree with Settings. An explicit refresh that merely joins an older pending scan can also lose a cross-window invalidation.
+- **Prevention:** share a lightweight ephemeral binary-availability source across consumers, deduplicate ordinary requests and queue a fresh scan for explicit invalidation. Preserve user defaults, distinguish installation from authentication, and avoid periodic polling or importing runner parsers to check availability.
+- **Verification:** credential-free gate, absent binaries, default hydration/preservation, concurrent/StrictMode requests, deferred invalidation, failure/retry and unmounted observers. The native cached PATH requires restart after PATH changes; no model or credential probe is needed for these tests.

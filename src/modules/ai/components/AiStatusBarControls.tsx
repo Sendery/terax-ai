@@ -1,3 +1,8 @@
+import {
+  providerAvailableInPicker,
+  refreshCliAvailability,
+  useCliAvailabilityStore,
+} from "@/modules/ai/cli/availability";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,14 +45,14 @@ import {
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   compatModelIdForEndpoint,
   getCompatModelInfo,
   getModel,
   isCompatModelId,
   MODELS,
-  providerNeedsKey,
+  isCliProvider,
   PROVIDERS,
   STT_PROVIDER_LABELS,
   type ModelCapabilities,
@@ -197,6 +202,7 @@ type Tab = "all" | "favorites" | "recent";
 
 function ModelDropdown() {
   const selected = useChatStore((s) => s.selectedModelId);
+  const cliPaths = useCliAvailabilityStore((s) => s.paths);
   const apiKeys = useChatStore((s) => s.apiKeys);
   const setSelected = useChatStore((s) => s.setSelectedModelId);
   const favoriteIds = usePreferencesStore((s) => s.favoriteModelIds);
@@ -212,14 +218,12 @@ function ModelDropdown() {
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("all");
   const inputRef = useRef<HTMLInputElement>(null);
-  const currentProviderHasKey = isCompatModelId(selected)
-    ? true
-    : providerNeedsKey(current.provider)
-      ? !!apiKeys[current.provider]
-      : true;
-
-  const hasKeyFor = (id: ProviderId) =>
-    providerNeedsKey(id) ? !!apiKeys[id] : true;
+  const hasKeyFor = useCallback(
+    (id: ProviderId) => providerAvailableInPicker(id, apiKeys, cliPaths),
+    [apiKeys, cliPaths],
+  );
+  const currentProviderHasKey =
+    isCompatModelId(selected) || hasKeyFor(current.provider);
 
   const epModelInfos = useMemo(() => {
     return customEndpoints.map((ep) =>
@@ -235,8 +239,7 @@ function ModelDropdown() {
       (hasKeyFor(p.id) ? configured : unconfigured).push(p);
     }
     return { configured, unconfigured };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKeys]);
+  }, [hasKeyFor]);
 
   const allModels = useMemo(
     () => [...MODELS, ...epModelInfos],
@@ -276,7 +279,9 @@ function ModelDropdown() {
   }, [activeProvider, allModels, favoriteIds, recentIds, search, tab]);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => {
+      if (open) void refreshCliAvailability();
+    }}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -291,7 +296,9 @@ function ModelDropdown() {
           title={
             currentProviderHasKey
               ? `Model: ${triggerLabel}`
-              : `${current.label} — no key configured`
+              : isCliProvider(current.provider)
+                ? `${current.label}: CLI unavailable`
+                : `${current.label}: no key configured`
           }
         >
           <span className="min-w-0 truncate">{triggerLabel}</span>
@@ -405,7 +412,7 @@ function ModelDropdown() {
             !hasKeyFor(activeProvider as ProviderId) ? (
               <ProviderConfigureCTA providerId={activeProvider as ProviderId} />
             ) : null}
-            {activeProvider === "cli-pi" ? (
+            {activeProvider === "cli-pi" && hasKeyFor("cli-pi") ? (
               <PiModelSection
                 selected={selected === PI_MODEL_ID}
                 onPick={() => setSelected(PI_MODEL_ID)}
