@@ -1,13 +1,14 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect } from "react";
+import { IS_MAC } from "@/lib/platform";
 import { useTerminalDropStore } from "@/modules/terminal/lib/dropStore";
 import { formatDroppedPaths } from "@/modules/terminal/lib/quoteShellPath";
 import { pasteIntoLeaf } from "@/modules/terminal/lib/rendererPool";
 
-// Tauri positions are physical pixels; DOM hit testing uses CSS pixels.
+// Pinned Wry sends AppKit points on macOS despite Tauri's PhysicalPosition label.
 function leafIdAt(x: number, y: number): number | null {
-  const dpr = window.devicePixelRatio || 1;
-  const el = document.elementFromPoint(x / dpr, y / dpr);
+  const scale = IS_MAC ? 1 : window.devicePixelRatio || 1;
+  const el = document.elementFromPoint(x / scale, y / scale);
   const leafEl = el?.closest<HTMLElement>("[data-pane-leaf]");
   if (!leafEl) return null;
   const id = Number(leafEl.dataset.paneLeaf);

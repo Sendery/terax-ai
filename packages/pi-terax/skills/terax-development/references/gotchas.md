@@ -1081,3 +1081,11 @@ A catalog update is complete when each candidate is promoted, merged, deferred w
 - **Failure mode:** a sandbox alone still permits some frame-local navigation; asset URLs can bypass a narrow file-reader boundary, and deeply nested source can exhaust recursive sanitization.
 - **Prevention:** parse inert template contents, rebuild a namespace-aware allowlist, remove navigation/resource attributes and active elements, bound structure depth/node count and catch preview failures locally. Use an empty sandbox and independent restrictive CSP; never reuse trusted engine nonces or bridge protocols. Relative resources stay disabled unless a separately authorized reader is designed.
 - **Verification:** real HTML5 parser payloads cover scripts, events, meta refresh, SVG/MathML, URL schemes and reparsing of escaped values; depth/width limits reject safely. Source tests do not establish actual WebKit enforcement.
+
+
+### Native drop position units come from the pinned platform backend
+
+- **Trigger:** converting a Tauri OS drop position before DOM hit testing on macOS Retina.
+- **Failure mode:** Wry 0.55.1 emits AppKit points; tauri-runtime-wry wraps them as PhysicalPosition without scaling. Dividing those values by DPR targets the wrong pane or turns an outside drop into an inside drop. The shared terminal hook affects both terminal engines.
+- **Prevention:** check the pinned backend implementation, not only the API type. Preserve macOS points for DOM hit testing, retain physical-pixel conversion where applicable, and never infer units from whether a point fits the viewport. Revisit this boundary when upgrading Wry. A source drag reporting Copy also does not establish nonempty paths: this Wry version reads NSFilenamesPboardType.
+- **Verification:** directed hook tests cover both macOS panes and outside-drop exclusion at DPR 2, alongside existing physical-coordinate and listener-lifecycle cases. Real acceptance still requires observed destination bytes from the exact packaged candidate.

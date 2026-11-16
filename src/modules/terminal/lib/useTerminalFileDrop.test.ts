@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DragDropEvent } from "@tauri-apps/api/webview";
 
 const native = vi.hoisted(() => ({
+  isMac: false,
   effect: null as null | (() => (() => void) | undefined),
   listener: null as null | ((event: { payload: DragDropEvent }) => void),
   registration: null as Promise<() => void> | null,
@@ -30,7 +31,12 @@ vi.mock("@/modules/terminal/lib/dropStore", () => ({
 vi.mock("@/modules/terminal/lib/rendererPool", () => ({
   pasteIntoLeaf: native.pasteIntoLeaf,
 }));
-vi.mock("@/lib/platform", () => ({ IS_WINDOWS: false }));
+vi.mock("@/lib/platform", () => ({
+  IS_WINDOWS: false,
+  get IS_MAC() {
+    return native.isMac;
+  },
+}));
 
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { useTerminalFileDrop } from "@/modules/terminal/lib/useTerminalFileDrop";
@@ -60,6 +66,7 @@ function positioned(
   native.listener?.({ payload });
 }
 beforeEach(() => {
+  native.isMac = false;
   native.effect = null;
   native.listener = null;
   native.registration = null;
@@ -74,7 +81,38 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("terminal OS file drops", () => {
-  it("targets the correct Retina split even when physical coordinates fit the CSS viewport", async () => {
+  it.each([1, 2])(
+    "preserves AppKit points for both macOS panes at DPR %s",
+    async (dpr) => {
+      native.isMac = true;
+      viewport.devicePixelRatio = dpr;
+      const cleanup = await TestHarness();
+      positioned("enter", 300, 100);
+      expect(native.setTarget).toHaveBeenLastCalledWith(17);
+      positioned("drop", 300, 100, ["/tmp/left.png"]);
+      positioned("over", 600, 200);
+      expect(native.setTarget).toHaveBeenLastCalledWith(29);
+      positioned("drop", 600, 200, ["/tmp/right.png"]);
+      expect(native.pasteIntoLeaf.mock.calls).toEqual([
+        [17, "/tmp/left.png "],
+        [29, "/tmp/right.png "],
+      ]);
+      expect(elementFromPoint).toHaveBeenLastCalledWith(600, 200);
+      cleanup();
+    },
+  );
+  it("does not turn an outside macOS drop into an inside drop on Retina", async () => {
+    native.isMac = true;
+    const cleanup = await TestHarness();
+    positioned("over", 900, 200);
+    expect(native.setTarget).toHaveBeenLastCalledWith(null);
+    positioned("drop", 900, 200, ["/tmp/outside.png"]);
+    positioned("drop", 300, 700, ["/tmp/below.png"]);
+    expect(native.pasteIntoLeaf).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("targets the correct split when physical coordinates fit the CSS viewport", async () => {
     const cleanup = await TestHarness();
     positioned("enter", 600, 200);
     positioned("over", 600, 200);
