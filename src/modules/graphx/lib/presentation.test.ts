@@ -35,3 +35,15 @@ it("keeps the real terminal alongside its docked graph with matching reserved wi
     visibleGraph([terminal, { ...graph, spaceId: "elsewhere" }], terminal),
   ).toBeUndefined();
 });
+
+it("hides companions and reserves no width for private terminals while keeping the graph tab available", () => {
+  const privateTerminal: TerminalTab = { ...terminal, private: true };
+  for (const placement of ["left", "right", "floating"] as const) {
+    const companion: GraphTab = { ...graph, placement };
+    const tabs = [privateTerminal, companion];
+    expect(visibleGraph(tabs, privateTerminal)).toBeUndefined();
+    expect(graphDockMargins(tabs, privateTerminal)).toEqual({});
+    expect(visibleGraph(tabs, companion)).toBe(companion);
+    expect(graphDockMargins(tabs, companion)).toEqual({});
+  }
+});

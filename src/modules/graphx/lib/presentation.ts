@@ -4,7 +4,7 @@ export function visibleGraph(
   activeTab: Tab | undefined,
 ): GraphTab | undefined {
   if (activeTab?.kind === "graphx") return activeTab;
-  if (activeTab?.kind !== "terminal") return;
+  if (activeTab?.kind !== "terminal" || activeTab.private) return;
   return tabs.find(
     (t): t is GraphTab =>
       t.kind === "graphx" &&
