@@ -51,3 +51,10 @@ Packaged-app acceptance remains separate: with an already authenticated CLI,
 select its model, open the composer and attach a public terminal selection with
 Ask Terax. Verify the chosen default and confirm missing CLI entries lead to
 Settings. This implementation pass does not execute that UI or a model request.
+
+
+Packaged M2 acceptance on ace5857 confirms the real composer opens from a
+known native terminal selection, preserves its two-line attachment and allows
+choosing installed Codex without an SDK key. The default preference was
+unchanged. The test sent no model request; installed still does not assert
+authentication. See docs/plans/2026-11-16-terminal-acceptance-status.md.

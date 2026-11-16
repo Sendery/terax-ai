@@ -615,3 +615,41 @@ unique test Sandbox profile and GUI processes were retired. Prior builds
 were not deleted. The copied non-secret report and manifest are in
 .terax/pi-development/m2/logs/m4-consumer-6f4fd47/. The iterated test binary
 contains identified temporary markers and is not a published release.
+
+
+## CLI-only composer and Ask Terax accepted: ace5857
+
+Atomic implementation ace5857 adds a deduplicated, ephemeral installed-CLI
+availability cache and shares it between bootstrap, model picker and Settings.
+It preserves the configured default, performs no authentication probe or model
+call, and adds no polling, CLI permission change, command or transcript format.
+The focused five-suite result is 52 passing tests, with types and touched-file
+lint passing; reported lint warnings are inherited.
+
+The newly compiled and frozen native sandbox restored the original 13 tabs,
+three clean editors and the GraphX document identity/source/revision 5. In an
+owned public terminal, a raw peer printed exactly two known lines. Native
+Select All followed by Ask Terax opened the actual composer with one terminal
+selection chip showing two lines. Choosing the installed Codex CLI changed the
+trigger to Model: Codex while preserving that chip. No SDK key was supplied,
+the original unconfigured SDK default was visible, defaultModelId remained
+unchanged, and no prompt/model request was submitted.
+
+The public UI proves the chip's name and line count, not its pending bytes.
+The peer completed cleanly with zero unexpected input. The own attachment was
+removed, the composer closed, and the own tab/shell retired. Original exact
+tab metadata and focused side were restored. Explicit model selection may
+appear in recent-model history, as in the existing picker behavior.
+
+An initial helper preparation failure prevented creation of the owned tab.
+Its subsequent unguarded selection shortcut was not accepted as a fixture
+test; the resulting attachment was removed without model submission, raw text
+logging or clipboard access. The helper now requires the owned peer receipt
+before any shortcut. The transient original selection was cleared and exact
+tab metadata restored. Later menu automation also used inflated accessibility
+bounds; a guarded visible row inset established the actual Codex choice.
+Neither helper issue is reported as a product failure.
+
+Receipts: .terax/pi-development/m2/logs/ask-keyless-ace5857/acceptance.json,
+preparation-failure.json and cleanup.json. This closes the listed Ask-to-
+composer path, not live SDK context delivery or a CLI model turn.
