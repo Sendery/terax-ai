@@ -92,6 +92,60 @@ The existing bellRowView prefers body over combined text, so the custom title
 is not independently visible there. Exact OS banner delivery and title display
 are not claimed by this bell check. No agent session was invented.
 
+## Graphics, renderer migration and live geometry
+
+The ordinary left pane rendered a direct red Kitty image and a virtual green
+one-pixel source spread across four columns and two placeholder rows. Real
+window PNGs were inspected before, during and after the WebGL preference
+changed from on to off to on. All sixteen calibrated red/green center samples
+in each image matched exact RGBA values. Both virtual rows remain visible in
+Canvas2D, including the fractional source slices. The original WebGL preference
+was restored. No shell, tab, editor or app process was replaced.
+
+The actual General settings controls changed Font size from 14 to 16 pixels
+and Letter spacing from zero to one pixel. Visible split shells changed from
+41 rows by 58 columns to 35 by 52, then 35 by 47. The hidden ordinary shell
+also received the changes, from 41 by 117 to 35 by 105, then 35 by 95.
+Restoring both original values restored 41 by 58 and 41 by 117. TTY geometry
+was read without consuming or injecting PTY bytes. Captures confirm readable
+text and retained direct/virtual graphics after the changes. Other preferences
+and destructive history shrink scenarios are not inferred from these checks.
+
+## Search and privacy through ordinary controls
+
+Actual Cmd+F, text input and Enter found TERAX_KITTY_READY in the owning left
+native pane. The captured window shows the expected highlighted marker.
+Shift+Enter requested the previous occurrence; Escape cleared search and
+restored Terminal input focus. The clipboard was not changed.
+
+Actual Cmd+R created one new private terminal. A manually typed marker command
+executed normally. The snapshot exposed only its id, private-terminal kind
+and space id, with no title, cwd, pane count or content. Whole-window, active
+pane and explicit private-pane captures each refused with the expected privacy
+reason. Whole-window capture also refused after the private tab was hidden.
+
+While the private tab was active, an explicit inactive public pane35 capture
+succeeded without changing the active tab. The PNG was inspected and contains
+only the requested public split pane. Only the newly created private tab was
+closed. All twelve original tabs, three editors, three shell identities and
+active35 were restored and rechecked.
+
+## Concrete defects after the general sweep
+
+A source review identified two legacy-only focus assumptions. The global
+shortcut guards in src/app/App.tsx recognize only .xterm for ai.askSelection
+and sidebar.toggle. Actual Cmd+B from focused native input reproduced the
+defect: the explorer changed from hidden to visible. The original hidden state
+was restored immediately. The intended plain-Mod+B terminal exception and
+Shift override are documented in shortcuts.ts.
+
+The selection-action popup hook also only recognizes .xterm and .cm-editor,
+and its zero-delay read does not await native selection completion. The
+existing native context menu remains a separate working path. These concrete
+defects are being corrected in two exclusive atomic worktrees, with directed
+checks. No corrected runtime acceptance is claimed for the still-frozen
+03a44af artifact.
+
 ## Evidence and remaining sweep
 
 Ignored M2 evidence lives under
@@ -101,12 +155,12 @@ workspace/readiness checks, marker proofs, two TUI event records, calibrated
 geometry and capture outcomes. Generated PNGs remain in the sandbox capture
 cache; selected public images were inspected.
 
-Remaining acceptance includes direct/virtual Kitty pixels in current GPU and
-software renderers; live settings/history shrink and selection/search/block
-invalidation; broader blocks/app/AI/agent/restore/task/Pi consumers; private and
-failure scenarios; physical mixed-DPI and applicable supported-platform/default
-and real-workload requirements. Historical completed slices are retained as
-evidence, not substituted for the scope of a new check.
+Remaining acceptance includes the two atomic corrections; other live
+preferences/history shrink and selection/search/block invalidation; broader
+blocks/app/AI/agent/restore/task/Pi consumers; additional private/stale-owner
+and failure scenarios; physical mixed-DPI and applicable supported-platform/
+default and real-workload requirements. Historical completed slices are
+retained as evidence, not substituted for the scope of a new check.
 
 Concrete product failures found after this general sweep use atomic worktrees
 and directed checks. Already-passed whole floors are not repeated without a
