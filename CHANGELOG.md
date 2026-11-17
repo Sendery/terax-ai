@@ -1,5 +1,13 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.18 (2026-11-17)
+
+- Corrige la colision de numeracion con una compilacion local dev.17 anterior.
+- Sustituye la release dev.17 publicada en GitHub el mismo dia, conservando el contenido funcional QA.
+- Alinea la version interna del DMG, Tauri, Rust, paquete y extension Pi en 0.9.0-dev.18.
+- Incluye el [changelog detallado](docs/releases/v0.9.0-dev.18.md) de terminal Ghostty, Blocks, imagenes, agentes, GraphX y vistas Raw/Rendered/Side by side, con sus comprobaciones y limitaciones.
+
+
 ## Pi-Terax v0.9.0-dev.17
 
 Publicado el 17 de noviembre de 2026. Esta versión continúa la serie de desarrollo después de v0.9.0-dev.16 y consolida el trabajo de la rama qa, incluido el candidato funcional ace5857. El número 0.9.0-dev.17 también se incorpora al paquete, a la configuración de Tauri, al crate Rust y a la extensión Pi.
