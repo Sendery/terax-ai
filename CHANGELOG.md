@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.20 (2026-11-17)
+
+- El Pi-Terax Agente controla toda la aplicacion: terminales no privados (listar, leer, abrir, dividir, cerrar, escribir), spaces y watches que avisan o despiertan al agente cuando cambia la salida de un comando.
+- Regla de paridad: registro, MCP, extension Pi-Terax e instrucciones del agente cambian juntos, con tests que lo exigen.
+- Modelo por defecto por agente, `!` y `!!` para ejecutar comandos desde la barra de Terax AI, y snippets `/new` y `/compact`.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.20.md).
+
 ## Pi-Terax v0.9.0-dev.19 (2026-11-17)
 
 - Corrige el empaquetado: Pi-Terax.app, titulos Pi-Terax e identidad habitual app.crynta.terax.
