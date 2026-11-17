@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.19 (2026-11-17)
+
+- Corrige el empaquetado: Pi-Terax.app, titulos Pi-Terax e identidad habitual app.crynta.terax.
+- Utiliza el perfil de desarrollo existente y la identidad local de firma disponible, con Ghostty precompilado.
+- Mantiene el contenido funcional de QA; no instala ni abre la app sobre datos existentes durante la publicacion.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.19.md).
+
 ## Pi-Terax v0.9.0-dev.18 (2026-11-17)
 
 - Corrige la colision de numeracion con una compilacion local dev.17 anterior.
