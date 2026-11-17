@@ -19,13 +19,14 @@ The extension detects whether Pi runs inside a Terax terminal via the `TERAX_TER
 
 ## MCP counterpart
 
-Terax serves the same capabilities to MCP clients (Claude Code, Codex, Cursor, OpenCode) with `terax --mcp`, grouped into seven tools. A test keeps both surfaces aligned: every Pi-Terax tool must be mapped to an MCP action or marked Pi-only in `src/modules/commands/lib/mcpSurface.ts`, and every registry command reachable through `terax_call` is also reachable over MCP. See `docs/pi-terax.md#mcp-server`.
+Terax serves the same capabilities to MCP clients (Claude Code, Codex, Cursor, OpenCode) with `terax --mcp`, grouped into nine tools. A test keeps both surfaces aligned: every Pi-Terax tool must be mapped to an MCP action or marked Pi-only in `src/modules/commands/lib/mcpSurface.ts`, and every registry command reachable through `terax_call` is also reachable over MCP. See `docs/pi-terax.md#mcp-server`.
 
 ## Tools
 
 - `terax_status`: reports whether this session is inside a Terax terminal, which capabilities are available, and how to enable them when not.
 - `terax_get_state`: returns a structural, redacted snapshot of tabs and sidebar state.
-- `terax_call`: invokes an allowlisted Terax command with a validated payload.
+- `terax_call`: invokes an allowlisted Terax command with a validated payload: tabs, spaces, panels, notes, scheduled tasks, diagrams, speech, and listing or reading terminal panes that are not private.
+- `terax_run`: invokes the commands that execute shell input (`terminal.send`, `terminal.open` and `terminal.split` with a command, and the `watch.*` commands that start polling). It is a separate tool so a host can withhold shell access by leaving it out.
 - `terax_speak`: reads a short text aloud through Terax's local speech engine (`tts.speak`).
 - `terax_wait`: waits briefly before the next state check.
 - `terax_development_guide`: returns exact contribution points, invariants, tests, and verification commands for features, windows, settings, shortcuts, and commands.

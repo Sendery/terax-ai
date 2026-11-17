@@ -6,7 +6,10 @@ import {
 import { useEffect, useState } from "react";
 import { firePendingReviewForSession } from "@/modules/agents/lib/review";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { onKeysChanged } from "@/modules/settings/store";
+import { onKeysChanged, setPiModel } from "@/modules/settings/store";
+import { isCompatModelId, isKnownModelId } from "../config";
+import { isPiModelPattern } from "../cli/pi";
+import { resolveAgentModel } from "../lib/agents";
 import {
   getAllCustomEndpointKeys,
   getAllKeys,
@@ -16,6 +19,8 @@ import { listOAuthAccounts, type OAuthAccount } from "../lib/oauth";
 import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
+
+const PI_CHAT_MODEL_ID = "cli-pi-agent";
 
 /**
  * Startup wiring for the AI subsystem: loads provider keys (and keeps them in
@@ -114,6 +119,38 @@ export function useAiBootstrap(): {
     setSelectedModelId(prefDefaultModel);
     void refreshCliAvailability();
   }, [prefsHydrated, prefDefaultModel, setSelectedModelId]);
+
+  // An agent's default model wins over the global one whenever that agent
+  // becomes active (at startup too). It only sets the starting point: the
+  // picker still changes the model for as long as the agent stays selected.
+  const activeAgentId = useAgentsStore((s) => s.activeId);
+  const agentDefaults = useAgentsStore((s) => s.modelDefaults);
+  const agentDefault = resolveAgentModel(
+    agentDefaults,
+    activeAgentId,
+    (id) => isKnownModelId(id) || isCompatModelId(id),
+  );
+  const agentModelId = agentDefault?.modelId;
+  const agentPiModel = agentDefault?.piModel;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: prefDefaultModel re-applies the agent's model after the global default resets the selection.
+  useEffect(() => {
+    if (!prefsHydrated || !agentModelId) return;
+    setSelectedModelId(agentModelId);
+    if (
+      agentModelId === PI_CHAT_MODEL_ID &&
+      agentPiModel !== undefined &&
+      (agentPiModel === "" || isPiModelPattern(agentPiModel))
+    ) {
+      void setPiModel(agentPiModel);
+    }
+  }, [
+    prefsHydrated,
+    prefDefaultModel,
+    activeAgentId,
+    agentModelId,
+    agentPiModel,
+    setSelectedModelId,
+  ]);
 
   useEffect(() => {
     void hydrateSessions();

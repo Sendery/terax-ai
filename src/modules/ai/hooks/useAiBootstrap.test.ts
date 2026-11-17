@@ -26,6 +26,11 @@ const h = vi.hoisted(() => ({
   hydrate: vi.fn(),
   setKeys: vi.fn(),
   setCustom: vi.fn(),
+  setPiModel: vi.fn(),
+  agents: {
+    activeId: "builtin:coder",
+    modelDefaults: {} as Record<string, { modelId: string; piModel?: string }>,
+  },
 }));
 vi.mock("react", () => ({
   useState(initial: unknown) {
@@ -67,6 +72,7 @@ vi.mock("@/modules/settings/store", () => ({
       h.keysListener = null;
     });
   },
+  setPiModel: h.setPiModel,
 }));
 vi.mock("@/modules/ai/lib/keyring", () => ({
   getAllKeys: () => Promise.resolve(h.keys),
@@ -89,7 +95,10 @@ vi.mock("@/modules/ai/store/chatStore", () => ({
     }),
 }));
 vi.mock("@/modules/ai/store/agentsStore", () => ({
-  useAgentsStore: { getState: () => ({ hydrate: h.hydrate }) },
+  useAgentsStore: Object.assign(
+    (select: (s: unknown) => unknown) => select(h.agents),
+    { getState: () => ({ hydrate: h.hydrate }) },
+  ),
 }));
 vi.mock("@/modules/ai/store/snippetsStore", () => ({
   useSnippetsStore: { getState: () => ({ hydrate: h.hydrate }) },
@@ -121,6 +130,32 @@ beforeEach(() => {
   h.prefs.ollamaModelId = "";
   h.refresh.mockReset();
   h.select.mockReset();
+  h.setPiModel.mockReset();
+  h.agents.activeId = "builtin:coder";
+  h.agents.modelDefaults = {};
+});
+it("starts an agent on its default model and re-applies it only when the agent changes", () => {
+  h.agents.modelDefaults = {
+    "builtin:pi-terax-manager": { modelId: "cli-pi-agent", piModel: "anthropic/claude-opus-5" },
+  };
+  TestHarness();
+  expect(h.select).toHaveBeenLastCalledWith("cli-codex-agent");
+  h.agents.activeId = "builtin:pi-terax-manager";
+  TestHarness();
+  expect(h.select).toHaveBeenLastCalledWith("cli-pi-agent");
+  expect(h.setPiModel).toHaveBeenCalledExactlyOnceWith("anthropic/claude-opus-5");
+  const calls = h.select.mock.calls.length;
+  // The user picking another model afterwards re-renders, but must not be undone.
+  TestHarness();
+  expect(h.select).toHaveBeenCalledTimes(calls);
+  h.agents.activeId = "builtin:coder";
+  TestHarness();
+  expect(h.select).toHaveBeenCalledTimes(calls);
+});
+it("ignores an agent default that names a model that no longer exists", () => {
+  h.agents.modelDefaults = { "builtin:coder": { modelId: "retired-model" } };
+  TestHarness();
+  expect(h.select).toHaveBeenCalledExactlyOnceWith("cli-codex-agent");
 });
 it("opens the composer and Ask Terax gate for an installed CLI without SDK credentials", () => {
   expect(TestHarness().hasComposer).toBe(false);

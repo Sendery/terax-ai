@@ -31,11 +31,16 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowRight01Icon,
   CodeIcon,
+  CommandLineIcon,
+  Radar01Icon,
+  SquareLock02Icon,
   File01Icon,
   HashtagIcon,
   TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { SLASH_COMMANDS, TERAX_CMD_RE } from "../lib/slashCommands";
+import { parseUserShellBlock, type UserShellBlock } from "../lib/userShell";
+import { parseWatchMessage } from "@/modules/watchers/lib/watch";
 import { Spinner } from "@/components/ui/spinner";
 import { useChatStore } from "../store/chatStore";
 import { sendMessage } from "../store/chatRuntime";
@@ -48,6 +53,76 @@ import type {
 } from "ai";
 import { memo, useCallback, useMemo } from "react";
 import { AiToolApproval } from "./AiToolApproval";
+
+const SHELL_STATE_LABEL: Record<UserShellBlock["state"], string> = {
+  running: "running",
+  done: "",
+  timeout: "timed out",
+  failed: "failed",
+};
+
+/** A command the user ran with `!` or `!!`, with who can read its output. */
+function UserShellCard({ block }: { block: UserShellBlock }) {
+  const isPrivate = block.visibility === "private";
+  const failed =
+    block.state === "timeout" ||
+    block.state === "failed" ||
+    (block.exitCode !== null && block.exitCode !== 0);
+  const status =
+    SHELL_STATE_LABEL[block.state] ||
+    (block.exitCode === null ? "" : `exit ${block.exitCode}`);
+  return (
+    <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-md border border-border/50 bg-muted/30 text-left">
+      <div className="flex items-center gap-2 border-b border-border/40 px-2 py-1">
+        <HugeiconsIcon
+          icon={isPrivate ? SquareLock02Icon : CommandLineIcon}
+          size={12}
+          strokeWidth={1.75}
+          className="shrink-0 text-muted-foreground"
+        />
+        <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+          {block.command}
+        </code>
+        {status ? (
+          <span
+            className={cn(
+              "shrink-0 text-[10px]",
+              failed
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground",
+            )}
+          >
+            {status}
+          </span>
+        ) : null}
+        <span
+          className="shrink-0 rounded bg-muted/60 px-1 py-0.5 text-[9px] tracking-wide text-muted-foreground uppercase"
+          title={
+            isPrivate
+              ? "Ran with !!: the agent never receives this command or its output"
+              : "Ran with !: the agent reads this output on its next turn"
+          }
+        >
+          {isPrivate ? "Hidden from agent" : "Shared with agent"}
+        </span>
+      </div>
+      {block.output ? (
+        <pre className="max-h-64 overflow-auto px-2 py-1.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground/90">
+          {block.output}
+        </pre>
+      ) : block.state === "running" ? (
+        <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground">
+          <Spinner className="size-3" />
+          Running
+        </div>
+      ) : (
+        <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+          No output
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CommandSnippet({ name }: { name: string }) {
   const meta = SLASH_COMMANDS[name];
@@ -347,6 +422,41 @@ const RenderedMessage = memo(function RenderedMessage({
       .map((p) => p.text)
       .join("\n");
 
+    const shellBlock = parseUserShellBlock(rawText);
+    if (shellBlock) {
+      return (
+        <Message from="user">
+          <MessageContent>
+            <UserShellCard block={shellBlock} />
+          </MessageContent>
+        </Message>
+      );
+    }
+    const watch = parseWatchMessage(rawText);
+    if (watch) {
+      return (
+        <Message from="user">
+          <MessageContent>
+            <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
+              <HugeiconsIcon
+                icon={Radar01Icon}
+                size={12}
+                strokeWidth={1.75}
+                className="shrink-0 text-foreground"
+              />
+              <span className="truncate text-[11px] text-muted-foreground">
+                Watch changed:{" "}
+                <span className="font-medium text-foreground">{watch.name}</span>
+              </span>
+            </div>
+            {watch.rest ? (
+              <p className="whitespace-pre-wrap wrap-break-word">{watch.rest}</p>
+            ) : null}
+          </MessageContent>
+        </Message>
+      );
+    }
+
     const cmdMatch = rawText.match(TERAX_CMD_RE);
     const commandName = cmdMatch?.[1] ?? null;
     const withoutCmd = cmdMatch ? rawText.slice(cmdMatch[0].length) : rawText;
@@ -359,7 +469,7 @@ const RenderedMessage = memo(function RenderedMessage({
           {stripped.chips.length > 0 ? (
             <ContextChips chips={stripped.chips} />
           ) : null}
-          {stripped.text ? (
+          {stripped.text && commandName !== "compact" ? (
             <p className="whitespace-pre-wrap wrap-break-word">
               {stripped.text}
             </p>

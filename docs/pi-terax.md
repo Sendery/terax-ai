@@ -88,6 +88,9 @@ The frontend registry lives in `src/modules/commands`. It is separate from the c
 - `tts.voices`
 - `tts.speak`
 - `tts.stopSpeaking`
+- `terminal.list`, `terminal.read`, `terminal.open`, `terminal.split`, `terminal.focus`, `terminal.close`, `terminal.send`
+- `space.list`, `space.focus`, `tab.moveToSpace`
+- `watch.list`, `watch.read`, `watch.add`, `watch.update`, `watch.remove`, `watch.setEnabled`, `watch.run`
 
 Call `app.commands` for the authoritative catalog with every payload argument,
 its type, and the closed value set of each enum. That catalog is generated from
@@ -96,7 +99,18 @@ what is enforced; this list is a convenience and `app.commands` wins.
 
 The registry validates command IDs and payloads before dispatch, normalizes failures into `{ ok: false, error }`, and delegates behavior to existing App, tabs, sidebar, git diff, settings, notes, scheduled-task, speech, capture, agent-monitor and session-history APIs. It does not expose AI diff approval internals.
 
-`app.snapshot` is intentionally redacted. It omits terminal text entirely, hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. The `tts` section reports which speech engines are installed and running, which models are downloaded, and whether the window is speaking, never the text being read, a sidecar token, or a voice sample path. `tasks.list` returns a prompt only because asking for it is an explicit request.
+`app.snapshot` is intentionally redacted. It omits terminal text entirely (terminal output is an explicit request through `terminal.read`, never part of a snapshot), hides private terminal cwd and title details, excludes AI diff approval IDs and proposed or original content, and reports scheduled tasks without their prompts. Mermaid tabs report only title and source character count, never diagram source. The `tts` section reports which speech engines are installed and running, which models are downloaded, and whether the window is speaking, never the text being read, a sidecar token, or a voice sample path. `tasks.list` returns a prompt only because asking for it is an explicit request.
+
+### Terminal, space and watch commands
+
+These let an agent operate the workspace, not only arrange it. See `docs/agent-control.md` for the workflow, the approval policy and examples.
+
+- `terminal.list` returns every pane that is not private (`leafId`, tab, space, title, directory, focus, running coding agent) and a count of private terminals. `terminal.read` returns the tail of a pane's scrollback, redacted.
+- `terminal.open`, `terminal.split`, `terminal.focus` and `terminal.close` arrange panes. `terminal.send` types one line into a pane and presses Enter unless `submit` is false.
+- `space.list`, `space.focus` and `tab.moveToSpace` cover spaces.
+- `watch.*` manage watches: a shell command polled on an interval that reports only when its output changes.
+
+Every one of them refuses a private terminal. The commands that execute shell input (`terminal.send`, `terminal.open` and `terminal.split` when they carry a `command`, `watch.add`, `watch.update`, `watch.setEnabled`, `watch.run`) are offered to Pi through `terax_run`, not `terax_call`, so a chat posture without a shell withholds them by leaving that tool out.
 
 ### mermaid.open
 
@@ -317,13 +331,15 @@ The built-in Terax agent gets the same registry without Pi: `terax_app_state` an
 
 The same capabilities reach every MCP-speaking agent (Claude Code, Codex, Cursor, OpenCode) through `terax --mcp`: the Terax binary itself, branching before any Tauri state exists, speaks MCP over stdio (protocol 2025-11-25 back to 2024-11-05, newline-delimited JSON-RPC, tools only) and relays each call over the authenticated Pi bridge to the running instance. It honours `TERAX_PI_DISCOVERY` like the extension, starts in tens of milliseconds and holds no state between calls.
 
-**Tools are grouped, not one per command.** Following the FastMCP guidance (outcomes over operations, flat arguments with closed enums, every description written as agent context, a curated handful of tools, honest annotations, errors returned as results that say how to recover), the 60 registry commands become seven tools that take an `action` plus flat arguments:
+**Tools are grouped, not one per command.** Following the FastMCP guidance (outcomes over operations, flat arguments with closed enums, every description written as agent context, a curated handful of tools, honest annotations, errors returned as results that say how to recover), the registry commands become nine tools that take an `action` plus flat arguments:
 
 | Tool | Actions | Annotations |
 |---|---|---|
-| `terax_inspect` | status, snapshot, list_commands, build_info, list_notes, list_tasks, speech_status, list_voices, search_content, capture, wait | read-only |
+| `terax_inspect` | status, snapshot, list_commands, build_info, list_terminals, read_terminal, list_spaces, list_watches, read_watch, list_notes, list_tasks, speech_status, list_voices, search_content, capture, wait | read-only |
 | `terax_open_view` | open_file, open_preview, open_mermaid, update_mermaid, open_git_diff, open_git_history, open_commit_file | |
-| `terax_manage_tabs` | focus_tab, close_tab, rename_tab, reset_tab_title, set_tab_color, move_tab, pin_tab | destructive (close_tab) |
+| `terax_manage_tabs` | focus_tab, close_tab, rename_tab, reset_tab_title, set_tab_color, move_tab, pin_tab, move_tab_to_space, focus_space | destructive (close_tab) |
+| `terax_terminals` | open_terminal, split_terminal, focus_terminal, close_terminal, send_to_terminal | destructive, open world |
+| `terax_watch` | add_watch, update_watch, remove_watch, set_watch_enabled, run_watch | destructive, open world |
 | `terax_manage_panels` | show/hide/toggle of sidebar, notes, tasks, history and agent monitor, detach/attach notes, open_settings, open_task_editor | |
 | `terax_manage_notes` | add_note, update_note, remove_note | destructive |
 | `terax_schedule_tasks` | add_task, update_task, clone_task, reseed_task, remove_task, run_task, set_task_enabled, pause_all, resume_all, wake | destructive, open world |
@@ -337,7 +353,11 @@ The listing costs about 4k tokens. An argument an action does not take, an unkno
 - the checked-in manifest differs from the generated one;
 - a Pi-Terax tool has no `EXTENSION_TOOL_ALIGNMENT` entry naming the MCP action that covers it, or the reason it stays Pi-only (`terax_development_guide`, `terax_visual_qa`);
 - an MCP-only local action (`status`, `wait`) lacks a Pi tool;
-- a surface command is rejected by the Rust bridge allowlist.
+- a surface command is rejected by the Rust bridge allowlist;
+- a command has no policy (`read`, `act`, `approve`), a `read` command sits outside the read-only tool or anything else sits inside it, or a shell-capable command is not mirrored in the extension's `terax_run` list (`parityRule.test.ts`);
+- the Pi-Terax Agente's instructions do not name a command area.
+
+This is the capability parity rule stated in `TERAX.md`: registry, MCP, extension and agent change together.
 
 **Registration.** The Pi-Terax button next to the chat's agent picker shows whether `terax --mcp` is registered with each installed CLI: green when every one points at this binary, amber when some do, red when none do, grey when no supported CLI is installed (hover lists each CLI). Clicking registers it where it is missing or points at another binary: Claude Code with `claude mcp add-json terax … -s user`, Codex with `codex mcp add terax -- <exe> --mcp`, Cursor in `~/.cursor/mcp.json` and OpenCode in `~/.config/opencode/opencode.json(c)`. The JSON files are rewritten atomically and never when they do not parse, so a JSONC file with comments is reported instead of reshaped (and its keys come back sorted when it is rewritten). The command registered is the running binary, so a sandbox build registers itself and talks to its own instance.
 
@@ -401,6 +421,8 @@ The bundled `terax-visual-qa` skill defines how Pi validates those changes with 
 The bridge is local only. It requires both the ephemeral port and the per-launch token from the discovery file. Any client without the token receives an authorization failure. The Pi extension also enforces the same command allowlist before sending a request.
 
 Snapshots are a privacy boundary. They are for UI coordination, not content extraction. Terminal buffers, terminal text, private terminal metadata, and AI diff approval internals are not included.
+
+Terminal output is available only through `terminal.read`, on purpose and per pane: it is redacted with the same patterns as the built-in agent's terminal context, bounded, and re-checked for privacy after the buffer is read. Private terminals are outside every command: `terminal.list` counts them without ids, titles or directories, and reading, typing into, focusing, splitting, closing or moving one is refused. Shell input sent through the registry is one line and passes the same deny-list as the built-in shell tools.
 
 ## Non-goal
 

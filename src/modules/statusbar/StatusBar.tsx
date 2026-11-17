@@ -15,6 +15,7 @@ import { IncognitoIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { SlotMonitorIndicator } from "@/modules/slot-monitor";
 import { SpeakingPill, TtsEngineControl } from "@/modules/tts";
+import { WatchersPill } from "@/modules/watchers";
 import { CwdBreadcrumb } from "./CwdBreadcrumb";
 import { WorkspaceEnvSelector } from "./WorkspaceEnvSelector";
 
@@ -83,6 +84,7 @@ export function StatusBar({
         {/* Speech keeps its transport, engine and history side by side. */}
         <SpeakingPill />
         <TtsEngineControl />
+        <WatchersPill />
         <SlotMonitorIndicator cwd={cwd} />
       </div>
     </footer>

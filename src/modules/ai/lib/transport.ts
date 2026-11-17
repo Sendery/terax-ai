@@ -5,6 +5,7 @@ import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
 import { formatAiError } from "./errors";
 import { native } from "./native";
 import type { ToolContext } from "../tools/tools";
+import { withoutPrivateShell } from "./userShell";
 
 const TERAX_MD_MAX_BYTES = 32 * 1024;
 type MemoryCacheEntry = { content: string | null; mtime: number };
@@ -78,9 +79,11 @@ export function createContextAwareTransport(deps: Deps) {
     const live = deps.getLive();
     const projectMemory = await readTeraxMd(live.workspaceRoot);
     const envBlock = formatEnvBlock(live);
+    // `!!` output is for the user only: it never reaches a model or a CLI.
+    const visible = withoutPrivateShell(options.messages);
     const messagesForRun = envBlock
-      ? injectEnvIntoLastUser(options.messages, envBlock)
-      : options.messages;
+      ? injectEnvIntoLastUser(visible, envBlock)
+      : visible;
     const result = await runAgentStream({
       keys: deps.getKeys(),
       modelId: deps.getModelId(),

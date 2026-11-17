@@ -82,7 +82,14 @@ Add one semantic ID. Do not add a second independent key listener for the same a
 - MCP surface (grouped tools for Claude Code, Codex, Cursor, OpenCode): `src/modules/commands/lib/mcpSurface.ts`, generated into `src-tauri/src/modules/mcp/surface.json` by `pnpm gen:mcp-surface`; served by `terax --mcp` (`src-tauri/src/modules/mcp/`)
 - Palette presentation, when relevant: `src/modules/command-palette/commands.ts`
 
+- Commands declared as data (terminals, spaces, watches): `src/modules/commands/lib/controlCommands.ts`, handlers in `src/modules/commands/useControlHandlers.ts`
+- Policy (`read`, `act`, `approve`, and the shell-capable list): `src/modules/commands/lib/policy.ts`
+- Pi-Terax Agente instructions: `src/modules/ai/lib/piTeraxManager.ts`
+- Parity tests: `allowlistParity.test.ts`, `mcpSurface.test.ts`, `parityRule.test.ts` in `src/modules/commands/lib/`
+
 The registry is the semantic command API. The command palette is presentation and must not become the external control contract.
+
+Capability parity rule: a capability an agent can use ships in the registry, the MCP surface, this extension and the Pi-Terax Agente in the same change. Touch every row above, regenerate the manifest, and do not relax the parity tests to land part of it.
 
 ## In-app visual capture
 

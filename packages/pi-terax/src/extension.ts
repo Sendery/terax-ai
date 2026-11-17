@@ -12,6 +12,9 @@ import {
   isTeraxCommandId,
   TERAX_COMMAND_IDS,
   type TeraxCommandId,
+  TERAX_SHELL_COMMAND_IDS,
+  isTeraxShellCommandId,
+  teraxCommandRunsShell,
 } from "./commands.js";
 import { TeraxClient } from "./client.js";
 import {
@@ -64,7 +67,7 @@ const getStateTool = defineTool({
   name: "terax_get_state",
   label: "Get Terax state",
   description:
-    "Return a redacted snapshot of the running Terax window. Terminal text and private terminal details are never included.",
+    "Return a redacted snapshot of the running Terax window. Terminal text is not part of it (use terax_call with terminal.list and terminal.read); private terminal details are never included.",
   parameters: Type.Object({}),
   async execute(_toolCallId, _params, signal) {
     const state = await callTerax("app.snapshot", undefined, signal);
@@ -76,7 +79,7 @@ const callTool = defineTool({
   name: "terax_call",
   label: "Call Terax",
   description:
-    "Invoke an allowlisted Terax UI command on the running app using the first-party command registry. Call app.commands first to read every command's supported payload arguments (types, required fields, and enum values such as tab colors).",
+    "Invoke an allowlisted Terax command on the running app using the first-party command registry: tabs, spaces, panels, notes, scheduled tasks, diagrams, speech, and reading or arranging terminal panes that are not private. Call app.commands first to read every command's supported payload arguments (types, required fields, and enum values such as tab colors). Commands that execute shell input (typing into a terminal, opening one with a command, watches) are refused here; use terax_run for those.",
   parameters: Type.Object({
     command: Type.Union(TERAX_COMMAND_IDS.map((id) => Type.Literal(id))),
     // A described object (not Type.Any) so host argument sanitizers forward
@@ -96,6 +99,39 @@ const callTool = defineTool({
   async execute(_toolCallId, params, signal) {
     if (!isTeraxCommandId(params.command)) {
       throw new Error(`Command ${params.command} is not allowed`);
+    }
+    if (teraxCommandRunsShell(params.command, params.payload)) {
+      throw new Error(
+        `Command ${params.command} executes shell input; call it through terax_run`,
+      );
+    }
+    const result = await callTerax(params.command, params.payload, signal);
+    return textResult(JSON.stringify(result, null, 2), {
+      command: params.command,
+      result,
+    });
+  },
+});
+
+const runTool = defineTool({
+  name: "terax_run",
+  label: "Run in Terax",
+  description:
+    "Invoke a Terax command that executes shell input with the user's permissions: terminal.send types a line into a terminal pane, terminal.open and terminal.split start a pane running a command, and watch.add, watch.update, watch.setEnabled and watch.run manage watches (a command polled on an interval that reports when its output changes, to follow a pull request, deploy or build). Read the arguments with terax_call app.commands. Private terminals are refused.",
+  parameters: Type.Object({
+    command: Type.Union(TERAX_SHELL_COMMAND_IDS.map((id) => Type.Literal(id))),
+    payload: Type.Object(
+      {},
+      {
+        additionalProperties: true,
+        description:
+          "Command arguments as an object. Call terax_call with app.commands to read the supported fields per command.",
+      },
+    ),
+  }),
+  async execute(_toolCallId, params, signal) {
+    if (!isTeraxShellCommandId(params.command)) {
+      throw new Error(`Command ${params.command} is not a shell command`);
     }
     const result = await callTerax(params.command, params.payload, signal);
     return textResult(JSON.stringify(result, null, 2), {
@@ -374,6 +410,7 @@ export function createExtension(
       registerMonitorLifecycle(pi);
       pi.registerTool(getStateTool);
       pi.registerTool(callTool);
+      pi.registerTool(runTool);
       pi.registerTool(createSpeakTool(dependencies));
       pi.registerTool(waitTool);
       pi.registerTool(developmentGuideTool);

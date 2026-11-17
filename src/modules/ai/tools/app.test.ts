@@ -21,8 +21,24 @@ describe("appCommandNeedsApproval", () => {
   });
 
   it("only names real registry commands", () => {
-    const risky = COMMAND_IDS.filter(appCommandNeedsApproval);
-    expect(risky.length).toBe(14);
+    const risky = COMMAND_IDS.filter((id) => appCommandNeedsApproval(id));
+    expect(risky.length).toBe(21);
+  });
+
+  it("asks before anything that runs shell input or ends a shell", () => {
+    for (const id of ["terminal.send", "terminal.close", "watch.add", "watch.run"]) {
+      expect(appCommandNeedsApproval(id, {}), id).toBe(true);
+    }
+    expect(appCommandNeedsApproval("terminal.open", { command: "pnpm dev" })).toBe(true);
+    expect(appCommandNeedsApproval("terminal.split", { leafId: 1, command: "ls" })).toBe(true);
+  });
+
+  it("lets terminals be listed, read, focused and opened empty without asking", () => {
+    for (const id of ["terminal.list", "terminal.read", "terminal.focus", "space.focus", "watch.list"]) {
+      expect(appCommandNeedsApproval(id, {}), id).toBe(false);
+    }
+    expect(appCommandNeedsApproval("terminal.open", { cwd: "/repo" })).toBe(false);
+    expect(appCommandNeedsApproval("terminal.split", { leafId: 1, direction: "right" })).toBe(false);
   });
 });
 

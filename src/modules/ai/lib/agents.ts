@@ -18,6 +18,31 @@ export type Agent = {
   builtIn: boolean;
 };
 
+/**
+ * The model an agent starts with when it becomes active. It is a default, not
+ * a lock: the user can pick another model from the picker afterwards, and
+ * that choice lasts until the agent is selected again.
+ */
+export type AgentModelDefault = {
+  modelId: string;
+  /** `provider/model` passed to Pi when the model is Pi; empty is Pi's own default. */
+  piModel?: string;
+};
+
+export type AgentModelDefaults = Record<string, AgentModelDefault>;
+
+/** The default to apply for an agent, or null when it has none or the model
+ *  it names no longer exists (a removed endpoint, an older catalogue). */
+export function resolveAgentModel(
+  defaults: AgentModelDefaults,
+  agentId: string,
+  isSelectable: (modelId: string) => boolean,
+): AgentModelDefault | null {
+  const entry = defaults[agentId];
+  if (!entry || typeof entry.modelId !== "string") return null;
+  return isSelectable(entry.modelId) ? entry : null;
+}
+
 export const BUILTIN_AGENTS: readonly Agent[] = [
   {
     id: "builtin:coder",
@@ -82,7 +107,7 @@ export const BUILTIN_AGENTS: readonly Agent[] = [
     id: "builtin:pi-terax-manager",
     name: "Pi-Terax Agente",
     description:
-      "Organizes Terax tabs, content and interactive GraphX diagrams through discovered Pi-Terax commands.",
+      "Operates the whole Terax app: tabs, terminals, panels, notes, watches, scheduled tasks and GraphX diagrams.",
     icon: "spark",
     builtIn: true,
     instructions: PI_TERAX_MANAGER_INSTRUCTIONS,
@@ -92,12 +117,14 @@ export const BUILTIN_AGENTS: readonly Agent[] = [
 const STORE_PATH = "terax-ai-agents.json";
 const KEY_CUSTOM = "customAgents";
 const KEY_ACTIVE = "activeAgentId";
+const KEY_MODEL_DEFAULTS = "modelDefaults";
 
 const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
 
 export type LoadedAgents = {
   custom: Agent[];
   activeId: string;
+  modelDefaults: AgentModelDefaults;
 };
 
 export async function loadAgents(): Promise<LoadedAgents> {
@@ -105,11 +132,17 @@ export async function loadAgents(): Promise<LoadedAgents> {
   const entries = await store.entries();
   let custom: Agent[] | undefined;
   let activeId: string | undefined;
+  let modelDefaults: AgentModelDefaults | undefined;
   for (const [k, v] of entries) {
     if (k === KEY_CUSTOM) custom = v as Agent[];
     else if (k === KEY_ACTIVE) activeId = v as string;
+    else if (k === KEY_MODEL_DEFAULTS) modelDefaults = v as AgentModelDefaults;
   }
-  return { custom: custom ?? [], activeId: activeId ?? BUILTIN_AGENTS[0].id };
+  return {
+    custom: custom ?? [],
+    activeId: activeId ?? BUILTIN_AGENTS[0].id,
+    modelDefaults: modelDefaults ?? {},
+  };
 }
 
 export async function saveCustomAgents(custom: Agent[]): Promise<void> {
@@ -119,6 +152,13 @@ export async function saveCustomAgents(custom: Agent[]): Promise<void> {
 
 export async function saveActiveAgentId(id: string): Promise<void> {
   await store.set(KEY_ACTIVE, id);
+  await store.save();
+}
+
+export async function saveModelDefaults(
+  defaults: AgentModelDefaults,
+): Promise<void> {
+  await store.set(KEY_MODEL_DEFAULTS, defaults);
   await store.save();
 }
 
