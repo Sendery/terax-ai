@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useWhisperRecording } from "../hooks/useWhisperRecording";
 import { expandSnippetTokens, type Snippet } from "../lib/snippets";
+import { parseUserShellInput } from "../lib/userShell";
 import { tryRunSlashCommand, type SlashCommandMeta } from "./slashCommands";
 import { getChat, useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
@@ -226,8 +227,35 @@ export function AiComposerProvider({ children }: ProviderProps) {
     )
       return;
 
+    // `!command` and `!!command` run in a shell instead of going to the model.
+    const shell =
+      files.length === 0 && pickedCommands.length === 0
+        ? parseUserShellInput(trimmed)
+        : null;
+    if (shell) {
+      if (!sessionId) return;
+      const store = useChatStore.getState();
+      if (!store.mini.open && !store.panelOpen) store.openMini();
+      void (async () => {
+        const [{ getOrCreateChat }, { runUserShell }] = await Promise.all([
+          import("../store/chatRuntime"),
+          import("./conversation"),
+        ]);
+        await runUserShell(
+          getOrCreateChat(sessionId),
+          shell,
+          useChatStore.getState().live.getCwd(),
+        );
+      })();
+      setValue("");
+      setPickedSnippets([]);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
+    }
+
     // Slash-command interception. `/plan` toggles plan mode; `/init` rewrites
     // the prompt to the TERAX.md scan template before sending.
+    let targetSessionId = sessionId;
     let effectiveText = trimmed;
     let commandMarker: string | null = null;
     let commandSource = trimmed;
@@ -240,6 +268,38 @@ export function AiComposerProvider({ children }: ProviderProps) {
         setValue("");
         if (outcome.toast) console.info(outcome.toast);
         return;
+      }
+      if (outcome.kind === "compact") {
+        if (!sessionId) return;
+        const store = useChatStore.getState();
+        if (!store.mini.open && !store.panelOpen) store.openMini();
+        store.patchAgentMeta({ hitStepCap: false, compactionNotice: null });
+        void (async () => {
+          const [{ getOrCreateChat }, { compactConversation }] =
+            await Promise.all([
+              import("../store/chatRuntime"),
+              import("./conversation"),
+            ]);
+          const result = await compactConversation(
+            getOrCreateChat(sessionId),
+            outcome.focus,
+          );
+          if (!result.ok) console.info(result.reason);
+        })();
+        setValue("");
+        setPickedCommands([]);
+        return;
+      }
+      if (outcome.kind === "new-session") {
+        targetSessionId = useChatStore.getState().newSession();
+        if (!outcome.prompt && files.length === 0) {
+          setValue("");
+          setPickedSnippets([]);
+          setPickedCommands([]);
+          requestAnimationFrame(() => textareaRef.current?.focus());
+          return;
+        }
+        effectiveText = outcome.prompt ?? "";
       }
       if (outcome.kind === "send-prompt") {
         effectiveText = outcome.prompt;
@@ -303,13 +363,14 @@ export function AiComposerProvider({ children }: ProviderProps) {
       }
     }
 
-    if (!sessionId) return;
+    if (!targetSessionId) return;
+    const sendTo = targetSessionId;
     const store = useChatStore.getState();
     store.patchAgentMeta({ hitStepCap: false, compactionNotice: null });
     if (!store.mini.open) store.openMini();
     void (async () => {
       const { getOrCreateChat } = await import("../store/chatRuntime");
-      const chat = getOrCreateChat(sessionId);
+      const chat = getOrCreateChat(sendTo);
       void chat.sendMessage({ role: "user", parts } as Parameters<
         typeof chat.sendMessage
       >[0]);

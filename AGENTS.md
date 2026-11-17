@@ -19,3 +19,7 @@ This repository (`Sendery/terax-ai`) is operated with the **Sendery** credential
 - **git:** remotes under `Sendery/**` already commit and push as Sendery through the machine's `includeIf` git config (author and SSH key). Do not override `user.name`, `user.email` or `core.sshCommand` in this repository.
 - **GitHub API (`gh`, `pnpm release:dev`):** run `gh auth status` first. If Sendery is not the active account, run `gh auth switch -u Sendery`. A `GH_TOKEN` in the environment, for example from a direnv `.envrc`, overrides the keyring account. Run `gh` and release scripts with `env -u GH_TOKEN` unless that token belongs to Sendery.
 - If the Sendery account cannot authenticate, stop and ask. Never fall back to another identity.
+
+## Capability parity
+
+A capability an agent can use ships in the command registry, the MCP server, the Pi-Terax extension and the Pi-Terax Agente in the same change, or it does not ship. `TERAX.md` ("Capability parity") lists the seven places to touch and the tests that enforce it (`allowlistParity.test.ts`, `mcpSurface.test.ts`, `parityRule.test.ts`). Regenerate the MCP manifest with `pnpm gen:mcp-surface`. Never relax those tests to land a partial change.

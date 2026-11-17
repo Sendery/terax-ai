@@ -261,7 +261,7 @@ export function AiComposerInput() {
                   c.submit();
                 }
               }}
-              placeholder="Ask Terax anything   -   # for snippets and commands, @ for files"
+              placeholder="Ask Terax anything   -   # snippets and commands, @ files, ! run a command, !! run it hidden from the agent"
               rows={1}
               className={cn(
                 "max-h-40 flex-1 resize-none bg-transparent text-[13px] leading-relaxed outline-none",

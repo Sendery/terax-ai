@@ -108,8 +108,9 @@ export function planPiTurn(
 
 /** Pi has no permission prompts, so each posture is a tool list. Read-only
  *  is an allowlist: other extensions (MCP adapters, diagram tools, peer
- *  messaging) can write, and a denylist would let them through. The other
- *  postures deny the shell and keep everything else, Terax control included.
+ *  messaging) can write, and a denylist would let them through. Accept-edits
+ *  denies the shell, and with it terax_run, the one Pi-Terax tool that
+ *  executes shell input; everything else stays, Terax control included.
  *  Pi ignores names it does not know, so both lists hold on every platform. */
 export const PI_READ_ONLY_TOOLS: readonly string[] = [
   "read",
@@ -126,7 +127,7 @@ const PI_EXCLUDED_TOOLS: Record<
   Exclude<CliPermissionMode, "default">,
   readonly string[]
 > = {
-  acceptEdits: ["bash", "powershell"],
+  acceptEdits: ["bash", "powershell", "terax_run"],
   full: [],
 };
 
@@ -138,7 +139,7 @@ function toolArgs(permission: CliPermissionMode): string[] {
 
 const CHAT_SURFACE_PROMPT = `## Terax chat panel
 You are running headless inside the Terax app's AI chat panel, not in a terminal. Replies render as Markdown in a chat view, and nothing can be typed into your stdin mid-turn, so never wait for interactive input.
-The Pi-Terax tools control the Terax app itself: terax_get_state reads a redacted snapshot, terax_call runs an app command (call it with app.commands first for the catalog of commands and their arguments), terax_wait lets the UI settle. Use them whenever the user asks about or wants to change the Terax window, tabs, panels, notes, scheduled tasks, previews, diagrams or speech.
+The Pi-Terax tools control the Terax app itself: terax_get_state reads a redacted snapshot, terax_call runs an app command (call it with app.commands first for the catalog of commands and their arguments), terax_wait lets the UI settle. Use them whenever the user asks about or wants to change the Terax window, tabs, spaces, panels, notes, scheduled tasks, previews, diagrams or speech, or to list and read terminal panes that are not private (terminal.list, terminal.read). When it is offered, terax_run executes shell input through the app: terminal.send types into a pane, terminal.open and terminal.split start one with a command, and watch.add polls a command and reports when its output changes.
 A user message may start with an <env> block (workspace_root, active_terminal_cwd, active_file); treat it as ground truth about where the user is.`;
 
 function piSystemAppend(ctx: {

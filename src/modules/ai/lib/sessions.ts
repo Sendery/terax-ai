@@ -70,6 +70,9 @@ export function deriveTitle(messages: UIMessage[]): string {
         .replace(/<terminal-context[\s\S]*?<\/terminal-context>\s*/g, "")
         .replace(/<selection[\s\S]*?<\/selection>\s*/g, "")
         .replace(/<file[\s\S]*?<\/file>\s*/g, "")
+        .replace(/<user-shell[\s\S]*?<\/user-shell>\s*/g, "")
+        .replace(/<terax-watch[\s\S]*?<\/terax-watch>\s*/g, "")
+        .replace(/<terax-command[^>]*\/>\s*/g, "")
         .trim();
       if (!text) continue;
       const first = text.split("\n")[0].trim();

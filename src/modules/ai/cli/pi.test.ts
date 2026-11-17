@@ -143,7 +143,9 @@ describe("planPiRun", () => {
     expect(PI_READ_ONLY_TOOLS).not.toContain("terax_call");
     expect(PI_READ_ONLY_TOOLS).not.toContain("bash");
     const edits = argvFor("acceptEdits");
-    expect(edits[edits.indexOf("--exclude-tools") + 1]).toBe("bash,powershell");
+    expect(edits[edits.indexOf("--exclude-tools") + 1]).toBe(
+      "bash,powershell,terax_run",
+    );
     expect(argvFor("full")).not.toContain("--exclude-tools");
     expect(argvFor("full")).not.toContain("--tools");
   });

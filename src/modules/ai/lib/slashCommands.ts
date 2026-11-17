@@ -1,4 +1,6 @@
 import {
+  ArrowShrink02Icon,
+  BubbleChatAddIcon,
   CheckListIcon,
   ClaudeIcon,
   SparklesIcon,
@@ -10,11 +12,16 @@ import { usePlanStore } from "../store/planStore";
  *
  * - `"handled"`: command ran; the composer should NOT send a chat message.
  * - `"send-prompt"`: replace the user's text with `prompt` and send normally.
+ * - `"new-session"`: start a new conversation; `prompt`, when present, is
+ *   sent as its first message.
+ * - `"compact"`: replace the conversation with a model-written summary.
  * - `"none"`: not a slash command; let the composer behave as usual.
  */
 export type SlashOutcome =
   | { kind: "handled"; toast?: string }
   | { kind: "send-prompt"; prompt: string; commandName?: string }
+  | { kind: "new-session"; prompt: string | null }
+  | { kind: "compact"; focus: string }
   | { kind: "none" };
 
 function claudeCodeDirective(request: string): string {
@@ -49,6 +56,18 @@ export type SlashCommandMeta = {
 };
 
 export const SLASH_COMMANDS: Record<string, SlashCommandMeta> = {
+  new: {
+    name: "new",
+    invocation: "/new",
+    label: "New conversation",
+    icon: BubbleChatAddIcon,
+  },
+  compact: {
+    name: "compact",
+    invocation: "/compact",
+    label: "Compact conversation",
+    icon: ArrowShrink02Icon,
+  },
   init: {
     name: "init",
     invocation: "/init",
@@ -85,6 +104,10 @@ export function tryRunSlashCommand(input: string): SlashOutcome {
   const tail = rest.join(" ").trim();
 
   switch (head) {
+    case "new":
+      return { kind: "new-session", prompt: tail || null };
+    case "compact":
+      return { kind: "compact", focus: tail };
     case "plan": {
       const store = usePlanStore.getState();
       if (tail === "off" || tail === "exit") {

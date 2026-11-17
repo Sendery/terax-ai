@@ -40,6 +40,16 @@ import {
   type TtsLanguage,
   type TtsModelId,
 } from "@/modules/tts/lib/engines";
+import {
+  CONTROL_COMMAND_IDS,
+  CONTROL_COMMAND_SCHEMAS,
+  type ControlCommandId,
+  type ControlHandlers,
+  type ControlPayloads,
+  dispatchControlCommand,
+  isControlCommandId,
+  validateControlPayload,
+} from "./controlCommands";
 import type { AppSnapshot } from "./snapshot";
 
 export const COMMAND_IDS = [
@@ -108,6 +118,7 @@ export const COMMAND_IDS = [
   "tts.voices",
   "tts.speak",
   "tts.stopSpeaking",
+  ...CONTROL_COMMAND_IDS,
 ] as const;
 
 export type CommandId = (typeof COMMAND_IDS)[number];
@@ -129,7 +140,7 @@ export type CommandResult<T = unknown> =
   | { ok: true; value: T }
   | { ok: false; error: CommandError };
 
-export type CommandPayloads = {
+type BaseCommandPayloads = {
   "app.snapshot": undefined;
   "app.commands": undefined;
   "app.buildInfo": undefined;
@@ -235,6 +246,8 @@ export type CommandPayloads = {
 };
 
 /** Optional configuration shared by tasks.add and tasks.update. */
+export type CommandPayloads = BaseCommandPayloads & ControlPayloads;
+
 export type TaskCommandFields = {
   cwd?: string;
   target?: TaskTarget;
@@ -423,6 +436,7 @@ const TASK_UPDATE_PARAMS: readonly CommandParamSchema[] = [
 ];
 
 const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
+  ...CONTROL_COMMAND_SCHEMAS,
   "app.snapshot": {
     id: "app.snapshot",
     description: "Return a redacted snapshot of the window state.",
@@ -1298,7 +1312,7 @@ export type BuildInfoResult = {
   channel: "development" | "official";
 };
 
-export type CommandHandlers = {
+export type CommandHandlers = ControlHandlers & {
   getSnapshot: () => Promise<AppSnapshot> | AppSnapshot;
   getBuildInfo: () => Promise<BuildInfoResult> | BuildInfoResult;
   capture: (
@@ -1545,6 +1559,11 @@ export function validateCommandRequest(
   }
 
   const { id, payload } = input;
+  if (isControlCommandId(id)) {
+    const control = validateControlPayload(id, payload);
+    if (!control.ok) return invalidPayload(control.message);
+    return { ok: true, value: { id, payload: control.value } as CommandRequest };
+  }
   if (
     id === "app.snapshot" ||
     id === "app.commands" ||
@@ -2227,10 +2246,19 @@ export function normalizeCommandError(error: unknown): CommandError {
   return { code: "internal_error", message: "Command failed" };
 }
 
+function isControlRequest(
+  request: CommandRequest,
+): request is CommandRequest<ControlCommandId> {
+  return isControlCommandId(request.id);
+}
+
 async function dispatchCommand(
   handlers: CommandHandlers,
   request: CommandRequest,
 ): Promise<unknown> {
+  if (isControlRequest(request)) {
+    return dispatchControlCommand(handlers, request.id, request.payload);
+  }
   switch (request.id) {
     case "app.snapshot":
       return handlers.getSnapshot();

@@ -232,6 +232,23 @@ fn is_allowed_command(command: &str) -> bool {
             | "tts.voices"
             | "tts.speak"
             | "tts.stopSpeaking"
+            | "terminal.list"
+            | "terminal.read"
+            | "terminal.open"
+            | "terminal.split"
+            | "terminal.focus"
+            | "terminal.close"
+            | "terminal.send"
+            | "space.list"
+            | "space.focus"
+            | "tab.moveToSpace"
+            | "watch.list"
+            | "watch.read"
+            | "watch.add"
+            | "watch.update"
+            | "watch.remove"
+            | "watch.setEnabled"
+            | "watch.run"
     )
 }
 

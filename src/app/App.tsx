@@ -49,6 +49,7 @@ import {
 import { CommandPalette, createCommandItems } from "@/modules/command-palette";
 import {
   buildAppSnapshot,
+  useControlHandlers,
   useExternalCommandBridge,
   type CommandHandlers,
 } from "@/modules/commands";
@@ -1730,8 +1731,22 @@ export default function App() {
     ],
   );
 
+  const controlHandlers = useControlHandlers({
+    tabsRef,
+    activeIdRef,
+    terminalRefs,
+    newTab,
+    setActiveId,
+    focusPane,
+    splitActivePane,
+    closePaneByLeaf,
+    updateTab,
+    moveTabToSpace,
+  });
+
   const externalCommandHandlers = useMemo<CommandHandlers>(
     () => ({
+      ...controlHandlers,
       getSnapshot: () =>
         buildAppSnapshot({
           tabs: tabsRef.current,
@@ -2234,6 +2249,7 @@ export default function App() {
       stopTtsSpeaking: () => ttsStopSpeakingCommand(),
     }),
     [
+      controlHandlers,
       activeId,
       home,
       showTasksPanel,

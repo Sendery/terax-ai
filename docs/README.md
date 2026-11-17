@@ -31,6 +31,7 @@ If a guide conflicts with `TERAX.md`, `TERAX.md` wins.
 
 ## Fork guides (Sendery/terax-ai)
 
+- [Agent control](agent-control.md) - terminal control, watches, per-agent default model, `!`/`!!` shell commands and conversation commands.
 - [Pi Terax bridge](pi-terax.md) - usage, protocol, and security details of the `@crynta/pi-terax` package.
 - [Pi visual QA](pi-visual-qa.md) - semantic state checks, screenshots, recording, and SSIM baselines.
 - [Local releases](local-releases.md) - signing setup and cross-platform local release builds.

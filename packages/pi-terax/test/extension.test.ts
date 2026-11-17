@@ -103,6 +103,7 @@ describe("Pi extension", () => {
       "terax_status",
       "terax_get_state",
       "terax_call",
+      "terax_run",
       "terax_speak",
       "terax_wait",
       "terax_development_guide",

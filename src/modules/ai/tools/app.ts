@@ -1,32 +1,19 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { callAppCommand, COMMAND_IDS, type CommandId } from "@/modules/commands";
+import {
+  callAppCommand,
+  COMMAND_IDS,
+  commandNeedsApproval,
+  describeCapabilities,
+} from "@/modules/commands";
 
-/**
- * Commands that act beyond the visible UI: they schedule or run agent
- * prompts, download or install software, or delete user data. Everything
- * else only moves, opens or reads app surfaces and runs without a prompt,
- * the same contract Pi gets through the bridge.
- */
-const NEEDS_APPROVAL: ReadonlySet<CommandId> = new Set<CommandId>([
-  "tasks.add",
-  "tasks.update",
-  "tasks.clone",
-  "tasks.reseed",
-  "tasks.remove",
-  "tasks.run",
-  "tasks.setEnabled",
-  "tasks.pauseAll",
-  "tasks.resumeAll",
-  "tasks.wake",
-  "tts.install",
-  "tts.download",
-  "notes.remove",
-  "tab.close",
-]);
-
-export function appCommandNeedsApproval(command: string): boolean {
-  return NEEDS_APPROVAL.has(command as CommandId);
+/** The approval decision lives with the registry (`commands/lib/policy.ts`),
+ *  so every caller of a command applies the same one. */
+export function appCommandNeedsApproval(
+  command: string,
+  payload?: unknown,
+): boolean {
+  return commandNeedsApproval(command, payload);
 }
 
 async function run(command: string, payload?: unknown) {
@@ -38,14 +25,13 @@ export function buildAppTools() {
   return {
     terax_app_state: tool({
       description:
-        "Read a redacted snapshot of the Terax window: the active space and tab, every tab (id, kind, title, cwd), the sidebar, scheduled tasks and speech status. Terminal text and private terminal details are never included.",
+        "Read a redacted snapshot of the Terax window: the active space and tab, every tab (id, kind, title, cwd), the sidebar, scheduled tasks and speech status. Terminal text is not part of it (use terminal.list and terminal.read); private terminal details are never included.",
       inputSchema: z.object({}),
       execute: async () => run("app.snapshot"),
     }),
 
     terax_app_command: tool({
-      description:
-        "Run a Terax app command: focus, rename, colour, move or close tabs; open files, previews, Mermaid and persistent GraphX diagrams (create, read, revision-checked update, dock or float), git diffs and history; show or hide the sidebar, notes, tasks, session history and agent monitor; manage notes and scheduled tasks; open settings; search content; speak through local TTS; capture a surface as PNG. Call it with command app.commands first to read every command's arguments, types and enum values. Commands that schedule or run agents, install software or delete data ask the user first.",
+      description: `Run a Terax app command. Everything the app can do for an agent is listed here by area:\n${describeCapabilities()}\nCall it with command app.commands first to read every command's arguments, types and enum values. Commands marked * run shell input, start agents, install software or delete data, and ask the user first. Private terminals are never available.`,
       inputSchema: z.object({
         command: z.enum(COMMAND_IDS),
         payload: z
@@ -55,7 +41,8 @@ export function buildAppTools() {
             "Command arguments as an object; app.commands lists the fields per command.",
           ),
       }),
-      needsApproval: ({ command }) => appCommandNeedsApproval(command),
+      needsApproval: ({ command, payload }) =>
+        appCommandNeedsApproval(command, payload),
       execute: async ({ command, payload }) => run(command, payload),
     }),
   } as const;

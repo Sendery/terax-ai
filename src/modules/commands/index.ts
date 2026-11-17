@@ -1,3 +1,4 @@
+export { useControlHandlers } from "./useControlHandlers";
 export { useExternalCommandBridge } from "./useExternalCommandBridge";
 export type {
   CommandError,
@@ -21,3 +22,11 @@ export type {
   SnapshotTtsInput,
 } from "./lib/snapshot";
 export { callAppCommand } from "./lib/inApp";
+export {
+  COMMAND_POLICY,
+  SHELL_COMMAND_IDS,
+  commandNeedsApproval,
+  commandRunsShell,
+  type CommandPolicy,
+} from "./lib/policy";
+export { describeCapabilities } from "./lib/capabilities";

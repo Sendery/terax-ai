@@ -7,13 +7,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { AGENT_ICONS } from "@/modules/ai/components/AgentSwitcher";
+import { isPiModelPattern } from "@/modules/ai/cli/pi";
+import {
+  compatModelIdForEndpoint,
+  getCompatModelInfo,
+  MODELS,
+  PROVIDERS,
+} from "@/modules/ai/config";
 import {
   BUILTIN_AGENTS,
   type Agent,
   type AgentIconId,
+  type AgentModelDefault,
 } from "@/modules/ai/lib/agents";
 import {
   isValidHandle,
@@ -55,6 +72,8 @@ export function AgentsSection() {
   const upsertAgent = useAgentsStore((s) => s.upsert);
   const removeAgent = useAgentsStore((s) => s.remove);
   const hydrateAgents = useAgentsStore((s) => s.hydrate);
+  const modelDefaults = useAgentsStore((s) => s.modelDefaults);
+  const setModelDefault = useAgentsStore((s) => s.setModelDefault);
 
   const snippets = useSnippetsStore((s) => s.snippets);
   const upsertSnippet = useSnippetsStore((s) => s.upsert);
@@ -106,6 +125,8 @@ export function AgentsSection() {
               key={a.id}
               agent={a}
               active={a.id === activeAgentId}
+              modelDefault={modelDefaults[a.id] ?? null}
+              onModelDefault={(value) => setModelDefault(a.id, value)}
               onActivate={() => setActiveAgentId(a.id)}
               onEdit={a.builtIn ? null : () => setEditingAgent(a)}
               onDelete={a.builtIn ? null : () => removeAgent(a.id)}
@@ -227,12 +248,16 @@ export function AgentsSection() {
 function AgentCard({
   agent,
   active,
+  modelDefault,
+  onModelDefault,
   onActivate,
   onEdit,
   onDelete,
 }: {
   agent: Agent;
   active: boolean;
+  modelDefault: AgentModelDefault | null;
+  onModelDefault: (value: AgentModelDefault | null) => void;
   onActivate: () => void;
   onEdit: (() => void) | null;
   onDelete: (() => void) | null;
@@ -265,6 +290,7 @@ function AgentCard({
           </span>
         </div>
       </div>
+      <AgentModelPicker value={modelDefault} onChange={onModelDefault} />
       <div className="mt-0.5 flex items-center justify-between gap-1">
         <Button
           size="sm"
@@ -310,6 +336,99 @@ function AgentCard({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+const NO_DEFAULT = "__none__";
+const PI_CHAT_MODEL_ID = "cli-pi-agent";
+
+/**
+ * The provider and model an agent starts with. Picking one here does not lock
+ * it: the model picker in the input bar still changes it per conversation.
+ */
+function AgentModelPicker({
+  value,
+  onChange,
+}: {
+  value: AgentModelDefault | null;
+  onChange: (value: AgentModelDefault | null) => void;
+}) {
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const [piDraft, setPiDraft] = useState(value?.piModel ?? "");
+  useEffect(() => setPiDraft(value?.piModel ?? ""), [value?.piModel]);
+  const piValid = piDraft === "" || isPiModelPattern(piDraft);
+  const groups = PROVIDERS.map((provider) => ({
+    provider,
+    models: MODELS.filter((m) => m.provider === provider.id),
+  })).filter((g) => g.models.length > 0);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Select
+        value={value?.modelId ?? NO_DEFAULT}
+        onValueChange={(next) =>
+          onChange(next === NO_DEFAULT ? null : { modelId: next })
+        }
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label="Default model"
+          className="w-full px-2 text-[10.5px] data-[size=sm]:h-6"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          <SelectItem value={NO_DEFAULT} className="text-[11px]">
+            No default model (keep the current one)
+          </SelectItem>
+          {groups.map(({ provider, models }) => (
+            <SelectGroup key={provider.id}>
+              <SelectLabel className="py-1 text-[10px]">
+                {provider.label}
+              </SelectLabel>
+              {models.map((m) => (
+                <SelectItem key={m.id} value={m.id} className="text-[11px]">
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+          {customEndpoints.length > 0 ? (
+            <SelectGroup>
+              <SelectLabel className="py-1 text-[10px]">
+                Custom endpoints
+              </SelectLabel>
+              {customEndpoints.map((ep) => {
+                const id = compatModelIdForEndpoint(ep.id);
+                return (
+                  <SelectItem key={id} value={id} className="text-[11px]">
+                    {getCompatModelInfo(id, customEndpoints).label}
+                  </SelectItem>
+                );
+              })}
+            </SelectGroup>
+          ) : null}
+        </SelectContent>
+      </Select>
+      {value?.modelId === PI_CHAT_MODEL_ID ? (
+        <Input
+          value={piDraft}
+          onChange={(e) => setPiDraft(e.target.value.trim())}
+          onBlur={() => {
+            if (!piValid) return;
+            onChange(
+              piDraft ? { modelId: value.modelId, piModel: piDraft } : { modelId: value.modelId },
+            );
+          }}
+          placeholder="Pi model as provider/model (empty: Pi's default)"
+          aria-invalid={!piValid}
+          className={cn(
+            "h-6 text-[10.5px]",
+            !piValid && "border-destructive",
+          )}
+        />
+      ) : null}
     </div>
   );
 }

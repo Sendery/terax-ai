@@ -54,7 +54,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
     name: "terax_inspect",
     title: "Inspect Terax",
     purpose:
-      "Read the running Terax app without changing it: window layout, tabs, notes, scheduled tasks, speech, the command catalog, file content search and PNG captures of a surface.",
+      "Read the running Terax app without changing it: window layout, tabs, spaces, terminal panes and their scrollback, notes, scheduled tasks, watches, speech, the command catalog, file content search and PNG captures of a surface. Private terminals are never listed or read.",
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -84,6 +84,27 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       build_info: {
         command: "app.buildInfo",
         summary: "Repository, branch, commit and channel of the running binary.",
+      },
+      list_terminals: {
+        command: "terminal.list",
+        summary:
+          "Every terminal pane that is not private: pane id (leafId), tab, space, directory, focus and the coding agent running in it.",
+      },
+      read_terminal: {
+        command: "terminal.read",
+        summary: "Tail of one terminal pane's scrollback, secrets redacted.",
+      },
+      list_spaces: {
+        command: "space.list",
+        summary: "Spaces (named groups of tabs) and which one is active.",
+      },
+      list_watches: {
+        command: "watch.list",
+        summary: "Watches with their command, interval, state and last change.",
+      },
+      read_watch: {
+        command: "watch.read",
+        summary: "One watch with the output of its last run.",
       },
       list_notes: { command: "notes.list", summary: "Note cards on the active tab." },
       list_tasks: {
@@ -175,7 +196,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
     name: "terax_manage_tabs",
     title: "Manage Terax tabs",
     purpose:
-      "Arrange existing tabs: focus, rename, colour, reorder, pin or close them. Read tab ids with terax_inspect snapshot first. close_tab removes a tab; everything else is reversible.",
+      "Arrange existing tabs and spaces: focus, rename, colour, reorder, pin or close tabs, move a tab to another space, switch space. Read tab ids with terax_inspect snapshot and space ids with terax_inspect list_spaces first. close_tab removes a tab; everything else is reversible.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -199,6 +220,76 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       set_tab_color: { command: "tab.setColor", summary: "Set or clear a tab's accent colour." },
       move_tab: { command: "tab.move", summary: "Move a tab to an index within its space." },
       pin_tab: { command: "tab.setPinned", summary: "Pin or unpin an editor tab." },
+      move_tab_to_space: {
+        command: "tab.moveToSpace",
+        summary: "Move a tab to another space.",
+      },
+      focus_space: { command: "space.focus", summary: "Switch to a space." },
+    },
+  },
+  {
+    name: "terax_terminals",
+    title: "Drive Terax terminals",
+    purpose:
+      "Open, split, focus and close terminal panes, and type into them. Typing runs whatever is at the prompt with the user's permissions, so confirm intent before sending commands that change anything. Read pane ids with terax_inspect list_terminals and their output with terax_inspect read_terminal. Private terminals are refused.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    argDescriptions: {
+      leafId: "Id of the terminal pane, from terax_inspect list_terminals.",
+      command:
+        "Optional one-line command typed and submitted in the new pane once its shell is ready.",
+    },
+    actions: {
+      open_terminal: {
+        command: "terminal.open",
+        summary: "Open a terminal tab, optionally running a command in it.",
+      },
+      split_terminal: {
+        command: "terminal.split",
+        summary: "Split a pane to the right or down; a tab holds four panes at most.",
+      },
+      focus_terminal: {
+        command: "terminal.focus",
+        summary: "Focus a pane, switching space and tab as needed.",
+      },
+      close_terminal: {
+        command: "terminal.close",
+        summary: "Close a pane and end its shell.",
+      },
+      send_to_terminal: {
+        command: "terminal.send",
+        summary:
+          "Type one line into a pane and press Enter (submit false leaves it at the prompt).",
+      },
+    },
+  },
+  {
+    name: "terax_watch",
+    title: "Watch commands from Terax",
+    purpose:
+      "Follow something that changes on its own (a pull request, a deploy, a build) without spending agent turns: a watch polls a shell command on an interval and reports when its output changes, by notification or by handing the new output to the Terax AI chat so it can refresh a panel, a GraphX diagram or a note. The command runs unattended with the user's permissions, so confirm it with the user. Read watches with terax_inspect list_watches.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    argDescriptions: {
+      id: "Id of the watch, from terax_inspect list_watches.",
+    },
+    actions: {
+      add_watch: { command: "watch.add", summary: "Start a watch." },
+      update_watch: { command: "watch.update", summary: "Edit a watch." },
+      remove_watch: { command: "watch.remove", summary: "Stop and delete a watch." },
+      set_watch_enabled: {
+        command: "watch.setEnabled",
+        summary: "Pause or resume a watch.",
+      },
+      run_watch: { command: "watch.run", summary: "Run a watch now." },
     },
   },
   {
@@ -338,6 +429,7 @@ export const EXTENSION_TOOL_ALIGNMENT: Record<
   terax_status: { mcp: { tool: "terax_inspect", action: "status" } },
   terax_get_state: { mcp: { tool: "terax_inspect", action: "snapshot" } },
   terax_call: { mcp: { tool: "*" } },
+  terax_run: { mcp: { tool: "*" } },
   terax_wait: { mcp: { tool: "terax_inspect", action: "wait" } },
   terax_speak: { mcp: { tool: "terax_speak", action: "speak" } },
   terax_development_guide: {
@@ -351,7 +443,7 @@ export const EXTENSION_TOOL_ALIGNMENT: Record<
 };
 
 const MCP_SERVER_INSTRUCTIONS =
-  "Controls the running Terax terminal app. Start with terax_inspect (action snapshot) to learn tab ids and what is open, then act with the other tools; every tool takes an `action` plus flat arguments listed in its description. Terminal contents and private terminals are never exposed. When a call fails to connect, call terax_inspect with action status: Terax must be running for this server to reach it.";
+  "Controls the running Terax terminal app. Start with terax_inspect (action snapshot) to learn tab ids and what is open, then act with the other tools; every tool takes an `action` plus flat arguments listed in its description. Terminal panes are listed and read through terax_inspect and driven through terax_terminals; private terminals are never exposed. When a call fails to connect, call terax_inspect with action status: Terax must be running for this server to reach it.";
 
 type JsonSchema = Record<string, unknown>;
 

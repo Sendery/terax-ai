@@ -17,6 +17,23 @@ import {
 
 function handlers(): CommandHandlers {
   return {
+    listTerminals: vi.fn(() => ({})),
+    readTerminal: vi.fn(() => ({})),
+    openTerminal: vi.fn(() => ({})),
+    splitTerminal: vi.fn(() => ({})),
+    focusTerminal: vi.fn(() => ({})),
+    closeTerminal: vi.fn(() => ({})),
+    sendToTerminal: vi.fn(() => ({})),
+    listSpaces: vi.fn(() => ({})),
+    focusSpace: vi.fn(() => ({})),
+    moveTabToSpace: vi.fn(() => ({})),
+    listWatches: vi.fn(() => ({})),
+    readWatch: vi.fn(() => ({})),
+    addWatch: vi.fn(() => ({})),
+    updateWatch: vi.fn(() => ({})),
+    removeWatch: vi.fn(() => ({})),
+    setWatchEnabled: vi.fn(() => ({})),
+    runWatch: vi.fn(() => ({})),
     getSnapshot: vi.fn(async () => ({
       version: 1 as const,
       tabs: [],
@@ -749,6 +766,23 @@ describe("command registry", () => {
       "tts.voices",
       "tts.speak",
       "tts.stopSpeaking",
+      "terminal.list",
+      "terminal.read",
+      "terminal.open",
+      "terminal.split",
+      "terminal.focus",
+      "terminal.close",
+      "terminal.send",
+      "space.list",
+      "space.focus",
+      "tab.moveToSpace",
+      "watch.list",
+      "watch.read",
+      "watch.add",
+      "watch.update",
+      "watch.remove",
+      "watch.setEnabled",
+      "watch.run",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });
