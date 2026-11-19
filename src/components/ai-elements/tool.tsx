@@ -119,6 +119,9 @@ export type ToolProps = ComponentProps<typeof Collapsible> & {
   input?: unknown;
   output?: unknown;
   errorText?: string;
+  /** Overrides the built-in summary, e.g. for CLI agent tools. */
+  summary?: string;
+  summaryTitle?: string;
 };
 
 // Tools whose `input` carries large/streaming content (file bodies, sub-
@@ -142,12 +145,14 @@ const ToolImpl = ({
   output,
   errorText,
   defaultOpen,
+  summary: summaryOverride,
+  summaryTitle,
   ...props
 }: ToolProps) => {
   const meta = TOOL_META[toolName];
   const Icon = meta?.icon ?? ToolsIcon;
   const label = meta?.label ?? toolName;
-  const summary = deriveSummary(toolName, input);
+  const summary = summaryOverride ?? deriveSummary(toolName, input);
   const isError = state === "output-error";
   const open = defaultOpen ?? isError;
   const isHeavy = HEAVY_CONTENT_TOOLS.has(toolName);
@@ -183,9 +188,17 @@ const ToolImpl = ({
           strokeWidth={1.75}
           className="shrink-0 text-muted-foreground"
         />
-        <span className="shrink-0 font-medium text-foreground">{label}</span>
+        <span
+          className="max-w-[45%] shrink-0 truncate font-medium text-foreground"
+          title={label}
+        >
+          {label}
+        </span>
         {summary ? (
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+          <span
+            className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
+            title={summaryTitle ?? summary}
+          >
             {summary}
           </span>
         ) : (
@@ -228,6 +241,8 @@ export const Tool = memo(ToolImpl, (a, b) => {
   if (a.errorText !== b.errorText) return false;
   if (a.output !== b.output) return false;
   if (a.className !== b.className) return false;
+  if (a.summary !== b.summary || a.summaryTitle !== b.summaryTitle)
+    return false;
   if (HEAVY_CONTENT_TOOLS.has(a.toolName)) {
     return deriveSummary(a.toolName, a.input) ===
       deriveSummary(b.toolName, b.input);

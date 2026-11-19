@@ -39,6 +39,7 @@ import {
   TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { SLASH_COMMANDS, TERAX_CMD_RE } from "../lib/slashCommands";
+import { summarizeToolInput } from "../lib/toolSummary";
 import { parseUserShellBlock, type UserShellBlock } from "../lib/userShell";
 import { parseWatchMessage } from "@/modules/watchers/lib/watch";
 import { Spinner } from "@/components/ui/spinner";
@@ -768,10 +769,14 @@ const RenderedTool = memo(function RenderedTool({
   part: AnyToolPart;
   onApproval: (id: string, approved: boolean) => void;
 }) {
-  const toolName =
-    part.type === "dynamic-tool"
-      ? part.toolName
-      : part.type.replace(/^tool-/, "");
+  const isDynamic = part.type === "dynamic-tool";
+  const toolName = isDynamic
+    ? part.toolName
+    : part.type.replace(/^tool-/, "");
+  const summary = useMemo(
+    () => (isDynamic ? summarizeToolInput(toolName, part.input) : null),
+    [isDynamic, toolName, part.input],
+  );
 
   if (part.state === "approval-requested") {
     return (
@@ -791,6 +796,8 @@ const RenderedTool = memo(function RenderedTool({
       output={"output" in part ? part.output : undefined}
       errorText={"errorText" in part ? part.errorText : undefined}
       defaultOpen={toolName === "list_directory"}
+      summary={summary?.text}
+      summaryTitle={summary?.full}
     />
   );
 });

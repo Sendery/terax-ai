@@ -32,11 +32,14 @@ import {
 import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
+  AiChatBottomPane,
+  AiChatDock,
   AiMiniWindow,
   LocalAgentNotificationsBridge,
   SelectionAskAi,
   useAiBootstrap,
   useAiLiveBridge,
+  useChatLayoutStore,
   useChatStore,
   useSelectionAskAi,
 } from "@/modules/ai";
@@ -519,6 +522,7 @@ export default function App() {
   );
   const miniOpen = useChatStore((s) => s.mini.open);
   const miniPresence = usePresence(miniOpen, 200);
+  const chatLayout = useChatLayoutStore((s) => s.mode);
   const openMini = useChatStore((s) => s.openMini);
   const toggleMini = useChatStore((s) => s.toggleMini);
   const focusInput = useChatStore((s) => s.focusInput);
@@ -529,6 +533,7 @@ export default function App() {
   const respondToApproval = useChatStore((s) => s.respondToApproval);
 
   const { hasComposer, keysLoaded } = useAiBootstrap();
+  const showChat = hasComposer && miniPresence.mounted;
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
@@ -2440,53 +2445,65 @@ export default function App() {
                 defaultSize="78%"
                 minSize="30%"
               >
-                <div className="flex h-full min-h-0 flex-col">
-                  <div className="relative min-h-0 flex-1">
-                    <WorkspaceSurface
-                      onGraphUpdate={updateGraph}
-                      onGraphPlace={placeGraphPanel}
-                      onGraphPanel={setGraphPanel}
-                      tabs={tabs}
-                      activeId={activeId}
-                      activeTab={activeTab}
-                      registerTerminalHandle={registerTerminalHandle}
-                      onSearchReady={handleSearchReady}
-                      onCwd={handleTerminalCwd}
-                      onExit={handleLeafExit}
-                      onFocusLeaf={handleFocusLeaf}
-                      onOpenFileLink={handleOpenTerminalFileLink}
-                      onReadAloud={speakAloud}
-                      onStopReading={stopReading}
-                      selectionActions={terminalSelectionActions}
-                      homePath={home}
-                      registerEditorHandle={registerEditorHandle}
-                      onEditorDirtyChange={handleEditorDirty}
-                      onEditorCloseTab={disposeTab}
-                      registerPreviewHandle={registerPreviewHandle}
-                      onPreviewUrlChange={handlePreviewUrl}
-                      onAiDiffAccept={(id) => respondToApproval(id, true)}
-                      onAiDiffReject={(id) => respondToApproval(id, false)}
-                      onOpenCommitFile={openCommitFileDiffTab}
-                      onPrReviewBaseChange={handlePrReviewBaseChange}
-                      onGitHistorySearchHandle={setGitHistoryHandle}
-                      onSetRenderableView={setRenderableView}
-                      onMermaidSourceChange={updateMermaidSource}
-                      onMermaidVisualLayoutChange={updateMermaidVisualLayout}
+                <div data-ai-dock-host className="flex h-full min-h-0">
+                  {showChat && chatLayout === "left" ? (
+                    <AiChatDock side="left" state={miniPresence.state} />
+                  ) : null}
+                  <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+                    <div className="relative min-h-0 flex-1">
+                      <WorkspaceSurface
+                        onGraphUpdate={updateGraph}
+                        onGraphPlace={placeGraphPanel}
+                        onGraphPanel={setGraphPanel}
+                        tabs={tabs}
+                        activeId={activeId}
+                        activeTab={activeTab}
+                        registerTerminalHandle={registerTerminalHandle}
+                        onSearchReady={handleSearchReady}
+                        onCwd={handleTerminalCwd}
+                        onExit={handleLeafExit}
+                        onFocusLeaf={handleFocusLeaf}
+                        onOpenFileLink={handleOpenTerminalFileLink}
+                        onReadAloud={speakAloud}
+                        onStopReading={stopReading}
+                        selectionActions={terminalSelectionActions}
+                        homePath={home}
+                        registerEditorHandle={registerEditorHandle}
+                        onEditorDirtyChange={handleEditorDirty}
+                        onEditorCloseTab={disposeTab}
+                        registerPreviewHandle={registerPreviewHandle}
+                        onPreviewUrlChange={handlePreviewUrl}
+                        onAiDiffAccept={(id) => respondToApproval(id, true)}
+                        onAiDiffReject={(id) => respondToApproval(id, false)}
+                        onOpenCommitFile={openCommitFileDiffTab}
+                        onPrReviewBaseChange={handlePrReviewBaseChange}
+                        onGitHistorySearchHandle={setGitHistoryHandle}
+                        onSetRenderableView={setRenderableView}
+                        onMermaidSourceChange={updateMermaidSource}
+                        onMermaidVisualLayoutChange={updateMermaidVisualLayout}
+                      />
+                    </div>
+
+                    {showChat && chatLayout === "bottom" ? (
+                      <AiChatBottomPane state={miniPresence.state} />
+                    ) : null}
+
+                    <WorkspaceInputBar
+                      isBlockTab={isBlockTab}
+                      isTerminalTab={isTerminalTab}
+                      activeLeafId={activeLeafId}
+                      cwd={activeCwd}
+                      home={home}
+                      hasComposer={hasComposer}
+                      panelOpen={panelOpen}
+                      keysLoaded={keysLoaded}
+                      onConnect={() => void openSettingsWindow("models")}
+                      onDismiss={closePanel}
                     />
                   </div>
-
-                  <WorkspaceInputBar
-                    isBlockTab={isBlockTab}
-                    isTerminalTab={isTerminalTab}
-                    activeLeafId={activeLeafId}
-                    cwd={activeCwd}
-                    home={home}
-                    hasComposer={hasComposer}
-                    panelOpen={panelOpen}
-                    keysLoaded={keysLoaded}
-                    onConnect={() => void openSettingsWindow("models")}
-                    onDismiss={closePanel}
-                  />
+                  {showChat && chatLayout === "right" ? (
+                    <AiChatDock side="right" state={miniPresence.state} />
+                  ) : null}
                 </div>
               </ResizablePanel>
               {notesVisible && (
@@ -2647,7 +2664,7 @@ export default function App() {
             </>
           ) : null}
 
-          {hasComposer && miniPresence.mounted ? (
+          {showChat && chatLayout === "floating" ? (
             <AiMiniWindow state={miniPresence.state} />
           ) : null}
           {askPresence.mounted ? (

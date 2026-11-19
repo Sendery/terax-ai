@@ -11,6 +11,14 @@ const AiMiniWindowInner = lazy(() =>
   import("./AiMiniWindow").then((m) => ({ default: m.AiMiniWindow })),
 );
 
+const AiChatDockInner = lazy(() =>
+  import("./AiChatDock").then((m) => ({ default: m.AiChatDock })),
+);
+
+const AiChatBottomPaneInner = lazy(() =>
+  import("./AiChatDock").then((m) => ({ default: m.AiChatBottomPane })),
+);
+
 const AiInputBarConnectInner = lazy(() =>
   import("./AiInputBar").then((m) => ({ default: m.AiInputBarConnect })),
 );
@@ -31,6 +39,25 @@ export function AiMiniWindow({ state }: { state: PresenceState }) {
   return (
     <Suspense fallback={null}>
       <AiMiniWindowInner state={state} />
+    </Suspense>
+  );
+}
+
+export function AiChatDock(props: {
+  side: "left" | "right";
+  state: PresenceState;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <AiChatDockInner {...props} />
+    </Suspense>
+  );
+}
+
+export function AiChatBottomPane({ state }: { state: PresenceState }) {
+  return (
+    <Suspense fallback={null}>
+      <AiChatBottomPaneInner state={state} />
     </Suspense>
   );
 }
