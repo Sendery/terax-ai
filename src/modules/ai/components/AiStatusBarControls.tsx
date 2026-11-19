@@ -18,36 +18,23 @@ import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import {
   Add01Icon,
   AiBookIcon,
-  AppleIcon,
   ArrowDown01Icon,
   BrainIcon,
-  ChatGptIcon,
-  ClaudeIcon,
   Clock01Icon,
   CoinsDollarIcon,
-  ComputerIcon,
-  CopilotIcon,
-  CpuIcon,
-  DeepseekIcon,
   FavouriteIcon,
   FlashIcon,
-  GlobeIcon,
-  GoogleGeminiIcon,
-  GravityIcon,
-  Grok02Icon,
   Message01Icon,
   Mic01Icon,
-  MistralIcon,
-  PiIcon,
   PlugIcon,
+  RefreshIcon,
   Search01Icon,
-  ServerStack01Icon,
   Settings01Icon,
   StarIcon,
   Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   compatModelIdForEndpoint,
   getCompatModelInfo,
@@ -55,42 +42,32 @@ import {
   isCompatModelId,
   MODELS,
   isCliProvider,
+  parseVariantModelId,
   PROVIDERS,
   STT_PROVIDER_LABELS,
   type ModelCapabilities,
-  type ModelId,
   type ModelInfo,
   type ProviderId,
 } from "../config";
 import { ACCEPTED_FILES, useComposer } from "../lib/composer";
 import { toggleFavoriteModel } from "../lib/modelPrefs";
 import { useChatStore } from "../store/chatStore";
-import { PI_MODEL_ID, PiModelSection, usePiModelLabel } from "./PiModelSection";
+import type { CatalogEntry } from "../store/modelCatalogStore";
+import { PI_MODEL_ID, usePiModelLabel } from "./PiModelSection";
+import {
+  groupProviders,
+  ORIGIN_META,
+  PROVIDER_ICONS,
+  PROVIDER_ORIGINS,
+  providerTitle,
+} from "../lib/providerPresentation";
+import { CATALOG_SOURCES } from "../lib/modelCatalog";
+import { ensureCatalog, useModelCatalogStore } from "../store/modelCatalogStore";
+import { relativeCommitTime } from "@/modules/git-history/lib/relativeTime";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { setPiModel } from "@/modules/settings/store";
 
-const PROVIDER_ICON = {
-  openai: ChatGptIcon,
-  anthropic: ClaudeIcon,
-  google: GoogleGeminiIcon,
-  xai: Grok02Icon,
-  cerebras: CpuIcon,
-  groq: FlashIcon,
-  deepseek: DeepseekIcon,
-  mistral: MistralIcon,
-  openrouter: GlobeIcon,
-  "openai-compatible": PlugIcon,
-  lmstudio: ComputerIcon,
-  mlx: AppleIcon,
-  ollama: ServerStack01Icon,
-  "chatgpt-codex": ChatGptIcon,
-  "cli-claude": ClaudeIcon,
-  "cli-codex": ChatGptIcon,
-  "cli-cursor": ComputerIcon,
-  "cli-opencode": CpuIcon,
-  "cli-pi": PiIcon,
-  "cli-agy": GravityIcon,
-  "cli-copilot": CopilotIcon,
-} as const satisfies Record<ProviderId, typeof ChatGptIcon>;
+const PROVIDER_ICON = PROVIDER_ICONS;
 
 /**
  * Opens the AI panel, and closes it again. It stays on screen while the panel
@@ -214,7 +191,7 @@ function ModelDropdown() {
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
   const current = isCompatModelId(selected)
     ? getCompatModelInfo(selected, customEndpoints)
-    : getModel(selected as ModelId);
+    : getModel(selected);
   const piLabel = usePiModelLabel();
   const triggerLabel =
     selected === PI_MODEL_ID ? `${current.label} · ${piLabel}` : current.label;
@@ -235,20 +212,67 @@ function ModelDropdown() {
     );
   }, [customEndpoints]);
 
-  const sortedProviders = useMemo(() => {
-    const configured: (typeof PROVIDERS)[number][] = [];
-    const unconfigured: (typeof PROVIDERS)[number][] = [];
-    for (const p of PROVIDERS) {
-      if (p.id === "openai-compatible") continue;
-      (hasKeyFor(p.id) ? configured : unconfigured).push(p);
+  const providerGroups = useMemo(
+    () =>
+      groupProviders(
+        PROVIDERS.filter((p) => p.id !== "openai-compatible"),
+        hasKeyFor,
+      ),
+    [hasKeyFor],
+  );
+
+  const catalogs = useModelCatalogStore((s) => s.catalogs);
+  const [open, setOpen] = useState(false);
+
+  // Catalogues load only for the provider on screen, and for the providers a
+  // starred or recent catalogue model belongs to, so their labels resolve.
+  useEffect(() => {
+    if (!open) return;
+    const wanted = new Set<ProviderId>();
+    if (activeProvider && activeProvider in CATALOG_SOURCES && hasKeyFor(activeProvider as ProviderId)) {
+      wanted.add(activeProvider as ProviderId);
     }
-    return { configured, unconfigured };
-  }, [hasKeyFor]);
+    for (const id of [...favoriteIds, ...recentIds, selected]) {
+      const variant = parseVariantModelId(id);
+      if (variant && hasKeyFor(variant.provider)) wanted.add(variant.provider);
+    }
+    for (const provider of wanted) void ensureCatalog(provider);
+  }, [open, activeProvider, favoriteIds, recentIds, selected, hasKeyFor]);
+
+  const catalogModels = useMemo(() => {
+    const out: ModelInfo[] = [];
+    for (const value of Object.values(catalogs)) {
+      for (const m of value?.view.extra ?? []) out.push(getModel(m.id));
+    }
+    return out;
+  }, [catalogs]);
+
+  // Starred or recent catalogue models whose catalogue has not loaded yet
+  // still resolve (the id carries the provider and model name).
+  const knownVariantIds = useMemo(() => {
+    const known = new Set(catalogModels.map((m) => m.id));
+    return [...favoriteIds, ...recentIds].filter(
+      (id) => !known.has(id) && parseVariantModelId(id) !== null,
+    );
+  }, [catalogModels, favoriteIds, recentIds]);
 
   const allModels = useMemo(
-    () => [...MODELS, ...epModelInfos],
-    [epModelInfos],
+    () => [
+      ...MODELS,
+      ...epModelInfos,
+      ...catalogModels,
+      ...[...new Set(knownVariantIds)].map((id) => getModel(id)),
+    ],
+    [epModelInfos, catalogModels, knownVariantIds],
   );
+
+  const unlisted = useMemo(() => {
+    const out = new Set<string>();
+    for (const value of Object.values(catalogs)) {
+      for (const id of value?.view.unlisted ?? []) out.add(id);
+    }
+    return out;
+  }, [catalogs]);
 
   const COMPAT_PROVIDER_ID = "__compat__";
 
@@ -268,6 +292,10 @@ function ModelDropdown() {
       pool = pool.filter((m) => isCompatModelId(m.id));
     } else if (activeProvider !== null) {
       pool = pool.filter((m) => m.provider === activeProvider);
+    } else if (tab === "all" && !q) {
+      // The unfiltered list stays the curated one; catalogues can hold
+      // hundreds of models and are browsed per provider or by search.
+      pool = pool.filter((m) => !parseVariantModelId(m.id));
     }
     if (q) {
       pool = pool.filter(
@@ -283,9 +311,12 @@ function ModelDropdown() {
   }, [activeProvider, allModels, favoriteIds, recentIds, search, tab]);
 
   return (
-    <DropdownMenu onOpenChange={(open) => {
-      if (open) void refreshCliAvailability();
-    }}>
+    <DropdownMenu
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void refreshCliAvailability();
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -373,22 +404,29 @@ function ModelDropdown() {
               active={activeProvider === null}
               onClick={() => setActiveProvider(null)}
             />
-            {[...sortedProviders.configured, ...sortedProviders.unconfigured].map(
-              (p) => (
-                <ProviderPill
-                  key={p.id}
-                  icon={PROVIDER_ICON[p.id]}
-                  title={
-                    hasKeyFor(p.id)
-                      ? p.label
-                      : `${p.label} — not configured`
-                  }
-                  active={activeProvider === p.id}
-                  muted={!hasKeyFor(p.id)}
-                  onClick={() => setActiveProvider(p.id)}
+            {providerGroups.map((group) => (
+              <div key={group.origin} className="flex flex-col gap-0.5">
+                <div
+                  className="mx-auto mt-1 h-px w-5 bg-border/70"
+                  title={ORIGIN_META[group.origin].title}
                 />
-              ),
-            )}
+                {group.providers.map((p) => (
+                  <ProviderPill
+                    key={p.id}
+                    icon={PROVIDER_ICON[p.id]}
+                    badge={ORIGIN_META[PROVIDER_ORIGINS[p.id]].badge}
+                    title={
+                      hasKeyFor(p.id)
+                        ? providerTitle(p.id)
+                        : `${providerTitle(p.id)}: not configured`
+                    }
+                    active={activeProvider === p.id}
+                    muted={!hasKeyFor(p.id)}
+                    onClick={() => setActiveProvider(p.id)}
+                  />
+                ))}
+              </div>
+            ))}
             {customEndpoints.length > 0 && (
               <ProviderPill
                 icon={PlugIcon}
@@ -409,19 +447,21 @@ function ModelDropdown() {
             )}
             {activeProvider !== null &&
             activeProvider !== COMPAT_PROVIDER_ID ? (
-              <ProviderHeader providerId={activeProvider as ProviderId} />
+              <ProviderHeader
+                providerId={activeProvider as ProviderId}
+                catalog={catalogs[activeProvider as ProviderId]}
+                canRefresh={
+                  activeProvider in CATALOG_SOURCES &&
+                  hasKeyFor(activeProvider as ProviderId)
+                }
+              />
             ) : null}
             {activeProvider !== null &&
             activeProvider !== COMPAT_PROVIDER_ID &&
             !hasKeyFor(activeProvider as ProviderId) ? (
               <ProviderConfigureCTA providerId={activeProvider as ProviderId} />
             ) : null}
-            {activeProvider === "cli-pi" && hasKeyFor("cli-pi") ? (
-              <PiModelSection
-                selected={selected === PI_MODEL_ID}
-                onPick={() => setSelected(PI_MODEL_ID)}
-              />
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="flex items-center justify-center px-4 py-10 text-xs text-muted-foreground/70">
                 {tab === "favorites"
                   ? "No favorites yet — star a model to pin it here."
@@ -441,11 +481,21 @@ function ModelDropdown() {
                   }
                   favorite={favoriteIds.includes(m.id)}
                   showProviderIcon={activeProvider === null}
+                  badge={
+                    unlisted.has(m.id)
+                      ? "unlisted"
+                      : parseVariantModelId(m.id) && !isCliProvider(m.provider)
+                        ? "new"
+                        : null
+                  }
                   onPick={() => {
                     if (!isCompatModelId(m.id) && !hasKeyFor(m.provider)) {
                       void openSettingsWindow("models");
                       return;
                     }
+                    // The bare Pi row means Pi's own default; a Pi model
+                    // picked earlier now has its own catalogue row.
+                    if (m.id === PI_MODEL_ID) void setPiModel("");
                     setSelected(m.id);
                   }}
                   onToggleFavorite={() => void toggleFavoriteModel(m.id)}
@@ -496,12 +546,15 @@ function TabButton({
 
 function ProviderPill({
   icon,
+  badge,
   title,
   active,
   muted,
   onClick,
 }: {
   icon: typeof AiBookIcon;
+  /** Origin mark drawn in the corner: API key, plan, CLI or local. */
+  badge?: typeof AiBookIcon;
   title: string;
   active: boolean;
   muted?: boolean;
@@ -522,13 +575,37 @@ function ProviderPill({
       )}
     >
       <HugeiconsIcon icon={icon} size={16} strokeWidth={1.5} />
+      {badge ? (
+        <span className="absolute right-0.5 bottom-0.5 flex size-3 items-center justify-center rounded-sm bg-background/90 ring-1 ring-border/70">
+          <HugeiconsIcon icon={badge} size={8} strokeWidth={2} />
+        </span>
+      ) : null}
     </button>
   );
 }
 
-function ProviderHeader({ providerId }: { providerId: ProviderId }) {
+function catalogNote(catalog: CatalogEntry | undefined): string | null {
+  if (!catalog) return null;
+  if (catalog.status === "loading") return "Updating models";
+  if (catalog.status === "error") return `Could not list models: ${catalog.error ?? "error"}`;
+  if (!catalog.live) return "Built-in list";
+  const age = relativeCommitTime(Math.floor(catalog.fetchedAt / 1000), Math.floor(Date.now() / 1000));
+  return `Listed by the provider ${age === "now" ? "just now" : `${age} ago`}`;
+}
+
+function ProviderHeader({
+  providerId,
+  catalog,
+  canRefresh,
+}: {
+  providerId: ProviderId;
+  catalog: CatalogEntry | undefined;
+  canRefresh: boolean;
+}) {
   const p = PROVIDERS.find((x) => x.id === providerId);
   if (!p) return null;
+  const origin = ORIGIN_META[PROVIDER_ORIGINS[p.id]];
+  const note = catalogNote(catalog);
   return (
     <div className="flex items-center gap-1.5 px-3 pt-1 pb-1.5 text-[11px] font-medium tracking-tight text-muted-foreground/90">
       <HugeiconsIcon
@@ -536,7 +613,44 @@ function ProviderHeader({ providerId }: { providerId: ProviderId }) {
         size={13}
         strokeWidth={1.75}
       />
-      <span>{p.label}</span>
+      <span>{providerTitle(p.id)}</span>
+      <span title={origin.title} className="text-muted-foreground/60">
+        <HugeiconsIcon icon={origin.badge} size={10} strokeWidth={2} />
+      </span>
+      {note ? (
+        <span
+          title={note}
+          className={cn(
+            "ml-auto min-w-0 truncate font-normal",
+            catalog?.status === "error" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/60",
+          )}
+        >
+          {note}
+        </span>
+      ) : null}
+      {canRefresh ? (
+        <button
+          type="button"
+          title="Refresh the model list"
+          aria-label="Refresh the model list"
+          disabled={catalog?.status === "loading"}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void ensureCatalog(providerId, true);
+          }}
+          className={cn(
+            "shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40",
+            !note && "ml-auto",
+          )}
+        >
+          {catalog?.status === "loading" ? (
+            <Spinner className="size-3" />
+          ) : (
+            <HugeiconsIcon icon={RefreshIcon} size={11} strokeWidth={2} />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -567,6 +681,7 @@ function ModelRow({
   hasKey,
   favorite,
   showProviderIcon,
+  badge,
   onPick,
   onToggleFavorite,
 }: {
@@ -575,6 +690,9 @@ function ModelRow({
   hasKey: boolean;
   favorite: boolean;
   showProviderIcon: boolean;
+  /** new: listed by the provider, not in the built-in list. unlisted: built
+   *  in, but the provider's own list no longer has it. */
+  badge?: "new" | "unlisted" | null;
   onPick: () => void;
   onToggleFavorite: () => void;
 }) {
@@ -614,18 +732,40 @@ function ModelRow({
       </button>
 
       {showProviderIcon ? (
-        <HugeiconsIcon
-          icon={PROVIDER_ICON[model.provider]}
-          size={13}
-          strokeWidth={1.5}
-          className="shrink-0 text-muted-foreground/70"
-        />
+        <span title={providerTitle(model.provider)} className="relative shrink-0">
+          <HugeiconsIcon
+            icon={PROVIDER_ICON[model.provider]}
+            size={13}
+            strokeWidth={1.5}
+            className="text-muted-foreground/70"
+          />
+          <span className="absolute -right-1 -bottom-1 flex size-2.5 items-center justify-center rounded-sm bg-popover">
+            <HugeiconsIcon
+              icon={ORIGIN_META[PROVIDER_ORIGINS[model.provider]].badge}
+              size={7}
+              strokeWidth={2.25}
+              className="text-muted-foreground"
+            />
+          </span>
+        </span>
       ) : null}
 
       <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="shrink-0 text-[12px] font-medium leading-none">
           {model.label}
         </span>
+        {badge === "new" ? (
+          <span className="shrink-0 rounded bg-emerald-500/15 px-1 text-[9px] leading-[14px] font-medium text-emerald-700 dark:text-emerald-400">
+            new
+          </span>
+        ) : badge === "unlisted" ? (
+          <span
+            title="The provider's model list no longer includes this model"
+            className="shrink-0 rounded bg-muted px-1 text-[9px] leading-[14px] text-muted-foreground"
+          >
+            not listed
+          </span>
+        ) : null}
         <span className="truncate text-[10.5px] leading-none text-muted-foreground">
           {model.description}
         </span>
