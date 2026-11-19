@@ -90,6 +90,7 @@ export const TERAX_COMMAND_IDS = [
   "reader.export",
   "reader.dock",
   "reader.delete",
+  "reader.generate",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];

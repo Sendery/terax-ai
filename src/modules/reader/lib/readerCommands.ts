@@ -18,13 +18,39 @@ import {
   playReader,
   seekReaderTo,
   setReaderSpeed,
+  setReaderVoice,
   stepReader,
   stopReader,
   summarize,
   toggleReader,
   toggleReaderCut,
 } from "./player";
-import { allCuts } from "./manifest";
+import { allCuts, pausesBySegment } from "./manifest";
+import { type ExportSplit, fragmentPlan } from "./flow";
+import { useTtsStore } from "@/modules/tts/store/ttsStore";
+
+/** Sets the document's voice from an agent, refusing an unknown profile. */
+async function applyVoice(docId: string, voiceId: string): Promise<void> {
+  const tts = useTtsStore.getState();
+  await tts.hydrate();
+  if (!useTtsStore.getState().profiles.some((p) => p.id === voiceId))
+    failure(`No voice profile ${voiceId}; see list_voices`);
+  await setReaderVoice(docId, voiceId);
+}
+
+/**
+ * Starts an export and answers at once: the bridge gives up long before a
+ * long document is synthesized. Progress and the files land in
+ * reader.state's export field.
+ */
+function startExport(docId: string, split: ExportSplit) {
+  if (useReaderStore.getState().playback.exporting)
+    failure("An export is already running; poll reader.state");
+  void exportReader(docId, split).catch((err: unknown) => {
+    console.warn("reader.export", err);
+  });
+  return { docId, split, status: "running" as const };
+}
 
 type ReaderHandlerKeys =
   | "openReader"
@@ -34,7 +60,8 @@ type ReaderHandlerKeys =
   | "markReader"
   | "exportReader"
   | "dockReader"
-  | "deleteReader";
+  | "deleteReader"
+  | "generateReader";
 
 export type ReaderHost = {
   tabs: () => Tab[];
@@ -348,8 +375,67 @@ export function createReaderHandlers(
       return summarize(docId);
     },
     exportReader: async (payload: ControlPayloads["reader.export"]) => {
-      const docId = await resolveDoc(host, payload?.docId, true);
-      return exportReader(docId);
+      // Exporting changes nothing on screen; the export keeps the document loaded.
+      const docId = await resolveDoc(host, payload?.docId, false);
+      if (payload?.voiceId !== undefined)
+        await applyVoice(docId, payload.voiceId);
+      return startExport(docId, payload?.split ?? "none");
+    },
+    generateReader: async (payload: ControlPayloads["reader.generate"]) => {
+      const sources = [payload.text, payload.path, payload.docId].filter(
+        (v) => v !== undefined,
+      );
+      if (sources.length !== 1)
+        failure("Pass exactly one of text, path or docId");
+      if (useReaderStore.getState().playback.exporting)
+        failure("An export is already running; poll reader.state");
+      let doc: DocEntry;
+      if (payload.docId !== undefined) {
+        requireDocId(payload.docId);
+        doc = await loadStored(payload.docId).catch(() =>
+          failure(`No Reader document ${payload.docId}`),
+        );
+      } else {
+        const { text, path } = payload;
+        if (
+          path !== undefined &&
+          !path.startsWith("/") &&
+          !/^[A-Za-z]:[\\/]/.test(path)
+        ) {
+          failure("reader.generate path must be absolute");
+        }
+        const title =
+          payload.title?.trim() ||
+          (path ? basename(path) : text ? titleFromText(text) : undefined);
+        doc = adoptDocument(
+          await readerNative.open({ text, path, title }),
+          title,
+        );
+      }
+      if (payload.voiceId !== undefined)
+        await applyVoice(doc.id, payload.voiceId);
+      if (payload.show && !shownSomewhere(host.tabs(), doc.id))
+        host.dockReading(host.activeId(), doc);
+      const split = payload.split ?? "paragraph";
+      const started = startExport(doc.id, split);
+      const fresh = useReaderStore.getState().docs[doc.id] ?? doc;
+      return {
+        ...started,
+        title: fresh.state.title,
+        words: fresh.doc.words.length,
+        segments: fresh.doc.segments.length,
+        fragments:
+          split === "none"
+            ? 1
+            : fragmentPlan(
+                fresh.doc,
+                split,
+                pausesBySegment(
+                  fresh.doc,
+                  allCuts(fresh.doc, fresh.state.cutPoints),
+                ),
+              ).length,
+      };
     },
     dockReader: async (payload: ControlPayloads["reader.dock"]) => {
       const tab = targetTab(host, payload.tabId);

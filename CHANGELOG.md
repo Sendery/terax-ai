@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.24 (2026-11-19)
+
+- Atajos globales del Reader (⌘⌥P, ⌘⌥← →, ⌘⌥= -, ⌘⌥R, ⌘⌥B) y controles multimedia del sistema: «Ahora suena», teclas multimedia y auriculares.
+- Exportación en fragmentos para textos largos: un WAV por sección, párrafo o frase, con índice y lista de reproducción.
+- `reader.generate` para que los agentes generen audio de un texto o fichero en segundo plano; `reader.export` con `split` y progreso consultable en `reader.state`.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.24.md).
+
 ## Pi-Terax v0.9.0-dev.23 (2026-11-19)
 
 - Reader en un panel acoplado bajo cualquier pestaña (terminal, editor o Markdown), sin cambiar de pestaña: «Read here», `terax-read` y la paleta.

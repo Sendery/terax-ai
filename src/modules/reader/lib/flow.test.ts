@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "./document";
-import { exportPlan, firstAudible, stepInto, stepSegment } from "./flow";
+import {
+  exportPlan,
+  firstAudible,
+  fragmentPlan,
+  stepInto,
+  stepSegment,
+} from "./flow";
 
 const doc = parseDocument(
   "First sentence here. https://only.example.com\n\nSecond sentence there. Third sentence ends.",
@@ -64,5 +70,49 @@ describe("exportPlan", () => {
       { segment: 2, pauseAfterMs: 0, chapter: "Part two" },
       { segment: 3, pauseAfterMs: 0 },
     ]);
+  });
+});
+
+describe("fragmentPlan", () => {
+  const doc = parseDocument(
+    "Prologue line before any heading.\n\n# One\n\nFirst paragraph here. Second sentence here.\n\n- An item in a list.\n\n## Two\n\n```\ncode\n```\n\nLast paragraph of the text.",
+  );
+
+  it("cuts a section per heading, with the opening before the first", () => {
+    const parts = fragmentPlan(doc, "heading", new Map());
+    expect(parts.map((p) => p.title)).toEqual([
+      "Prologue line before any heading.",
+      "One",
+      "Two",
+    ]);
+    expect(parts[1].steps).toHaveLength(4);
+  });
+
+  it("joins a heading to the paragraph it introduces", () => {
+    const parts = fragmentPlan(doc, "paragraph", new Map());
+    expect(parts.map((p) => p.title)).toEqual([
+      "Prologue line before any heading.",
+      "One",
+      "An item in a list.",
+      "Two",
+    ]);
+    expect(parts[1].steps.map((s) => doc.segments[s.segment].text)).toEqual([
+      "One",
+      "First paragraph here.",
+      "Second sentence here.",
+    ]);
+  });
+
+  it("gives every sentence its own fragment and drops trailing pauses", () => {
+    const pauses = new Map([
+      [2, 1500],
+      [3, 800],
+    ]);
+    const parts = fragmentPlan(doc, "sentence", pauses);
+    expect(parts).toHaveLength(doc.segments.filter((s) => s.text).length);
+    expect(parts.every((p) => p.steps.length === 1)).toBe(true);
+    expect(parts.every((p) => p.steps[0].pauseAfterMs === 0)).toBe(true);
+    const sections = fragmentPlan(doc, "heading", pauses);
+    expect(sections[1].steps[0].pauseAfterMs).toBe(1500);
   });
 });

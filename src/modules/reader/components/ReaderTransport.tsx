@@ -22,6 +22,7 @@ import {
   stepReader,
 } from "@/modules/reader/lib/player";
 import { formatClock } from "@/modules/reader/lib/timing";
+import type { ExportSplit } from "@/modules/reader/lib/flow";
 import { useReaderStore } from "@/modules/reader/store/readerStore";
 import { LANGUAGE_LABELS } from "@/modules/tts/lib/engines";
 import { useTtsStore } from "@/modules/tts/store/ttsStore";
@@ -51,7 +52,7 @@ type Props = {
   /** Word the m / p buttons act on: the cursor, else the reading point. */
   targetWord: number;
   onCut: (kind: "bookmark" | "pause" | "stop") => void;
-  onExport: () => void;
+  onExport: (split: ExportSplit) => void;
   /** Absent where the controls cannot float, such as the docked panel. */
   onToggleFloating?: () => void;
   compact?: boolean;
@@ -277,8 +278,32 @@ export function ReaderTransport({
               Study mode: stop at every bookmark
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onExport} disabled={!!exporting}>
+            <DropdownMenuItem
+              onSelect={() => onExport("none")}
+              disabled={!!exporting}
+            >
               <HugeiconsIcon icon={Download01Icon} size={14} /> Export audio (e)
+            </DropdownMenuItem>
+            <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+              Export in fragments
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={() => onExport("heading")}
+              disabled={!!exporting}
+            >
+              One file per section
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onExport("paragraph")}
+              disabled={!!exporting}
+            >
+              One file per paragraph
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onExport("sentence")}
+              disabled={!!exporting}
+            >
+              One file per sentence
             </DropdownMenuItem>
             {onToggleFloating ? (
               <DropdownMenuItem onSelect={onToggleFloating}>

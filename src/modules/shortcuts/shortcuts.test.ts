@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getBindingTokens, type KeyBinding, matchBinding } from "./shortcuts";
+import {
+  getBindingTokens,
+  type KeyBinding,
+  matchBinding,
+  SHORTCUTS,
+} from "./shortcuts";
 
 // These tests run in the vitest node environment, where the Tauri OS plugin is
 // unavailable so `IS_MAC` resolves to false. That makes the non-mac token
@@ -100,5 +105,38 @@ describe("matchBinding", () => {
     expect(
       matchBinding(event({ key: "x" }), { key: "1" }, "tab.selectByIndex"),
     ).toBe(false);
+  });
+});
+
+describe("default bindings", () => {
+  it("never give one chord to two shortcuts", () => {
+    const seen = new Map<string, string>();
+    for (const shortcut of SHORTCUTS) {
+      for (const b of shortcut.defaultBindings) {
+        const chord = [
+          b.ctrl ? "ctrl" : "",
+          b.alt ? "alt" : "",
+          b.shift ? "shift" : "",
+          b.meta ? "meta" : "",
+          b.key.toLowerCase(),
+        ].join("+");
+        expect(seen.get(chord), `${shortcut.id} and ${seen.get(chord)}`).toBeUndefined();
+        seen.set(chord, shortcut.id);
+      }
+    }
+  });
+
+  it("reaches the Reader chords through Option on macOS", () => {
+    const toggle = SHORTCUTS.find((s) => s.id === "reader.togglePlayback");
+    expect(toggle).toBeDefined();
+    const binding = toggle?.defaultBindings[0] as KeyBinding;
+    const pressed = event({
+      key: "π",
+      code: "KeyP",
+      altKey: true,
+      metaKey: binding.meta === true,
+      ctrlKey: binding.ctrl === true,
+    });
+    expect(matchBinding(pressed, binding)).toBe(true);
   });
 });

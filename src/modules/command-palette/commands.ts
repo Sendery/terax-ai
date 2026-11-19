@@ -416,6 +416,7 @@ export function createCommandItems(
       ? [
           {
             id: "reader.readHere",
+            shortcutId: "reader.readHere" as const,
             title: "Read here, in the Reader panel",
             group: "Voice" as const,
             keywords: [
@@ -436,6 +437,7 @@ export function createCommandItems(
       ? [
           {
             id: "reader.togglePanel",
+            shortcutId: "reader.togglePanel" as const,
             title: "Show or hide the Reader panel",
             group: "Voice" as const,
             keywords: ["reader", "panel", "library", "readings", "dock"],
@@ -448,6 +450,7 @@ export function createCommandItems(
       ? [
           {
             id: "reader.togglePlayback",
+            shortcutId: "reader.togglePlayback" as const,
             title: "Play or pause the Reader",
             group: "Voice" as const,
             keywords: ["reader", "play", "pause", "resume", "listen"],

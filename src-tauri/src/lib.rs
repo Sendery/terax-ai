@@ -491,6 +491,7 @@ pub fn run() {
             reader::reader_chunk_get,
             reader::reader_chunk_put,
             reader::reader_export,
+            reader::reader_export_parts,
         ])
         .build(context)
         .expect("error while building tauri application")

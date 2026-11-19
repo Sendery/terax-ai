@@ -35,6 +35,7 @@ function handlers(): ControlHandlers {
     exportReader: vi.fn(() => "exportReader"),
     dockReader: vi.fn(() => "dockReader"),
     deleteReader: vi.fn(() => "deleteReader"),
+    generateReader: vi.fn(() => "generateReader"),
   };
 }
 

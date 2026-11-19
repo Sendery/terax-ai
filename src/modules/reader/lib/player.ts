@@ -22,10 +22,18 @@ import {
   IDLE_PLAYBACK,
   useReaderStore,
   type DocEntry,
+  type ExportOutcome,
   type PlaybackPhase,
 } from "@/modules/reader/store/readerStore";
 import { isSilentSegment, parseDocument, type ReaderSegment } from "./document";
-import { exportPlan, firstAudible, stepInto, stepSegment } from "./flow";
+import {
+  type ExportSplit,
+  exportPlan,
+  firstAudible,
+  fragmentPlan,
+  stepInto,
+  stepSegment,
+} from "./flow";
 import {
   allCuts,
   buildManifest,
@@ -46,6 +54,7 @@ import {
   readerNative,
   wavDurationMs,
   type ExportResult,
+  type PartsResult,
   type StoredDocument,
 } from "./native";
 import {
@@ -1163,41 +1172,61 @@ export function removeReaderCut(docId: string, cutId: string): void {
   }));
 }
 
-/** Synthesizes what is missing and writes one WAV with the pauses in it. */
-export async function exportReader(docId: string): Promise<ExportResult> {
+/**
+ * Synthesizes what is missing and writes the reading out: one WAV with the
+ * scripted pauses (split "none"), or one WAV per section, paragraph or
+ * sentence with an index and a playlist. The outcome stays in the store for
+ * agents, which cannot wait on a long export through the bridge.
+ */
+export async function exportReader(
+  docId: string,
+  split: ExportSplit = "none",
+): Promise<ExportResult | PartsResult> {
   const entry = entryOf(docId);
-  if (!entry) throw new Error("Open the document in a Reader tab first.");
+  if (!entry) throw new Error("Open the document in the Reader first.");
   if (store().playback.exporting)
     throw new Error("An export is already running.");
-  const ctx = await bindVoice(docId);
-  const fresh = entryOf(docId) ?? entry;
-  const cuts = allCuts(fresh.doc, fresh.state.cutPoints);
-  const chapters = new Map<number, string>();
-  for (const block of fresh.doc.blocks) {
-    if (block.kind !== "heading" || block.wordEnd <= block.wordStart) continue;
-    chapters.set(
-      block.segmentStart,
-      fresh.doc.words
-        .slice(block.wordStart, block.wordEnd)
-        .map((w) => w.text)
-        .join(" "),
-    );
-  }
-  for (const cut of cuts) {
-    if (cut.kind !== "bookmark") continue;
-    const segment = fresh.doc.words[cut.wordIndex]?.segment;
-    if (segment !== undefined && !chapters.has(segment))
-      chapters.set(segment, cut.label || "Bookmark");
-  }
-  const plan = exportPlan(
-    fresh.doc,
-    pausesBySegment(fresh.doc, cuts),
-    chapters,
-  );
-  if (plan.length === 0)
-    throw new Error("This document has nothing to read aloud.");
-  store().setPlayback({ exporting: { docId, done: 0, total: plan.length } });
+  const started = Date.now();
+  const report = (done: number, total: number) => {
+    store().setPlayback({ exporting: { docId, done, total, split } });
+    store().setExport(docId, {
+      status: "running",
+      split,
+      done,
+      total,
+      startedAt: started,
+    });
+  };
+  report(0, 0);
   try {
+    const ctx = await bindVoice(docId);
+    const fresh = entryOf(docId) ?? entry;
+    const cuts = allCuts(fresh.doc, fresh.state.cutPoints);
+    const pauses = pausesBySegment(fresh.doc, cuts);
+    const chapters = new Map<number, string>();
+    if (split === "none") {
+      for (const block of fresh.doc.blocks) {
+        if (block.kind !== "heading" || block.wordEnd <= block.wordStart)
+          continue;
+        chapters.set(
+          block.segmentStart,
+          fresh.doc.words
+            .slice(block.wordStart, block.wordEnd)
+            .map((w) => w.text)
+            .join(" "),
+        );
+      }
+      for (const cut of cuts) {
+        if (cut.kind !== "bookmark") continue;
+        const segment = fresh.doc.words[cut.wordIndex]?.segment;
+        if (segment !== undefined && !chapters.has(segment))
+          chapters.set(segment, cut.label || "Bookmark");
+      }
+    }
+    const plan = exportPlan(fresh.doc, pauses, chapters);
+    if (plan.length === 0)
+      throw new Error("This document has nothing to read aloud.");
+    report(0, plan.length);
     let done = 0;
     for (const step of plan) {
       const segment = fresh.doc.segments[step.segment];
@@ -1209,20 +1238,49 @@ export async function exportReader(docId: string): Promise<ExportResult> {
         if (ms !== null) recordDuration(ctx, segment.key, ms);
       }
       done++;
-      store().setPlayback({ exporting: { docId, done, total: plan.length } });
+      report(done, plan.length);
     }
-    const result = await readerNative.exportAudio(
-      docId,
-      ctx.voiceKey,
-      plan.map((step) => ({
-        key: fresh.doc.segments[step.segment].key,
-        pauseAfterMs: step.pauseAfterMs,
-        ...(step.chapter ? { chapter: step.chapter } : {}),
-      })),
-      fresh.state.title,
-    );
+    const key = (index: number) => fresh.doc.segments[index].key;
+    const result =
+      split === "none"
+        ? await readerNative.exportAudio(
+            docId,
+            ctx.voiceKey,
+            plan.map((step) => ({
+              key: key(step.segment),
+              pauseAfterMs: step.pauseAfterMs,
+              ...(step.chapter ? { chapter: step.chapter } : {}),
+            })),
+            fresh.state.title,
+          )
+        : await readerNative.exportParts(
+            docId,
+            ctx.voiceKey,
+            fragmentPlan(fresh.doc, split, pauses).map((fragment) => ({
+              title: fragment.title,
+              segments: fragment.steps.map((step) => ({
+                key: key(step.segment),
+                pauseAfterMs: step.pauseAfterMs,
+              })),
+            })),
+            `${fresh.state.title} (${split})`,
+          );
+    store().setExport(docId, {
+      status: "done",
+      split,
+      result,
+      finishedAt: Date.now(),
+    });
     void saveNow(docId);
     return result;
+  } catch (err) {
+    store().setExport(docId, {
+      status: "failed",
+      split,
+      error: messageOf(err),
+      finishedAt: Date.now(),
+    });
+    throw err;
   } finally {
     store().setPlayback({ exporting: null });
   }
@@ -1292,6 +1350,10 @@ export type ReaderSummary = {
     source: string;
   }[];
   error: string | null;
+  /** The latest export: running with progress, done with its files, or failed. */
+  export: ExportOutcome | null;
+  /** The OS media controls (Now Playing, media keys) can drive the Reader. */
+  osMediaControls: boolean;
 };
 
 /** What an agent sees of a document: position, cuts and timing, no audio. */
@@ -1333,5 +1395,8 @@ export function summarize(docId: string): ReaderSummary | null {
       source: c.source,
     })),
     error: live ? playback.error : null,
+    export: store().exports[docId] ?? null,
+    osMediaControls:
+      typeof navigator !== "undefined" && "mediaSession" in navigator,
   };
 }
