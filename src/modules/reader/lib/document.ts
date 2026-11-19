@@ -377,7 +377,16 @@ function groupBlocks(source: string): RawBlock[] {
       continue;
     }
     const item = LIST_ITEM.exec(line.text);
-    if (item) {
+    // As in CommonMark, a numbered line inside a paragraph starts a list only
+    // when it is "1.": hard-wrapped prose such as "released in\n2019. It..."
+    // stays prose and keeps its number.
+    const interrupts =
+      paragraph !== null &&
+      (paragraph as RawBlock).kind === "paragraph" &&
+      item !== null &&
+      /^\d/.test(item[2]) &&
+      !/^1[.)]$/.test(item[2]);
+    if (item && !interrupts) {
       flush();
       const body = item[3];
       blocks.push({

@@ -1,6 +1,8 @@
 # Reader
 
-The Reader is a tab that reads a text aloud with the local voice and highlights each word as it is spoken. It is meant for long texts: articles, notes, specs and command output. It keeps the reading position, bookmarks and scripted pauses per document, and can export the reading as one audio file.
+The Reader reads a text aloud with the local voice and highlights each word as it is spoken. It is meant for long texts: articles, notes, specs and command output. It keeps the reading position, bookmarks and scripted pauses per document, and can export the reading as one audio file.
+
+It opens in a panel docked under the tab you are working in, so a terminal, an editor or a Markdown view stays on screen while you listen. A reading can also have a Reader tab of its own.
 
 It uses the speech stack described in [tts.md](tts.md). Nothing leaves the machine.
 
@@ -14,13 +16,18 @@ It uses the speech stack described in [tts.md](tts.md). Nothing leaves the machi
   terax-read --no-play spec.md
   ```
 
+  The text opens in the panel under the tab on screen. `--tab` opens a Reader tab instead.
+
   It calls the app binary with `--read`, which talks to the running Terax over the same local bridge as the MCP server. Outside Terax, run the binary directly: `/Applications/Pi-Terax.app/Contents/MacOS/terax --read notes.md`.
-- **From a terminal selection.** Right-click, then choose Open in Reader.
+- **From a terminal selection.** Right-click, then choose Read here for the panel, or Open in Reader tab.
 - **From the command palette:**
-  - Open selection in Reader.
+  - Read here, in the Reader panel: the selection, or the whole file in an editor or Markdown tab (as saved on disk). A selection in the rendered Markdown view counts too.
+  - Show or hide the Reader panel, which opens on the list of readings.
+  - Play or pause the Reader, from any tab.
+  - Open selection in Reader tab.
   - Open this file in Reader, when an editor or Markdown tab is active.
   - Resume last Reader document.
-- **From an agent.** Agents use `reader.open` with `text`, or with an absolute `path`.
+- **From an agent.** Agents use `reader.open` with `text`, or with an absolute `path`. It docks in the panel unless they pass `placement: "tab"`.
 
 The same text always reopens the same document, because its id is a hash of the text, so reopening it resumes where it stopped.
 
@@ -50,6 +57,37 @@ The column is about 72 characters wide. Text still ahead is dimmed, the sentence
 | ? | Show the shortcuts. |
 
 The controls float over the workspace when the reading continues behind another tab, so it follows you as you work. With `f` they float even over the Reader tab itself.
+
+## The Reader panel
+
+The panel sits under the tab's content, and the content above shrinks to make room: a terminal keeps every row it shows, and a program such as Claude Code redraws once. Drag the panel's top edge to change its height, between about a fifth and four fifths of the space.
+
+Each tab has its own panel, kept with the tab across restarts; a reading comes back paused. A Reader tab has no panel.
+
+The panel never takes the keyboard on its own, so you keep typing in the terminal or the editor. Click the text to give it the keyboard: the shortcuts below then apply, and Escape hands the keyboard back. `q` closes the panel.
+
+The header holds:
+
+- the book button, which opens the list of readings;
+- the document's title and where it came from;
+- the progress;
+- Open in a Reader tab, which moves the reading to a tab of its own;
+- close, which stops the reading unless a Reader tab or another panel still shows it.
+
+When you switch to another tab, the reading goes on and the floating controls follow you.
+
+## Readings
+
+The book button lists every reading made so far, newest first, with the tab it was made in, its size, its progress and when it was last read. Click one to go back to it, at the point where it stopped.
+
+The chain button at the top decides where it opens:
+
+- **Chain on** (the default): it opens in the panel of the tab it was made in, and Terax switches to that tab. If that tab is closed, it opens here.
+- **Chain off**: it opens in the panel you are looking at, and you stay on this tab.
+
+A reading belongs to the first tab it was opened in while that tab stays open. Tabs keep their identity across restarts for this, even though their numbers change.
+
+The bin button on a row deletes that reading and its audio. Delete all, then a second click to confirm, empties the library. Panels and Reader tabs that showed a deleted reading let go of it.
 
 ## How the audio is made
 
@@ -92,6 +130,7 @@ The library sits beside the speech directory, not inside it, so removing the spe
 
 `manifest.json` is the script of the reading, written in snake_case:
 
+- `origin`: the `key` of the tab the reading belongs to and its `label` then;
 - `playback_state`: `status`, `last_position_ms`, `last_word_index` and `speed`;
 - `cut_points`: each with `kind`, `label`, `word_index`, `timestamp_ms`, `pause_after_ms` and `source`;
 - `segments`: for each segment already made, its `chunk_file`, `start_ms`, `end_ms` and every word with `char_start`, `char_end`, `start_ms` and `end_ms`. Above 40,000 words the per-word list is left out.
@@ -114,15 +153,25 @@ Clips already made are played from disk. A document listened to once plays again
 | `reader.control` | act | `terax_speak control_reader` |
 | `reader.mark` | act | `terax_speak mark_reader` |
 | `reader.export` | act | `terax_speak export_reader` |
+| `reader.dock` | act | `terax_speak dock_reader` |
+| `reader.delete` | approve | `terax_speak delete_reader_documents` |
 
-Without a `docId`, a command acts on the document playing, else on the Reader tab on screen, else on the reading left paused.
+Without a `docId`, a command acts on the document playing, else on the one on screen (a Reader tab or the panel of the tab on screen), else on the reading left paused. `reader.state` never changes the screen; the other commands dock a named document that nothing shows under the tab on screen.
+
+- `reader.open` takes `placement` (`dock`, the default, or `tab`) and `tabId` to dock under a tab other than the one on screen.
+- The app snapshot shows `readerPanel: { docId }` on every tab with a panel open, except private terminals.
+- `reader.list` adds `originTabId`, the open tab a reading belongs to, and `shownInTabIds`.
+- `reader.dock` shows a document (`docId`) or the readings list in a tab's panel, or closes it with `close`.
+- `reader.delete` deletes one reading (`docId`) or all of them (`all`), with their audio. It asks for approval.
 
 - `reader.state` returns the word being read and its index, the position and total time, the speed, the voice and every cut point.
-- `reader.control` takes an `op` (`play`, `pause`, `toggle`, `stop`, `next`, `previous` or `seek`). It is not called `action` because MCP tools use that name to pick the action. It also takes an optional `wordIndex` or `positionMs`, and an optional `speedPercent` from 75 to 250.
+- `reader.control` takes an `op` (`play`, `pause`, `toggle`, `stop`, `next`, `previous` or `seek`). It is not called `action` because MCP tools use that name to pick the action. It also takes an optional `wordIndex` or `positionMs`, and an optional `speedPercent` from 75 to 250. `pause` and `stop` with the `docId` of a document that is not playing change nothing.
 
 ## Limits
 
 - Texts up to 2 MiB. Through the bridge, a `text` argument is limited to 300,000 characters; longer texts go by `path`. `terax-read` handles this on its own.
 - One document plays at a time. Starting "read aloud" elsewhere pauses the Reader, and the Reader stops "read aloud".
 - The export is WAV only.
+- Read here on a file reads it as saved on disk, not unsaved edits; select the text to read those.
+- Audio made for a sentence that later changed, or for a voice no longer used, stays in the document's folder until the reading is deleted.
 - Kokoro reads its Spanish voices through espeak, so the language guess only picks the default voice. Choose a voice for each document in the controls.

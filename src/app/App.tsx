@@ -76,13 +76,21 @@ import {
 import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import {
   closeReaderDoc,
+  isLive,
+  type LibraryEntry,
   loadStored,
+  type OriginTab,
   openStored,
+  pickDefaultDoc,
   playReader,
   ReaderMiniPlayer,
   readerNative,
+  setReaderOrigin,
+  stopReader,
+  toggleReader,
   useReaderStore,
 } from "@/modules/reader";
+import type { DocEntry } from "@/modules/reader/store/readerStore";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
@@ -155,6 +163,8 @@ import {
   useWindowTitle,
   useWorkspaceCwd,
   DEFAULT_SPACE_ID,
+  labelFor,
+  READER_DOCK_DEFAULT_HEIGHT,
   type TabColor,
 } from "@/modules/tabs";
 import {
@@ -209,7 +219,10 @@ import {
   TOGGLE_BLOCK_INPUT_EVENT,
   WorkspaceInputBar,
 } from "./components/WorkspaceInputBar";
-import { WorkspaceSurface } from "./components/WorkspaceSurface";
+import {
+  type ReaderDockBinding,
+  WorkspaceSurface,
+} from "./components/WorkspaceSurface";
 import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
@@ -278,6 +291,8 @@ export default function App() {
     closeTab,
     updateTab,
     updateTabNotes,
+    ensureReaderKey,
+    setReaderDock,
     selectByIndex,
     setLeafCwd,
     focusPane,
@@ -697,7 +712,12 @@ export default function App() {
       return terminalRefs.current.get(lid)?.getSelection() ?? null;
     }
     if (t.kind === "editor" || t.kind === "markdown") {
-      return editorRefs.current.get(activeId)?.getSelection() ?? null;
+      // The rendered Markdown view is plain DOM, not the editor.
+      const dom = window.getSelection()?.toString() ?? "";
+      return (
+        editorRefs.current.get(activeId)?.getSelection() ??
+        (dom.trim() ? dom : null)
+      );
     }
     return null;
   }, [tabs, activeId]);
@@ -773,10 +793,53 @@ export default function App() {
     addTextToNote(captureActiveSelection() ?? "");
   }, [addTextToNote, captureActiveSelection]);
 
+  /** The open tab a reading belongs to, by the key in its manifest. */
+  const readerOriginTab = useCallback(
+    (key: string | null): OriginTab | null => {
+      if (!key) return null;
+      const tab = tabsRef.current.find(
+        (t) => t.kind !== "reader" && t.readerKey === key,
+      );
+      return tab ? { id: tab.id, label: labelFor(tab) } : null;
+    },
+    [],
+  );
+
+  /**
+   * Records `tabId` as where a reading belongs, unless the tab it already
+   * belongs to is still open: the first home wins while it exists.
+   */
+  const recordReaderOrigin = useCallback(
+    (tabId: number, entry: DocEntry) => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      if (!tab || tab.kind === "reader") return;
+      if (readerOriginTab(entry.state.origin?.key ?? null)) return;
+      const key = ensureReaderKey(tabId);
+      if (key) setReaderOrigin(entry.id, { key, label: labelFor(tab) });
+    },
+    [ensureReaderKey, readerOriginTab],
+  );
+
+  /** Shows a reading in the panel under a tab. False for a Reader tab. */
+  const dockReading = useCallback(
+    (tabId: number, entry: DocEntry): boolean => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      if (!tab || tab.kind === "reader") return false;
+      setReaderDock(tabId, {
+        docId: entry.id,
+        height: tab.readerDock?.height ?? READER_DOCK_DEFAULT_HEIGHT,
+      });
+      recordReaderOrigin(tabId, entry);
+      return true;
+    },
+    [setReaderDock, recordReaderOrigin],
+  );
+
   const openInReader = useCallback(
     async (
       source: { text?: string; path?: string; title?: string },
       play = true,
+      placement: "dock" | "tab" = "tab",
     ) => {
       try {
         const title =
@@ -785,7 +848,11 @@ export default function App() {
             ? `${source.text.trim().split(/\s+/).slice(0, 6).join(" ")}...`
             : undefined);
         const entry = await openStored({ ...source, title });
-        openReaderTab({ docId: entry.id, title: entry.state.title });
+        const from = activeIdRef.current;
+        if (placement !== "dock" || !dockReading(from, entry)) {
+          recordReaderOrigin(from, entry);
+          openReaderTab({ docId: entry.id, title: entry.state.title });
+        }
         if (play) await playReader(entry.id);
       } catch (error: unknown) {
         toast.error(
@@ -793,16 +860,16 @@ export default function App() {
         );
       }
     },
-    [openReaderTab],
+    [openReaderTab, dockReading, recordReaderOrigin],
   );
 
   const speakAloud = useCallback((
     text: string,
-    options: SpeakOptions & { reader?: boolean } = {},
+    options: SpeakOptions & { reader?: boolean; here?: boolean } = {},
   ) => {
     if (!text.trim()) return;
-    if (options.reader) {
-      void openInReader({ text });
+    if (options.reader || options.here) {
+      void openInReader({ text }, true, options.here ? "dock" : "tab");
       return;
     }
     void speakText(text, options).catch((error: unknown) => {
@@ -1645,24 +1712,184 @@ export default function App() {
     [updateTab],
   );
 
-  // A Reader tab that closes, by any route, saves its place and frees its audio.
+  // A reading nothing shows any more, by any route (its tab or the tab under
+  // its panel closed, the panel closed), saves its place and frees its audio.
+  // The one playing or exporting is kept: the mini player still drives it.
   useEffect(() => {
     const open = new Set(
-      tabs.flatMap((t) => (t.kind === "reader" ? [t.docId] : [])),
+      tabs.flatMap((t) =>
+        t.kind === "reader"
+          ? [t.docId]
+          : t.readerDock?.docId
+            ? [t.readerDock.docId]
+            : [],
+      ),
     );
-    for (const docId of Object.keys(useReaderStore.getState().docs)) {
+    const { playback, docs } = useReaderStore.getState();
+    if (playback.docId && isLive(playback.docId)) open.add(playback.docId);
+    if (playback.exporting) open.add(playback.exporting.docId);
+    for (const docId of Object.keys(docs)) {
       if (!open.has(docId)) void closeReaderDoc(docId);
     }
   }, [tabs]);
 
   const focusReaderDoc = useCallback(
     (docId: string) => {
-      const tab = tabsRef.current.find(
-        (t) => t.kind === "reader" && t.docId === docId,
-      );
-      if (tab) setActiveId(tab.id);
+      const tabs = tabsRef.current;
+      const active = tabs.find((t) => t.id === activeIdRef.current);
+      if (
+        active &&
+        (active.kind === "reader"
+          ? active.docId === docId
+          : active.readerDock?.docId === docId)
+      )
+        return;
+      const tab =
+        tabs.find((t) => t.kind === "reader" && t.docId === docId) ??
+        tabs.find((t) => t.kind !== "reader" && t.readerDock?.docId === docId);
+      if (tab) {
+        setActiveId(tab.id);
+        return;
+      }
+      const entry = useReaderStore.getState().docs[docId];
+      if (entry && !dockReading(activeIdRef.current, entry))
+        openReaderTab({ docId, title: entry.state.title });
     },
-    [setActiveId],
+    [setActiveId, dockReading, openReaderTab],
+  );
+
+  /** Hands the keyboard back to a tab's own content, from its Reader panel. */
+  const focusTabContent = useCallback((tabId: number) => {
+    const tab = tabsRef.current.find((t) => t.id === tabId);
+    if (tab?.kind === "terminal") {
+      terminalRefs.current.get(tab.activeLeafId)?.focus();
+      return;
+    }
+    if (tab?.kind === "editor") {
+      editorRefs.current.get(tabId)?.focus();
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+  }, []);
+
+  /** Closes a tab's panel; the reading stops unless something else shows it. */
+  const closeReaderDock = useCallback(
+    (tabId: number) => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      const docId = tab?.kind !== "reader" ? tab?.readerDock?.docId : null;
+      if (docId) {
+        const elsewhere = tabsRef.current.some(
+          (t) =>
+            t.id !== tabId &&
+            (t.kind === "reader"
+              ? t.docId === docId
+              : t.readerDock?.docId === docId),
+        );
+        if (!elsewhere && useReaderStore.getState().playback.docId === docId)
+          stopReader();
+      }
+      setReaderDock(tabId, null);
+      if (tabId === activeIdRef.current) focusTabContent(tabId);
+    },
+    [setReaderDock, focusTabContent],
+  );
+
+  const showReaderLibrary = useCallback(
+    (tabId: number) => {
+      const tab = tabsRef.current.find((t) => t.id === tabId);
+      if (!tab || tab.kind === "reader") return;
+      setReaderDock(tabId, {
+        docId: null,
+        height: tab.readerDock?.height ?? READER_DOCK_DEFAULT_HEIGHT,
+      });
+    },
+    [setReaderDock],
+  );
+
+  /**
+   * A reading picked in the library opens in the tab it was made in when the
+   * chain is on and that tab is open, else in the panel it was picked from.
+   */
+  const pickReading = useCallback(
+    async (fromTabId: number, picked: LibraryEntry) => {
+      try {
+        const entry = await loadStored(picked.id);
+        const origin = useReaderStore.getState().followOrigin
+          ? readerOriginTab(picked.originKey)
+          : null;
+        const target = origin?.id ?? fromTabId;
+        if (!dockReading(target, entry)) return;
+        if (target !== activeIdRef.current) setActiveId(target);
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [dockReading, readerOriginTab, setActiveId],
+  );
+
+  /** Deleted readings leave the panels and Reader tabs that showed them. */
+  const forgetDeletedReadings = useCallback(
+    (ids: string[]) => {
+      const gone = new Set(ids);
+      for (const tab of tabsRef.current) {
+        if (tab.kind === "reader") {
+          if (gone.has(tab.docId)) void handleClose(tab.id);
+        } else if (tab.readerDock?.docId && gone.has(tab.readerDock.docId)) {
+          setReaderDock(tab.id, { ...tab.readerDock, docId: null });
+        }
+      }
+    },
+    [setReaderDock, handleClose],
+  );
+
+  const readerDockBinding = useMemo<ReaderDockBinding>(
+    () => ({
+      onResize: (tabId, height) => {
+        const tab = tabsRef.current.find((t) => t.id === tabId);
+        if (tab?.readerDock)
+          setReaderDock(tabId, { ...tab.readerDock, height });
+      },
+      onClose: closeReaderDock,
+      onPick: (tabId, entry) => void pickReading(tabId, entry),
+      onDeleted: forgetDeletedReadings,
+      onOpenAsTab: (docId, title) => {
+        // The reading moves: out of the panel, into a tab of its own.
+        const from = activeIdRef.current;
+        const tab = tabsRef.current.find((t) => t.id === from);
+        if (tab?.kind !== "reader" && tab?.readerDock?.docId === docId)
+          setReaderDock(from, null);
+        openReaderTab({ docId, title });
+      },
+      onEscape: focusTabContent,
+      originTab: readerOriginTab,
+    }),
+    [
+      setReaderDock,
+      closeReaderDock,
+      pickReading,
+      forgetDeletedReadings,
+      openReaderTab,
+      focusTabContent,
+      readerOriginTab,
+    ],
+  );
+
+  const readerPanelHost = useMemo(
+    () => ({
+      dockReading,
+      recordOrigin: recordReaderOrigin,
+      showLibrary: showReaderLibrary,
+      closeDock: closeReaderDock,
+      forgetDeleted: forgetDeletedReadings,
+    }),
+    [
+      dockReading,
+      recordReaderOrigin,
+      showReaderLibrary,
+      closeReaderDock,
+      forgetDeletedReadings,
+    ],
   );
 
   const handleNewSpace = useCallback(() => {
@@ -1787,6 +2014,48 @@ export default function App() {
                 ? () => void openInReader({ path: activeTab.path }, false)
                 : undefined,
             resumeLastReader: () => void resumeLastReader(),
+            readHere:
+              activeTab && activeTab.kind !== "reader"
+                ? () => {
+                    const selection = captureActiveSelection();
+                    if (selection?.trim())
+                      void openInReader({ text: selection }, true, "dock");
+                    else if (
+                      activeTab.kind === "editor" ||
+                      activeTab.kind === "markdown"
+                    )
+                      void openInReader({ path: activeTab.path }, true, "dock");
+                    else
+                      toast.message("Select the text to read first", {
+                        description:
+                          "Or right-click a selection and choose Read here.",
+                      });
+                  }
+                : undefined,
+            toggleReaderPanel:
+              activeTab && activeTab.kind !== "reader"
+                ? () =>
+                    activeTab.readerDock
+                      ? closeReaderDock(activeTab.id)
+                      : showReaderLibrary(activeTab.id)
+                : undefined,
+            toggleReaderPlayback: (() => {
+              const { playback } = useReaderStore.getState();
+              const docId = pickDefaultDoc(
+                playback,
+                activeTab?.kind === "reader"
+                  ? activeTab.docId
+                  : (activeTab?.readerDock?.docId ?? null),
+              );
+              return docId
+                ? () =>
+                    void toggleReader(docId).catch((error: unknown) =>
+                      toast.error(
+                        error instanceof Error ? error.message : String(error),
+                      ),
+                    )
+                : undefined;
+            })(),
             stopReading,
             openVoiceSettings: () => void openSettingsWindow("voice"),
             openSettings: () => void openSettingsWindow(),
@@ -1826,6 +2095,8 @@ export default function App() {
       readSelectionAloud,
       openInReader,
       resumeLastReader,
+      closeReaderDock,
+      showReaderLibrary,
       activeTab,
       stopReading,
       activeSpaceId,
@@ -1846,6 +2117,7 @@ export default function App() {
     updateTab,
     moveTabToSpace,
     openReaderTab,
+    readerPanel: readerPanelHost,
   });
 
   const externalCommandHandlers = useMemo<CommandHandlers>(
@@ -2578,6 +2850,7 @@ export default function App() {
                         onPrReviewBaseChange={handlePrReviewBaseChange}
                         onReaderClose={(id) => void handleClose(id)}
                         onReaderTitle={handleReaderTitle}
+                        readerDock={readerDockBinding}
                         onGitHistorySearchHandle={setGitHistoryHandle}
                         onSetRenderableView={setRenderableView}
                         onMermaidSourceChange={updateMermaidSource}
@@ -2769,7 +3042,11 @@ export default function App() {
             <AiMiniWindow state={miniPresence.state} />
           ) : null}
           <ReaderMiniPlayer
-            visibleDocId={activeTab?.kind === "reader" ? activeTab.docId : null}
+            visibleDocId={
+              activeTab?.kind === "reader"
+                ? activeTab.docId
+                : (activeTab?.readerDock?.docId ?? null)
+            }
             onOpenDoc={focusReaderDoc}
           />
           {askPresence.mounted ? (

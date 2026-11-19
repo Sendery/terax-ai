@@ -71,6 +71,18 @@ describe("parseDocument", () => {
     ]);
   });
 
+  it("keeps a hard-wrapped number inside a paragraph as prose", () => {
+    const doc = parseDocument(
+      "It was released in\n2019. It was a good year for it.\n1. First step\n2. Second step",
+    );
+    expect(doc.blocks.map((b) => b.kind)).toEqual([
+      "paragraph",
+      "list",
+      "list",
+    ]);
+    expect(doc.words.map((w) => w.text)).toContain("2019.");
+  });
+
   it("turns each table row into one segment with commas between cells", () => {
     const doc = parseDocument(
       "| Name | Role |\n| --- | --- |\n| Ana | Lead dev |",

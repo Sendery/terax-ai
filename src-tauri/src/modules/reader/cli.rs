@@ -18,18 +18,23 @@ const INLINE_TEXT_LIMIT: usize = 256 * 1024;
 const FRAME_OVERHEAD: usize = 1024;
 
 const USAGE: &str = "\
-Usage: terax --read [FILE] [--title TITLE] [--no-play]
-       <command> | terax --read [--title TITLE] [--no-play]
+Usage: terax --read [FILE] [--title TITLE] [--no-play] [--tab]
+       <command> | terax --read [--title TITLE] [--no-play] [--tab]
 
-Opens FILE, or text piped on stdin, in a Terax Reader tab.
+Opens FILE, or text piped on stdin, in the Terax Reader panel of the tab on
+screen.
   --title TITLE   name shown on the tab
-  --no-play       open without starting playback";
+  --no-play       open without starting playback
+  --tab           open in a Reader tab instead of the panel under the
+                  tab on screen";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReadArgs {
     pub file: Option<String>,
     pub title: Option<String>,
     pub play: bool,
+    /// Open in a Reader tab rather than the panel under the current tab.
+    pub tab: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -47,6 +52,7 @@ pub fn parse_read_args(args: &[String]) -> Result<ReadCommand, String> {
     let mut file: Option<String> = None;
     let mut title: Option<String> = None;
     let mut play = true;
+    let mut tab = false;
     let mut options_done = false;
     let mut iter = args.iter();
     fn set_file(value: &str, file: &mut Option<String>) -> Result<(), String> {
@@ -67,6 +73,7 @@ pub fn parse_read_args(args: &[String]) -> Result<ReadCommand, String> {
             "--" => options_done = true,
             "-h" | "--help" => return Ok(ReadCommand::Help),
             "--no-play" => play = false,
+            "--tab" => tab = true,
             "--title" => {
                 let value = iter.next().ok_or("--title needs a value")?;
                 title = Some(value.clone());
@@ -80,7 +87,12 @@ pub fn parse_read_args(args: &[String]) -> Result<ReadCommand, String> {
     let title = title
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty());
-    Ok(ReadCommand::Open(ReadArgs { file, title, play }))
+    Ok(ReadCommand::Open(ReadArgs {
+        file,
+        title,
+        play,
+        tab,
+    }))
 }
 
 fn base_payload(title: Option<&str>, play: bool) -> Map<String, Value> {
@@ -207,6 +219,12 @@ fn run_open(args: ReadArgs, bridge: &dyn Bridge) -> i32 {
             (payload, "stdin".to_string())
         }
     };
+    let mut payload = payload;
+    if args.tab {
+        if let Value::Object(fields) = &mut payload {
+            fields.insert("placement".into(), json!("tab"));
+        }
+    }
     match bridge.call("reader.open", payload) {
         Ok(reply) => {
             let shown = title.map(str::to_string).unwrap_or(fallback);
@@ -257,7 +275,19 @@ mod tests {
             file: file.map(str::to_string),
             title: title.map(str::to_string),
             play,
+            tab: false,
         })
+    }
+
+    #[test]
+    fn tab_flag_asks_for_a_reader_tab() {
+        match parse(&["--tab", "a.md"]).unwrap() {
+            ReadCommand::Open(args) => {
+                assert!(args.tab);
+                assert_eq!(args.file.as_deref(), Some("a.md"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 
     #[test]
@@ -358,11 +388,25 @@ mod tests {
             file: Some("/x/a.md".into()),
             title: None,
             play: true,
+            tab: false,
         };
         assert_eq!(run_open(args, &ok), 0);
         let calls = ok.calls.borrow();
         assert_eq!(calls[0].0, "reader.open");
         assert_eq!(calls[0].1, json!({ "path": "/x/a.md", "play": true }));
+        drop(calls);
+
+        let args = ReadArgs {
+            file: Some("/x/a.md".into()),
+            title: None,
+            play: true,
+            tab: true,
+        };
+        assert_eq!(run_open(args, &ok), 0);
+        assert_eq!(
+            ok.calls.borrow()[1].1,
+            json!({ "path": "/x/a.md", "play": true, "placement": "tab" })
+        );
 
         let failing = FakeBridge {
             reply: Err(BridgeError {
@@ -375,6 +419,7 @@ mod tests {
             file: Some("/x/a.md".into()),
             title: None,
             play: false,
+            tab: false,
         };
         assert_eq!(run_open(args, &failing), 1);
     }

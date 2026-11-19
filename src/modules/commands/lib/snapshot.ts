@@ -183,7 +183,7 @@ export type AppSnapshot = {
     visible: boolean;
     view: SidebarViewId;
   };
-  tabs: SnapshotTab[];
+  tabs: Array<SnapshotTab & { readerPanel?: SnapshotReaderPanel }>;
   scheduledTasks?: {
     paused: boolean;
     tasks: SnapshotTask[];
@@ -428,13 +428,26 @@ function serializeTab(tab: Tab): SnapshotTab {
   };
 }
 
+/** The Reader panel docked under a tab: the document it shows, or null for the readings list. */
+export type SnapshotReaderPanel = { docId: string | null };
+
+function withReaderPanel(
+  tab: Tab,
+): SnapshotTab & { readerPanel?: SnapshotReaderPanel } {
+  const out = serializeTab(tab);
+  // A private terminal shows nothing of itself, its panel included.
+  if (tab.kind === "reader" || !tab.readerDock || out.kind === "private-terminal")
+    return out;
+  return { ...out, readerPanel: { docId: tab.readerDock.docId } };
+}
+
 export function buildAppSnapshot(input: AppSnapshotInput): AppSnapshot {
   return {
     version: 1,
     activeTabId: input.activeTabId,
     activeSpaceId: input.activeSpaceId,
     ...(input.sidebar ? { sidebar: input.sidebar } : {}),
-    tabs: input.tabs.map(serializeTab),
+    tabs: input.tabs.map(withReaderPanel),
     ...(input.scheduledTasks
       ? {
           scheduledTasks: {

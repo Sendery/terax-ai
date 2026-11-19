@@ -1223,11 +1223,11 @@
     {
       "name": "terax_speak",
       "title": "Speak through Terax",
-      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along tab for long texts with word highlighting, bookmarks, scripted pauses and audio export. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?): Open a text or file in a read-along Reader tab, optionally playing it.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?): Export a Reader document as one WAV with its pauses and chapters.",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?): Export a Reader document as one WAV with its pauses and chapters.",
       "annotations": {
         "title": "Speak through Terax",
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true
       },
@@ -1244,6 +1244,8 @@
               "install_engine",
               "download_model",
               "open_reader",
+              "dock_reader",
+              "delete_reader_documents",
               "control_reader",
               "mark_reader",
               "export_reader"
@@ -1300,6 +1302,30 @@
             "type": "boolean",
             "description": "The path is a temporary copy of piped input: do not keep it as the source."
           },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "dock",
+              "tab"
+            ],
+            "description": "dock (default): the panel under a tab. tab: a Reader tab of its own."
+          },
+          "tabId": {
+            "type": "integer",
+            "description": "open_reader: Tab to dock the panel under, from the snapshot; defaults to the tab on screen. dock_reader: Tab whose panel to change, from the snapshot."
+          },
+          "docId": {
+            "type": "string",
+            "description": "Reader document id, from reader.list or the snapshot's reader tabs."
+          },
+          "close": {
+            "type": "boolean",
+            "description": "Close the panel instead of showing it."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Delete every document in the library."
+          },
           "op": {
             "type": "string",
             "enum": [
@@ -1312,10 +1338,6 @@
               "seek"
             ],
             "description": "play, pause, toggle, stop, next, previous or seek."
-          },
-          "docId": {
-            "type": "string",
-            "description": "Reader document id, from reader.list or the snapshot's reader tabs."
           },
           "wordIndex": {
             "type": "integer",
@@ -1400,7 +1422,24 @@
             "path",
             "title",
             "play",
-            "stdin"
+            "stdin",
+            "placement",
+            "tabId"
+          ]
+        },
+        "dock_reader": {
+          "command": "reader.dock",
+          "params": [
+            "tabId",
+            "docId",
+            "close"
+          ]
+        },
+        "delete_reader_documents": {
+          "command": "reader.delete",
+          "params": [
+            "docId",
+            "all"
           ]
         },
         "control_reader": {

@@ -1,3 +1,5 @@
+export { ReaderDock } from "./components/ReaderDock";
+export type { OriginTab } from "./components/ReaderLibrary";
 export { ReaderMiniPlayer } from "./components/ReaderMiniPlayer";
 export { ReaderStack } from "./ReaderStack";
 export {
@@ -7,9 +9,12 @@ export {
 } from "./lib/document";
 export { readerKeyAction, READER_KEY_HELP } from "./lib/keys";
 export { readerNative, type LibraryEntry } from "./lib/native";
+export { pickDefaultDoc } from "./lib/readerCommands";
 export {
   closeReaderDoc,
+  deleteReaderDocs,
   exportReader,
+  isLive,
   loadStored,
   openStored,
   pauseReader,
@@ -17,6 +22,7 @@ export {
   resumeReader,
   seekReaderTo,
   setReaderSpeed,
+  setReaderOrigin,
   setReaderVoice,
   stepReader,
   stopReader,

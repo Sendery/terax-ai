@@ -51,12 +51,22 @@ export const IDLE_PLAYBACK: ReaderPlayback = {
 };
 
 const FLOATING_KEY = "terax.reader.floatingControls";
+const FOLLOW_ORIGIN_KEY = "terax.reader.followOrigin";
 
-function readFloating(): boolean {
+function readFlag(key: string, fallback: boolean): boolean {
   try {
-    return globalThis.localStorage?.getItem(FLOATING_KEY) === "1";
+    const value = globalThis.localStorage?.getItem(key);
+    return value === null || value === undefined ? fallback : value === "1";
   } catch {
-    return false;
+    return fallback;
+  }
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(key, value ? "1" : "0");
+  } catch {
+    // A private window keeps the choice for this session only.
   }
 }
 
@@ -65,17 +75,24 @@ type ReaderStore = {
   playback: ReaderPlayback;
   /** Controls float over the workspace instead of docking under the text. */
   floating: boolean;
+  /**
+   * Picking a reading in the library goes to the tab it was made in. Off, it
+   * opens in the panel of the tab on screen.
+   */
+  followOrigin: boolean;
   putDoc: (entry: DocEntry) => void;
   patchDoc: (id: string, patch: Partial<DocEntry>) => void;
   dropDoc: (id: string) => void;
   setPlayback: (patch: Partial<ReaderPlayback>) => void;
   setFloating: (floating: boolean) => void;
+  setFollowOrigin: (followOrigin: boolean) => void;
 };
 
 export const useReaderStore = create<ReaderStore>((set) => ({
   docs: {},
   playback: IDLE_PLAYBACK,
-  floating: readFloating(),
+  floating: readFlag(FLOATING_KEY, false),
+  followOrigin: readFlag(FOLLOW_ORIGIN_KEY, true),
   putDoc: (entry) => set((s) => ({ docs: { ...s.docs, [entry.id]: entry } })),
   patchDoc: (id, patch) =>
     set((s) => {
@@ -92,11 +109,11 @@ export const useReaderStore = create<ReaderStore>((set) => ({
   setPlayback: (patch) =>
     set((s) => ({ playback: { ...s.playback, ...patch } })),
   setFloating: (floating) => {
-    try {
-      globalThis.localStorage?.setItem(FLOATING_KEY, floating ? "1" : "0");
-    } catch {
-      // A private window keeps the choice for this session only.
-    }
+    writeFlag(FLOATING_KEY, floating);
     set({ floating });
+  },
+  setFollowOrigin: (followOrigin) => {
+    writeFlag(FOLLOW_ORIGIN_KEY, followOrigin);
+    set({ followOrigin });
   },
 }));

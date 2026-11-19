@@ -9,6 +9,7 @@ import {
 import { validateMermaidDraftSource } from "@/modules/mermaid";
 import { isNoteCard, type NoteCard } from "@/modules/notes/lib/cards";
 import {
+  clampDockHeight,
   type EditorTab,
   isTabColor,
   type MarkdownTab,
@@ -31,7 +32,42 @@ export type SerializedNode =
   | { kind: "leaf"; cwd?: string; active?: boolean }
   | { kind: "split"; dir: SplitDir; children: SerializedNode[] };
 
-type SerializedTabBase = { viewMode?: ViewMode; color?: TabColor; notes?: NoteCard[] };
+type SerializedTabBase = {
+  viewMode?: ViewMode;
+  color?: TabColor;
+  notes?: NoteCard[];
+  readerKey?: string;
+  readerDock?: { docId: string | null; height: number };
+};
+
+const READER_KEY = /^[0-9a-z]{4,32}$/;
+const READER_DOC_ID = /^[0-9a-f]{12}$/;
+
+function restoreReaderFields(raw: SerializedTab, tab: Tab): void {
+  const { readerKey, readerDock } = raw as {
+    readerKey?: unknown;
+    readerDock?: unknown;
+  };
+  if (typeof readerKey === "string" && READER_KEY.test(readerKey))
+    tab.readerKey = readerKey;
+  if (
+    tab.kind === "reader" ||
+    !readerDock ||
+    typeof readerDock !== "object" ||
+    Array.isArray(readerDock)
+  )
+    return;
+  const { docId, height } = readerDock as { docId?: unknown; height?: unknown };
+  if (
+    docId !== null &&
+    !(typeof docId === "string" && READER_DOC_ID.test(docId))
+  )
+    return;
+  tab.readerDock = {
+    docId,
+    height: clampDockHeight(typeof height === "number" ? height : NaN),
+  };
+}
 
 export type SerializedTab =
   | (SerializedTabBase & {
@@ -243,10 +279,21 @@ export function serializeTabs(tabs: Tab[]): SerializedTab[] {
   for (const tab of tabs) {
     const s = serializeTab(tab);
     if (!s) continue;
-    if (["editor", "markdown", "mermaid", "graphx"].includes(tab.kind) && isViewMode(tab.viewMode)) s.viewMode = tab.viewMode;
+    if (
+      ["editor", "markdown", "mermaid", "graphx"].includes(tab.kind) &&
+      isViewMode(tab.viewMode)
+    )
+      s.viewMode = tab.viewMode;
     if (tab.notes?.length) {
       const valid = tab.notes.filter(isNoteCard);
       if (valid.length) s.notes = valid;
+    }
+    if (tab.readerKey) s.readerKey = tab.readerKey;
+    if (tab.readerDock && tab.kind !== "reader") {
+      s.readerDock = {
+        docId: tab.readerDock.docId,
+        height: tab.readerDock.height,
+      };
     }
     out.push(s);
   }
@@ -327,7 +374,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "editor",
-        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
+        ...(isViewMode(s.viewMode) ? { viewMode: s.viewMode } : {}),
         spaceId,
         cold: true,
         title: basename(s.path),
@@ -350,7 +397,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "markdown",
-        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
+        ...(isViewMode(s.viewMode) ? { viewMode: s.viewMode } : {}),
         spaceId,
         cold: true,
         title: basename(s.path),
@@ -382,13 +429,17 @@ function hydrateTab(
     }
     case "reader": {
       // The id names a folder in the Reader library; anything else is not one.
-      if (typeof s.docId !== "string" || !/^[0-9a-f]{12}$/.test(s.docId)) return null;
+      if (typeof s.docId !== "string" || !/^[0-9a-f]{12}$/.test(s.docId))
+        return null;
       return {
         id: allocId(),
         kind: "reader",
         spaceId,
         cold: true,
-        title: typeof s.title === "string" && s.title.trim() ? s.title.slice(0, 200) : "Reader",
+        title:
+          typeof s.title === "string" && s.title.trim()
+            ? s.title.slice(0, 200)
+            : "Reader",
         docId: s.docId,
         ...color,
       } satisfies ReaderTab;
@@ -424,7 +475,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "graphx",
-        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
+        ...(isViewMode(s.viewMode) ? { viewMode: s.viewMode } : {}),
         spaceId,
         cold: true,
         title: spec.title,
@@ -453,7 +504,7 @@ function hydrateTab(
       return {
         id: allocId(),
         kind: "mermaid",
-        ...(isViewMode(s.viewMode) ? {viewMode: s.viewMode} : {}),
+        ...(isViewMode(s.viewMode) ? { viewMode: s.viewMode } : {}),
         spaceId,
         cold: true,
         title,
@@ -506,6 +557,7 @@ export function hydrateTabs(
         const valid = rawNotes.filter(isNoteCard);
         if (valid.length) tab.notes = valid;
       }
+      restoreReaderFields(s, tab);
       out.push(tab);
     } catch {
       // Skip corrupted entries rather than failing the whole restore.

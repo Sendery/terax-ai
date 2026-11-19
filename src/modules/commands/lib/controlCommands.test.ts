@@ -33,6 +33,8 @@ function handlers(): ControlHandlers {
     controlReader: vi.fn(() => "controlReader"),
     markReader: vi.fn(() => "markReader"),
     exportReader: vi.fn(() => "exportReader"),
+    dockReader: vi.fn(() => "dockReader"),
+    deleteReader: vi.fn(() => "deleteReader"),
   };
 }
 

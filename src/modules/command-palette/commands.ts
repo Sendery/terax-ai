@@ -14,6 +14,7 @@ import {
   Globe02Icon,
   IncognitoIcon,
   KeyboardIcon,
+  LayoutBottomIcon,
   LayoutTwoColumnIcon,
   LayoutTwoRowIcon,
   Note01Icon,
@@ -73,6 +74,12 @@ export type CommandPaletteActionContext = {
   readSelectionAloudSpanish: () => void;
   readSelectionAloudEnglish: () => void;
   openSelectionInReader: () => void;
+  /** Reads the selection, else the file on screen, in the panel under the tab. */
+  readHere?: () => void;
+  /** Opens the Reader panel with the library, or closes it. */
+  toggleReaderPanel?: () => void;
+  /** Present while a reading is open somewhere. */
+  toggleReaderPlayback?: () => void;
   /** Present when the active tab is a file. */
   openFileInReader?: () => void;
   resumeLastReader: () => void;
@@ -405,9 +412,53 @@ export function createCommandItems(
       disabledReason: selectionDisabled,
       run: ctx.readSelectionAloudEnglish,
     },
+    ...(ctx.readHere
+      ? [
+          {
+            id: "reader.readHere",
+            title: "Read here, in the Reader panel",
+            group: "Voice" as const,
+            keywords: [
+              "reader",
+              "read along",
+              "panel",
+              "dock",
+              "tts",
+              "listen",
+              "here",
+            ],
+            icon: LayoutBottomIcon,
+            run: ctx.readHere,
+          },
+        ]
+      : []),
+    ...(ctx.toggleReaderPanel
+      ? [
+          {
+            id: "reader.togglePanel",
+            title: "Show or hide the Reader panel",
+            group: "Voice" as const,
+            keywords: ["reader", "panel", "library", "readings", "dock"],
+            icon: BookOpen01Icon,
+            run: ctx.toggleReaderPanel,
+          },
+        ]
+      : []),
+    ...(ctx.toggleReaderPlayback
+      ? [
+          {
+            id: "reader.togglePlayback",
+            title: "Play or pause the Reader",
+            group: "Voice" as const,
+            keywords: ["reader", "play", "pause", "resume", "listen"],
+            icon: BookOpen01Icon,
+            run: ctx.toggleReaderPlayback,
+          },
+        ]
+      : []),
     {
       id: "reader.openSelection",
-      title: "Open selection in Reader",
+      title: "Open selection in Reader tab",
       group: "Voice",
       keywords: ["reader", "read along", "tts", "karaoke", "voice", "listen"],
       icon: BookOpen01Icon,

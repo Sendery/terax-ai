@@ -37,6 +37,11 @@ export type CutPoint = {
 
 export type PlaybackStatus = "idle" | "playing" | "paused" | "finished";
 
+/** The tab a reading was made in, by its stable Reader key, and its name then. */
+export type ReaderOrigin = { key: string; label: string };
+
+const ORIGIN_KEY = /^[0-9a-z]{4,32}$/;
+
 export type ReaderState = {
   title: string;
   sourcePath: string | null;
@@ -48,6 +53,7 @@ export type ReaderState = {
   cutPoints: CutPoint[];
   /** Study mode: stop at every bookmark instead of reading through. */
   stopAtBookmarks: boolean;
+  origin: ReaderOrigin | null;
 };
 
 export function clampSpeed(speed: number): number {
@@ -78,6 +84,7 @@ export function defaultReaderState(
     status: "idle",
     cutPoints: [],
     stopAtBookmarks: false,
+    origin: null,
   };
 }
 
@@ -294,6 +301,7 @@ export type ManifestJson = {
   voice_id: string | null;
   voice_key: string | null;
   stop_at_bookmarks: boolean;
+  origin: ReaderOrigin | null;
   playback_state: {
     status: PlaybackStatus;
     last_position_ms: number;
@@ -362,6 +370,7 @@ export function buildManifest(input: ManifestInput): ManifestJson {
     voice_id: state.voiceId,
     voice_key: input.voiceKey,
     stop_at_bookmarks: state.stopAtBookmarks,
+    origin: state.origin,
     playback_state: {
       status: state.status === "playing" ? "paused" : state.status,
       last_position_ms: Math.round(state.lastPositionMs),
@@ -410,6 +419,13 @@ const STATUSES: readonly PlaybackStatus[] = [
   "finished",
 ];
 
+export function parseOrigin(value: unknown): ReaderOrigin | null {
+  if (!isObject(value)) return null;
+  const key = value.key;
+  if (typeof key !== "string" || !ORIGIN_KEY.test(key)) return null;
+  return { key, label: str(value.label, MAX_LABEL) ?? "" };
+}
+
 /**
  * Reads the parts of a stored manifest the Reader trusts. Text cuts are not
  * read back: they are rebuilt from the source, which is the authority.
@@ -435,6 +451,7 @@ export function parseManifest(
   if (path) state.sourcePath = path;
   state.voiceId = str(json.voice_id, 120);
   state.stopAtBookmarks = json.stop_at_bookmarks === true;
+  state.origin = parseOrigin(json.origin);
   const maxWord = Math.max(0, wordCount - 1);
   if (isObject(json.playback_state)) {
     const p = json.playback_state;

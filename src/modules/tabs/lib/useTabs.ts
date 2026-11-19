@@ -47,7 +47,35 @@ type TabBase = {
   color?: TabColor;
   /** Per-tab notes (Jira/GitHub PR/Notion/Figma/Obsidian/link/text cards). */
   notes?: NoteCard[];
+  /**
+   * Stable name the Reader library uses to find this tab again, across
+   * restarts, since tab ids are reassigned on every launch.
+   */
+  readerKey?: string;
+  /** The Reader panel docked under the tab's content, when open. */
+  readerDock?: ReaderDock;
 };
+
+/** `docId` null shows the Reader library instead of a document. */
+export type ReaderDock = { docId: string | null; height: number };
+
+export const READER_DOCK_DEFAULT_HEIGHT = 0.42;
+export const READER_DOCK_MIN_HEIGHT = 0.18;
+export const READER_DOCK_MAX_HEIGHT = 0.8;
+
+export function clampDockHeight(height: number): number {
+  if (!Number.isFinite(height)) return READER_DOCK_DEFAULT_HEIGHT;
+  return Math.min(
+    READER_DOCK_MAX_HEIGHT,
+    Math.max(READER_DOCK_MIN_HEIGHT, Math.round(height * 1000) / 1000),
+  );
+}
+
+export function newReaderKey(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return `t${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
 
 export type TerminalTab = TabBase & {
   id: number;
@@ -1256,6 +1284,51 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     );
   }, [setTabs]);
 
+  /**
+   * The tab's Reader key, made on first use. Synchronous so the caller can
+   * write it into a document's manifest right away.
+   */
+  const ensureReaderKey = useCallback(
+    (id: number): string | null => {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (!tab) return null;
+      if (tab.readerKey) return tab.readerKey;
+      const key = newReaderKey();
+      setTabs(
+        tabsRef.current.map((t) => (t.id === id ? { ...t, readerKey: key } : t)),
+      );
+      return key;
+    },
+    [setTabs],
+  );
+
+  /** Opens, changes or (with null) closes the Reader panel under a tab. */
+  const setReaderDock = useCallback(
+    (id: number, dock: ReaderDock | null) => {
+      setTabs(
+        tabsRef.current.map((t) => {
+          if (t.id !== id || t.kind === "reader") return t;
+          if (dock === null) {
+            if (!t.readerDock) return t;
+            const { readerDock: _closed, ...rest } = t;
+            return rest as Tab;
+          }
+          const next = {
+            docId: dock.docId,
+            height: clampDockHeight(dock.height),
+          };
+          if (
+            t.readerDock?.docId === next.docId &&
+            t.readerDock.height === next.height
+          )
+            return t;
+          return { ...t, readerDock: next };
+        }),
+      );
+    },
+    [setTabs],
+  );
+
   /** Update a tab's notes with an immutable updater. Persisted via the space
    * serializer, so notes survive restarts and are scoped per workspace+tab. */
   const updateTabNotes = useCallback(
@@ -1510,6 +1583,8 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     closeTab,
     updateTab,
     updateTabNotes,
+    ensureReaderKey,
+    setReaderDock,
     selectByIndex,
     setLeafCwd,
     focusPane,

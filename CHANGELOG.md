@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.23 (2026-11-19)
+
+- Reader en un panel acoplado bajo cualquier pestaña (terminal, editor o Markdown), sin cambiar de pestaña: «Read here», `terax-read` y la paleta.
+- Lista de lecturas en el icono del libro, con borrar una o todas y la cadena para volver a la pestaña donde se hizo cada una.
+- Correcciones de reproducción, guardado y lectura de texto partido salidas de una revisión independiente, y `reader.dock` y `reader.delete` para los agentes.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.23.md).
+
 ## Pi-Terax v0.9.0-dev.22 (2026-11-19)
 
 - Reader: pestaña que lee textos largos con la voz local y resalta cada palabra, con clic para empezar, atajos estilo vim, velocidad de 0.75x a 2.5x y controles flotantes.

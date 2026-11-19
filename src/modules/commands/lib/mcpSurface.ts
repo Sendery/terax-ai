@@ -405,10 +405,10 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
     name: "terax_speak",
     title: "Speak through Terax",
     purpose:
-      "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along tab for long texts with word highlighting, bookmarks, scripted pauses and audio export. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.",
+      "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.",
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
@@ -427,7 +427,16 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       download_model: { command: "tts.download", summary: "Download a speech model." },
       open_reader: {
         command: "reader.open",
-        summary: "Open a text or file in a read-along Reader tab, optionally playing it.",
+        summary:
+          "Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.",
+      },
+      dock_reader: {
+        command: "reader.dock",
+        summary: "Show a reading or the library in the Reader panel under a tab, or close it.",
+      },
+      delete_reader_documents: {
+        command: "reader.delete",
+        summary: "Delete one reading, or all of them, with their audio.",
       },
       control_reader: {
         command: "reader.control",

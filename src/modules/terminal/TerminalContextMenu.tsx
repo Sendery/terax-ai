@@ -24,6 +24,7 @@ import {
   ClipboardPasteIcon,
   Copy01Icon,
   Flowchart01Icon,
+  LayoutBottomIcon,
   Note01Icon,
   Refresh01Icon,
   SparklesIcon,
@@ -42,6 +43,8 @@ export type ReadAloudOptions = {
   language?: TtsLanguage;
   /** Open the text in a Reader tab instead of speaking it in the background. */
   reader?: boolean;
+  /** Read it along in the Reader panel under this tab, without leaving it. */
+  here?: boolean;
 };
 
 /**
@@ -260,10 +263,21 @@ function MenuBody({
           </ContextMenuSub>
           <ContextMenuItem
             disabled={selection.length === 0}
+            onSelect={() => onReadAloud(selection, { here: true })}
+          >
+            <HugeiconsIcon
+              icon={LayoutBottomIcon}
+              size={14}
+              strokeWidth={1.75}
+            />
+            <span className="flex-1">Read here</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={selection.length === 0}
             onSelect={() => onReadAloud(selection, { reader: true })}
           >
             <HugeiconsIcon icon={BookOpen01Icon} size={14} strokeWidth={1.75} />
-            <span className="flex-1">Open in Reader</span>
+            <span className="flex-1">Open in Reader tab</span>
           </ContextMenuItem>
           <ContextMenuItem
             disabled={!speaking}

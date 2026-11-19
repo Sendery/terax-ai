@@ -173,6 +173,37 @@ describe("buildAppSnapshot", () => {
     expect(JSON.stringify(snapshot)).not.toContain('"color"');
   });
 
+  it("shows the Reader panel under a tab, except under a private terminal", () => {
+    const tabs: Tab[] = [
+      {
+        id: 1,
+        kind: "terminal",
+        spaceId: "default",
+        title: "shell",
+        paneTree: { kind: "leaf", id: 2 },
+        activeLeafId: 2,
+        readerDock: { docId: "a8f92c1d0b3e", height: 0.4 },
+      },
+      {
+        id: 3,
+        kind: "terminal",
+        spaceId: "default",
+        title: "private",
+        paneTree: { kind: "leaf", id: 4 },
+        activeLeafId: 4,
+        private: true,
+        readerDock: { docId: "b8f92c1d0b3e", height: 0.4 },
+      },
+    ];
+    const snapshot = buildAppSnapshot({
+      tabs,
+      activeTabId: 1,
+      activeSpaceId: "default",
+    });
+    expect(snapshot.tabs[0].readerPanel).toEqual({ docId: "a8f92c1d0b3e" });
+    expect(snapshot.tabs[1].readerPanel).toBeUndefined();
+  });
+
   it("serializes color for every non-private tab kind", () => {
     const tabs: Tab[] = [
       {
