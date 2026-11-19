@@ -2,7 +2,12 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 import { create } from "zustand";
 import { allocateSpawnId, killCliAgent, runCliAgent } from "../cli/bridge";
 import { loadPiModels, usePiModelsStore } from "../cli/piModels";
-import { type ProviderId, rememberVariantLabel } from "../config";
+import {
+  parseVariantModelId,
+  type ProviderId,
+  rememberVariantLabel,
+  variantModelId,
+} from "../config";
 import {
   CATALOG_SOURCES,
   CATALOG_TTL_MS,
@@ -57,7 +62,16 @@ function hydrate(): Promise<void> {
     const catalogs: State["catalogs"] = {};
     for (const [provider, value] of Object.entries(saved) as [ProviderId, Persisted[ProviderId]][]) {
       if (!value || !Array.isArray(value.models) || !CATALOG_SOURCES[provider]) continue;
-      catalogs[provider] = entry(provider, value.models, value.live, value.fetchedAt);
+      // The file is ours but may be stale or edited: keep only rows that
+      // still form a valid model id, so the picker never renders a bad one.
+      const models = value.models.filter(
+        (m): m is CatalogModel =>
+          !!m &&
+          typeof m.wire === "string" &&
+          typeof m.label === "string" &&
+          parseVariantModelId(variantModelId(provider, m.wire)) !== null,
+      );
+      catalogs[provider] = entry(provider, models, value.live === true, Number(value.fetchedAt) || 0);
     }
     useModelCatalogStore.setState((s) => ({ catalogs: { ...catalogs, ...s.catalogs } }));
   })();
@@ -104,7 +118,9 @@ async function listCli(argv: string[]): Promise<string[]> {
   return lines;
 }
 
-async function fetchCatalog(provider: ProviderId): Promise<{ models: CatalogModel[]; live: boolean }> {
+async function fetchCatalog(
+  provider: ProviderId,
+): Promise<{ models: CatalogModel[]; live: boolean; stale?: boolean }> {
   const source = CATALOG_SOURCES[provider];
   if (!source) return { models: [], live: false };
   switch (source.kind) {
@@ -112,7 +128,9 @@ async function fetchCatalog(provider: ProviderId): Promise<{ models: CatalogMode
       return { models: source.models, live: false };
     case "api": {
       const models = await fetchApi(provider, source.url, source.auth);
-      return models ? { models, live: true } : { models: [], live: false };
+      // No key (a subscription sign-in, say): nothing to cache, so adding a
+      // key later lists the catalogue on the next look instead of in 24 h.
+      return models ? { models, live: true } : { models: [], live: false, stale: true };
     }
     case "cli":
       return { models: source.parse(await listCli(source.argv)), live: true };
@@ -144,9 +162,9 @@ export async function ensureCatalog(provider: ProviderId, force = false): Promis
     useModelCatalogStore.setState((s) => ({ catalogs: { ...s.catalogs, [provider]: next } }));
   if (current) set({ ...current, status: "loading" });
   const job = fetchCatalog(provider)
-    .then(({ models, live }) => {
-      set(entry(provider, models, live, Date.now()));
-      persist();
+    .then(({ models, live, stale }) => {
+      set(entry(provider, models, live, stale ? 0 : Date.now()));
+      if (!stale) persist();
     })
     .catch((e: unknown) => {
       const message = e instanceof Error ? e.message : String(e);

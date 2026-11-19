@@ -1012,7 +1012,8 @@ export function getModelContextLimit(
   if (isCompatModelId(modelId)) return compatOverride ?? 128_000;
   if (modelId === "openai-compatible-custom" && compatOverride)
     return compatOverride;
-  return MODEL_CONTEXT_LIMITS[modelId] ?? 128_000;
+  const wire = parseVariantModelId(modelId)?.wire;
+  return MODEL_CONTEXT_LIMITS[modelId] ?? (wire ? MODEL_CONTEXT_LIMITS[wire] : undefined) ?? 128_000;
 }
 
 export type ModelPricing = {

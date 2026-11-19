@@ -12,10 +12,11 @@ describe("copilotPermissionArgs", () => {
 
   // Accepting edits withholds the shell, so Terax tools that type into
   // terminals or poll commands stay out too.
-  it("allows writes and the Terax tools that cannot run shell input", () => {
+  it("allows writes and the Terax tools with no approval-gated action", () => {
     const args = copilotPermissionArgs("acceptEdits", true);
     expect(args[0]).toBe("--allow-tool=write");
-    expect(args).toContain("--allow-tool=terax(terax_manage_tabs)");
+    expect(args).toContain("--allow-tool=terax(terax_open_view)");
+    expect(args).not.toContain("--allow-tool=terax(terax_schedule_tasks)");
     expect(args).not.toContain("--allow-tool=terax(terax_terminals)");
     expect(args).not.toContain("--allow-tool=terax(terax_watch)");
     expect(args.some((a) => a.includes("shell"))).toBe(false);

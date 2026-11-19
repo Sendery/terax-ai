@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getModel,
+  getModelContextLimit,
+  MODEL_CONTEXT_LIMITS,
   isKnownModelId,
   parseVariantModelId,
   rememberVariantLabel,
@@ -36,5 +38,13 @@ describe("catalogue variant model ids", () => {
     expect(resolveModel("gpt-5.5").id).toBe("gpt-5.5");
     expect(() => resolveModel("not-a-model")).toThrow();
     expect(isKnownModelId("not-a-model")).toBe(false);
+  });
+});
+
+describe("variant context limits", () => {
+  it("uses the provider model's own limit when it is known", () => {
+    const known = Object.keys(MODEL_CONTEXT_LIMITS)[0];
+    expect(getModelContextLimit(`openrouter::${known}`)).toBe(MODEL_CONTEXT_LIMITS[known]);
+    expect(getModelContextLimit("openai::gpt-unknown-9")).toBe(128_000);
   });
 });

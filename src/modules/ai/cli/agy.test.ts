@@ -7,15 +7,20 @@ describe("Terax tools an agy turn may call", () => {
     expect(teraxToolsFor("default")).toEqual(["terax_inspect"]);
   });
 
-  // Accepting edits withholds the shell; the tools that type into terminals
-  // or poll commands would be the way around that.
-  it("withholds the shell-capable tools when edits are accepted", () => {
+  // Accepting edits withholds the shell. Typing into terminals, polling
+  // commands or scheduling a task (which starts an agent with its own shell)
+  // would be the way around that, and the rest of the approval-gated actions
+  // (closing tabs, removing notes, installing speech engines) still need a yes.
+  it("pre-approves only tools whose every action needs no approval", () => {
     const tools = teraxToolsFor("acceptEdits");
-    expect(tools).toContain("terax_inspect");
-    expect(tools).toContain("terax_manage_tabs");
-    expect(tools).not.toContain("terax_terminals");
-    expect(tools).not.toContain("terax_watch");
-    expect(tools.length).toBe(MCP_GROUPS.length - 2);
+    expect(tools).toEqual(["terax_inspect", "terax_open_view", "terax_manage_panels"]);
+    for (const withheld of ["terax_terminals", "terax_watch", "terax_schedule_tasks", "terax_manage_tabs", "terax_manage_notes", "terax_speak"]) {
+      expect(tools, withheld).not.toContain(withheld);
+    }
+  });
+
+  it("classifies every MCP tool in some posture", () => {
+    expect(MCP_GROUPS.length).toBeGreaterThan(teraxToolsFor("acceptEdits").length);
   });
 
   it("needs no list under full access", () => {
