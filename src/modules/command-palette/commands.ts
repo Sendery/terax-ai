@@ -5,6 +5,7 @@ import {
   AlarmClockIcon,
   AlarmClockPlusIcon,
   AudioWave01Icon,
+  BookOpen01Icon,
   Cancel01Icon,
   DashboardSquare01Icon,
   FileEditIcon,
@@ -71,6 +72,10 @@ export type CommandPaletteActionContext = {
   readSelectionAloud: () => void;
   readSelectionAloudSpanish: () => void;
   readSelectionAloudEnglish: () => void;
+  openSelectionInReader: () => void;
+  /** Present when the active tab is a file. */
+  openFileInReader?: () => void;
+  resumeLastReader: () => void;
   stopReading: () => void;
   openVoiceSettings: () => void;
   openSettings: () => void;
@@ -399,6 +404,35 @@ export function createCommandItems(
       icon: AudioWave01Icon,
       disabledReason: selectionDisabled,
       run: ctx.readSelectionAloudEnglish,
+    },
+    {
+      id: "reader.openSelection",
+      title: "Open selection in Reader",
+      group: "Voice",
+      keywords: ["reader", "read along", "tts", "karaoke", "voice", "listen"],
+      icon: BookOpen01Icon,
+      disabledReason: selectionDisabled,
+      run: ctx.openSelectionInReader,
+    },
+    ...(ctx.openFileInReader
+      ? [
+          {
+            id: "reader.openFile",
+            title: "Open this file in Reader",
+            group: "Voice" as const,
+            keywords: ["reader", "read along", "tts", "listen", "document"],
+            icon: BookOpen01Icon,
+            run: ctx.openFileInReader,
+          },
+        ]
+      : []),
+    {
+      id: "reader.resume",
+      title: "Resume last Reader document",
+      group: "Voice",
+      keywords: ["reader", "resume", "continue", "library", "listen"],
+      icon: BookOpen01Icon,
+      run: ctx.resumeLastReader,
     },
     {
       id: "tts.stop",

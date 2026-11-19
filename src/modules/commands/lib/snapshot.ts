@@ -119,6 +119,15 @@ export type SnapshotTab =
     }
   | {
       id: number;
+      kind: "reader";
+      spaceId: string;
+      title: string;
+      /** Reader library id; pass it to reader.* commands. */
+      docId: string;
+      color?: TabColor;
+    }
+  | {
+      id: number;
       kind: "git-commit-file";
       spaceId: string;
       title: string;
@@ -389,6 +398,17 @@ function serializeTab(tab: Tab): SnapshotTab {
       repoRoot: tab.repoRoot,
       head: tab.head,
       base: tab.base,
+      ...(tab.color ? { color: tab.color } : {}),
+    };
+  }
+
+  if (tab.kind === "reader") {
+    return {
+      id: tab.id,
+      kind: "reader",
+      spaceId: tab.spaceId,
+      title: displayTitle(tab),
+      docId: tab.docId,
       ...(tab.color ? { color: tab.color } : {}),
     };
   }

@@ -172,7 +172,17 @@ export type PrReviewTab = TabBase & {
   base: string;
 };
 
+/** A document read aloud with word-by-word highlighting. */
+export type ReaderTab = TabBase & {
+  id: number;
+  kind: "reader";
+  title: string;
+  /** Folder name of the document in the Reader library. */
+  docId: string;
+};
+
 export type Tab =
+  | ReaderTab
   | PrReviewTab
   | TerminalTab
   | EditorTab
@@ -1120,6 +1130,41 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     [setTabs],
   );
 
+  const openReaderTab = useCallback(
+    (input: { docId: string; title: string; background?: boolean }) => {
+      const curr = tabsRef.current;
+      // One tab per document: opening it again returns to the same reading.
+      const existing = curr.find(
+        (t) => t.kind === "reader" && t.docId === input.docId,
+      );
+      if (existing) {
+        const nextTabs = curr.map((t) =>
+          t.id === existing.id ? { ...t, title: input.title } : t,
+        );
+        tabsRef.current = nextTabs;
+        setTabs(nextTabs);
+        if (!input.background) setActiveId(existing.id);
+        return existing.id;
+      }
+      const id = nextIdRef.current++;
+      const nextTabs = [
+        ...curr,
+        {
+          id,
+          kind: "reader",
+          spaceId: activeSpaceIdRef.current,
+          title: input.title,
+          docId: input.docId,
+        } satisfies ReaderTab,
+      ];
+      tabsRef.current = nextTabs;
+      setTabs(nextTabs);
+      if (!input.background) setActiveId(id);
+      return id;
+    },
+    [setTabs],
+  );
+
   const setPrReviewBase = useCallback((tabId: number, base: string) => {
     setTabs((curr) =>
       curr.map((t) =>
@@ -1458,6 +1503,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     openCommitHistoryTab,
     openCommitFileDiffTab,
     openPrReviewTab,
+    openReaderTab,
     setPrReviewBase,
     setAiDiffStatus,
     closeAiDiffTab,

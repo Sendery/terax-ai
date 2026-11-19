@@ -175,6 +175,10 @@ fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     if let Ok(discovery) = crate::modules::pi::cache_file_path() {
         cmd.env("TERAX_PI_DISCOVERY", discovery);
     }
+    // `terax-read` in the integration scripts runs this binary's `--read`.
+    if let Ok(exe) = std::env::current_exe() {
+        cmd.env("TERAX_APP_EXE", exe);
+    }
     for (key, value) in workspace::appimage_env_overrides() {
         match value {
             Some(v) => {
@@ -899,6 +903,14 @@ mod term_program_tests {
         apply_common(&mut cmd, None, false);
         assert_eq!(cmd.get_env("TERM_PROGRAM"), Some(OsStr::new("Terax")));
         assert!(cmd.get_env("TERM_PROGRAM_VERSION").is_some());
+    }
+
+    #[test]
+    fn apply_common_exposes_the_app_executable_for_terax_read() {
+        let mut cmd = CommandBuilder::new("sh");
+        apply_common(&mut cmd, None, false);
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(cmd.get_env("TERAX_APP_EXE"), Some(exe.as_os_str()));
     }
 
     #[test]

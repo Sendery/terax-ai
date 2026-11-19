@@ -16,6 +16,7 @@ import {
   type MermaidVisualLayout,
   type PreviewTab,
   type PrReviewTab,
+  type ReaderTab,
   type Tab,
   type TabColor,
   type TerminalTab,
@@ -53,6 +54,7 @@ export type SerializedTab =
   | (SerializedTabBase & { kind: "editor"; path: string })
   | (SerializedTabBase & { kind: "preview"; url: string })
   | (SerializedTabBase & { kind: "markdown"; path: string })
+  | (SerializedTabBase & { kind: "reader"; docId: string; title: string })
   | (SerializedTabBase & {
       kind: "pr-review";
       repoRoot: string;
@@ -157,6 +159,7 @@ export function isSerializableTab(tab: Tab): boolean {
     case "graphx":
     case "mermaid":
     case "pr-review":
+    case "reader":
       return true;
     default:
       return false;
@@ -198,6 +201,13 @@ function serializeTab(tab: Tab): SerializedTab | null {
         repoRoot: tab.repoRoot,
         head: tab.head,
         base: tab.base,
+        ...(tab.color !== undefined && { color: tab.color }),
+      };
+    case "reader":
+      return {
+        kind: "reader",
+        docId: tab.docId,
+        title: tab.title,
         ...(tab.color !== undefined && { color: tab.color }),
       };
     case "graphx":
@@ -369,6 +379,19 @@ function hydrateTab(
         base: s.base,
         ...color,
       } satisfies PrReviewTab;
+    }
+    case "reader": {
+      // The id names a folder in the Reader library; anything else is not one.
+      if (typeof s.docId !== "string" || !/^[0-9a-f]{12}$/.test(s.docId)) return null;
+      return {
+        id: allocId(),
+        kind: "reader",
+        spaceId,
+        cold: true,
+        title: typeof s.title === "string" && s.title.trim() ? s.title.slice(0, 200) : "Reader",
+        docId: s.docId,
+        ...color,
+      } satisfies ReaderTab;
     }
     case "graphx": {
       const spec = parseGraphSource(s.source);

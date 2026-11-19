@@ -29,6 +29,7 @@ export {
   nextActiveInSpace,
   type PreviewTab,
   type PrReviewTab,
+  type ReaderTab,
   type Tab,
   type TabPatch,
   type TerminalTab,

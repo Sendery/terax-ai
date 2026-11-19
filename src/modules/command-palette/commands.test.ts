@@ -39,6 +39,8 @@ function context(
     readSelectionAloud: noop,
     readSelectionAloudSpanish: noop,
     readSelectionAloudEnglish: noop,
+    openSelectionInReader: noop,
+    resumeLastReader: noop,
     stopReading: noop,
     openVoiceSettings: noop,
     openSettings: noop,

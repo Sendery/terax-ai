@@ -116,6 +116,14 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
         summary: "Installed and running speech engines and downloaded models.",
       },
       list_voices: { command: "tts.voices", summary: "Voice profiles for speak." },
+      list_reader_documents: {
+        command: "reader.list",
+        summary: "Documents in the Reader library and where reading stopped.",
+      },
+      reader_state: {
+        command: "reader.state",
+        summary: "A Reader document's position, word, timing, speed and cut points.",
+      },
       search_content: {
         command: "search.content",
         summary: "Ripgrep content search under a root; secret paths are never returned.",
@@ -397,7 +405,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
     name: "terax_speak",
     title: "Speak through Terax",
     purpose:
-      "Read short text aloud on the user's machine with Terax's local speech engines, and manage those engines. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.",
+      "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along tab for long texts with word highlighting, bookmarks, scripted pauses and audio export. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -417,6 +425,22 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       stop_engine: { command: "tts.stop", summary: "Stop one engine, or all when omitted." },
       install_engine: { command: "tts.install", summary: "Install a speech engine." },
       download_model: { command: "tts.download", summary: "Download a speech model." },
+      open_reader: {
+        command: "reader.open",
+        summary: "Open a text or file in a read-along Reader tab, optionally playing it.",
+      },
+      control_reader: {
+        command: "reader.control",
+        summary: "Play, pause, stop, step, seek or change the speed of a Reader document.",
+      },
+      mark_reader: {
+        command: "reader.mark",
+        summary: "Place or remove a bookmark, scripted pause or stop before a word.",
+      },
+      export_reader: {
+        command: "reader.export",
+        summary: "Export a Reader document as one WAV with its pauses and chapters.",
+      },
     },
   },
 ];

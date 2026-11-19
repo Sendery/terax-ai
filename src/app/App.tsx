@@ -74,6 +74,15 @@ import {
   validateMermaidSource,
 } from "@/modules/mermaid";
 import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
+import {
+  closeReaderDoc,
+  loadStored,
+  openStored,
+  playReader,
+  ReaderMiniPlayer,
+  readerNative,
+  useReaderStore,
+} from "@/modules/reader";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
@@ -262,6 +271,7 @@ export default function App() {
     openCommitHistoryTab,
     openCommitFileDiffTab,
     openPrReviewTab,
+    openReaderTab,
     setPrReviewBase,
     moveTab,
     setTabPinned,
@@ -763,8 +773,38 @@ export default function App() {
     addTextToNote(captureActiveSelection() ?? "");
   }, [addTextToNote, captureActiveSelection]);
 
-  const speakAloud = useCallback((text: string, options: SpeakOptions = {}) => {
+  const openInReader = useCallback(
+    async (
+      source: { text?: string; path?: string; title?: string },
+      play = true,
+    ) => {
+      try {
+        const title =
+          source.title ??
+          (source.text
+            ? `${source.text.trim().split(/\s+/).slice(0, 6).join(" ")}...`
+            : undefined);
+        const entry = await openStored({ ...source, title });
+        openReaderTab({ docId: entry.id, title: entry.state.title });
+        if (play) await playReader(entry.id);
+      } catch (error: unknown) {
+        toast.error(
+          error instanceof Error ? error.message : "The Reader could not open it.",
+        );
+      }
+    },
+    [openReaderTab],
+  );
+
+  const speakAloud = useCallback((
+    text: string,
+    options: SpeakOptions & { reader?: boolean } = {},
+  ) => {
     if (!text.trim()) return;
+    if (options.reader) {
+      void openInReader({ text });
+      return;
+    }
     void speakText(text, options).catch((error: unknown) => {
       toast.error(
         error instanceof Error
@@ -772,7 +812,25 @@ export default function App() {
           : "Reading aloud failed. Check Settings, Voice.",
       );
     });
-  }, []);
+  }, [openInReader]);
+
+  /** Reopens the most recent Reader document where it was left. */
+  const resumeLastReader = useCallback(async () => {
+    try {
+      const [last] = await readerNative.list();
+      if (!last) {
+        toast.message("The Reader library is empty", {
+          description: "Open a selection, a file or `terax-read` output first.",
+        });
+        return;
+      }
+      const entry = await loadStored(last.id);
+      openReaderTab({ docId: entry.id, title: entry.state.title });
+      await playReader(entry.id);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [openReaderTab]);
 
   const readSelectionAloud = useCallback(
     (options: SpeakOptions = {}) => {
@@ -1580,6 +1638,33 @@ export default function App() {
     [setPrReviewBase],
   );
 
+  const handleReaderTitle = useCallback(
+    (tabId: number, title: string) => {
+      updateTab(tabId, { title });
+    },
+    [updateTab],
+  );
+
+  // A Reader tab that closes, by any route, saves its place and frees its audio.
+  useEffect(() => {
+    const open = new Set(
+      tabs.flatMap((t) => (t.kind === "reader" ? [t.docId] : [])),
+    );
+    for (const docId of Object.keys(useReaderStore.getState().docs)) {
+      if (!open.has(docId)) void closeReaderDoc(docId);
+    }
+  }, [tabs]);
+
+  const focusReaderDoc = useCallback(
+    (docId: string) => {
+      const tab = tabsRef.current.find(
+        (t) => t.kind === "reader" && t.docId === docId,
+      );
+      if (tab) setActiveId(tab.id);
+    },
+    [setActiveId],
+  );
+
   const handleNewSpace = useCallback(() => {
     const { spaces, create, setActive } = useSpaces.getState();
     const meta = create({
@@ -1692,6 +1777,16 @@ export default function App() {
               readSelectionAloud({ language: "es-ES" }),
             readSelectionAloudEnglish: () =>
               readSelectionAloud({ language: "en-US" }),
+            openSelectionInReader: () => {
+              const selection = captureActiveSelection();
+              if (selection?.trim()) void openInReader({ text: selection });
+            },
+            openFileInReader:
+              activeTab &&
+              (activeTab.kind === "editor" || activeTab.kind === "markdown")
+                ? () => void openInReader({ path: activeTab.path }, false)
+                : undefined,
+            resumeLastReader: () => void resumeLastReader(),
             stopReading,
             openVoiceSettings: () => void openSettingsWindow("voice"),
             openSettings: () => void openSettingsWindow(),
@@ -1729,6 +1824,9 @@ export default function App() {
       askFromSelection,
       captureActiveSelection,
       readSelectionAloud,
+      openInReader,
+      resumeLastReader,
+      activeTab,
       stopReading,
       activeSpaceId,
       handleNewSpace,
@@ -1747,6 +1845,7 @@ export default function App() {
     closePaneByLeaf,
     updateTab,
     moveTabToSpace,
+    openReaderTab,
   });
 
   const externalCommandHandlers = useMemo<CommandHandlers>(
@@ -2477,6 +2576,8 @@ export default function App() {
                         onAiDiffReject={(id) => respondToApproval(id, false)}
                         onOpenCommitFile={openCommitFileDiffTab}
                         onPrReviewBaseChange={handlePrReviewBaseChange}
+                        onReaderClose={(id) => void handleClose(id)}
+                        onReaderTitle={handleReaderTitle}
                         onGitHistorySearchHandle={setGitHistoryHandle}
                         onSetRenderableView={setRenderableView}
                         onMermaidSourceChange={updateMermaidSource}
@@ -2667,6 +2768,10 @@ export default function App() {
           {showChat && chatLayout === "floating" ? (
             <AiMiniWindow state={miniPresence.state} />
           ) : null}
+          <ReaderMiniPlayer
+            visibleDocId={activeTab?.kind === "reader" ? activeTab.docId : null}
+            onOpenDoc={focusReaderDoc}
+          />
           {askPresence.mounted ? (
             <SelectionAskAi
               state={askPresence.state}

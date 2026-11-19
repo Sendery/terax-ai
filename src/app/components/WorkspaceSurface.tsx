@@ -7,6 +7,7 @@ import { GitHistoryStack } from "@/modules/git-history";
 import { MermaidStack } from "@/modules/mermaid";
 import { PrReviewStack } from "@/modules/pr-review";
 import { PreviewStack } from "@/modules/preview";
+import { ReaderStack } from "@/modules/reader";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
 import type { ComponentProps } from "react";
@@ -44,6 +45,8 @@ type Props = {
   onAiDiffReject: AiDiffStackProps["onReject"];
   onOpenCommitFile: GitHistoryStackProps["onOpenCommitFile"];
   onPrReviewBaseChange: (tabId: number, base: string) => void;
+  onReaderClose: (tabId: number) => void;
+  onReaderTitle: (tabId: number, title: string) => void;
   onGitHistorySearchHandle: GitHistoryStackProps["onSearchHandle"];
   onSetRenderableView: EditorStackProps["onSetRenderableView"];
   onMermaidSourceChange: MermaidStackProps["onSourceChange"];
@@ -81,6 +84,8 @@ export function WorkspaceSurface({
   onAiDiffReject,
   onOpenCommitFile,
   onPrReviewBaseChange,
+  onReaderClose,
+  onReaderTitle,
   onGitHistorySearchHandle,
   onSetRenderableView,
   onMermaidSourceChange,
@@ -95,6 +100,7 @@ export function WorkspaceSurface({
   const isGitDiffTab = kind === "git-diff" || kind === "git-commit-file";
   const isGitHistoryTab = kind === "git-history";
   const isPrReviewTab = kind === "pr-review";
+  const isReaderTab = kind === "reader";
 
   return (
     <div className="relative h-full min-h-0">
@@ -217,6 +223,20 @@ export function WorkspaceSurface({
             tabs={tabs}
             activeId={activeId}
             onBaseChange={onPrReviewBaseChange}
+          />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0",
+            !isReaderTab && "invisible pointer-events-none",
+          )}
+          aria-hidden={!isReaderTab}
+        >
+          <ReaderStack
+            tabs={tabs}
+            activeId={activeId}
+            onClose={onReaderClose}
+            onTitle={onReaderTitle}
           />
         </div>
       </div>

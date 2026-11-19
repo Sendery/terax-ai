@@ -16,6 +16,7 @@ pub mod proc;
 pub mod notify;
 pub mod profile;
 pub mod pty;
+pub mod reader;
 pub mod scheduler;
 pub mod secrets;
 pub mod shell;

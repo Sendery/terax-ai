@@ -32,6 +32,12 @@ export const CONTROL_COMMAND_IDS = [
   "watch.setEnabled",
   "watch.run",
   "chat.layout",
+  "reader.open",
+  "reader.list",
+  "reader.state",
+  "reader.control",
+  "reader.mark",
+  "reader.export",
 ] as const;
 
 export type ControlCommandId = (typeof CONTROL_COMMAND_IDS)[number];
@@ -47,6 +53,19 @@ export const WATCH_MIN_INTERVAL_SECONDS = 15;
 export const WATCH_MAX_INTERVAL_SECONDS = 86_400;
 export const WATCH_COMMAND_MAX_CHARS = 2000;
 export const WATCH_PROMPT_MAX_CHARS = 4000;
+/** Bridge frames cap at 384 KiB; longer texts go through a file path. */
+export const READER_TEXT_MAX_CHARS = 300_000;
+export const READER_CONTROL_ACTIONS = [
+  "play",
+  "pause",
+  "toggle",
+  "stop",
+  "next",
+  "previous",
+  "seek",
+] as const;
+export type ReaderControlAction = (typeof READER_CONTROL_ACTIONS)[number];
+export const READER_CUT_KINDS = ["bookmark", "pause", "stop"] as const;
 
 export type WatchFields = {
   cwd?: string;
@@ -86,6 +105,32 @@ export type ControlPayloads = {
   "watch.setEnabled": { id: string; enabled: boolean };
   "watch.run": { id: string };
   "chat.layout": { mode: ChatLayoutMode; show?: boolean };
+  "reader.open": {
+    text?: string;
+    path?: string;
+    title?: string;
+    play?: boolean;
+    /** Set by `terax --read` when `path` is a temporary copy of stdin. */
+    stdin?: boolean;
+  };
+  "reader.list": undefined;
+  "reader.state": { docId?: string };
+  "reader.control": {
+    op: ReaderControlAction;
+    docId?: string;
+    wordIndex?: number;
+    positionMs?: number;
+    speedPercent?: number;
+  };
+  "reader.mark": {
+    wordIndex: number;
+    kind: (typeof READER_CUT_KINDS)[number];
+    docId?: string;
+    label?: string;
+    pauseMs?: number;
+    remove?: boolean;
+  };
+  "reader.export": { docId?: string };
 };
 
 type Reply = Promise<unknown> | unknown;
@@ -109,6 +154,12 @@ export type ControlHandlers = {
   setWatchEnabled: (payload: ControlPayloads["watch.setEnabled"]) => Reply;
   runWatch: (payload: ControlPayloads["watch.run"]) => Reply;
   setChatLayout: (payload: ControlPayloads["chat.layout"]) => Reply;
+  openReader: (payload: ControlPayloads["reader.open"]) => Reply;
+  listReader: () => Reply;
+  readerState: (payload: ControlPayloads["reader.state"]) => Reply;
+  controlReader: (payload: ControlPayloads["reader.control"]) => Reply;
+  markReader: (payload: ControlPayloads["reader.mark"]) => Reply;
+  exportReader: (payload: ControlPayloads["reader.export"]) => Reply;
 };
 
 /** Limits the validator enforces on top of the public param shape. */
@@ -129,6 +180,15 @@ type ControlSpec = {
   params: readonly ControlParam[];
   /** Fields a call must carry at least one of, beyond the required ones. */
   anyOf?: readonly string[];
+};
+
+const READER_DOC_ID: ControlParam = {
+  name: "docId",
+  type: "string",
+  required: false,
+  description: "Reader document id, from reader.list or the snapshot's reader tabs.",
+  maxLength: 12,
+  nonEmpty: true,
 };
 
 const LEAF_ID: ControlParam = {
@@ -406,6 +466,142 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
       },
     ],
   },
+  "reader.open": {
+    description:
+      "Open a text in a Reader tab: a read-along view that speaks it with the local voice and highlights each word. Give the text itself, or the absolute path of a UTF-8 file (up to 2 MiB; Markdown is laid out). The same text always reopens the same document, with its reading position and cut points. Returns the tab id, the document id and the title.",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        required: false,
+        description: "Text to read. Prefer path for long documents.",
+        maxLength: READER_TEXT_MAX_CHARS,
+        nonEmpty: true,
+      },
+      {
+        name: "path",
+        type: "string",
+        required: false,
+        description: "Absolute path of a text or Markdown file.",
+        maxLength: 4096,
+        nonEmpty: true,
+      },
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Title for the tab; defaults to the file name.",
+        maxLength: 200,
+      },
+      {
+        name: "play",
+        type: "boolean",
+        required: false,
+        description: "Start reading right away from the saved position (default false).",
+      },
+      {
+        name: "stdin",
+        type: "boolean",
+        required: false,
+        description: "The path is a temporary copy of piped input: do not keep it as the source.",
+      },
+    ],
+    anyOf: ["text", "path"],
+  },
+  "reader.list": {
+    description:
+      "List the Reader library: every document read before, newest first, with its id, title, source path, word count and where reading stopped.",
+    params: [],
+  },
+  "reader.state": {
+    description:
+      "Read a Reader document's state: phase (idle, loading, playing, paused, gap, finished), the word being read and its index, position and total time, speed, voice and every cut point. Defaults to the document playing, else the Reader tab on screen.",
+    params: [READER_DOC_ID],
+  },
+  "reader.control": {
+    description:
+      "Drive a Reader document with op: play (from wordIndex, else from where it stopped), pause, toggle, stop, next or previous sentence, or seek to wordIndex or positionMs. speedPercent (75 to 250) sets the reading speed with any op.",
+    params: [
+      {
+        // Not "action": MCP tools already use that name to pick the action.
+        name: "op",
+        type: "enum",
+        required: true,
+        description: "play, pause, toggle, stop, next, previous or seek.",
+        values: [...READER_CONTROL_ACTIONS],
+      },
+      READER_DOC_ID,
+      {
+        name: "wordIndex",
+        type: "integer",
+        required: false,
+        description: "Word to play or seek to, from reader.state or the document text.",
+        min: 0,
+      },
+      {
+        name: "positionMs",
+        type: "integer",
+        required: false,
+        description: "Document time to seek to, at 1x, scripted pauses included.",
+        min: 0,
+      },
+      {
+        name: "speedPercent",
+        type: "integer",
+        required: false,
+        description: "Reading speed as a percentage: 100 is normal, 150 is 1.5x.",
+        min: 75,
+        max: 250,
+      },
+    ],
+  },
+  "reader.mark": {
+    description:
+      "Place or remove a cut point before a word: a bookmark (a start point; in study mode playback stops there), a scripted pause (silence of pauseMs, default 1500) or a stop (playback halts there). Pauses and stops also split the audio there.",
+    params: [
+      {
+        name: "wordIndex",
+        type: "integer",
+        required: true,
+        description: "The cut sits before this word.",
+        min: 0,
+      },
+      {
+        name: "kind",
+        type: "enum",
+        required: true,
+        description: "bookmark, pause or stop.",
+        values: [...READER_CUT_KINDS],
+      },
+      READER_DOC_ID,
+      {
+        name: "label",
+        type: "string",
+        required: false,
+        description: "Label shown in the gutter and used as a chapter title on export.",
+        maxLength: 120,
+      },
+      {
+        name: "pauseMs",
+        type: "integer",
+        required: false,
+        description: "Length of a pause in milliseconds (0 to 60000).",
+        min: 0,
+        max: 60_000,
+      },
+      {
+        name: "remove",
+        type: "boolean",
+        required: false,
+        description: "Remove the cut of this kind at this word instead of placing it.",
+      },
+    ],
+  },
+  "reader.export": {
+    description:
+      "Export a Reader document as one WAV file with its scripted pauses, synthesizing any sentence not made yet, plus chapter files from headings and bookmarks. Returns the file path. Long documents take a while.",
+    params: [READER_DOC_ID],
+  },
 };
 
 function publicParam(param: ControlParam): CommandParamSchema {
@@ -584,5 +780,17 @@ export function dispatchControlCommand(
       return handlers.runWatch(p);
     case "chat.layout":
       return handlers.setChatLayout(p);
+    case "reader.open":
+      return handlers.openReader(p);
+    case "reader.list":
+      return handlers.listReader();
+    case "reader.state":
+      return handlers.readerState(p);
+    case "reader.control":
+      return handlers.controlReader(p);
+    case "reader.mark":
+      return handlers.markReader(p);
+    case "reader.export":
+      return handlers.exportReader(p);
   }
 }

@@ -5,7 +5,7 @@ import {
   EXTENSION_TOOL_ALIGNMENT,
   MCP_GROUPS,
 } from "./mcpSurface";
-import { COMMAND_IDS } from "./registry";
+import { COMMAND_IDS, describeCommands } from "./registry";
 
 const repoRoot = new URL("../../../../", import.meta.url);
 const surface = buildMcpSurface();
@@ -24,6 +24,15 @@ describe("MCP surface", () => {
       Object.values(g.actions).flatMap((a) => ("command" in a ? [a.command] : [])),
     );
     expect([...served].sort()).toEqual([...COMMAND_IDS].sort());
+  });
+
+  // Every MCP tool picks its action with an `action` argument, so a command
+  // param with that name could never reach the command.
+  it("keeps the action argument free for picking the action", () => {
+    for (const command of describeCommands().commands) {
+      const names = command.params.map((p) => p.name);
+      expect(names, command.id).not.toContain("action");
+    }
   });
 
   it("stays a curated surface, not one tool per command", () => {

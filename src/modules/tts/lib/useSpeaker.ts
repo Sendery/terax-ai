@@ -242,14 +242,15 @@ async function synthesizeChunk(active: Session, index: number): Promise<void> {
   }
 }
 
-function clearIdleTimer(): void {
+/** Holds the idle shutdown while another player (the Reader) is busy. */
+export function clearIdleTimer(): void {
   if (idleTimer === null) return;
   clearTimeout(idleTimer);
   idleTimer = null;
 }
 
 /** Armed only while an engine is up, so an unused feature holds no timer. */
-function armIdleTimer(): void {
+export function armIdleTimer(): void {
   clearIdleTimer();
   const minutes = usePreferencesStore.getState().ttsIdleStopMinutes;
   if (minutes <= 0) return;
@@ -282,7 +283,8 @@ export async function stopEngines(): Promise<boolean> {
   return stopped;
 }
 
-async function resolveEndpoint(voice: VoiceProfile): Promise<TtsEndpoint> {
+/** The running sidecar for a voice, started when needed. */
+export async function resolveEndpoint(voice: VoiceProfile): Promise<TtsEndpoint> {
   const engine = engineOf(voice.model);
   const status = await ttsNative.status();
   useTtsStore.getState().setStatus(status);
@@ -308,7 +310,7 @@ async function resolveEndpoint(voice: VoiceProfile): Promise<TtsEndpoint> {
   return started;
 }
 
-async function resolveSamplePath(voice: VoiceProfile): Promise<string | null> {
+export async function resolveSamplePath(voice: VoiceProfile): Promise<string | null> {
   if (MODEL_VOICE_SOURCE[voice.model] === "preset") return null;
   if (!voice.sampleId) return null;
   const layout = await ttsNative.layout();
