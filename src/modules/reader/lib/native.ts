@@ -18,6 +18,9 @@ export type LibraryEntry = {
   updatedAtMs: number;
   wordCount: number | null;
   lastWordIndex: number | null;
+  /** Stable Reader key of the tab the reading was made in. */
+  originKey: string | null;
+  originLabel: string | null;
 };
 
 export type ExportSegment = {

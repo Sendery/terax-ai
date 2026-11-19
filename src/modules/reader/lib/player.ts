@@ -39,6 +39,7 @@ import {
   userBreaks,
   voiceKeyOf,
   type CutKind,
+  type ReaderOrigin,
   type ReaderState,
 } from "./manifest";
 import {
@@ -72,7 +73,10 @@ const URL_WINDOW = 12;
 /** Clips synthesized ahead of the one playing. */
 const PREFETCH = 2;
 const SAVE_DEBOUNCE_MS = 1500;
+/** While playing, the manifest is rewritten when new clips were measured... */
 const SAVE_WHILE_PLAYING_MS = 5000;
+/** ...and at least this often for the position alone. */
+const SAVE_POSITION_MS = 30_000;
 
 type Clip = {
   docId: string;
@@ -97,10 +101,13 @@ let clip: Clip | null = null;
 let frame = 0;
 let gapTimer: ReturnType<typeof setTimeout> | null = null;
 let voiceContext: VoiceContext | null = null;
+/** Object URLs by `docId/voiceKey/segmentKey`, so a clip made with one voice is never played for another. */
 const urls = new Map<string, string>();
 const pending = new Map<string, Promise<ArrayBuffer>>();
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let lastPeriodicSave = 0;
+/** Clip lengths learned since the last save, per document. */
+const unsavedDurations = new Set<string>();
 let speakerWatch: (() => void) | null = null;
 
 function store() {
@@ -109,6 +116,17 @@ function store() {
 
 function entryOf(docId: string): DocEntry | null {
   return store().docs[docId] ?? null;
+}
+
+/** The document is sounding, or about to: playing, loading a clip or in a scripted gap. */
+export function isLive(docId: string): boolean {
+  const { playback } = store();
+  return (
+    playback.docId === docId &&
+    (playback.phase === "playing" ||
+      playback.phase === "loading" ||
+      playback.phase === "gap")
+  );
 }
 
 function setPhase(
@@ -305,6 +323,7 @@ export async function saveNow(docId: string): Promise<void> {
   if (!entry) return;
   const state = snapshotState(entry);
   if (state !== entry.state) store().patchDoc(docId, { state });
+  unsavedDurations.delete(docId);
   const manifest = buildManifest({
     id: entry.id,
     doc: entry.doc,
@@ -315,7 +334,7 @@ export async function saveNow(docId: string): Promise<void> {
     timeline: entry.timeline,
   });
   try {
-    await readerNative.saveManifest(docId, JSON.stringify(manifest, null, 1));
+    await readerNative.saveManifest(docId, JSON.stringify(manifest));
   } catch (err) {
     console.warn("reader.save", err);
   }
@@ -482,28 +501,37 @@ function clipBytes(
   return work;
 }
 
-function recordDuration(docId: string, key: string, ms: number): void {
-  const entry = entryOf(docId);
-  if (!entry || entry.durations.get(key) === ms) return;
+function urlKey(ctx: VoiceContext, segment: ReaderSegment): string {
+  return `${ctx.docId}/${ctx.voiceKey}/${segment.key}`;
+}
+
+/** Records a clip length, unless the document moved to another voice since. */
+function recordDuration(ctx: VoiceContext, key: string, ms: number): void {
+  const entry = entryOf(ctx.docId);
+  if (!entry || entry.voiceKey !== ctx.voiceKey) return;
+  if (entry.durations.get(key) === ms) return;
   const durations = new Map(entry.durations);
   durations.set(key, ms);
   store().putDoc(withTimeline({ ...entry, durations }));
+  unsavedDurations.add(ctx.docId);
 }
 
 async function clipUrl(
   ctx: VoiceContext,
   segment: ReaderSegment,
 ): Promise<{ url: string; ms: number }> {
-  const known = urls.get(segment.key);
-  const entry = entryOf(ctx.docId);
-  const knownMs = entry?.durations.get(segment.key);
+  const id = urlKey(ctx, segment);
+  const known = urls.get(id);
+  const knownMs = entryOf(ctx.docId)?.durations.get(segment.key);
   if (known && knownMs !== undefined) return { url: known, ms: knownMs };
   const bytes = await clipBytes(ctx, segment);
   const ms = wavDurationMs(bytes) ?? knownMs ?? 0;
-  recordDuration(ctx.docId, segment.key, ms);
+  recordDuration(ctx, segment.key, ms);
+  // Another call may have made the URL while this one waited for the bytes.
   const url =
-    known ?? URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-  urls.set(segment.key, url);
+    urls.get(id) ??
+    URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+  urls.set(id, url);
   trimUrls();
   return { url, ms };
 }
@@ -512,10 +540,10 @@ function trimUrls(): void {
   if (urls.size <= URL_WINDOW) return;
   const keep = new Set<string>();
   const entry = clip ? entryOf(clip.docId) : null;
-  if (entry && clip) {
+  if (entry && clip && voiceContext) {
     for (let s = clip.segment - 2; s <= clip.segment + PREFETCH + 1; s++) {
       const segment = entry.doc.segments[s];
-      if (segment) keep.add(segment.key);
+      if (segment) keep.add(urlKey(voiceContext, segment));
     }
   }
   for (const [key, url] of urls) {
@@ -539,12 +567,9 @@ function prefetch(ctx: VoiceContext, from: number): void {
     const segment = entry.doc.segments[s];
     if (isSilentSegment(segment)) continue;
     queued++;
-    void clipBytes(ctx, segment)
-      .then((bytes) => {
-        const ms = wavDurationMs(bytes);
-        if (ms !== null) recordDuration(ctx.docId, segment.key, ms);
-      })
-      .catch(() => {});
+    // Prefetching all the way to an object URL lets the next sentence start
+    // without a "loading" flash or a second read from disk.
+    void clipUrl(ctx, segment).catch(() => {});
   }
 }
 
@@ -608,7 +633,12 @@ function track(): void {
         positionMs: start + ms,
       });
       const now = Date.now();
-      if (now - lastPeriodicSave > SAVE_WHILE_PLAYING_MS) {
+      const since = now - lastPeriodicSave;
+      if (
+        (unsavedDurations.has(current.docId) &&
+          since > SAVE_WHILE_PLAYING_MS) ||
+        since > SAVE_POSITION_MS
+      ) {
         lastPeriodicSave = now;
         scheduleSave(current.docId, 0);
       }
@@ -655,12 +685,16 @@ async function playSegment(
     docId,
     segment: index,
     wordIndex: firstWord,
-    positionMs: entry.timeline.starts[index] ?? 0,
+    positionMs:
+      (entry.timeline.starts[index] ?? 0) +
+      ("offsetMs" in at ? at.offsetMs : 0),
     error: null,
   });
   const ctx = await bindVoice(docId);
   if (my !== generation) return;
-  const ready = urls.has(segment.key) && entry.durations.has(segment.key);
+  const ready =
+    urls.has(urlKey(ctx, segment)) &&
+    (entryOf(docId) ?? entry).durations.has(segment.key);
   if (!ready) setPhase("loading");
   let loaded: { url: string; ms: number };
   try {
@@ -791,7 +825,10 @@ async function takeOver(docId: string): Promise<void> {
     clip = null;
     stopTracking();
     await saveNow(previous);
-    store().setPlayback({ ...IDLE_PLAYBACK });
+    store().setPlayback({
+      ...IDLE_PLAYBACK,
+      exporting: store().playback.exporting,
+    });
   }
 }
 
@@ -845,6 +882,9 @@ export function pauseReader(): boolean {
   const { playback } = store();
   if (!playback.docId) return false;
   if (playback.phase === "playing") {
+    // Also drops a next clip that is about to start: without this, a pause
+    // between two sentences was undone when that clip began.
+    cancelPending();
     audio?.pause();
     stopTracking();
     setPhase("paused");
@@ -912,11 +952,24 @@ export function stopReader(): void {
   clip = null;
   if (playback.docId) {
     const docId = playback.docId;
-    setPhase(playback.phase === "finished" ? "finished" : "paused");
-    void saveNow(docId).then(() => {
-      if (store().playback.docId === docId)
-        store().setPlayback({ ...IDLE_PLAYBACK });
+    const entry = entryOf(docId);
+    // The position goes into the document before playback lets go of it, so
+    // the idle state can be set at once: setting it after the save used to
+    // clobber a play started in the meantime.
+    if (entry) {
+      const state = snapshotState(entry);
+      store().patchDoc(docId, {
+        state: {
+          ...state,
+          status: playback.phase === "finished" ? "finished" : "paused",
+        },
+      });
+    }
+    store().setPlayback({
+      ...IDLE_PLAYBACK,
+      exporting: store().playback.exporting,
     });
+    void saveNow(docId);
   }
   armIdleTimer();
 }
@@ -957,7 +1010,10 @@ export async function skipReader(
   const el = audio;
   const start = entry.timeline.starts[playback.segment] ?? 0;
   const now =
-    playback.docId === docId && clip?.docId === docId && el
+    playback.docId === docId &&
+    playback.phase === "playing" &&
+    clip?.docId === docId &&
+    el
       ? start + el.currentTime * 1000
       : playback.docId === docId
         ? playback.positionMs
@@ -975,8 +1031,14 @@ export async function seekReaderTo(docId: string, ms: number): Promise<void> {
   const el = audio;
   const target = locate(entry.timeline, ms);
   if (!target) return;
-  const live = playback.docId === docId && playback.phase === "playing";
-  if (live && clip?.segment === target.segment && el) {
+  const live = isLive(docId);
+  if (
+    live &&
+    playback.phase === "playing" &&
+    clip?.docId === docId &&
+    clip.segment === target.segment &&
+    el
+  ) {
     el.currentTime = target.offsetMs / 1000;
     return;
   }
@@ -986,8 +1048,16 @@ export async function seekReaderTo(docId: string, ms: number): Promise<void> {
     return;
   }
   const my = cancelPending();
+  // The clip that was sounding stops now, not when the new one is ready.
+  stopTracking();
+  detachAudio();
+  clip = null;
+  const audible = firstAudible(entry.doc, target.segment);
+  if (audible === null) return finish(docId);
   setPhase("loading");
-  await playSegment(my, docId, target.segment, { offsetMs: target.offsetMs });
+  await playSegment(my, docId, audible, {
+    offsetMs: audible === target.segment ? target.offsetMs : 0,
+  });
 }
 
 /** Sets where playback will start without playing. */
@@ -999,6 +1069,8 @@ export function moveCursorTo(docId: string, wordIndex: number): void {
       Math.max(0, Math.min(wordIndex, entry.doc.words.length - 1))
     ];
   if (!word) return;
+  // While it sounds, the cursor is the pane's business: playback goes on.
+  if (isLive(docId)) return;
   const { playback } = store();
   if (playback.docId === docId) {
     store().setPlayback({
@@ -1029,15 +1101,24 @@ export async function setReaderVoice(
   docId: string,
   voiceId: string | null,
 ): Promise<void> {
-  const { playback } = store();
-  const wasLive = playback.docId === docId && playback.phase === "playing";
+  const wasLive = isLive(docId);
   if (wasLive) pauseReader();
   updateState(docId, (s) => ({ ...s, voiceId }));
   if (voiceContext?.docId === docId) {
     voiceContext = null;
     releaseUrls();
   }
+  // A paused clip in the old voice must not be resumed as is.
+  if (clip?.docId === docId) {
+    detachAudio();
+    clip = null;
+  }
   if (wasLive) await playReader(docId, store().playback.wordIndex);
+}
+
+/** Records the tab a reading belongs to, for the library to lead back to it. */
+export function setReaderOrigin(docId: string, origin: ReaderOrigin): void {
+  updateState(docId, (s) => ({ ...s, origin }));
 }
 
 export function setStopAtBookmarks(docId: string, value: boolean): void {
@@ -1120,10 +1201,12 @@ export async function exportReader(docId: string): Promise<ExportResult> {
     let done = 0;
     for (const step of plan) {
       const segment = fresh.doc.segments[step.segment];
-      if (!entryOf(docId)?.cached.has(segment.key)) {
+      const now = entryOf(docId);
+      if (!now) throw new Error("The document was closed during the export.");
+      if (!now.cached.has(segment.key)) {
         const bytes = await clipBytes(ctx, segment);
         const ms = wavDurationMs(bytes);
-        if (ms !== null) recordDuration(docId, segment.key, ms);
+        if (ms !== null) recordDuration(ctx, segment.key, ms);
       }
       done++;
       store().setPlayback({ exporting: { docId, done, total: plan.length } });
@@ -1145,7 +1228,7 @@ export async function exportReader(docId: string): Promise<ExportResult> {
   }
 }
 
-/** Saves and lets go of a document whose tab closed. */
+/** Saves and lets go of a document nothing shows any more. */
 export async function closeReaderDoc(docId: string): Promise<void> {
   if (store().playback.docId === docId) stopReader();
   await saveNow(docId);
@@ -1154,6 +1237,36 @@ export async function closeReaderDoc(docId: string): Promise<void> {
     releaseUrls();
   }
   store().dropDoc(docId);
+}
+
+/**
+ * Deletes documents from the library, with their audio. A document playing
+ * stops first, and nothing is saved afterwards: a save would bring its folder
+ * back.
+ */
+export async function deleteReaderDocs(ids: readonly string[]): Promise<void> {
+  for (const id of ids) {
+    if (store().playback.docId === id) {
+      cancelPending();
+      stopTracking();
+      detachAudio();
+      clip = null;
+      store().setPlayback({
+        ...IDLE_PLAYBACK,
+        exporting: store().playback.exporting,
+      });
+    }
+    const timer = saveTimers.get(id);
+    if (timer) clearTimeout(timer);
+    saveTimers.delete(id);
+    unsavedDurations.delete(id);
+    if (voiceContext?.docId === id) {
+      voiceContext = null;
+      releaseUrls();
+    }
+    store().dropDoc(id);
+  }
+  for (const id of ids) await readerNative.remove(id);
 }
 
 export type ReaderSummary = {

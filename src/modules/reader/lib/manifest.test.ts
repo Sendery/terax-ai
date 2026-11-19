@@ -118,6 +118,7 @@ describe("manifest round trip", () => {
       lastPositionMs: 2400,
       status: "playing" as const,
       cutPoints: toggleCut([], "bookmark", 4, "Segunda"),
+      origin: { key: "k7f3a9c1", label: "zsh" },
     };
     const durations = new Map([[0, 2000]]);
     const json = buildManifest({
@@ -164,6 +165,7 @@ describe("manifest round trip", () => {
       speed: 1.25,
       lastWordIndex: 5,
       status: "paused",
+      origin: { key: "k7f3a9c1", label: "zsh" },
     });
     expect(back.cutPoints).toHaveLength(1);
   });
@@ -171,6 +173,7 @@ describe("manifest round trip", () => {
   it("drops malformed and out-of-range fields", () => {
     const raw = JSON.stringify({
       title: 5,
+      origin: { key: "../tab", label: "x" },
       playback_state: { speed: 40, last_word_index: 9999, status: "weird" },
       cut_points: [
         { kind: "nope", word_index: 1 },
@@ -184,6 +187,7 @@ describe("manifest round trip", () => {
     expect(state.speed).toBe(2.5);
     expect(state.lastWordIndex).toBe(0);
     expect(state.status).toBe("idle");
+    expect(state.origin).toBeNull();
     expect(state.cutPoints).toEqual([
       expect.objectContaining({ kind: "pause", wordIndex: 2, pauseMs: 60_000 }),
     ]);

@@ -59,6 +59,9 @@ pub fn is_riff_wave(bytes: &[u8]) -> bool {
     bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE"
 }
 
+const MAX_CHANNELS: u16 = 32;
+const MAX_SAMPLE_RATE: u32 = 768_000;
+
 fn parse_fmt(body: &[u8]) -> Result<PcmFormat, String> {
     if body.len() < 16 {
         return Err("fmt chunk is too short".into());
@@ -84,6 +87,14 @@ fn parse_fmt(body: &[u8]) -> Result<PcmFormat, String> {
     };
     if format.channels == 0 || format.sample_rate == 0 {
         return Err("WAV declares zero channels or a zero sample rate".into());
+    }
+    // Bounds keep the byte rate and block alignment inside the header's
+    // u32 and u16 fields, whatever a malformed clip declares.
+    if format.channels > MAX_CHANNELS || format.sample_rate > MAX_SAMPLE_RATE {
+        return Err(format!(
+            "unsupported WAV layout: {} channels at {} Hz",
+            format.channels, format.sample_rate
+        ));
     }
     if !matches!(format.bits_per_sample, 8 | 16 | 24 | 32) {
         return Err(format!(
@@ -424,6 +435,20 @@ mod tests {
         let mut truncated = wav_from_chunks(&[chunk(b"fmt ", &fmt_body(1, &MONO16))]);
         truncated.truncate(truncated.len() - 3);
         assert!(parse_wav(&truncated).unwrap_err().contains("truncated"));
+    }
+
+    #[test]
+    fn rejects_layouts_whose_header_fields_would_overflow() {
+        for format in [
+            PcmFormat { channels: 1000, sample_rate: 48_000, bits_per_sample: 16 },
+            PcmFormat { channels: 1, sample_rate: 1_000_000, bits_per_sample: 16 },
+        ] {
+            let bytes = wav_from_chunks(&[
+                chunk(b"fmt ", &fmt_body(1, &format)),
+                chunk(b"data", &[0, 0]),
+            ]);
+            assert!(parse_wav(&bytes).unwrap_err().contains("unsupported WAV layout"));
+        }
     }
 
     fn run_concat(

@@ -52,7 +52,8 @@ type Props = {
   targetWord: number;
   onCut: (kind: "bookmark" | "pause" | "stop") => void;
   onExport: () => void;
-  onToggleFloating: () => void;
+  /** Absent where the controls cannot float, such as the docked panel. */
+  onToggleFloating?: () => void;
   compact?: boolean;
   /** Extra controls at the end of the first row, such as "open tab". */
   trailing?: ReactNode;
@@ -96,8 +97,9 @@ export function ReaderTransport({
   );
   const lastCut = cutIndex >= 0 ? cuts[cutIndex] : null;
   const voice = profiles.find((p) => p.id === entry.state.voiceId) ?? null;
+  // An export runs whether or not the document is the one playing.
   const exporting =
-    live && playback.exporting?.docId === docId ? playback.exporting : null;
+    playback.exporting?.docId === docId ? playback.exporting : null;
   const error = live ? playback.error : null;
 
   const toggle = () => {
@@ -278,12 +280,14 @@ export function ReaderTransport({
             <DropdownMenuItem onSelect={onExport} disabled={!!exporting}>
               <HugeiconsIcon icon={Download01Icon} size={14} /> Export audio (e)
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={onToggleFloating}>
-              <HugeiconsIcon icon={PictureInPictureOnIcon} size={14} />
-              {floating
-                ? "Dock controls under the text (f)"
-                : "Float the controls (f)"}
-            </DropdownMenuItem>
+            {onToggleFloating ? (
+              <DropdownMenuItem onSelect={onToggleFloating}>
+                <HugeiconsIcon icon={PictureInPictureOnIcon} size={14} />
+                {floating
+                  ? "Dock controls under the text (f)"
+                  : "Float the controls (f)"}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="sr-only">Word {targetWord + 1}</span>

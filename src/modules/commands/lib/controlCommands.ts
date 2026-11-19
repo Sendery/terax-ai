@@ -38,6 +38,8 @@ export const CONTROL_COMMAND_IDS = [
   "reader.control",
   "reader.mark",
   "reader.export",
+  "reader.dock",
+  "reader.delete",
 ] as const;
 
 export type ControlCommandId = (typeof CONTROL_COMMAND_IDS)[number];
@@ -66,6 +68,7 @@ export const READER_CONTROL_ACTIONS = [
 ] as const;
 export type ReaderControlAction = (typeof READER_CONTROL_ACTIONS)[number];
 export const READER_CUT_KINDS = ["bookmark", "pause", "stop"] as const;
+export const READER_PLACEMENTS = ["dock", "tab"] as const;
 
 export type WatchFields = {
   cwd?: string;
@@ -112,6 +115,8 @@ export type ControlPayloads = {
     play?: boolean;
     /** Set by `terax --read` when `path` is a temporary copy of stdin. */
     stdin?: boolean;
+    placement?: (typeof READER_PLACEMENTS)[number];
+    tabId?: number;
   };
   "reader.list": undefined;
   "reader.state": { docId?: string };
@@ -131,6 +136,8 @@ export type ControlPayloads = {
     remove?: boolean;
   };
   "reader.export": { docId?: string };
+  "reader.dock": { tabId?: number; docId?: string; close?: boolean };
+  "reader.delete": { docId?: string; all?: boolean };
 };
 
 type Reply = Promise<unknown> | unknown;
@@ -160,6 +167,8 @@ export type ControlHandlers = {
   controlReader: (payload: ControlPayloads["reader.control"]) => Reply;
   markReader: (payload: ControlPayloads["reader.mark"]) => Reply;
   exportReader: (payload: ControlPayloads["reader.export"]) => Reply;
+  dockReader: (payload: ControlPayloads["reader.dock"]) => Reply;
+  deleteReader: (payload: ControlPayloads["reader.delete"]) => Reply;
 };
 
 /** Limits the validator enforces on top of the public param shape. */
@@ -468,7 +477,7 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
   },
   "reader.open": {
     description:
-      "Open a text in a Reader tab: a read-along view that speaks it with the local voice and highlights each word. Give the text itself, or the absolute path of a UTF-8 file (up to 2 MiB; Markdown is laid out). The same text always reopens the same document, with its reading position and cut points. Returns the tab id, the document id and the title.",
+      "Open a text in the Reader, a read-along view that speaks it with the local voice and highlights each word. By default it opens in the Reader panel docked under the tab on screen (or under tabId), so the user stays on that tab; placement tab opens a Reader tab instead. Give the text itself, or the absolute path of a UTF-8 file (up to 2 MiB; Markdown is laid out). The same text always reopens the same document, with its reading position and cut points. Returns the tab id, the placement, the document id and the title.",
     params: [
       {
         name: "text",
@@ -505,17 +514,31 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
         required: false,
         description: "The path is a temporary copy of piped input: do not keep it as the source.",
       },
+      {
+        name: "placement",
+        type: "enum",
+        required: false,
+        description: "dock (default): the panel under a tab. tab: a Reader tab of its own.",
+        values: [...READER_PLACEMENTS],
+      },
+      {
+        name: "tabId",
+        type: "integer",
+        required: false,
+        description: "Tab to dock the panel under, from the snapshot; defaults to the tab on screen.",
+        min: 0,
+      },
     ],
     anyOf: ["text", "path"],
   },
   "reader.list": {
     description:
-      "List the Reader library: every document read before, newest first, with its id, title, source path, word count and where reading stopped.",
+      "List the Reader library: every document read before, newest first, with its id, title, source path, word count, where reading stopped, the tab it was made in (originTabId while that tab is open) and the tabs that show it now.",
     params: [],
   },
   "reader.state": {
     description:
-      "Read a Reader document's state: phase (idle, loading, playing, paused, gap, finished), the word being read and its index, position and total time, speed, voice and every cut point. Defaults to the document playing, else the Reader tab on screen.",
+      "Read a Reader document's state: phase (idle, loading, playing, paused, gap, finished), the word being read and its index, position and total time, speed, voice and every cut point. Defaults to the document playing, else the one on screen (Reader tab or docked panel). Never opens anything.",
     params: [READER_DOC_ID],
   },
   "reader.control": {
@@ -601,6 +624,40 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
     description:
       "Export a Reader document as one WAV file with its scripted pauses, synthesizing any sentence not made yet, plus chapter files from headings and bookmarks. Returns the file path. Long documents take a while.",
     params: [READER_DOC_ID],
+  },
+  "reader.dock": {
+    description:
+      "Show or close the Reader panel docked under a tab (default: the tab on screen). With docId it shows that document, without it the library of readings; close hides the panel and stops the reading if nothing else shows it. Reader tabs have no panel.",
+    params: [
+      {
+        name: "tabId",
+        type: "integer",
+        required: false,
+        description: "Tab whose panel to change, from the snapshot.",
+        min: 0,
+      },
+      READER_DOC_ID,
+      {
+        name: "close",
+        type: "boolean",
+        required: false,
+        description: "Close the panel instead of showing it.",
+      },
+    ],
+  },
+  "reader.delete": {
+    description:
+      "Delete Reader documents from the library with their audio: one by docId, or every one with all. Panels and Reader tabs showing them let go of them.",
+    params: [
+      READER_DOC_ID,
+      {
+        name: "all",
+        type: "boolean",
+        required: false,
+        description: "Delete every document in the library.",
+      },
+    ],
+    anyOf: ["docId", "all"],
   },
 };
 
@@ -792,5 +849,9 @@ export function dispatchControlCommand(
       return handlers.markReader(p);
     case "reader.export":
       return handlers.exportReader(p);
+    case "reader.dock":
+      return handlers.dockReader(p);
+    case "reader.delete":
+      return handlers.deleteReader(p);
   }
 }

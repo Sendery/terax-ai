@@ -41,6 +41,8 @@ function handlers(): CommandHandlers {
     controlReader: vi.fn(() => ({})),
     markReader: vi.fn(() => ({})),
     exportReader: vi.fn(() => ({})),
+    dockReader: vi.fn(() => ({})),
+    deleteReader: vi.fn(() => ({})),
     getSnapshot: vi.fn(async () => ({
       version: 1 as const,
       tabs: [],
@@ -797,6 +799,8 @@ describe("command registry", () => {
       "reader.control",
       "reader.mark",
       "reader.export",
+      "reader.dock",
+      "reader.delete",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });

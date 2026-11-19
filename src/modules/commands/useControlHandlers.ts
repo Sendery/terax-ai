@@ -17,7 +17,10 @@ import {
   stopWatchRunner,
   watchCommands,
 } from "@/modules/watchers";
-import { createReaderHandlers } from "@/modules/reader/lib/readerCommands";
+import {
+  createReaderHandlers,
+  type ReaderHost,
+} from "@/modules/reader/lib/readerCommands";
 import type { ControlHandlers } from "./lib/controlCommands";
 import { createTerminalControl } from "./lib/terminalControl";
 
@@ -37,6 +40,11 @@ type Params = {
     title: string;
     background?: boolean;
   }) => number;
+  /** How the Reader panel under a tab is driven, from App. */
+  readerPanel: Pick<
+    ReaderHost,
+    "dockReading" | "recordOrigin" | "showLibrary" | "closeDock" | "forgetDeleted"
+  >;
 };
 
 function failure(message: string): never {
@@ -80,6 +88,7 @@ export function useControlHandlers(params: Params): ControlHandlers {
     updateTab,
     moveTabToSpace,
     openReaderTab,
+    readerPanel,
   } = params;
 
   useEffect(() => {
@@ -184,6 +193,7 @@ export function useControlHandlers(params: Params): ControlHandlers {
           if (!input.background) focusTab(id);
           return id;
         },
+        ...readerPanel,
       }),
     };
   }, [
@@ -198,5 +208,6 @@ export function useControlHandlers(params: Params): ControlHandlers {
     updateTab,
     moveTabToSpace,
     openReaderTab,
+    readerPanel,
   ]);
 }

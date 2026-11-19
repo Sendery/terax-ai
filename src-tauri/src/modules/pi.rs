@@ -256,6 +256,8 @@ fn is_allowed_command(command: &str) -> bool {
             | "reader.control"
             | "reader.mark"
             | "reader.export"
+            | "reader.dock"
+            | "reader.delete"
     )
 }
 

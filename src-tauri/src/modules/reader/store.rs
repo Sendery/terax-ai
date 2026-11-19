@@ -50,6 +50,9 @@ pub struct ReaderEntry {
     pub updated_at_ms: u64,
     pub word_count: Option<u64>,
     pub last_word_index: Option<u64>,
+    /// The tab the reading was made in, as the frontend's stable tab key.
+    pub origin_key: Option<String>,
+    pub origin_label: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -181,6 +184,8 @@ struct ManifestFields {
     source_path: Option<String>,
     word_count: Option<u64>,
     last_word_index: Option<u64>,
+    origin_key: Option<String>,
+    origin_label: Option<String>,
 }
 
 fn manifest_fields(raw: Option<&str>) -> ManifestFields {
@@ -196,6 +201,17 @@ fn manifest_fields(raw: Option<&str>) -> ManifestFields {
             .get("playback_state")
             .and_then(|p| p.get("last_word_index"))
             .and_then(Value::as_u64),
+        origin_key: value
+            .get("origin")
+            .and_then(|o| o.get("key"))
+            .and_then(Value::as_str)
+            .filter(|k| !k.is_empty() && k.len() <= 32 && k.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .map(str::to_string),
+        origin_label: value
+            .get("origin")
+            .and_then(|o| o.get("label"))
+            .and_then(Value::as_str)
+            .map(|l| l.chars().take(120).collect()),
     }
 }
 
@@ -334,6 +350,8 @@ impl ReaderStore {
                 updated_at_ms: mtime_ms(&manifest_path).unwrap_or(source_mtime),
                 word_count: fields.word_count,
                 last_word_index: fields.last_word_index,
+                origin_key: fields.origin_key,
+                origin_label: fields.origin_label,
             });
         }
         out.sort_by(|a, b| {
@@ -653,7 +671,7 @@ mod tests {
         store
             .save_manifest(
                 &a.id,
-                r#"{"title":"A","word_count":10,"playback_state":{"last_word_index":4}}"#,
+                r#"{"title":"A","word_count":10,"playback_state":{"last_word_index":4},"origin":{"key":"k1a2b3c4","label":"zsh"}}"#,
             )
             .unwrap();
         fs::write(store.root.join(&b.id).join(MANIFEST_FILE), "not json").unwrap();
@@ -666,6 +684,8 @@ mod tests {
         assert_eq!(entry_a.title.as_deref(), Some("A"));
         assert_eq!(entry_a.word_count, Some(10));
         assert_eq!(entry_a.last_word_index, Some(4));
+        assert_eq!(entry_a.origin_key.as_deref(), Some("k1a2b3c4"));
+        assert_eq!(entry_a.origin_label.as_deref(), Some("zsh"));
         let entry_b = list.iter().find(|e| e.id == b.id).unwrap();
         assert_eq!(entry_b.title, None);
         assert!(list[0].updated_at_ms >= list[1].updated_at_ms);

@@ -9,7 +9,7 @@ const opts = { toolCallId: "t", messages: [] } as never;
 
 describe("appCommandNeedsApproval", () => {
   it("asks before scheduling agents, installing software or deleting data", () => {
-    for (const id of ["tasks.add", "tasks.run", "tasks.wake", "tts.install", "notes.remove", "tab.close"]) {
+    for (const id of ["tasks.add", "tasks.run", "tasks.wake", "tts.install", "notes.remove", "tab.close", "reader.delete"]) {
       expect(appCommandNeedsApproval(id), id).toBe(true);
     }
   });
@@ -22,7 +22,7 @@ describe("appCommandNeedsApproval", () => {
 
   it("only names real registry commands", () => {
     const risky = COMMAND_IDS.filter((id) => appCommandNeedsApproval(id));
-    expect(risky.length).toBe(21);
+    expect(risky.length).toBe(22);
   });
 
   it("asks before anything that runs shell input or ends a shell", () => {

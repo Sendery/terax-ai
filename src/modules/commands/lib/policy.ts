@@ -103,6 +103,8 @@ export const COMMAND_POLICY: Record<CommandId, CommandPolicy> = {
   "reader.control": "act",
   "reader.mark": "act",
   "reader.export": "act",
+  "reader.dock": "act",
+  "reader.delete": "approve",
 };
 
 /**
