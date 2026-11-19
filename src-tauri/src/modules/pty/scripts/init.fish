@@ -92,6 +92,15 @@ function __terax_install_prompt
 end
 __terax_install_prompt
 
+# Opens a file or piped text in this Terax's Reader tab.
+function terax-read
+    if not set -q TERAX_APP_EXE; or test -z "$TERAX_APP_EXE"
+        echo 'terax-read: TERAX_APP_EXE is unset; run it inside a Terax terminal' >&2
+        return 1
+    end
+    $TERAX_APP_EXE --read $argv
+end
+
 function __terax_preexec --on-event fish_preexec
     set -g __terax_block_seen 1
     set -l cmd (string replace -ra '[\x00-\x1f\x7f]' ' ' -- "$argv")

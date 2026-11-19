@@ -4,7 +4,7 @@ use modules::{
     agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, mcp, net, notify,
     oauth, pi,
     pisessions, profile,
-    pty, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
+    pty, reader, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -211,6 +211,12 @@ pub fn run() {
     // running instance over the Pi bridge and never builds an app of its own.
     if mcp::is_mcp_invocation() {
         std::process::exit(mcp::run_stdio());
+    }
+
+    // `terax --read [FILE]` opens a file or piped text in the running
+    // instance's Reader and exits, like `--mcp`.
+    if reader::cli::is_read_invocation() {
+        std::process::exit(reader::cli::run());
     }
 
     // A waker invocation is meant to be almost free. Ask a live instance to
@@ -476,6 +482,15 @@ pub fn run() {
             tts::commands::tts_reveal_dir,
             tts::commands::tts_sample_import,
             tts::commands::tts_sample_remove,
+            reader::reader_open,
+            reader::reader_load,
+            reader::reader_save_manifest,
+            reader::reader_list,
+            reader::reader_delete,
+            reader::reader_chunks_present,
+            reader::reader_chunk_get,
+            reader::reader_chunk_put,
+            reader::reader_export,
         ])
         .build(context)
         .expect("error while building tauri application")

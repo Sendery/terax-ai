@@ -82,6 +82,12 @@ export const TERAX_COMMAND_IDS = [
   "watch.setEnabled",
   "watch.run",
   "chat.layout",
+  "reader.open",
+  "reader.list",
+  "reader.state",
+  "reader.control",
+  "reader.mark",
+  "reader.export",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];

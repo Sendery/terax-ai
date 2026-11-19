@@ -35,6 +35,12 @@ function handlers(): CommandHandlers {
     setWatchEnabled: vi.fn(() => ({})),
     runWatch: vi.fn(() => ({})),
     setChatLayout: vi.fn(() => ({})),
+    openReader: vi.fn(() => ({})),
+    listReader: vi.fn(() => ({})),
+    readerState: vi.fn(() => ({})),
+    controlReader: vi.fn(() => ({})),
+    markReader: vi.fn(() => ({})),
+    exportReader: vi.fn(() => ({})),
     getSnapshot: vi.fn(async () => ({
       version: 1 as const,
       tabs: [],
@@ -785,6 +791,12 @@ describe("command registry", () => {
       "watch.setEnabled",
       "watch.run",
       "chat.layout",
+      "reader.open",
+      "reader.list",
+      "reader.state",
+      "reader.control",
+      "reader.mark",
+      "reader.export",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });

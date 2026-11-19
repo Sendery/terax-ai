@@ -9,7 +9,7 @@
     {
       "name": "terax_inspect",
       "title": "Inspect Terax",
-      "description": "Read the running Terax app without changing it: window layout, tabs, spaces, terminal panes and their scrollback, notes, scheduled tasks, watches, speech, the command catalog, file content search and PNG captures of a surface. Private terminals are never listed or read.\n\nActions:\n- read_graphx(graphId): Read a GraphX document source and revision explicitly.\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_terminals(): Every terminal pane that is not private: pane id (leafId), tab, space, directory, focus and the coding agent running in it.\n- read_terminal(leafId, lines?): Tail of one terminal pane's scrollback, secrets redacted.\n- list_spaces(): Spaces (named groups of tabs) and which one is active.\n- list_watches(): Watches with their command, interval, state and last change.\n- read_watch(id): One watch with the output of its last run.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
+      "description": "Read the running Terax app without changing it: window layout, tabs, spaces, terminal panes and their scrollback, notes, scheduled tasks, watches, speech, the command catalog, file content search and PNG captures of a surface. Private terminals are never listed or read.\n\nActions:\n- read_graphx(graphId): Read a GraphX document source and revision explicitly.\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_terminals(): Every terminal pane that is not private: pane id (leafId), tab, space, directory, focus and the coding agent running in it.\n- read_terminal(leafId, lines?): Tail of one terminal pane's scrollback, secrets redacted.\n- list_spaces(): Spaces (named groups of tabs) and which one is active.\n- list_watches(): Watches with their command, interval, state and last change.\n- read_watch(id): One watch with the output of its last run.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- list_reader_documents(): Documents in the Reader library and where reading stopped.\n- reader_state(docId?): A Reader document's position, word, timing, speed and cut points.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
       "annotations": {
         "title": "Inspect Terax",
         "readOnlyHint": true,
@@ -37,6 +37,8 @@
               "list_tasks",
               "speech_status",
               "list_voices",
+              "list_reader_documents",
+              "reader_state",
               "search_content",
               "capture",
               "wait"
@@ -58,6 +60,10 @@
           "id": {
             "type": "string",
             "description": "Id of the watch, from watch.list."
+          },
+          "docId": {
+            "type": "string",
+            "description": "Reader document id, from reader.list or the snapshot's reader tabs."
           },
           "query": {
             "type": "string",
@@ -167,6 +173,16 @@
         "list_voices": {
           "command": "tts.voices",
           "params": []
+        },
+        "list_reader_documents": {
+          "command": "reader.list",
+          "params": []
+        },
+        "reader_state": {
+          "command": "reader.state",
+          "params": [
+            "docId"
+          ]
         },
         "search_content": {
           "command": "search.content",
@@ -1207,7 +1223,7 @@
     {
       "name": "terax_speak",
       "title": "Speak through Terax",
-      "description": "Read short text aloud on the user's machine with Terax's local speech engines, and manage those engines. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along tab for long texts with word highlighting, bookmarks, scripted pauses and audio export. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?): Open a text or file in a read-along Reader tab, optionally playing it.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?): Export a Reader document as one WAV with its pauses and chapters.",
       "annotations": {
         "title": "Speak through Terax",
         "readOnlyHint": false,
@@ -1226,13 +1242,17 @@
               "start_engine",
               "stop_engine",
               "install_engine",
-              "download_model"
+              "download_model",
+              "open_reader",
+              "control_reader",
+              "mark_reader",
+              "export_reader"
             ],
             "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
           },
           "text": {
             "type": "string",
-            "description": "Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally."
+            "description": "speak: Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally. open_reader: Text to read. Prefer path for long documents."
           },
           "voiceId": {
             "type": "string",
@@ -1263,6 +1283,72 @@
               "chatterbox-nano"
             ],
             "description": "Model to download."
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute path of a text or Markdown file."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title for the tab; defaults to the file name."
+          },
+          "play": {
+            "type": "boolean",
+            "description": "Start reading right away from the saved position (default false)."
+          },
+          "stdin": {
+            "type": "boolean",
+            "description": "The path is a temporary copy of piped input: do not keep it as the source."
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "play",
+              "pause",
+              "toggle",
+              "stop",
+              "next",
+              "previous",
+              "seek"
+            ],
+            "description": "play, pause, toggle, stop, next, previous or seek."
+          },
+          "docId": {
+            "type": "string",
+            "description": "Reader document id, from reader.list or the snapshot's reader tabs."
+          },
+          "wordIndex": {
+            "type": "integer",
+            "description": "control_reader: Word to play or seek to, from reader.state or the document text. mark_reader: The cut sits before this word."
+          },
+          "positionMs": {
+            "type": "integer",
+            "description": "Document time to seek to, at 1x, scripted pauses included."
+          },
+          "speedPercent": {
+            "type": "integer",
+            "description": "Reading speed as a percentage: 100 is normal, 150 is 1.5x."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bookmark",
+              "pause",
+              "stop"
+            ],
+            "description": "bookmark, pause or stop."
+          },
+          "label": {
+            "type": "string",
+            "description": "Label shown in the gutter and used as a chapter title on export."
+          },
+          "pauseMs": {
+            "type": "integer",
+            "description": "Length of a pause in milliseconds (0 to 60000)."
+          },
+          "remove": {
+            "type": "boolean",
+            "description": "Remove the cut of this kind at this word instead of placing it."
           }
         },
         "required": [
@@ -1305,6 +1391,43 @@
           "command": "tts.download",
           "params": [
             "model"
+          ]
+        },
+        "open_reader": {
+          "command": "reader.open",
+          "params": [
+            "text",
+            "path",
+            "title",
+            "play",
+            "stdin"
+          ]
+        },
+        "control_reader": {
+          "command": "reader.control",
+          "params": [
+            "op",
+            "docId",
+            "wordIndex",
+            "positionMs",
+            "speedPercent"
+          ]
+        },
+        "mark_reader": {
+          "command": "reader.mark",
+          "params": [
+            "wordIndex",
+            "kind",
+            "docId",
+            "label",
+            "pauseMs",
+            "remove"
+          ]
+        },
+        "export_reader": {
+          "command": "reader.export",
+          "params": [
+            "docId"
           ]
         }
       }

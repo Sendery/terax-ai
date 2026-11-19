@@ -27,6 +27,12 @@ function handlers(): ControlHandlers {
     setWatchEnabled: vi.fn(() => "setWatchEnabled"),
     runWatch: vi.fn(() => "runWatch"),
     setChatLayout: vi.fn(() => "setChatLayout"),
+    openReader: vi.fn(() => "openReader"),
+    listReader: vi.fn(() => "listReader"),
+    readerState: vi.fn(() => "readerState"),
+    controlReader: vi.fn(() => "controlReader"),
+    markReader: vi.fn(() => "markReader"),
+    exportReader: vi.fn(() => "exportReader"),
   };
 }
 

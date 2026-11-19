@@ -250,6 +250,12 @@ fn is_allowed_command(command: &str) -> bool {
             | "watch.setEnabled"
             | "watch.run"
             | "chat.layout"
+            | "reader.open"
+            | "reader.list"
+            | "reader.state"
+            | "reader.control"
+            | "reader.mark"
+            | "reader.export"
     )
 }
 

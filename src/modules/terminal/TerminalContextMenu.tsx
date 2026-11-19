@@ -20,6 +20,7 @@ import {
 } from "@/modules/tts";
 import {
   AudioWave01Icon,
+  BookOpen01Icon,
   ClipboardPasteIcon,
   Copy01Icon,
   Flowchart01Icon,
@@ -36,7 +37,12 @@ import {
   writeTerminalClipboard,
 } from "./lib/terminalClipboard";
 
-export type ReadAloudOptions = { voiceId?: string; language?: TtsLanguage };
+export type ReadAloudOptions = {
+  voiceId?: string;
+  language?: TtsLanguage;
+  /** Open the text in a Reader tab instead of speaking it in the background. */
+  reader?: boolean;
+};
 
 /**
  * Selection actions shared with the floating popup that a primary-button
@@ -252,6 +258,13 @@ function MenuBody({
               ))}
             </ContextMenuSubContent>
           </ContextMenuSub>
+          <ContextMenuItem
+            disabled={selection.length === 0}
+            onSelect={() => onReadAloud(selection, { reader: true })}
+          >
+            <HugeiconsIcon icon={BookOpen01Icon} size={14} strokeWidth={1.75} />
+            <span className="flex-1">Open in Reader</span>
+          </ContextMenuItem>
           <ContextMenuItem
             disabled={!speaking}
             onSelect={() => onStopReading?.()}

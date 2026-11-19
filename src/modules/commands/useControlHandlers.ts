@@ -17,6 +17,7 @@ import {
   stopWatchRunner,
   watchCommands,
 } from "@/modules/watchers";
+import { createReaderHandlers } from "@/modules/reader/lib/readerCommands";
 import type { ControlHandlers } from "./lib/controlCommands";
 import { createTerminalControl } from "./lib/terminalControl";
 
@@ -31,6 +32,11 @@ type Params = {
   closePaneByLeaf: (leafId: number) => void;
   updateTab: (id: number, patch: { customTitle?: string }) => void;
   moveTabToSpace: (tabId: number, spaceId: string) => boolean;
+  openReaderTab: (input: {
+    docId: string;
+    title: string;
+    background?: boolean;
+  }) => number;
 };
 
 function failure(message: string): never {
@@ -73,6 +79,7 @@ export function useControlHandlers(params: Params): ControlHandlers {
     closePaneByLeaf,
     updateTab,
     moveTabToSpace,
+    openReaderTab,
   } = params;
 
   useEffect(() => {
@@ -169,6 +176,15 @@ export function useControlHandlers(params: Params): ControlHandlers {
         else chat.openMini();
         return { mode, visible: show !== false };
       },
+      ...createReaderHandlers({
+        tabs: () => tabsRef.current,
+        activeId: () => activeIdRef.current,
+        openReaderTab: (input) => {
+          const id = openReaderTab(input);
+          if (!input.background) focusTab(id);
+          return id;
+        },
+      }),
     };
   }, [
     tabsRef,
@@ -181,5 +197,6 @@ export function useControlHandlers(params: Params): ControlHandlers {
     closePaneByLeaf,
     updateTab,
     moveTabToSpace,
+    openReaderTab,
   ]);
 }

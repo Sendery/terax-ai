@@ -97,6 +97,12 @@ export const COMMAND_POLICY: Record<CommandId, CommandPolicy> = {
   "watch.setEnabled": "approve",
   "watch.run": "approve",
   "chat.layout": "act",
+  "reader.open": "act",
+  "reader.list": "read",
+  "reader.state": "read",
+  "reader.control": "act",
+  "reader.mark": "act",
+  "reader.export": "act",
 };
 
 /**
