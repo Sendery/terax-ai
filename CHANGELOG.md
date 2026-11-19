@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.21 (2026-11-19)
+
+- Antigravity (agy) y GitHub Copilot CLI como proveedores de la barra de IA, con el MCP de Terax y reglas de permiso por postura.
+- Selector de modelos con iconos unicos e insignia de origen, favoritos por modelo (tambien en los CLIs) y catalogos vivos.
+- Chat acoplable a los lados o sobre la barra inferior, filas de herramientas legibles y comando `chat.layout`.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.21.md).
+
 ## Pi-Terax v0.9.0-dev.20 (2026-11-17)
 
 - El Pi-Terax Agente controla toda la aplicacion: terminales no privados (listar, leer, abrir, dividir, cerrar, escribir), spaces y watches que avisan o despiertan al agente cuando cambia la salida de un comando.
