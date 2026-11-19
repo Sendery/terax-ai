@@ -96,6 +96,7 @@ export const COMMAND_POLICY: Record<CommandId, CommandPolicy> = {
   "watch.remove": "approve",
   "watch.setEnabled": "approve",
   "watch.run": "approve",
+  "chat.layout": "act",
 };
 
 /**

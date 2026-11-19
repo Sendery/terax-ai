@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useMemo } from "react";
 import { useAgentStore } from "@/modules/agents";
 import { readTerminalContext } from "@/modules/ai/lib/terminalContext";
+import { switchChatLayout } from "@/modules/ai/store/chatLayoutStore";
 import { hasKeyForModel, useChatStore } from "@/modules/ai/store/chatStore";
 import { useSpaces } from "@/modules/spaces";
 import { MAX_PANES_PER_TAB, type Tab } from "@/modules/tabs";
@@ -161,6 +162,13 @@ export function useControlHandlers(params: Params): ControlHandlers {
       setWatchEnabled: ({ id, enabled }) =>
         watchCommands.setEnabled(id, enabled),
       runWatch: ({ id }) => watchCommands.run(id),
+      setChatLayout: ({ mode, show }) => {
+        switchChatLayout(mode);
+        const chat = useChatStore.getState();
+        if (show === false) chat.closeMini();
+        else chat.openMini();
+        return { mode, visible: show !== false };
+      },
     };
   }, [
     tabsRef,

@@ -17,15 +17,9 @@ import {
   saveGeom,
   type MiniWindowDragHooks,
 } from "../lib/useMiniWindowGeometry";
-import { useChatLayoutStore } from "../store/chatLayoutStore";
-import { useChatStore } from "../store/chatStore";
+import { switchChatLayout, useChatLayoutStore } from "../store/chatLayoutStore";
 
-export function switchChatLayout(mode: ChatLayoutMode) {
-  useChatLayoutStore.getState().setMode(mode);
-  // The bottom pane sits on the composer; without it the pane would float
-  // over an empty strip.
-  if (mode === "bottom") useChatStore.getState().openPanel();
-}
+export { switchChatLayout };
 
 type Host = { rect: Rect; scale: number };
 

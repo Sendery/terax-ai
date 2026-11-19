@@ -323,6 +323,10 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
         command: "agent-monitor.toggle",
         summary: "Toggle the agent monitor.",
       },
+      set_chat_layout: {
+        command: "chat.layout",
+        summary: "Float the Terax AI chat, dock it left or right, or put it above the bottom bar.",
+      },
       open_settings: { command: "settings.open", summary: "Open the settings window." },
       open_task_editor: {
         command: "tasks.openEditor",

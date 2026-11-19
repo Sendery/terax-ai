@@ -1,4 +1,5 @@
 import { checkShellCommand } from "@/modules/ai/lib/security";
+import { CHAT_LAYOUT_MODES, type ChatLayoutMode } from "@/modules/ai/lib/chatLayout";
 import { WATCH_ACTIONS, type WatchAction } from "@/modules/watchers/lib/watch";
 import type { CommandParamSchema } from "./registry";
 
@@ -30,6 +31,7 @@ export const CONTROL_COMMAND_IDS = [
   "watch.remove",
   "watch.setEnabled",
   "watch.run",
+  "chat.layout",
 ] as const;
 
 export type ControlCommandId = (typeof CONTROL_COMMAND_IDS)[number];
@@ -83,6 +85,7 @@ export type ControlPayloads = {
   "watch.remove": { id: string };
   "watch.setEnabled": { id: string; enabled: boolean };
   "watch.run": { id: string };
+  "chat.layout": { mode: ChatLayoutMode; show?: boolean };
 };
 
 type Reply = Promise<unknown> | unknown;
@@ -105,6 +108,7 @@ export type ControlHandlers = {
   removeWatch: (payload: ControlPayloads["watch.remove"]) => Reply;
   setWatchEnabled: (payload: ControlPayloads["watch.setEnabled"]) => Reply;
   runWatch: (payload: ControlPayloads["watch.run"]) => Reply;
+  setChatLayout: (payload: ControlPayloads["chat.layout"]) => Reply;
 };
 
 /** Limits the validator enforces on top of the public param shape. */
@@ -383,6 +387,25 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
     description: "Run a watch now, outside its interval, and report whether its output changed.",
     params: [WATCH_ID],
   },
+  "chat.layout": {
+    description:
+      "Place the Terax AI chat: a floating window, docked to the left or right of the workspace (it stays while tabs change), or a pane above the bottom input bar.",
+    params: [
+      {
+        name: "mode",
+        type: "enum",
+        required: true,
+        description: "floating, left, right or bottom.",
+        values: [...CHAT_LAYOUT_MODES],
+      },
+      {
+        name: "show",
+        type: "boolean",
+        required: false,
+        description: "Show the chat after placing it (default true); false hides it.",
+      },
+    ],
+  },
 };
 
 function publicParam(param: ControlParam): CommandParamSchema {
@@ -559,5 +582,7 @@ export function dispatchControlCommand(
       return handlers.setWatchEnabled(p);
     case "watch.run":
       return handlers.runWatch(p);
+    case "chat.layout":
+      return handlers.setChatLayout(p);
   }
 }

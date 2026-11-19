@@ -34,6 +34,7 @@ function handlers(): CommandHandlers {
     removeWatch: vi.fn(() => ({})),
     setWatchEnabled: vi.fn(() => ({})),
     runWatch: vi.fn(() => ({})),
+    setChatLayout: vi.fn(() => ({})),
     getSnapshot: vi.fn(async () => ({
       version: 1 as const,
       tabs: [],
@@ -783,6 +784,7 @@ describe("command registry", () => {
       "watch.remove",
       "watch.setEnabled",
       "watch.run",
+      "chat.layout",
     ]);
     expect(PI_ALLOWED_COMMAND_IDS).not.toContain("ai.diff.approve");
   });

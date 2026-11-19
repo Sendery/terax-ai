@@ -1,3 +1,4 @@
+import { useChatStore } from "./chatStore";
 import { create } from "zustand";
 import {
   BOTTOM_MAX_H,
@@ -67,3 +68,10 @@ export const useChatLayoutStore = create<ChatLayoutState>((set, get) => {
       commit({ bottomHeight: clampTo(height, BOTTOM_MIN_H, BOTTOM_MAX_H) }),
   };
 });
+
+export function switchChatLayout(mode: ChatLayoutMode) {
+  useChatLayoutStore.getState().setMode(mode);
+  // The bottom pane sits on the composer; without it the pane would float
+  // over an empty strip.
+  if (mode === "bottom") useChatStore.getState().openPanel();
+}

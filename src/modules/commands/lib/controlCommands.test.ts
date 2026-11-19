@@ -26,6 +26,7 @@ function handlers(): ControlHandlers {
     removeWatch: vi.fn(() => "removeWatch"),
     setWatchEnabled: vi.fn(() => "setWatchEnabled"),
     runWatch: vi.fn(() => "runWatch"),
+    setChatLayout: vi.fn(() => "setChatLayout"),
   };
 }
 
@@ -79,6 +80,13 @@ describe("control command validation", () => {
       validateControlPayload("watch.add", { name: "x", command: "rm -rf /", intervalSeconds: 60 }).ok,
     ).toBe(false);
     expect(validateControlPayload("terminal.send", { leafId: 1, text: "pnpm test" }).ok).toBe(true);
+  });
+
+  it("places the chat only in a known layout", () => {
+    expect(validateControlPayload("chat.layout", { mode: "left" }).ok).toBe(true);
+    expect(validateControlPayload("chat.layout", { mode: "bottom", show: false }).ok).toBe(true);
+    expect(validateControlPayload("chat.layout", { mode: "top" }).ok).toBe(false);
+    expect(validateControlPayload("chat.layout", {}).ok).toBe(false);
   });
 
   it("requires an edit to actually change something", () => {
