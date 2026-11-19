@@ -523,6 +523,27 @@ pub fn configure_all() -> Result<McpStatus, String> {
     Ok(status)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerLaunch {
+    pub command: String,
+    /// This instance's bridge discovery file, so the server reaches it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discovery: Option<String>,
+}
+
+/// What a chat turn hands to a CLI that takes MCP servers per session
+/// (Copilot), without the subprocess round-trips of a full status check.
+#[tauri::command]
+pub fn mcp_server_command() -> Result<McpServerLaunch, String> {
+    Ok(McpServerLaunch {
+        command: server_command()?,
+        discovery: crate::modules::pi::cache_file_path()
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned()),
+    })
+}
+
 #[tauri::command]
 pub async fn mcp_status() -> Result<McpStatus, String> {
     tauri::async_runtime::spawn_blocking(collect_status)

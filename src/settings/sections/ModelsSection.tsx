@@ -826,6 +826,7 @@ function CliAgentsBlock({
         can drive this window; pick which Pi model answers from the chat's
         model menu. Antigravity reaches this window through the Terax MCP
         server: register it with the Pi-Terax button next to the agent picker.
+        GitHub Copilot gets the Terax server attached to each chat turn.
       </p>
 
       {detectionStatus === "error" && (

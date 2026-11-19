@@ -8,4 +8,5 @@ export const CLI_BINARIES: Record<CliAgentId, string> = {
   opencode: "opencode",
   pi: "pi",
   agy: "agy",
+  copilot: "copilot",
 };

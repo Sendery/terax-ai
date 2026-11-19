@@ -164,3 +164,40 @@ describe("Antigravity (agy)", () => {
     expect(CLI_AGENTS.agy.planRun(base).bridge).toBe(true);
   });
 });
+
+describe("GitHub Copilot", () => {
+  const launch = { command: "/Apps/Pi-Terax.app/Contents/MacOS/terax", discovery: "/cache/pi-bridge.json" };
+
+  it("attaches the Terax server for the turn and binds the prompt to --prompt", () => {
+    const plan = CLI_AGENTS.copilot.planRun({ ...base, host: launch });
+    expect(plan.argv.slice(0, 5)).toEqual([
+      "copilot",
+      "--output-format",
+      "json",
+      "--no-color",
+      "--no-ask-user",
+    ]);
+    const mcp = plan.argv.find((a) => a.startsWith("--additional-mcp-config="));
+    expect(JSON.parse(mcp?.slice("--additional-mcp-config=".length) ?? "null").mcpServers.terax.command).toBe(
+      launch.command,
+    );
+    expect(plan.argv).toContain("--allow-tool=terax(terax_inspect)");
+    expect(plan.argv[plan.argv.length - 1]).toBe(`--prompt=${messagesToPrompt(messages)}`);
+    expect(plan.bridge).toBe(true);
+  });
+
+  it("runs without Terax when this instance's binary is unknown", () => {
+    const argv = CLI_AGENTS.copilot.planRun({ ...base, host: null }).argv;
+    expect(argv.some((a) => a.startsWith("--additional-mcp-config"))).toBe(false);
+    expect(argv.some((a) => a.includes("terax("))).toBe(false);
+  });
+
+  it("keeps a prompt that looks like a flag inside --prompt", () => {
+    const dash: UIMessage[] = [
+      { id: "u", role: "user", parts: [{ type: "text", text: "--allow-all" }] },
+    ];
+    const argv = CLI_AGENTS.copilot.planRun({ ...base, messages: dash, host: null }).argv;
+    expect(argv).not.toContain("--allow-all");
+    expect(argv[argv.length - 1]).toBe("--prompt=--allow-all");
+  });
+});

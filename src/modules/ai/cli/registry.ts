@@ -3,9 +3,11 @@ import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { ParserFactory } from "./parsers/emitter";
 import { createClaudeParser } from "./parsers/claude";
 import { type AgyPermissions, agySessionSettings } from "./agy";
-import { readAgyPermissions } from "./bridge";
+import { type McpServerLaunch, readAgyPermissions, readMcpServerLaunch } from "./bridge";
+import { copilotMcpConfig, copilotPermissionArgs } from "./copilot";
 import { createAgyParser } from "./parsers/agy";
 import { createCodexParser } from "./parsers/codex";
+import { createCopilotParser } from "./parsers/copilot";
 import { createCursorParser } from "./parsers/cursor";
 import { createOpenCodeParser } from "./parsers/opencode";
 import { createPiParser } from "./parsers/pi";
@@ -84,6 +86,20 @@ function planAgyRun(ctx: CliRunContext): CliRunPlan {
   // As `--print=<prompt>` a prompt that starts with "-" is never read as a flag.
   argv.push(`--print=${transcriptPrompt(ctx)}`);
   // The bridge pins `terax --mcp`, started by agy, to the window that asked.
+  return { argv, bridge: true };
+}
+
+/** Copilot takes the Terax server per turn, so nothing is written to its
+ *  config; without a known binary the turn simply runs without Terax. */
+function planCopilotRun(ctx: CliRunContext): CliRunPlan {
+  const launch = ctx.host as McpServerLaunch | null | undefined;
+  const argv = ["copilot", "--output-format", "json", "--no-color", "--no-ask-user"];
+  if (launch?.command) {
+    argv.push(`--additional-mcp-config=${copilotMcpConfig(launch.command, launch.discovery)}`);
+  }
+  argv.push(...copilotPermissionArgs(ctx.permission, Boolean(launch?.command)));
+  if (ctx.model) argv.push("--model", ctx.model);
+  argv.push(`--prompt=${transcriptPrompt(ctx)}`);
   return { argv, bridge: true };
 }
 
@@ -173,6 +189,15 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     prepare: () => readAgyPermissions(),
     planRun: planAgyRun,
     createParser: createAgyParser,
+  },
+  copilot: {
+    id: "copilot",
+    label: "GitHub Copilot",
+    bin: CLI_BINARIES.copilot,
+    docsUrl: "https://docs.github.com/en/copilot/how-tos/copilot-cli",
+    prepare: () => readMcpServerLaunch(),
+    planRun: planCopilotRun,
+    createParser: createCopilotParser,
   },
   pi: {
     id: "pi",

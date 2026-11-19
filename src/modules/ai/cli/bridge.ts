@@ -23,6 +23,13 @@ export type PiDefaultsResult = {
   defaultThinkingLevel?: string;
 };
 
+export type McpServerLaunch = { command: string; discovery?: string };
+
+/** How to start this instance's `terax --mcp`, or null when unknown. */
+export function readMcpServerLaunch(): Promise<McpServerLaunch | null> {
+  return invoke<McpServerLaunch>("mcp_server_command").catch(() => null);
+}
+
 /** Antigravity's own permission rules, or null when they cannot be read. */
 export function readAgyPermissions(): Promise<AgyPermissions | null> {
   return invoke<AgyPermissions | null>("agent_cli_agy_permissions").catch(

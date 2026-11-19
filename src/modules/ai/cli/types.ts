@@ -4,7 +4,8 @@ export type CliAgentId =
   | "cursor"
   | "opencode"
   | "pi"
-  | "agy";
+  | "agy"
+  | "copilot";
 
 /** Mirror of the Rust `AgentCliEvent` (serde tag = "kind", camelCase). */
 export type CliSpawnEvent =

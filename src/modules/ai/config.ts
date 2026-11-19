@@ -20,12 +20,13 @@ export type ProviderId =
   | "cli-cursor"
   | "cli-opencode"
   | "cli-pi"
-  | "cli-agy";
+  | "cli-agy"
+  | "cli-copilot";
 
 /** Providers backed by a locally-installed agent CLI (no API key, runs the
  *  agent's own tool loop). Maps each provider to its CLI agent id. */
 export const CLI_PROVIDERS: Partial<
-  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi" | "agy">
+  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi" | "agy" | "copilot">
 > = {
   "cli-claude": "claude",
   "cli-codex": "codex",
@@ -33,6 +34,7 @@ export const CLI_PROVIDERS: Partial<
   "cli-opencode": "opencode",
   "cli-pi": "pi",
   "cli-agy": "agy",
+  "cli-copilot": "copilot",
 };
 
 export function isCliProvider(id: ProviderId): boolean {
@@ -211,6 +213,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://antigravity.google",
+  },
+  {
+    id: "cli-copilot",
+    label: "GitHub Copilot (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://docs.github.com/en/copilot/how-tos/copilot-cli",
   },
 ] as const;
 
@@ -787,6 +796,16 @@ export const MODELS = [
     capabilities: { intelligence: 5, speed: 4, cost: 5 },
     tags: ["reasoning", "tools", "coding"],
   },
+  {
+    id: "cli-copilot-agent",
+    provider: "cli-copilot",
+    label: "GitHub Copilot",
+    hint: "CLI",
+    description:
+      "Your installed Copilot CLI with your GitHub plan's models; Terax joins each turn as an MCP server.",
+    capabilities: { intelligence: 5, speed: 4, cost: 5 },
+    tags: ["reasoning", "tools", "coding"],
+  },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -976,6 +995,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "cli-opencode",
   "cli-pi",
   "cli-agy",
+  "cli-copilot",
 ] as const;
 
 export function providerNeedsKey(id: ProviderId): boolean {

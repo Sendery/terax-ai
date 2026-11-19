@@ -4,6 +4,7 @@ import {
   ChatGptIcon,
   ClaudeIcon,
   ComputerIcon,
+  CopilotIcon,
   CpuIcon,
   DeepseekIcon,
   FlashIcon,
@@ -39,6 +40,7 @@ const ICON_BY_PROVIDER = {
   "cli-opencode": CpuIcon,
   "cli-pi": PiIcon,
   "cli-agy": GravityIcon,
+  "cli-copilot": CopilotIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 type Props = {

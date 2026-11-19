@@ -26,6 +26,7 @@ import {
   Clock01Icon,
   CoinsDollarIcon,
   ComputerIcon,
+  CopilotIcon,
   CpuIcon,
   DeepseekIcon,
   FavouriteIcon,
@@ -88,6 +89,7 @@ const PROVIDER_ICON = {
   "cli-opencode": CpuIcon,
   "cli-pi": PiIcon,
   "cli-agy": GravityIcon,
+  "cli-copilot": CopilotIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 /**
