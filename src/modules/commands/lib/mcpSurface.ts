@@ -448,7 +448,13 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       },
       export_reader: {
         command: "reader.export",
-        summary: "Export a Reader document as one WAV with its pauses and chapters.",
+        summary:
+          "Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.",
+      },
+      generate_reading: {
+        command: "reader.generate",
+        summary:
+          "Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
       },
     },
   },

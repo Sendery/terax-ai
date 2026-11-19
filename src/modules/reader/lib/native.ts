@@ -35,6 +35,22 @@ export type ExportResult = {
   chapters: { title: string; startMs: number }[];
 };
 
+export type ExportPart = { title: string; segments: ExportSegment[] };
+
+export type PartsResult = {
+  directory: string;
+  parts: {
+    index: number;
+    title: string;
+    path: string;
+    startMs: number;
+    durationMs: number;
+  }[];
+  playlist: string;
+  index: string;
+  durationMs: number;
+};
+
 export const readerNative = {
   open: (args: { text?: string; path?: string; title?: string }) =>
     invoke<StoredDocument>("reader_open", {
@@ -66,6 +82,18 @@ export const readerNative = {
     fileName: string,
   ) =>
     invoke<ExportResult>("reader_export", { id, voiceKey, segments, fileName }),
+  exportParts: (
+    id: string,
+    voiceKey: string,
+    parts: ExportPart[],
+    folderName: string,
+  ) =>
+    invoke<PartsResult>("reader_export_parts", {
+      id,
+      voiceKey,
+      parts,
+      folderName,
+    }),
 };
 
 /**

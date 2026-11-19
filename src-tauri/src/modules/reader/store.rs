@@ -65,6 +65,37 @@ pub struct ExportSegment {
     pub chapter: Option<String>,
 }
 
+/// One fragment of a split export: its own WAV made of these segments.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPart {
+    pub title: String,
+    pub segments: Vec<ExportSegment>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedPart {
+    pub index: usize,
+    pub title: String,
+    pub path: String,
+    /// Where the fragment starts in the reading as a whole.
+    pub start_ms: u64,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PartsResult {
+    pub directory: String,
+    pub parts: Vec<ExportedPart>,
+    /// `playlist.m3u`, the fragments in reading order.
+    pub playlist: String,
+    /// `index.json`, the same list with titles and timings.
+    pub index: String,
+    pub duration_ms: u64,
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportResult {
@@ -460,16 +491,7 @@ impl ReaderStore {
             })
             .collect();
 
-        let tmp = tempfile::NamedTempFile::new_in(&exports).map_err(|e| e.to_string())?;
-        let mut writer = std::io::BufWriter::new(tmp);
-        let summary = wav::concat_wavs(&mut writer, &plan, |key| {
-            let path = chunks.join(format!("{key}.wav"));
-            fs::read(&path).map_err(|_| format!("chunk {key} is not cached for this voice"))
-        })?;
-        let tmp = writer.into_inner().map_err(|e| e.error().to_string())?;
-        tmp.as_file().sync_all().map_err(|e| e.to_string())?;
-        tmp.persist(&wav_path).map_err(|e| e.error.to_string())?;
-        set_private(&wav_path);
+        let summary = write_concat(&exports, &wav_path, &plan, &chunks)?;
 
         let chapters_path = exports.join(format!("{name}.chapters.json"));
         let cue_path = exports.join(format!("{name}.cue"));
@@ -491,6 +513,133 @@ impl ReaderStore {
             chapters: summary.chapters,
         })
     }
+}
+
+impl ReaderStore {
+    /// Writes each part as its own WAV under `exports/<folder>/`, numbered in
+    /// reading order, with `index.json` and `playlist.m3u` beside them. The
+    /// folder is replaced, so fragments of an earlier split never linger.
+    pub fn export_parts(
+        &self,
+        id: &str,
+        voice_key: &str,
+        parts: &[ExportPart],
+        folder_name: &str,
+    ) -> Result<PartsResult, String> {
+        if parts.is_empty() {
+            return Err("nothing to export: no parts".into());
+        }
+        let total: usize = parts.iter().map(|p| p.segments.len()).sum();
+        if total > MAX_EXPORT_SEGMENTS {
+            return Err(format!("at most {MAX_EXPORT_SEGMENTS} segments per export"));
+        }
+        for part in parts {
+            if part.segments.is_empty() {
+                return Err("every part needs at least one segment".into());
+            }
+            for segment in &part.segments {
+                validate_key(&segment.key, "chunk key")?;
+                if segment.pause_after_ms > MAX_PAUSE_MS {
+                    return Err(format!(
+                        "pause after {} exceeds {MAX_PAUSE_MS} ms",
+                        segment.key
+                    ));
+                }
+            }
+        }
+        let doc = self.existing_doc_dir(id)?;
+        let chunks = self.chunk_dir(id, voice_key)?;
+        let exports = doc.join(EXPORTS_DIR);
+        ensure_dir(&exports)?;
+        let folder = exports.join(sanitize_export_name(folder_name));
+        if folder.exists() {
+            fs::remove_dir_all(&folder).map_err(|e| e.to_string())?;
+        }
+        ensure_dir(&folder)?;
+
+        let width = parts.len().to_string().len().max(2);
+        let mut out = Vec::with_capacity(parts.len());
+        let mut playlist = String::from("#EXTM3U\n");
+        let mut at_ms = 0_u64;
+        for (i, part) in parts.iter().enumerate() {
+            let title = clean_title(&part.title, i + 1);
+            let file = format!(
+                "{:0width$} {}.wav",
+                i + 1,
+                sanitize_export_name(&title),
+                width = width
+            );
+            let path = folder.join(&file);
+            let plan: Vec<ConcatSegment<'_>> = part
+                .segments
+                .iter()
+                .map(|s| ConcatSegment {
+                    key: &s.key,
+                    pause_after_ms: s.pause_after_ms,
+                    chapter: None,
+                })
+                .collect();
+            let summary = write_concat(&folder, &path, &plan, &chunks)?;
+            playlist.push_str(&format!(
+                "#EXTINF:{},{}\n{}\n",
+                summary.duration_ms.div_ceil(1000),
+                title,
+                file
+            ));
+            out.push(ExportedPart {
+                index: i + 1,
+                title,
+                path: path.to_string_lossy().into_owned(),
+                start_ms: at_ms,
+                duration_ms: summary.duration_ms,
+            });
+            at_ms += summary.duration_ms;
+        }
+        let playlist_path = folder.join("playlist.m3u");
+        write_atomic(&playlist_path, playlist.as_bytes())?;
+        let index_path = folder.join("index.json");
+        let json = serde_json::to_vec_pretty(&out).map_err(|e| e.to_string())?;
+        write_atomic(&index_path, &json)?;
+        Ok(PartsResult {
+            directory: folder.to_string_lossy().into_owned(),
+            parts: out,
+            playlist: playlist_path.to_string_lossy().into_owned(),
+            index: index_path.to_string_lossy().into_owned(),
+            duration_ms: at_ms,
+        })
+    }
+}
+
+/// A title for the playlist: one line, bounded, never empty.
+fn clean_title(raw: &str, index: usize) -> String {
+    let one_line = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let short: String = one_line.chars().take(120).collect();
+    if short.is_empty() {
+        format!("Part {index}")
+    } else {
+        short
+    }
+}
+
+/// Concatenates cached clips into `target` through a temporary file in `dir`,
+/// so a failed export never leaves a half-written WAV behind.
+fn write_concat(
+    dir: &Path,
+    target: &Path,
+    plan: &[ConcatSegment<'_>],
+    chunks: &Path,
+) -> Result<wav::ConcatSummary, String> {
+    let tmp = tempfile::NamedTempFile::new_in(dir).map_err(|e| e.to_string())?;
+    let mut writer = std::io::BufWriter::new(tmp);
+    let summary = wav::concat_wavs(&mut writer, plan, |key| {
+        let path = chunks.join(format!("{key}.wav"));
+        fs::read(&path).map_err(|_| format!("chunk {key} is not cached for this voice"))
+    })?;
+    let tmp = writer.into_inner().map_err(|e| e.error().to_string())?;
+    tmp.as_file().sync_all().map_err(|e| e.to_string())?;
+    tmp.persist(target).map_err(|e| e.error.to_string())?;
+    set_private(target);
+    Ok(summary)
 }
 
 /// `[A-Za-z0-9 ._-]` only, no leading dots, at most 80 chars, and without a
@@ -776,6 +925,69 @@ mod tests {
         }];
         store.export(&doc.id, "v1", &plain, "My Book").unwrap();
         assert!(!exports.join("My Book.cue").exists());
+    }
+
+    #[test]
+    fn export_parts_writes_numbered_fragments_with_index_and_playlist() {
+        let (_tmp, store) = store();
+        let doc = store.open(Some("split me".into()), None, None).unwrap();
+        store
+            .chunk_put(&doc.id, "v1", "a", &mono16_wav(&[1, 2]))
+            .unwrap();
+        store
+            .chunk_put(&doc.id, "v1", "b", &mono16_wav(&[3]))
+            .unwrap();
+        let seg = |key: &str, pause: u32| ExportSegment {
+            key: key.into(),
+            pause_after_ms: pause,
+            chapter: None,
+        };
+        let parts = vec![
+            ExportPart {
+                title: "Intro: the start".into(),
+                segments: vec![seg("a", 1000), seg("b", 0)],
+            },
+            ExportPart {
+                title: "   ".into(),
+                segments: vec![seg("b", 0)],
+            },
+        ];
+        let result = store.export_parts(&doc.id, "v1", &parts, "My Book").unwrap();
+        assert!(result.directory.ends_with("exports/My Book"), "{}", result.directory);
+        assert_eq!(result.parts.len(), 2);
+        assert!(result.parts[0].path.ends_with("/01 Intro the start.wav"));
+        assert_eq!(result.parts[1].title, "Part 2");
+        assert_eq!(result.parts[0].duration_ms, 1003);
+        assert_eq!(result.parts[1].start_ms, 1003);
+        assert_eq!(result.duration_ms, 1004);
+        let playlist = fs::read_to_string(&result.playlist).unwrap();
+        assert!(playlist.starts_with("#EXTM3U\n#EXTINF:2,Intro: the start\n01 Intro the start.wav\n"));
+        let index: Value = serde_json::from_slice(&fs::read(&result.index).unwrap()).unwrap();
+        assert_eq!(index[1]["startMs"], 1003);
+
+        // A second split replaces the folder rather than mixing fragments.
+        let one = vec![ExportPart {
+            title: "Only".into(),
+            segments: vec![seg("a", 0)],
+        }];
+        let again = store.export_parts(&doc.id, "v1", &one, "My Book").unwrap();
+        let files = fs::read_dir(&again.directory).unwrap().count();
+        assert_eq!(files, 3);
+
+        assert!(store.export_parts(&doc.id, "v1", &[], "x").is_err());
+        let empty = vec![ExportPart {
+            title: "x".into(),
+            segments: vec![],
+        }];
+        assert!(store.export_parts(&doc.id, "v1", &empty, "x").is_err());
+        let missing = vec![ExportPart {
+            title: "x".into(),
+            segments: vec![seg("zz", 0)],
+        }];
+        assert!(store
+            .export_parts(&doc.id, "v1", &missing, "x")
+            .unwrap_err()
+            .contains("not cached"));
     }
 
     #[test]

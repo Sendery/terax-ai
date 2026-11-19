@@ -56,6 +56,30 @@ The column is about 72 characters wide. Text still ahead is dimmed, the sentence
 | q | Save and close the tab. |
 | ? | Show the shortcuts. |
 
+### From anywhere
+
+These chords work from any tab while a reading is open, and can be changed in Settings, Shortcuts:
+
+| macOS | Windows and Linux | Action |
+| --- | --- | --- |
+| ⌘⌥P | Ctrl+Alt+P | Play or pause. |
+| ⌘⌥← ⌘⌥→ | Ctrl+Alt+← → | Previous or next sentence. |
+| ⌘⌥= ⌘⌥- | Ctrl+Alt+= - | Faster or slower. |
+| ⌘⌥R | Ctrl+Alt+R | Read here: the selection, or the file on screen, in the panel. |
+| ⌘⌥B | Ctrl+Alt+B | Show or hide the Reader panel. |
+
+They act on the reading that is sounding, else the one on screen, else the one left paused.
+
+### The system's media controls
+
+The Reader shows in the operating system's own media controls, and they drive it:
+
+- **macOS:** Now Playing in Control Center and the menu bar, the play, previous and next keys, and AirPods or headphone buttons.
+- **Windows:** the media overlay and the media keys.
+- **Linux:** MPRIS players and the media keys.
+
+The title is the document's, and the sentence being read shows as the second line. Previous and next move by sentence; skip back and forward move by 10 seconds; the position bar seeks. The webview has to support the Media Session API; `reader.state` reports it as `osMediaControls`.
+
 The controls float over the workspace when the reading continues behind another tab, so it follows you as you work. With `f` they float even over the Reader tab itself.
 
 ## The Reader panel
@@ -143,6 +167,16 @@ Clips already made are played from disk. A document listened to once plays again
 
 `e`, or Export audio in the controls' menu, makes any missing clips and writes `exports/<title>.wav` with the scripted pauses in place. When the document has headings or bookmarks, the export also writes `<title>.chapters.json` and a `<title>.cue` sheet. A CUE sheet holds at most 99 tracks; the JSON keeps every chapter.
 
+### Fragments
+
+For long texts, the same menu exports the reading in pieces, one WAV each:
+
+- **One file per section:** a section starts at each heading; whatever comes before the first heading is a section too.
+- **One file per paragraph:** a paragraph, list item, quote or table row each, with a heading joined to the block it introduces.
+- **One file per sentence:** each segment the audio is made in.
+
+The files go to `exports/<title> (<split>)/`, numbered in reading order (`01 Introduction.wav`, `02 ...`), with `index.json` (title, path, start and length of each) and `playlist.m3u`. The folder is replaced on each export, so fragments of an earlier split never linger. Scripted pauses stay inside a fragment; the one after its last sentence is dropped.
+
 ## Agents
 
 | Command | Policy | MCP |
@@ -155,6 +189,7 @@ Clips already made are played from disk. A document listened to once plays again
 | `reader.export` | act | `terax_speak export_reader` |
 | `reader.dock` | act | `terax_speak dock_reader` |
 | `reader.delete` | approve | `terax_speak delete_reader_documents` |
+| `reader.generate` | act | `terax_speak generate_reading` |
 
 Without a `docId`, a command acts on the document playing, else on the one on screen (a Reader tab or the panel of the tab on screen), else on the reading left paused. `reader.state` never changes the screen; the other commands dock a named document that nothing shows under the tab on screen.
 
@@ -163,6 +198,9 @@ Without a `docId`, a command acts on the document playing, else on the one on sc
 - `reader.list` adds `originTabId`, the open tab a reading belongs to, and `shownInTabIds`.
 - `reader.dock` shows a document (`docId`) or the readings list in a tab's panel, or closes it with `close`.
 - `reader.delete` deletes one reading (`docId`) or all of them (`all`), with their audio. It asks for approval.
+- `reader.export` takes `split` (`none`, the default, `heading`, `paragraph` or `sentence`) and `voiceId`.
+- `reader.generate` turns a `text`, an absolute `path` or a `docId` into audio fragments without opening anything: `split` defaults to `paragraph`, `voiceId` sets the voice, `title` names the folder and `show` also docks it on screen. It answers with the `docId` and the number of fragments planned.
+- Both start the work and answer at once, because the bridge gives up on a call after 15 seconds and a long text takes minutes. Poll `reader.state`: its `export` field is `running` with `done` and `total`, then `done` with the file or the list of fragments, or `failed` with the error. One export runs at a time.
 
 - `reader.state` returns the word being read and its index, the position and total time, the speed, the voice and every cut point.
 - `reader.control` takes an `op` (`play`, `pause`, `toggle`, `stop`, `next`, `previous` or `seek`). It is not called `action` because MCP tools use that name to pick the action. It also takes an optional `wordIndex` or `positionMs`, and an optional `speedPercent` from 75 to 250. `pause` and `stop` with the `docId` of a document that is not playing change nothing.

@@ -14,7 +14,9 @@ pub mod wav;
 
 use tauri::{AppHandle, Manager};
 
-use store::{ExportResult, ExportSegment, ReaderDocument, ReaderEntry, ReaderStore};
+use store::{
+    ExportPart, ExportResult, ExportSegment, PartsResult, ReaderDocument, ReaderEntry, ReaderStore,
+};
 
 const READER_DIR: &str = "reader";
 
@@ -124,6 +126,20 @@ pub async fn reader_chunk_put(
     let bytes = bytes.clone();
     blocking(app, move |store| {
         store.chunk_put(&id, &voice_key, &key, &bytes)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reader_export_parts(
+    app: AppHandle,
+    id: String,
+    voice_key: String,
+    parts: Vec<ExportPart>,
+    folder_name: String,
+) -> Result<PartsResult, String> {
+    blocking(app, move |store| {
+        store.export_parts(&id, &voice_key, &parts, &folder_name)
     })
     .await
 }

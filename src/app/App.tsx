@@ -85,7 +85,11 @@ import {
   playReader,
   ReaderMiniPlayer,
   readerNative,
+  installReaderMediaSession,
   setReaderOrigin,
+  setReaderSpeed,
+  stepReader,
+  stepSpeed,
   stopReader,
   toggleReader,
   useReaderStore,
@@ -1364,6 +1368,41 @@ export default function App() {
     );
   }, [activeTerminalTab, activeLeafId]);
 
+  /**
+   * The reading a Reader shortcut means: the one sounding, else the one on
+   * screen (Reader tab or panel), else the one left paused; null if none is
+   * loaded.
+   */
+  const defaultReaderDoc = useCallback((): string | null => {
+    const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    const { playback, docs } = useReaderStore.getState();
+    const docId = pickDefaultDoc(
+      playback,
+      tab?.kind === "reader"
+        ? tab.docId
+        : (tab?.readerDock?.docId ?? null),
+    );
+    return docId && docs[docId] ? docId : null;
+  }, []);
+
+  const nudgeReaderSpeed = useCallback(
+    (direction: 1 | -1) => {
+      const docId = defaultReaderDoc();
+      const entry = docId ? useReaderStore.getState().docs[docId] : undefined;
+      if (!docId || !entry) return;
+      const speed = stepSpeed(entry.state.speed, direction);
+      setReaderSpeed(docId, speed);
+      toast.message(`Reader at ${speed}x`, { duration: 1200 });
+    },
+    [defaultReaderDoc],
+  );
+
+  /** Reader actions defined further down, reached by the shortcuts above them. */
+  const readerActionsRef = useRef({
+    readHere: () => {},
+    togglePanel: () => {},
+  });
+
   const shortcutHandlers = useMemo<ShortcutHandlers>(
     () => ({
       "commandPalette.open": () => openCommandPalette("commands"),
@@ -1408,6 +1447,25 @@ export default function App() {
       "notes.addSelection": addSelectionToNote,
       "tts.readSelection": () => readSelectionAloud(),
       "tts.stop": stopReading,
+      "reader.togglePlayback": () => {
+        const docId = defaultReaderDoc();
+        if (docId)
+          void toggleReader(docId).catch((error: unknown) =>
+            toast.error(error instanceof Error ? error.message : String(error)),
+          );
+      },
+      "reader.previous": () => {
+        const docId = defaultReaderDoc();
+        if (docId) void stepReader(docId, -1);
+      },
+      "reader.next": () => {
+        const docId = defaultReaderDoc();
+        if (docId) void stepReader(docId, 1);
+      },
+      "reader.faster": () => nudgeReaderSpeed(1),
+      "reader.slower": () => nudgeReaderSpeed(-1),
+      "reader.readHere": () => readerActionsRef.current.readHere(),
+      "reader.togglePanel": () => readerActionsRef.current.togglePanel(),
       "terminal.clearActive": clearActiveTerminal,
       "settings.open": () => void openSettingsWindow(),
       "sidebar.toggle": toggleSidebar,
@@ -1471,6 +1529,19 @@ export default function App() {
       }
       if (id === "tts.stop") {
         return !useTtsStore.getState().speaking;
+      }
+      if (
+        id === "reader.togglePlayback" ||
+        id === "reader.previous" ||
+        id === "reader.next" ||
+        id === "reader.faster" ||
+        id === "reader.slower"
+      ) {
+        // Only claim the chord while there is a reading to drive.
+        return defaultReaderDoc() === null;
+      }
+      if (id === "reader.readHere" || id === "reader.togglePanel") {
+        return !activeTab || activeTab.kind === "reader";
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -1807,6 +1878,34 @@ export default function App() {
     [setReaderDock],
   );
 
+  /** Reads the selection, else the file on screen, in the panel under the tab. */
+  const readHere = useCallback(() => {
+    const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    if (!tab || tab.kind === "reader") return;
+    const selection = captureActiveSelection();
+    if (selection?.trim()) {
+      void openInReader({ text: selection }, true, "dock");
+    } else if (tab.kind === "editor" || tab.kind === "markdown") {
+      void openInReader({ path: tab.path }, true, "dock");
+    } else {
+      toast.message("Select the text to read first", {
+        description: "Or right-click a selection and choose Read here.",
+      });
+    }
+  }, [captureActiveSelection, openInReader]);
+
+  const toggleReaderPanel = useCallback(() => {
+    const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    if (!tab || tab.kind === "reader") return;
+    if (tab.readerDock) closeReaderDock(tab.id);
+    else showReaderLibrary(tab.id);
+  }, [closeReaderDock, showReaderLibrary]);
+
+  readerActionsRef.current = { readHere, togglePanel: toggleReaderPanel };
+
+  // The operating system's media controls drive the Reader too.
+  useEffect(() => installReaderMediaSession(), []);
+
   /**
    * A reading picked in the library opens in the tab it was made in when the
    * chain is on and that tab is open, else in the panel it was picked from.
@@ -2015,29 +2114,10 @@ export default function App() {
                 : undefined,
             resumeLastReader: () => void resumeLastReader(),
             readHere:
-              activeTab && activeTab.kind !== "reader"
-                ? () => {
-                    const selection = captureActiveSelection();
-                    if (selection?.trim())
-                      void openInReader({ text: selection }, true, "dock");
-                    else if (
-                      activeTab.kind === "editor" ||
-                      activeTab.kind === "markdown"
-                    )
-                      void openInReader({ path: activeTab.path }, true, "dock");
-                    else
-                      toast.message("Select the text to read first", {
-                        description:
-                          "Or right-click a selection and choose Read here.",
-                      });
-                  }
-                : undefined,
+              activeTab && activeTab.kind !== "reader" ? readHere : undefined,
             toggleReaderPanel:
               activeTab && activeTab.kind !== "reader"
-                ? () =>
-                    activeTab.readerDock
-                      ? closeReaderDock(activeTab.id)
-                      : showReaderLibrary(activeTab.id)
+                ? toggleReaderPanel
                 : undefined,
             toggleReaderPlayback: (() => {
               const { playback } = useReaderStore.getState();
@@ -2095,8 +2175,8 @@ export default function App() {
       readSelectionAloud,
       openInReader,
       resumeLastReader,
-      closeReaderDock,
-      showReaderLibrary,
+      readHere,
+      toggleReaderPanel,
       activeTab,
       stopReading,
       activeSpaceId,

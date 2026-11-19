@@ -40,6 +40,7 @@ export const CONTROL_COMMAND_IDS = [
   "reader.export",
   "reader.dock",
   "reader.delete",
+  "reader.generate",
 ] as const;
 
 export type ControlCommandId = (typeof CONTROL_COMMAND_IDS)[number];
@@ -69,6 +70,7 @@ export const READER_CONTROL_ACTIONS = [
 export type ReaderControlAction = (typeof READER_CONTROL_ACTIONS)[number];
 export const READER_CUT_KINDS = ["bookmark", "pause", "stop"] as const;
 export const READER_PLACEMENTS = ["dock", "tab"] as const;
+export const READER_SPLITS = ["none", "heading", "paragraph", "sentence"] as const;
 
 export type WatchFields = {
   cwd?: string;
@@ -135,7 +137,20 @@ export type ControlPayloads = {
     pauseMs?: number;
     remove?: boolean;
   };
-  "reader.export": { docId?: string };
+  "reader.export": {
+    docId?: string;
+    split?: (typeof READER_SPLITS)[number];
+    voiceId?: string;
+  };
+  "reader.generate": {
+    text?: string;
+    path?: string;
+    docId?: string;
+    title?: string;
+    split?: (typeof READER_SPLITS)[number];
+    voiceId?: string;
+    show?: boolean;
+  };
   "reader.dock": { tabId?: number; docId?: string; close?: boolean };
   "reader.delete": { docId?: string; all?: boolean };
 };
@@ -169,6 +184,7 @@ export type ControlHandlers = {
   exportReader: (payload: ControlPayloads["reader.export"]) => Reply;
   dockReader: (payload: ControlPayloads["reader.dock"]) => Reply;
   deleteReader: (payload: ControlPayloads["reader.delete"]) => Reply;
+  generateReader: (payload: ControlPayloads["reader.generate"]) => Reply;
 };
 
 /** Limits the validator enforces on top of the public param shape. */
@@ -197,6 +213,23 @@ const READER_DOC_ID: ControlParam = {
   required: false,
   description: "Reader document id, from reader.list or the snapshot's reader tabs.",
   maxLength: 12,
+  nonEmpty: true,
+};
+
+const READER_SPLIT: ControlParam = {
+  name: "split",
+  type: "enum",
+  required: false,
+  description: "none (default): one file. heading, paragraph or sentence: one file per fragment.",
+  values: [...READER_SPLITS],
+};
+
+const READER_VOICE: ControlParam = {
+  name: "voiceId",
+  type: "string",
+  required: false,
+  description: "Voice profile id (see tts list_voices); it becomes the document's voice.",
+  maxLength: 120,
   nonEmpty: true,
 };
 
@@ -622,8 +655,47 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
   },
   "reader.export": {
     description:
-      "Export a Reader document as one WAV file with its scripted pauses, synthesizing any sentence not made yet, plus chapter files from headings and bookmarks. Returns the file path. Long documents take a while.",
-    params: [READER_DOC_ID],
+      "Start exporting a Reader document as audio, synthesizing any sentence not made yet. split none (default) writes one WAV with its scripted pauses plus chapter files from headings and bookmarks; heading, paragraph or sentence writes one numbered WAV per section, paragraph or sentence into a folder with index.json and playlist.m3u. Returns at once; poll reader.state, whose export field shows progress, then the files or the error.",
+    params: [READER_DOC_ID, READER_SPLIT, READER_VOICE],
+  },
+  "reader.generate": {
+    description:
+      "Generate the audio of a text in the background: give the text, an absolute path or a Reader docId. It is split into sentences, headings, list items and table rows for synthesis, then written as audio fragments by split (paragraph by default: one WAV per paragraph, with a heading joined to the paragraph it introduces; heading: one per section; sentence: one per sentence; none: one file). Nothing opens unless show is true. Returns the docId at once; poll reader.state for progress and the list of files.",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        required: false,
+        description: "Text to read. Prefer path for long documents.",
+        maxLength: READER_TEXT_MAX_CHARS,
+        nonEmpty: true,
+      },
+      {
+        name: "path",
+        type: "string",
+        required: false,
+        description: "Absolute path of a text or Markdown file (up to 2 MiB).",
+        maxLength: 4096,
+        nonEmpty: true,
+      },
+      READER_DOC_ID,
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Title, also the export folder name; defaults to the file name or the first words.",
+        maxLength: 200,
+      },
+      { ...READER_SPLIT, description: "How to cut the audio: paragraph (default), heading, sentence or none." },
+      READER_VOICE,
+      {
+        name: "show",
+        type: "boolean",
+        required: false,
+        description: "Also show the reading in the Reader panel under the tab on screen.",
+      },
+    ],
+    anyOf: ["text", "path", "docId"],
   },
   "reader.dock": {
     description:
@@ -853,5 +925,7 @@ export function dispatchControlCommand(
       return handlers.dockReader(p);
     case "reader.delete":
       return handlers.deleteReader(p);
+    case "reader.generate":
+      return handlers.generateReader(p);
   }
 }

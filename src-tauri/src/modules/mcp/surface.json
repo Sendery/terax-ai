@@ -1223,7 +1223,7 @@
     {
       "name": "terax_speak",
       "title": "Speak through Terax",
-      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?): Export a Reader document as one WAV with its pauses and chapters.",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?, split?, voiceId?): Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.\n- generate_reading(text?, path?, docId?, title?, split?, voiceId?, show?): Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
       "annotations": {
         "title": "Speak through Terax",
         "readOnlyHint": false,
@@ -1248,17 +1248,18 @@
               "delete_reader_documents",
               "control_reader",
               "mark_reader",
-              "export_reader"
+              "export_reader",
+              "generate_reading"
             ],
             "description": "What to do. Each action's arguments are listed in the tool description; ? marks optional ones."
           },
           "text": {
             "type": "string",
-            "description": "speak: Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally. open_reader: Text to read. Prefer path for long documents."
+            "description": "speak: Text to speak, 1 to 8192 characters after trimming. Plain prose reads best; markup is spoken literally. open_reader, generate_reading: Text to read. Prefer path for long documents."
           },
           "voiceId": {
             "type": "string",
-            "description": "Voice profile id from tts.voices. Wins over language when both are given."
+            "description": "speak: Voice profile id from tts.voices. Wins over language when both are given. export_reader, generate_reading: Voice profile id (see tts list_voices); it becomes the document's voice."
           },
           "language": {
             "type": "string",
@@ -1288,11 +1289,11 @@
           },
           "path": {
             "type": "string",
-            "description": "Absolute path of a text or Markdown file."
+            "description": "open_reader: Absolute path of a text or Markdown file. generate_reading: Absolute path of a text or Markdown file (up to 2 MiB)."
           },
           "title": {
             "type": "string",
-            "description": "Title for the tab; defaults to the file name."
+            "description": "open_reader: Title for the tab; defaults to the file name. generate_reading: Title, also the export folder name; defaults to the file name or the first words."
           },
           "play": {
             "type": "boolean",
@@ -1371,6 +1372,20 @@
           "remove": {
             "type": "boolean",
             "description": "Remove the cut of this kind at this word instead of placing it."
+          },
+          "split": {
+            "type": "string",
+            "enum": [
+              "none",
+              "heading",
+              "paragraph",
+              "sentence"
+            ],
+            "description": "export_reader: none (default): one file. heading, paragraph or sentence: one file per fragment. generate_reading: How to cut the audio: paragraph (default), heading, sentence or none."
+          },
+          "show": {
+            "type": "boolean",
+            "description": "Also show the reading in the Reader panel under the tab on screen."
           }
         },
         "required": [
@@ -1466,7 +1481,21 @@
         "export_reader": {
           "command": "reader.export",
           "params": [
-            "docId"
+            "docId",
+            "split",
+            "voiceId"
+          ]
+        },
+        "generate_reading": {
+          "command": "reader.generate",
+          "params": [
+            "text",
+            "path",
+            "docId",
+            "title",
+            "split",
+            "voiceId",
+            "show"
           ]
         }
       }

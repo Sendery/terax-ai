@@ -42,6 +42,13 @@ export type ShortcutId =
   | "notes.addSelection"
   | "tts.readSelection"
   | "tts.stop"
+  | "reader.togglePlayback"
+  | "reader.previous"
+  | "reader.next"
+  | "reader.faster"
+  | "reader.slower"
+  | "reader.readHere"
+  | "reader.togglePanel"
   | "settings.open"
   | "sidebar.toggle"
   | "editor.undo"
@@ -285,6 +292,55 @@ export const SHORTCUTS: Shortcut[] = [
       { [MOD_PROP]: true, shift: true, key: "." },
       { [MOD_PROP]: true, shift: true, key: ">" },
     ],
+  },
+  // Reader: Mod+Option chords, free in the terminal, the editor and the
+  // shells' own keymaps, and usable from any tab while a reading is open.
+  {
+    id: "reader.togglePlayback",
+    label: "Reader: play or pause",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "p" }],
+  },
+  {
+    id: "reader.previous",
+    label: "Reader: previous sentence",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "ArrowLeft" }],
+    allowRepeat: true,
+  },
+  {
+    id: "reader.next",
+    label: "Reader: next sentence",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "ArrowRight" }],
+    allowRepeat: true,
+  },
+  {
+    id: "reader.faster",
+    label: "Reader: faster",
+    group: "Voice",
+    defaultBindings: [
+      { [MOD_PROP]: true, alt: true, key: "=" },
+      { [MOD_PROP]: true, alt: true, shift: true, key: "=" },
+    ],
+  },
+  {
+    id: "reader.slower",
+    label: "Reader: slower",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "-" }],
+  },
+  {
+    id: "reader.readHere",
+    label: "Reader: read here, in the panel",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "r" }],
+  },
+  {
+    id: "reader.togglePanel",
+    label: "Reader: show or hide the panel",
+    group: "Voice",
+    defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "b" }],
   },
   {
     id: "sidebar.toggle",

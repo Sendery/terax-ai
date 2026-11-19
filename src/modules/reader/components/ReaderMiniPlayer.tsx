@@ -1,17 +1,16 @@
 import { cn } from "@/lib/utils";
 import {
-  exportReader,
   stopReader,
   toggleReaderCut,
 } from "@/modules/reader/lib/player";
 import { useReaderStore } from "@/modules/reader/store/readerStore";
+import { exportWithToast } from "@/modules/reader/lib/exportToast";
 import {
   BookOpen01Icon,
   Cancel01Icon,
   PictureInPictureOnIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { toast } from "sonner";
 import { ReaderTransport } from "./ReaderTransport";
 
 type Props = {
@@ -74,18 +73,7 @@ export function ReaderMiniPlayer({ visibleDocId, onOpenDoc }: Props) {
         onCut={(kind) => {
           toggleReaderCut(docId, kind, word);
         }}
-        onExport={() => {
-          toast.promise(exportReader(docId), {
-            loading: "Exporting the reading as audio...",
-            success: (r) => ({
-              message: "Audio exported",
-              description: r.path,
-              duration: 10_000,
-            }),
-            error: (err: unknown) =>
-              err instanceof Error ? err.message : String(err),
-          });
-        }}
+        onExport={(split) => exportWithToast(docId, split)}
         onToggleFloating={() => setFloating(!floating)}
         trailing={
           <>

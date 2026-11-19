@@ -258,6 +258,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "reader.export"
             | "reader.dock"
             | "reader.delete"
+            | "reader.generate"
     )
 }
 

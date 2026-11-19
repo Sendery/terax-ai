@@ -1,3 +1,4 @@
+import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { nextBlockWord } from "@/modules/reader/lib/document";
 import {
@@ -12,7 +13,6 @@ import {
   type CutPoint,
 } from "@/modules/reader/lib/manifest";
 import {
-  exportReader,
   loadStored,
   moveCursorTo,
   playReader,
@@ -23,6 +23,8 @@ import {
   toggleReaderCut,
 } from "@/modules/reader/lib/player";
 import { useReaderStore } from "@/modules/reader/store/readerStore";
+import { exportWithToast } from "@/modules/reader/lib/exportToast";
+import type { ExportSplit } from "@/modules/reader/lib/flow";
 import {
   type ReactNode,
   useCallback,
@@ -54,6 +56,9 @@ type Props = {
   /** Escape with nothing left to clear. */
   onEscape?: () => void;
 };
+
+/** The Reader's app-wide chords, as Settings, Shortcuts lists them by default. */
+const GLOBAL_MOD = IS_MAC ? "⌘⌥" : "Ctrl+Alt+";
 
 /** Where the reading line settles, as a share of the viewport height. */
 const READING_LINE = 0.4;
@@ -179,18 +184,10 @@ export function ReaderPane({
     [docId, entry, target],
   );
 
-  const runExport = useCallback(() => {
-    toast.promise(exportReader(docId), {
-      loading: "Exporting the reading as audio...",
-      success: (result) => ({
-        message: "Audio exported",
-        description: result.path,
-        duration: 10_000,
-      }),
-      error: (err: unknown) =>
-        err instanceof Error ? err.message : String(err),
-    });
-  }, [docId]);
+  const runExport = useCallback(
+    (split: ExportSplit = "none") => exportWithToast(docId, split),
+    [docId],
+  );
 
   const toggleFloating = useCallback(() => {
     if (!docked) setFloating(!floating);
@@ -482,6 +479,12 @@ export function ReaderPane({
           <div className="mt-2 text-muted-foreground">
             Alt+click moves the cursor without playing. Write [pause: 2s] or
             [stop] in the text to script cuts.
+          </div>
+          <div className="mt-2 text-muted-foreground">
+            From any tab: {GLOBAL_MOD}P play or pause, {GLOBAL_MOD}← →
+            sentences, {GLOBAL_MOD}= − speed, {GLOBAL_MOD}R read here,{" "}
+            {GLOBAL_MOD}B panel. The media keys and the system's Now Playing
+            controls work too.
           </div>
         </div>
       ) : null}

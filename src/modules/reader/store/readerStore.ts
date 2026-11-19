@@ -3,6 +3,25 @@ import type { TtsLanguage } from "@/modules/tts/lib/engines";
 import type { ReaderDocument } from "@/modules/reader/lib/document";
 import type { ReaderState } from "@/modules/reader/lib/manifest";
 import type { Timeline } from "@/modules/reader/lib/timing";
+import type { ExportSplit } from "@/modules/reader/lib/flow";
+import type { ExportResult, PartsResult } from "@/modules/reader/lib/native";
+
+/** The latest export of a document, kept so agents can poll for it. */
+export type ExportOutcome =
+  | {
+      status: "running";
+      split: ExportSplit;
+      done: number;
+      total: number;
+      startedAt: number;
+    }
+  | {
+      status: "done";
+      split: ExportSplit;
+      result: ExportResult | PartsResult;
+      finishedAt: number;
+    }
+  | { status: "failed"; split: ExportSplit; error: string; finishedAt: number };
 
 export type DocEntry = {
   id: string;
@@ -37,7 +56,12 @@ export type ReaderPlayback = {
   positionMs: number;
   error: string | null;
   /** Set while an export synthesizes what is missing and writes the file. */
-  exporting: { docId: string; done: number; total: number } | null;
+  exporting: {
+    docId: string;
+    done: number;
+    total: number;
+    split?: ExportSplit;
+  } | null;
 };
 
 export const IDLE_PLAYBACK: ReaderPlayback = {
@@ -80,6 +104,8 @@ type ReaderStore = {
    * opens in the panel of the tab on screen.
    */
   followOrigin: boolean;
+  exports: Record<string, ExportOutcome>;
+  setExport: (docId: string, outcome: ExportOutcome) => void;
   putDoc: (entry: DocEntry) => void;
   patchDoc: (id: string, patch: Partial<DocEntry>) => void;
   dropDoc: (id: string) => void;
@@ -93,6 +119,9 @@ export const useReaderStore = create<ReaderStore>((set) => ({
   playback: IDLE_PLAYBACK,
   floating: readFlag(FLOATING_KEY, false),
   followOrigin: readFlag(FOLLOW_ORIGIN_KEY, true),
+  exports: {},
+  setExport: (docId, outcome) =>
+    set((s) => ({ exports: { ...s.exports, [docId]: outcome } })),
   putDoc: (entry) => set((s) => ({ docs: { ...s.docs, [entry.id]: entry } })),
   patchDoc: (id, patch) =>
     set((s) => {
