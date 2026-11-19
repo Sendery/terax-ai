@@ -19,18 +19,20 @@ export type ProviderId =
   | "cli-codex"
   | "cli-cursor"
   | "cli-opencode"
-  | "cli-pi";
+  | "cli-pi"
+  | "cli-agy";
 
 /** Providers backed by a locally-installed agent CLI (no API key, runs the
  *  agent's own tool loop). Maps each provider to its CLI agent id. */
 export const CLI_PROVIDERS: Partial<
-  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi">
+  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi" | "agy">
 > = {
   "cli-claude": "claude",
   "cli-codex": "codex",
   "cli-cursor": "cursor",
   "cli-opencode": "opencode",
   "cli-pi": "pi",
+  "cli-agy": "agy",
 };
 
 export function isCliProvider(id: ProviderId): boolean {
@@ -202,6 +204,13 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://pi.dev",
+  },
+  {
+    id: "cli-agy",
+    label: "Antigravity (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://antigravity.google",
   },
 ] as const;
 
@@ -768,6 +777,16 @@ export const MODELS = [
     capabilities: { intelligence: 5, speed: 3, cost: 5 },
     tags: ["reasoning", "tools", "coding"],
   },
+  {
+    id: "cli-agy-agent",
+    provider: "cli-agy",
+    label: "Antigravity",
+    hint: "CLI",
+    description:
+      "Your installed Antigravity CLI (agy) with its own models; the Terax MCP lets it drive this app.",
+    capabilities: { intelligence: 5, speed: 4, cost: 5 },
+    tags: ["reasoning", "tools", "coding"],
+  },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -956,6 +975,7 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "cli-cursor",
   "cli-opencode",
   "cli-pi",
+  "cli-agy",
 ] as const;
 
 export function providerNeedsKey(id: ProviderId): boolean {

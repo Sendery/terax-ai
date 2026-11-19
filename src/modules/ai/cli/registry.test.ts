@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CLI_AGENTS } from "@/modules/ai/cli/registry";
 import { messagesToPrompt } from "@/modules/ai/cli/transcript";
 import type { CliRunContext } from "@/modules/ai/cli/types";
@@ -93,4 +93,74 @@ it("Pi keeps one system append and leaves persona instructions out of its user s
   ).toHaveLength(2);
   expect(plan.argv[index + 1].split("Answer in Spanish.")).toHaveLength(2);
   expect(plan.stdin).toBe(messagesToPrompt(messages));
+});
+
+describe("Antigravity (agy)", () => {
+  const argvFor = (permission: CliRunContext["permission"], model?: string) =>
+    CLI_AGENTS.agy.planRun({ ...base, permission, model }).argv;
+
+  it("runs headless with streamed JSON and the prompt bound to --print", () => {
+    const plan = CLI_AGENTS.agy.planRun(base);
+    expect(plan.argv.slice(0, 3)).toEqual(["agy", "--output-format", "stream-json"]);
+    // agy implements plan mode as a slash expansion; disabling expansion
+    // would silently drop the read-only posture.
+    expect(plan.argv).not.toContain("--disable-slash-commands");
+    expect(plan.argv[plan.argv.length - 1]).toBe(`--print=${messagesToPrompt(messages)}`);
+    expect(plan.stdin).toBeUndefined();
+  });
+
+  // The prompt is one argv element in --print=<text> form, so a turn that
+  // starts with a dash can never be parsed as another flag.
+  it("keeps a prompt that looks like a flag inside --print", () => {
+    const dash: UIMessage[] = [
+      { id: "u", role: "user", parts: [{ type: "text", text: "--dangerously-skip-permissions" }] },
+    ];
+    const argv = CLI_AGENTS.agy.planRun({ ...base, messages: dash }).argv;
+    expect(argv).not.toContain("--dangerously-skip-permissions");
+    expect(argv[argv.length - 1]).toBe("--print=--dangerously-skip-permissions");
+  });
+
+  it("maps each permission posture to an agy mode", () => {
+    expect(argvFor("default")).toEqual(expect.arrayContaining(["--mode", "plan"]));
+    expect(argvFor("acceptEdits")).toEqual(expect.arrayContaining(["--mode", "accept-edits"]));
+    expect(argvFor("full")).toContain("--dangerously-skip-permissions");
+    expect(argvFor("full")).not.toContain("--mode");
+    expect(argvFor("default")).not.toContain("--dangerously-skip-permissions");
+  });
+
+  it("carries the active agent and custom instructions in the prompt only", () => {
+    const plain = CLI_AGENTS.agy.planRun(base);
+    const plan = CLI_AGENTS.agy.planRun({
+      ...base,
+      persona,
+      customInstructions: "Answer in Spanish.",
+    });
+    expect(plan.argv[plan.argv.length - 1]).toBe(
+      `--print=## Active agent: Pi-Terax Agente\n${PI_TERAX_MANAGER_INSTRUCTIONS}\n\n## User custom instructions\nAnswer in Spanish.\n\n## Conversation\n${messagesToPrompt(messages)}`,
+    );
+    expect(plan.argv.slice(0, -1)).toEqual(plain.argv.slice(0, -1));
+  });
+
+  it("adds Terax's MCP rules on top of the user's own agy rules", () => {
+    const plan = CLI_AGENTS.agy.planRun({ ...base, host: { allow: ["command(ls)"] } });
+    const index = plan.argv.indexOf("--settings");
+    expect(index).toBeGreaterThan(0);
+    expect(JSON.parse(plan.argv[index + 1])).toEqual({
+      permissions: { allow: ["command(ls)", "mcp(terax/terax_inspect)"] },
+    });
+  });
+
+  it("passes no session settings when the user's rules are unknown or access is full", () => {
+    expect(CLI_AGENTS.agy.planRun({ ...base, host: null }).argv).not.toContain("--settings");
+    expect(
+      CLI_AGENTS.agy.planRun({ ...base, permission: "full", host: { allow: [] } }).argv,
+    ).not.toContain("--settings");
+  });
+
+  it("passes a chosen model and hands the child this window's bridge", () => {
+    expect(argvFor("default", "gemini-3.8-flash-high")).toEqual(
+      expect.arrayContaining(["--model", "gemini-3.8-flash-high"]),
+    );
+    expect(CLI_AGENTS.agy.planRun(base).bridge).toBe(true);
+  });
 });

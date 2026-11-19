@@ -1,3 +1,4 @@
+import type { AgyPermissions } from "./agy";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import type { CliSpawnEvent } from "./types";
@@ -21,6 +22,13 @@ export type PiDefaultsResult = {
   defaultModel?: string;
   defaultThinkingLevel?: string;
 };
+
+/** Antigravity's own permission rules, or null when they cannot be read. */
+export function readAgyPermissions(): Promise<AgyPermissions | null> {
+  return invoke<AgyPermissions | null>("agent_cli_agy_permissions").catch(
+    () => null,
+  );
+}
 
 /** Pi's configured default provider/model, read from its settings file. */
 export function readPiDefaults(): Promise<PiDefaultsResult | null> {

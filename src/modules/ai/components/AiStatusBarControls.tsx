@@ -32,14 +32,15 @@ import {
   FlashIcon,
   GlobeIcon,
   GoogleGeminiIcon,
+  GravityIcon,
   Grok02Icon,
-  MistralIcon,
   Message01Icon,
   Mic01Icon,
+  MistralIcon,
   PiIcon,
   PlugIcon,
-  ServerStack01Icon,
   Search01Icon,
+  ServerStack01Icon,
   Settings01Icon,
   StarIcon,
   Tick01Icon,
@@ -86,6 +87,7 @@ const PROVIDER_ICON = {
   "cli-cursor": ComputerIcon,
   "cli-opencode": CpuIcon,
   "cli-pi": PiIcon,
+  "cli-agy": GravityIcon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 /**

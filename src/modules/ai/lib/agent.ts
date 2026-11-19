@@ -297,6 +297,7 @@ export async function buildLanguageModel(
     case "cli-cursor":
     case "cli-opencode":
     case "cli-pi":
+    case "cli-agy":
       throw new Error(
         "CLI agent providers do not build a LanguageModel; they stream via runCliAgentStream.",
       );

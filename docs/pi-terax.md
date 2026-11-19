@@ -329,7 +329,7 @@ The built-in Terax agent gets the same registry without Pi: `terax_app_state` an
 
 ## MCP server
 
-The same capabilities reach every MCP-speaking agent (Claude Code, Codex, Cursor, OpenCode) through `terax --mcp`: the Terax binary itself, branching before any Tauri state exists, speaks MCP over stdio (protocol 2025-11-25 back to 2024-11-05, newline-delimited JSON-RPC, tools only) and relays each call over the authenticated Pi bridge to the running instance. It honours `TERAX_PI_DISCOVERY` like the extension, starts in tens of milliseconds and holds no state between calls.
+The same capabilities reach every MCP-speaking agent (Claude Code, Codex, Cursor, OpenCode, Antigravity) through `terax --mcp`: the Terax binary itself, branching before any Tauri state exists, speaks MCP over stdio (protocol 2025-11-25 back to 2024-11-05, newline-delimited JSON-RPC, tools only) and relays each call over the authenticated Pi bridge to the running instance. It honours `TERAX_PI_DISCOVERY` like the extension, starts in tens of milliseconds and holds no state between calls.
 
 **Tools are grouped, not one per command.** Following the FastMCP guidance (outcomes over operations, flat arguments with closed enums, every description written as agent context, a curated handful of tools, honest annotations, errors returned as results that say how to recover), the registry commands become nine tools that take an `action` plus flat arguments:
 
@@ -359,7 +359,7 @@ The listing costs about 4k tokens. An argument an action does not take, an unkno
 
 This is the capability parity rule stated in `TERAX.md`: registry, MCP, extension and agent change together.
 
-**Registration.** The Pi-Terax button next to the chat's agent picker shows whether `terax --mcp` is registered with each installed CLI: green when every one points at this binary, amber when some do, red when none do, grey when no supported CLI is installed (hover lists each CLI). Clicking registers it where it is missing or points at another binary: Claude Code with `claude mcp add-json terax … -s user`, Codex with `codex mcp add terax -- <exe> --mcp`, Cursor in `~/.cursor/mcp.json` and OpenCode in `~/.config/opencode/opencode.json(c)`. The JSON files are rewritten atomically and never when they do not parse, so a JSONC file with comments is reported instead of reshaped (and its keys come back sorted when it is rewritten). The command registered is the running binary, so a sandbox build registers itself and talks to its own instance.
+**Registration.** The Pi-Terax button next to the chat's agent picker shows whether `terax --mcp` is registered with each installed CLI: green when every one points at this binary, amber when some do, red when none do, grey when no supported CLI is installed (hover lists each CLI). Clicking registers it where it is missing or points at another binary: Claude Code with `claude mcp add-json terax … -s user`, Codex with `codex mcp add terax -- <exe> --mcp`, Antigravity with `agy mcp add terax -- <exe> --mcp` (status read from `~/.gemini/config/mcp_config.json`; a disabled entry is re-enabled), Cursor in `~/.cursor/mcp.json` and OpenCode in `~/.config/opencode/opencode.json(c)`. The JSON files are rewritten atomically and never when they do not parse, so a JSONC file with comments is reported instead of reshaped (and its keys come back sorted when it is rewritten). The command registered is the running binary, so a sandbox build registers itself and talks to its own instance.
 
 ## Companion extension channel
 

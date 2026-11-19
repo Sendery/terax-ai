@@ -33,7 +33,9 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
       createUIMessageStream({
         execute: async ({ writer }) => {
           const emitter = new ChunkEmitter(writer);
+          const host = def.prepare ? await def.prepare().catch(() => null) : undefined;
           const plan = def.planRun({
+            host,
             messages: opts.uiMessages,
             cwd: opts.cwd,
             model: opts.model,

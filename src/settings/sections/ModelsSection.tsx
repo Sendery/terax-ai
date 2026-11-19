@@ -824,7 +824,8 @@ function CliAgentsBlock({
         in the active workspace and bring their own tools. Detected on your
         login PATH. Pi also loads its extensions, so with Pi-Terax installed it
         can drive this window; pick which Pi model answers from the chat's
-        model menu.
+        model menu. Antigravity reaches this window through the Terax MCP
+        server: register it with the Pi-Terax button next to the agent picker.
       </p>
 
       {detectionStatus === "error" && (

@@ -7,7 +7,7 @@ type McpTargetState =
   | "unreadable";
 
 export type McpTargetStatus = {
-  id: "claude" | "codex" | "cursor" | "opencode";
+  id: "claude" | "codex" | "cursor" | "opencode" | "agy";
   label: string;
   state: McpTargetState;
   location?: string;

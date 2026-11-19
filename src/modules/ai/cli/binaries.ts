@@ -7,4 +7,5 @@ export const CLI_BINARIES: Record<CliAgentId, string> = {
   cursor: "cursor-agent",
   opencode: "opencode",
   pi: "pi",
+  agy: "agy",
 };

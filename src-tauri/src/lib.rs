@@ -436,6 +436,7 @@ pub fn run() {
             agent_cli::agent_cli_spawn,
             agent_cli::agent_cli_kill,
             agent_cli::agent_cli_pi_defaults,
+            agent_cli::agent_cli_agy_permissions,
             mcp::config::mcp_status,
             mcp::config::mcp_configure,
             secrets::secrets_get,
