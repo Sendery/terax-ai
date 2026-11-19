@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.22 (2026-11-19)
+
+- Reader: pestaña que lee textos largos con la voz local y resalta cada palabra, con clic para empezar, atajos estilo vim, velocidad de 0.75x a 2.5x y controles flotantes.
+- Audio por frase guardado en disco, retomada exacta, marcadores, pausas y paradas guionizadas, y exportación a WAV con capítulos.
+- `terax-read` desde los terminales, «Open in Reader» y comandos `reader.*` para los agentes.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.22.md).
+
 ## Pi-Terax v0.9.0-dev.21 (2026-11-19)
 
 - Antigravity (agy) y GitHub Copilot CLI como proveedores de la barra de IA, con el MCP de Terax y reglas de permiso por postura.
