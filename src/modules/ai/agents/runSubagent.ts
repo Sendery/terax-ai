@@ -1,5 +1,10 @@
 import { generateText, stepCountIs } from "ai";
-import { DEFAULT_MODEL_ID, getModel, type ModelId } from "../config";
+import {
+  DEFAULT_MODEL_ID,
+  getModel,
+  type ModelId,
+  variantWireModel,
+} from "../config";
 import { buildLanguageModel } from "../lib/agent";
 import type { ProviderKeys } from "../lib/keyring";
 import type { ToolContext } from "../tools/context";
@@ -49,7 +54,7 @@ export async function runSubagent({
   const model = await buildLanguageModel(
     getModel(modelId as ModelId).provider,
     keys,
-    getModel(modelId as ModelId).id,
+    variantWireModel(modelId) ?? getModel(modelId as ModelId).id,
     { lmstudioBaseURL },
   );
 

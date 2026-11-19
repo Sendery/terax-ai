@@ -249,6 +249,7 @@ fn is_allowed_command(command: &str) -> bool {
             | "watch.remove"
             | "watch.setEnabled"
             | "watch.run"
+            | "chat.layout"
     )
 }
 

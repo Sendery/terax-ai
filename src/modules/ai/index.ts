@@ -1,9 +1,12 @@
 export {
   AgentRunBridge,
+  AiChatBottomPane,
+  AiChatDock,
   AiInputBarConnect,
   AiMiniWindow,
   SelectionAskAi,
 } from "./components/lazy";
+export { useChatLayoutStore } from "./store/chatLayoutStore";
 export { AgentStatusPill } from "./components/AgentStatusPill";
 export { useAiBootstrap } from "./hooks/useAiBootstrap";
 export { useSelectionAskAi } from "./hooks/useSelectionAskAi";

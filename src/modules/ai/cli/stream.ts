@@ -33,7 +33,15 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
       createUIMessageStream({
         execute: async ({ writer }) => {
           const emitter = new ChunkEmitter(writer);
+          const host = def.prepare ? await def.prepare().catch(() => null) : undefined;
+          // Stop pressed while the host was being read: the abort listener
+          // below is not attached yet, so nothing would kill the run.
+          if (opts.abortSignal?.aborted) {
+            emitter.finish();
+            return;
+          }
           const plan = def.planRun({
+            host,
             messages: opts.uiMessages,
             cwd: opts.cwd,
             model: opts.model,

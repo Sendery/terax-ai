@@ -19,18 +19,22 @@ export type ProviderId =
   | "cli-codex"
   | "cli-cursor"
   | "cli-opencode"
-  | "cli-pi";
+  | "cli-pi"
+  | "cli-agy"
+  | "cli-copilot";
 
 /** Providers backed by a locally-installed agent CLI (no API key, runs the
  *  agent's own tool loop). Maps each provider to its CLI agent id. */
 export const CLI_PROVIDERS: Partial<
-  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi">
+  Record<ProviderId, "claude" | "codex" | "cursor" | "opencode" | "pi" | "agy" | "copilot">
 > = {
   "cli-claude": "claude",
   "cli-codex": "codex",
   "cli-cursor": "cursor",
   "cli-opencode": "opencode",
   "cli-pi": "pi",
+  "cli-agy": "agy",
+  "cli-copilot": "copilot",
 };
 
 export function isCliProvider(id: ProviderId): boolean {
@@ -202,6 +206,20 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     keyringAccount: "",
     keyPrefix: null,
     consoleUrl: "https://pi.dev",
+  },
+  {
+    id: "cli-agy",
+    label: "Antigravity (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://antigravity.google",
+  },
+  {
+    id: "cli-copilot",
+    label: "GitHub Copilot (CLI)",
+    keyringAccount: "",
+    keyPrefix: null,
+    consoleUrl: "https://docs.github.com/en/copilot/how-tos/copilot-cli",
   },
 ] as const;
 
@@ -768,6 +786,26 @@ export const MODELS = [
     capabilities: { intelligence: 5, speed: 3, cost: 5 },
     tags: ["reasoning", "tools", "coding"],
   },
+  {
+    id: "cli-agy-agent",
+    provider: "cli-agy",
+    label: "Antigravity",
+    hint: "CLI",
+    description:
+      "Your installed Antigravity CLI (agy) with its own models; the Terax MCP lets it drive this app.",
+    capabilities: { intelligence: 5, speed: 4, cost: 5 },
+    tags: ["reasoning", "tools", "coding"],
+  },
+  {
+    id: "cli-copilot-agent",
+    provider: "cli-copilot",
+    label: "GitHub Copilot",
+    hint: "CLI",
+    description:
+      "Your installed Copilot CLI with your GitHub plan's models; Terax joins each turn as an MCP server.",
+    capabilities: { intelligence: 5, speed: 4, cost: 5 },
+    tags: ["reasoning", "tools", "coding"],
+  },
 ] as const satisfies readonly ModelInfo[];
 
 export type ModelId = (typeof MODELS)[number]["id"];
@@ -789,24 +827,111 @@ export function getCompatModelInfo(
   };
 }
 
+/**
+ * A model from a provider's live catalogue rather than the built-in list:
+ * `<provider>::<model id as the provider names it>`. The built-in entries keep
+ * their plain ids, so favourites, recents and agent defaults stored before
+ * catalogues existed still resolve.
+ */
+export const VARIANT_SEPARATOR = "::";
+
+/** Providers whose catalogue can be listed: API providers that take a model
+ *  id per request, and the agent CLIs, which pick their own model by name. */
+const VARIANT_PROVIDERS: ReadonlySet<ProviderId> = new Set<ProviderId>([
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "cerebras",
+  "groq",
+  "deepseek",
+  "mistral",
+  "openrouter",
+  "cli-claude",
+  "cli-codex",
+  "cli-cursor",
+  "cli-opencode",
+  "cli-pi",
+  "cli-agy",
+  "cli-copilot",
+]);
+
+/** Model names are passed as one argv element or one JSON field, never through
+ *  a shell, but they are still kept to the characters providers use. */
+const WIRE_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}$/;
+
+export function supportsModelVariants(provider: ProviderId): boolean {
+  return VARIANT_PROVIDERS.has(provider);
+}
+
+export function variantModelId(provider: ProviderId, wire: string): string {
+  return `${provider}${VARIANT_SEPARATOR}${wire}`;
+}
+
+export function parseVariantModelId(
+  id: string,
+): { provider: ProviderId; wire: string } | null {
+  const at = id.indexOf(VARIANT_SEPARATOR);
+  if (at <= 0) return null;
+  const provider = id.slice(0, at) as ProviderId;
+  const wire = id.slice(at + VARIANT_SEPARATOR.length);
+  if (!VARIANT_PROVIDERS.has(provider) || !WIRE_MODEL_RE.test(wire)) return null;
+  return { provider, wire };
+}
+
+const variantLabels = new Map<string, string>();
+
+/** Display names from a loaded catalogue, so a variant id resolves to a
+ *  readable label anywhere it is shown. */
+export function rememberVariantLabel(id: string, label: string): void {
+  if (label && label !== variantLabels.get(id)) variantLabels.set(id, label);
+}
+
+function variantInfo(id: string, provider: ProviderId, wire: string): ModelInfo {
+  const label = variantLabels.get(id) ?? wire;
+  const agent = MODELS.find((m) => m.provider === provider && isCliProvider(provider));
+  if (agent) {
+    return {
+      ...agent,
+      id,
+      label,
+      description: `${agent.label} running ${wire}.`,
+    };
+  }
+  const vendor = PROVIDERS.find((p) => p.id === provider)?.label ?? provider;
+  return {
+    id,
+    provider,
+    label,
+    hint: vendor,
+    description: `Listed by ${vendor}.`,
+    capabilities: { intelligence: 3, speed: 3, cost: 3 },
+  };
+}
+
 export function resolveModel(
   modelId: string,
   endpoints: readonly CustomEndpoint[] = [],
 ): ModelInfo {
   if (isCompatModelId(modelId)) return getCompatModelInfo(modelId, endpoints);
   const m = MODELS.find((x) => x.id === modelId);
-  if (!m) throw new Error(`Unknown model: ${modelId}`);
-  return m;
+  if (m) return m;
+  const variant = parseVariantModelId(modelId);
+  if (variant) return variantInfo(modelId, variant.provider, variant.wire);
+  throw new Error(`Unknown model: ${modelId}`);
 }
 
-export function getModel(id: ModelId): ModelInfo {
-  const m = MODELS.find((x) => x.id === id);
-  if (!m) throw new Error(`Unknown model: ${id}`);
-  return m;
+export function getModel(id: ModelId | string): ModelInfo {
+  return resolveModel(id);
 }
 
 export function isKnownModelId(id: string): id is ModelId {
-  return MODELS.some((x) => x.id === id);
+  return MODELS.some((x) => x.id === id) || parseVariantModelId(id) !== null;
+}
+
+/** The model a CLI should run, when a catalogue variant was picked. */
+export function variantWireModel(id: string): string | undefined {
+  return parseVariantModelId(id)?.wire;
 }
 
 const FREEFORM_PROVIDERS: ReadonlySet<ProviderId> = new Set([
@@ -887,7 +1012,8 @@ export function getModelContextLimit(
   if (isCompatModelId(modelId)) return compatOverride ?? 128_000;
   if (modelId === "openai-compatible-custom" && compatOverride)
     return compatOverride;
-  return MODEL_CONTEXT_LIMITS[modelId] ?? 128_000;
+  const wire = parseVariantModelId(modelId)?.wire;
+  return MODEL_CONTEXT_LIMITS[modelId] ?? (wire ? MODEL_CONTEXT_LIMITS[wire] : undefined) ?? 128_000;
 }
 
 export type ModelPricing = {
@@ -956,6 +1082,8 @@ export const KEYLESS_PROVIDERS: readonly ProviderId[] = [
   "cli-cursor",
   "cli-opencode",
   "cli-pi",
+  "cli-agy",
+  "cli-copilot",
 ] as const;
 
 export function providerNeedsKey(id: ProviderId): boolean {

@@ -1,7 +1,7 @@
 //! Registers `terax --mcp` with the coding-agent CLIs Terax drives, so their
 //! sessions (in a terminal or in the chat panel) can control the app.
 //!
-//! Claude Code and Codex own their config through `mcp add`/`mcp remove`, so
+//! Claude Code, Codex and Antigravity own their config through `mcp add`, so
 //! Terax goes through those commands rather than editing files another
 //! process may be writing. Cursor and OpenCode only have a JSON file; it is
 //! edited atomically and never when it does not parse (a JSONC file with
@@ -62,13 +62,15 @@ enum Target {
     Codex,
     Cursor,
     OpenCode,
+    Agy,
 }
 
-const TARGETS: [Target; 4] = [
+const TARGETS: [Target; 5] = [
     Target::Claude,
     Target::Codex,
     Target::Cursor,
     Target::OpenCode,
+    Target::Agy,
 ];
 
 impl Target {
@@ -78,6 +80,7 @@ impl Target {
             Self::Codex => "codex",
             Self::Cursor => "cursor",
             Self::OpenCode => "opencode",
+            Self::Agy => "agy",
         }
     }
 
@@ -87,6 +90,7 @@ impl Target {
             Self::Codex => "Codex",
             Self::Cursor => "Cursor Agent",
             Self::OpenCode => "OpenCode",
+            Self::Agy => "Antigravity",
         }
     }
 }
@@ -112,6 +116,17 @@ pub fn classify_stdio(entry: Option<&Value>, command: &str) -> TargetState {
         TargetState::Current
     } else {
         TargetState::Stale
+    }
+}
+
+/// Antigravity stores `{ command, args, disabled }`; a disabled entry is not
+/// serving the agent, so it counts as stale and gets re-enabled.
+pub fn classify_agy(entry: Option<&Value>, command: &str) -> TargetState {
+    match classify_stdio(entry, command) {
+        TargetState::Current if entry.is_some_and(|e| e["disabled"] == Value::Bool(true)) => {
+            TargetState::Stale
+        }
+        state => state,
     }
 }
 
@@ -262,6 +277,11 @@ fn cursor_config_path() -> Option<PathBuf> {
     Some(home()?.join(".cursor").join("mcp.json"))
 }
 
+/// Where `agy mcp add` writes; read directly so status needs no subprocess.
+fn agy_config_path() -> Option<PathBuf> {
+    Some(home()?.join(".gemini").join("config").join("mcp_config.json"))
+}
+
 fn opencode_config_path() -> Option<PathBuf> {
     let base = match std::env::var_os("XDG_CONFIG_HOME").filter(|d| !d.is_empty()) {
         Some(dir) => PathBuf::from(dir),
@@ -286,7 +306,10 @@ fn status_of(target: Target, command: &str) -> TargetStatus {
         detail: None,
     };
     let from_file =
-        |status: &mut TargetStatus, path: Option<PathBuf>, keys: &[&str], opencode: bool| {
+        |status: &mut TargetStatus,
+         path: Option<PathBuf>,
+         keys: &[&str],
+         classify: fn(Option<&Value>, &str) -> TargetState| {
             let Some(path) = path else {
                 status.state = TargetState::Unreadable;
                 status.detail = Some("home directory not found".into());
@@ -301,11 +324,7 @@ fn status_of(target: Target, command: &str) -> TargetStatus {
                 }
                 ConfigRead::Parsed(doc) => {
                     let entry = lookup(&doc, keys);
-                    status.state = if opencode {
-                        classify_opencode(entry, command)
-                    } else {
-                        classify_stdio(entry, command)
-                    };
+                    status.state = classify(entry, command);
                     if status.state == TargetState::Stale {
                         status.detail = Some(describe_other(entry));
                     }
@@ -322,7 +341,7 @@ fn status_of(target: Target, command: &str) -> TargetStatus {
                 &mut status,
                 claude_config_path(),
                 &["mcpServers", SERVER_NAME],
-                false,
+                classify_stdio,
             );
         }
         Target::Codex => {
@@ -357,7 +376,7 @@ fn status_of(target: Target, command: &str) -> TargetStatus {
                 &mut status,
                 cursor_config_path(),
                 &["mcpServers", SERVER_NAME],
-                false,
+                classify_stdio,
             );
         }
         Target::OpenCode => {
@@ -368,7 +387,18 @@ fn status_of(target: Target, command: &str) -> TargetStatus {
                 &mut status,
                 opencode_config_path(),
                 &["mcp", SERVER_NAME],
-                true,
+                classify_opencode,
+            );
+        }
+        Target::Agy => {
+            if resolve_bin("agy").is_none() {
+                return status;
+            }
+            from_file(
+                &mut status,
+                agy_config_path(),
+                &["mcpServers", SERVER_NAME],
+                classify_agy,
             );
         }
     }
@@ -432,6 +462,14 @@ fn configure_target(target: Target, current: &TargetStatus, command: &str) -> Re
             let path = opencode_config_path().ok_or("home directory not found")?;
             edit_json(&path, &["mcp"], opencode_entry(command))
         }
+        Target::Agy => {
+            // `add` replaces an entry of the same name and re-enables it.
+            let agy = resolve_bin("agy").ok_or("agy is not installed")?;
+            let out = run_cli(&agy, &["mcp", "add", SERVER_NAME, "--", command, MCP_FLAG])?;
+            out.success
+                .then_some(())
+                .ok_or_else(|| last_line(&format!("{}\n{}", out.stdout, out.stderr)))
+        }
     }
 }
 
@@ -483,6 +521,27 @@ pub fn configure_all() -> Result<McpStatus, String> {
         }
     }
     Ok(status)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerLaunch {
+    pub command: String,
+    /// This instance's bridge discovery file, so the server reaches it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discovery: Option<String>,
+}
+
+/// What a chat turn hands to a CLI that takes MCP servers per session
+/// (Copilot), without the subprocess round-trips of a full status check.
+#[tauri::command]
+pub fn mcp_server_command() -> Result<McpServerLaunch, String> {
+    Ok(McpServerLaunch {
+        command: server_command()?,
+        discovery: crate::modules::pi::cache_file_path()
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned()),
+    })
 }
 
 #[tauri::command]

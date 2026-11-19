@@ -1,5 +1,5 @@
 use super::config::{
-    classify_opencode, classify_stdio, opencode_entry, stdio_entry, upsert_server, TargetState,
+    classify_agy, classify_opencode, classify_stdio, opencode_entry, stdio_entry, upsert_server, TargetState,
 };
 use super::*;
 use std::cell::RefCell;
@@ -321,6 +321,19 @@ fn opencode_entries_are_classified() {
     let disabled = json!({ "type": "local", "command": [cmd, "--mcp"], "enabled": false });
     assert_eq!(classify_opencode(Some(&disabled), cmd), TargetState::Stale);
     assert_eq!(classify_opencode(None, cmd), TargetState::Missing);
+}
+
+#[test]
+fn agy_entries_are_classified_from_the_file_agy_writes() {
+    let cmd = "/Applications/Pi-Terax.app/Contents/MacOS/terax";
+    // The exact shape `agy mcp add terax -- <cmd> --mcp` leaves in mcp_config.json.
+    let written = json!({ "args": ["--mcp"], "command": cmd, "disabled": false });
+    assert_eq!(classify_agy(Some(&written), cmd), TargetState::Current);
+    let disabled = json!({ "args": ["--mcp"], "command": cmd, "disabled": true });
+    assert_eq!(classify_agy(Some(&disabled), cmd), TargetState::Stale);
+    let other = json!({ "args": ["--mcp"], "command": "/old/terax" });
+    assert_eq!(classify_agy(Some(&other), cmd), TargetState::Stale);
+    assert_eq!(classify_agy(None, cmd), TargetState::Missing);
 }
 
 #[test]

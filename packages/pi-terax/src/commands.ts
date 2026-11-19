@@ -81,6 +81,7 @@ export const TERAX_COMMAND_IDS = [
   "watch.remove",
   "watch.setEnabled",
   "watch.run",
+  "chat.layout",
 ] as const;
 
 export type TeraxCommandId = (typeof TERAX_COMMAND_IDS)[number];

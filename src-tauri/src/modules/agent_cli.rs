@@ -305,6 +305,57 @@ pub async fn agent_cli_pi_defaults() -> Option<PiDefaults> {
     parse_pi_defaults(&std::fs::read_to_string(&path).ok()?)
 }
 
+const MAX_AGY_SETTINGS_BYTES: u64 = 1024 * 1024;
+
+fn agy_settings_path() -> Option<PathBuf> {
+    Some(
+        dirs::home_dir()?
+            .join(".gemini")
+            .join("antigravity-cli")
+            .join("settings.json"),
+    )
+}
+
+/// The `permissions` block of Antigravity's settings, reduced to its lists of
+/// rule strings. `agy --settings` replaces that block for the session, so the
+/// chat must start from the user's own rules and only add Terax's.
+pub fn parse_agy_permissions(raw: &str) -> Option<serde_json::Value> {
+    let doc: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let doc = doc.as_object()?;
+    let Some(perms) = doc.get("permissions") else {
+        return Some(serde_json::json!({}));
+    };
+    let perms = perms.as_object()?;
+    let mut out = serde_json::Map::new();
+    for (key, value) in perms {
+        let list = value.as_array()?;
+        let rules: Option<Vec<serde_json::Value>> = list
+            .iter()
+            .map(|rule| rule.as_str().map(|s| serde_json::Value::String(s.to_string())))
+            .collect();
+        out.insert(key.clone(), serde_json::Value::Array(rules?));
+    }
+    Some(serde_json::Value::Object(out))
+}
+
+/// `Some({})` when Antigravity has no settings yet; `None` when they exist
+/// but cannot be read safely, so the caller leaves them untouched.
+#[tauri::command]
+pub async fn agent_cli_agy_permissions() -> Option<serde_json::Value> {
+    let path = agy_settings_path()?;
+    let Ok(meta) = std::fs::metadata(&path) else {
+        return Some(serde_json::json!({}));
+    };
+    if !meta.is_file() || meta.len() > MAX_AGY_SETTINGS_BYTES {
+        return None;
+    }
+    let raw = std::fs::read_to_string(&path).ok()?;
+    if raw.trim().is_empty() {
+        return Some(serde_json::json!({}));
+    }
+    parse_agy_permissions(&raw)
+}
+
 fn stream_lines<R: std::io::Read>(pipe: R, ch: &Channel<AgentCliEvent>, stdout: bool) {
     let reader = BufReader::new(pipe);
     for line in reader.lines() {
@@ -323,6 +374,27 @@ fn stream_lines<R: std::io::Read>(pipe: R, ch: &Channel<AgentCliEvent>, stdout: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agy_permissions_keep_only_rule_lists() {
+        let raw = r#"{"model":"x","trustedWorkspaces":["/a"],"permissions":{"allow":["command(ls)"],"deny":[]}}"#;
+        assert_eq!(
+            parse_agy_permissions(raw),
+            Some(serde_json::json!({"allow": ["command(ls)"], "deny": []}))
+        );
+        assert_eq!(
+            parse_agy_permissions(r#"{"model":"x"}"#),
+            Some(serde_json::json!({}))
+        );
+    }
+
+    #[test]
+    fn agy_permissions_of_an_unexpected_shape_are_left_alone() {
+        assert_eq!(parse_agy_permissions("not json"), None);
+        assert_eq!(parse_agy_permissions(r#"{"permissions":{"allow":"ls"}}"#), None);
+        assert_eq!(parse_agy_permissions(r#"{"permissions":{"allow":[1]}}"#), None);
+        assert_eq!(parse_agy_permissions("[]"), None);
+    }
 
     #[test]
     fn login_path_is_non_empty() {

@@ -39,7 +39,7 @@ export function describeMcp(status: McpStatus | null, summary: McpSummary | null
     summary.tone === "configured"
       ? "Pi-Terax MCP is configured for every installed agent CLI."
       : summary.tone === "unavailable"
-        ? "Pi-Terax MCP: no supported agent CLI (Claude Code, Codex, Cursor, OpenCode) found."
+        ? "Pi-Terax MCP: no supported agent CLI (Claude Code, Codex, Cursor, OpenCode, Antigravity) found."
         : "Pi-Terax MCP: click to register Terax with the agent CLIs below.";
   const lines = status.targets.map((t) => {
     const detail = t.detail ? ` (${t.detail})` : "";

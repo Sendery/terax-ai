@@ -1,43 +1,6 @@
 import type { ProviderId } from "@/modules/ai/config";
-import {
-  AppleIcon,
-  ChatGptIcon,
-  ClaudeIcon,
-  ComputerIcon,
-  FlashIcon,
-  GoogleGeminiIcon,
-  Grok02Icon,
-  CpuIcon,
-  DeepseekIcon,
-  GlobeIcon,
-  MistralIcon,
-  PiIcon,
-  PlugIcon,
-  ServerStack01Icon,
-} from "@hugeicons/core-free-icons";
+import { PROVIDER_ICONS } from "@/modules/ai/lib/providerPresentation";
 import { HugeiconsIcon } from "@hugeicons/react";
-
-const ICON_BY_PROVIDER = {
-  openai: ChatGptIcon,
-  anthropic: ClaudeIcon,
-  google: GoogleGeminiIcon,
-  xai: Grok02Icon,
-  cerebras: CpuIcon,
-  groq: FlashIcon,
-  deepseek: DeepseekIcon,
-  mistral: MistralIcon,
-  openrouter: GlobeIcon,
-  "openai-compatible": PlugIcon,
-  lmstudio: ComputerIcon,
-  mlx: AppleIcon,
-  ollama: ServerStack01Icon,
-  "chatgpt-codex": ChatGptIcon,
-  "cli-claude": ClaudeIcon,
-  "cli-codex": ChatGptIcon,
-  "cli-cursor": ComputerIcon,
-  "cli-opencode": CpuIcon,
-  "cli-pi": PiIcon,
-} as const satisfies Record<ProviderId, typeof ChatGptIcon>;
 
 type Props = {
   provider: ProviderId;
@@ -48,7 +11,7 @@ type Props = {
 export function ProviderIcon({ provider, size = 14, className }: Props) {
   return (
     <HugeiconsIcon
-      icon={ICON_BY_PROVIDER[provider]}
+      icon={PROVIDER_ICONS[provider]}
       size={size}
       strokeWidth={1.75}
       className={className}

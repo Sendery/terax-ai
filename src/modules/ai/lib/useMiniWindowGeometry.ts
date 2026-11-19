@@ -16,7 +16,7 @@ const viewport = (): Viewport => ({
   vh: window.innerHeight,
 });
 
-function loadGeom(): Geom | null {
+export function loadGeom(): Geom | null {
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     if (!raw) return null;
@@ -35,7 +35,7 @@ function loadGeom(): Geom | null {
   return null;
 }
 
-function saveGeom(g: Geom) {
+export function saveGeom(g: Geom) {
   try {
     window.localStorage.setItem(STORE_KEY, JSON.stringify(g));
   } catch {
@@ -45,11 +45,20 @@ function saveGeom(g: Geom) {
 
 type Compute = (start: Geom, dx: number, dy: number, vp: Viewport) => Geom;
 
+export type MiniWindowDragHooks = {
+  onDragMove?: (pointer: { x: number; y: number }) => void;
+  /** Returns true when the drop was taken elsewhere (docked), in which case
+   * the window keeps the place it had before the drag. */
+  onDragEnd?: (pointer: { x: number; y: number }, cancelled: boolean) => boolean;
+};
+
 /** Drives the mini window's position and size entirely through the DOM (no
  * React state), so neither chat streaming nor any other re-render can disturb
  * an in-flight gesture. Writes are batched into a single rAF per frame. */
-export function useMiniWindowGeometry() {
+export function useMiniWindowGeometry(hooks: MiniWindowDragHooks = {}) {
   const ref = useRef<HTMLDivElement>(null);
+  const hooksRef = useRef(hooks);
+  hooksRef.current = hooks;
   const geom = useRef<Geom>({ x: 0, y: 0, w: 0, h: 0 });
   const frame = useRef(0);
   const pending = useRef<Geom | null>(null);
@@ -95,7 +104,12 @@ export function useMiniWindowGeometry() {
   }, [write]);
 
   const beginGesture = useCallback(
-    (e: React.PointerEvent, compute: Compute, threshold: number) => {
+    (
+      e: React.PointerEvent,
+      compute: Compute,
+      threshold: number,
+      isMove = false,
+    ) => {
       const el = e.currentTarget as HTMLElement;
       const pointerId = e.pointerId;
       const startX = e.clientX;
@@ -121,14 +135,26 @@ export function useMiniWindowGeometry() {
           document.body.style.userSelect = "none";
         }
         write(compute(start, dx, dy, viewport()));
+        if (isMove) hooksRef.current.onDragMove?.({ x: ev.clientX, y: ev.clientY });
       };
-      const onUp = () => {
+      const onUp = (ev: PointerEvent) => {
         el.removeEventListener("pointermove", onMove);
         el.removeEventListener("pointerup", onUp);
         el.removeEventListener("pointercancel", onUp);
         if (!armed) return;
         el.releasePointerCapture?.(pointerId);
         document.body.style.userSelect = "";
+        const taken =
+          isMove &&
+          hooksRef.current.onDragEnd?.(
+            { x: ev.clientX, y: ev.clientY },
+            ev.type === "pointercancel",
+          ) === true;
+        if (taken) {
+          write(start);
+          saveGeom(start);
+          return;
+        }
         saveGeom(geom.current);
       };
       el.addEventListener("pointermove", onMove);
@@ -148,7 +174,7 @@ export function useMiniWindowGeometry() {
         )
       )
         return;
-      beginGesture(e, applyDrag, 4);
+      beginGesture(e, applyDrag, 4, true);
     },
     [beginGesture],
   );

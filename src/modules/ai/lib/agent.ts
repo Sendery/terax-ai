@@ -21,6 +21,7 @@ import {
   oauthProviderFor,
   providerNeedsKey,
   resolveModel,
+  variantWireModel,
   selectSystemPrompt,
   type CustomEndpoint,
   type OAuthProviderId,
@@ -297,6 +298,8 @@ export async function buildLanguageModel(
     case "cli-cursor":
     case "cli-opencode":
     case "cli-pi":
+    case "cli-agy":
+    case "cli-copilot":
       throw new Error(
         "CLI agent providers do not build a LanguageModel; they stream via runCliAgentStream.",
       );
@@ -346,7 +349,7 @@ export function buildConfiguredLanguageModel(
     );
   }
   const m = resolveModel(modelId);
-  let resolvedId: string = m.id;
+  let resolvedId: string = variantWireModel(modelId) ?? m.id;
   if (m.id === "lmstudio-local") {
     if (!local.lmstudioModelId?.trim()) {
       throw new Error(
@@ -477,7 +480,8 @@ export async function runAgentStream(opts: RunAgentOptions) {
       cliId,
       uiMessages: opts.uiMessages,
       cwd: opts.toolContext.getCwd(),
-      model: cliId === "pi" ? opts.piModel : undefined,
+      model:
+        variantWireModel(modelId) ?? (cliId === "pi" ? opts.piModel : undefined),
       chatSessionId: opts.toolContext.getSessionId(),
       persona: opts.agentPersona ?? null,
       customInstructions: opts.customInstructions,

@@ -1,4 +1,11 @@
-export type CliAgentId = "claude" | "codex" | "cursor" | "opencode" | "pi";
+export type CliAgentId =
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "opencode"
+  | "pi"
+  | "agy"
+  | "copilot";
 
 /** Mirror of the Rust `AgentCliEvent` (serde tag = "kind", camelCase). */
 export type CliSpawnEvent =
@@ -23,6 +30,8 @@ export type CliRunContext = {
   planMode?: boolean;
   /** Caller-supplied uniqueness token so planning stays pure. */
   nonce: string;
+  /** What the CLI's `prepare` step read from the host before planning. */
+  host?: unknown;
 };
 
 /** How to spawn one turn. `stdin` carries the prompt when argv would be

@@ -741,7 +741,7 @@
     {
       "name": "terax_manage_panels",
       "title": "Show and hide Terax panels",
-      "description": "Show, hide or toggle the side panels (file sidebar, notes, scheduled tasks, session history, agent monitor), float or dock the notes panel, and open the settings window or the task editor for the user.\n\nActions:\n- show_sidebar(view?): Show the sidebar, optionally on a view.\n- hide_sidebar(): Hide the sidebar.\n- show_notes(): Show the notes panel.\n- hide_notes(): Hide the notes panel.\n- toggle_notes(): Toggle the notes panel.\n- detach_notes(): Float notes in their own window.\n- attach_notes(): Dock floating notes back.\n- show_tasks(): Show the scheduled tasks panel.\n- hide_tasks(): Hide the scheduled tasks panel.\n- toggle_tasks(): Toggle the scheduled tasks panel.\n- show_history(): Show the session history graph.\n- hide_history(): Hide the session history graph.\n- toggle_history(): Toggle the session history graph.\n- show_agent_monitor(): Show the agent monitor.\n- hide_agent_monitor(): Hide the agent monitor.\n- toggle_agent_monitor(): Toggle the agent monitor.\n- open_settings(tab?): Open the settings window.\n- open_task_editor(id?): Open the task editor so the user can review or finish a task.",
+      "description": "Show, hide or toggle the side panels (file sidebar, notes, scheduled tasks, session history, agent monitor), float or dock the notes panel, and open the settings window or the task editor for the user.\n\nActions:\n- show_sidebar(view?): Show the sidebar, optionally on a view.\n- hide_sidebar(): Hide the sidebar.\n- show_notes(): Show the notes panel.\n- hide_notes(): Hide the notes panel.\n- toggle_notes(): Toggle the notes panel.\n- detach_notes(): Float notes in their own window.\n- attach_notes(): Dock floating notes back.\n- show_tasks(): Show the scheduled tasks panel.\n- hide_tasks(): Hide the scheduled tasks panel.\n- toggle_tasks(): Toggle the scheduled tasks panel.\n- show_history(): Show the session history graph.\n- hide_history(): Hide the session history graph.\n- toggle_history(): Toggle the session history graph.\n- show_agent_monitor(): Show the agent monitor.\n- hide_agent_monitor(): Hide the agent monitor.\n- toggle_agent_monitor(): Toggle the agent monitor.\n- set_chat_layout(mode, show?): Float the Terax AI chat, dock it left or right, or put it above the bottom bar.\n- open_settings(tab?): Open the settings window.\n- open_task_editor(id?): Open the task editor so the user can review or finish a task.",
       "annotations": {
         "title": "Show and hide Terax panels",
         "readOnlyHint": false,
@@ -771,6 +771,7 @@
               "show_agent_monitor",
               "hide_agent_monitor",
               "toggle_agent_monitor",
+              "set_chat_layout",
               "open_settings",
               "open_task_editor"
             ],
@@ -783,6 +784,20 @@
               "source-control"
             ],
             "description": "Sidebar view to reveal."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "floating",
+              "left",
+              "right",
+              "bottom"
+            ],
+            "description": "floating, left, right or bottom."
+          },
+          "show": {
+            "type": "boolean",
+            "description": "Show the chat after placing it (default true); false hides it."
           },
           "tab": {
             "type": "string",
@@ -873,6 +888,13 @@
         "toggle_agent_monitor": {
           "command": "agent-monitor.toggle",
           "params": []
+        },
+        "set_chat_layout": {
+          "command": "chat.layout",
+          "params": [
+            "mode",
+            "show"
+          ]
         },
         "open_settings": {
           "command": "settings.open",

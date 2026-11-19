@@ -2,8 +2,8 @@
 
 Terax can open its AI composer and **Ask Terax** selection action when a supported
 CLI is installed, without an SDK API key, subscription connection or local model
-endpoint. Supported CLI providers are Claude Code, Codex, Cursor Agent, OpenCode
-and Pi. They retain their own authentication, tool loop and permission setting.
+endpoint. Supported CLI providers are Claude Code, Codex, Cursor Agent, OpenCode,
+Pi, Antigravity (`agy`) and GitHub Copilot (`copilot`). They retain their own authentication, tool loop and permission setting.
 Detection establishes that the binary is installed; it does not verify login or
 start an agent.
 
