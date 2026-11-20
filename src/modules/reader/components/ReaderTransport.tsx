@@ -25,6 +25,8 @@ import { formatClock } from "@/modules/reader/lib/timing";
 import type { ExportSplit } from "@/modules/reader/lib/flow";
 import { useReaderStore } from "@/modules/reader/store/readerStore";
 import { LANGUAGE_LABELS } from "@/modules/tts/lib/engines";
+import { findVoice } from "@/modules/tts/lib/presets";
+import { useVoiceOptions } from "@/modules/tts/lib/useVoiceOptions";
 import { useTtsStore } from "@/modules/tts/store/ttsStore";
 import {
   Download01Icon,
@@ -74,6 +76,9 @@ export function ReaderTransport({
   const floating = useReaderStore((s) => s.floating);
   const profiles = useTtsStore((s) => s.profiles);
   const hydrate = useTtsStore((s) => s.hydrate);
+  // The same list as Settings and the status bar, in the document's language
+  // when it is known.
+  const voices = useVoiceOptions({ language: entry?.language ?? undefined });
 
   useEffect(() => {
     void hydrate();
@@ -97,7 +102,9 @@ export function ReaderTransport({
     -1,
   );
   const lastCut = cutIndex >= 0 ? cuts[cutIndex] : null;
-  const voice = profiles.find((p) => p.id === entry.state.voiceId) ?? null;
+  const voice = findVoice(profiles, entry.state.voiceId);
+  const readyVoices = voices.filter((v) => v.ready);
+  const pendingVoices = voices.filter((v) => !v.ready).slice(0, 4);
   // An export runs whether or not the document is the one playing.
   const exporting =
     playback.exporting?.docId === docId ? playback.exporting : null;
@@ -225,15 +232,28 @@ export function ReaderTransport({
                   ? LANGUAGE_LABELS[entry.language]
                   : "the default language"}
               </DropdownMenuRadioItem>
-              {profiles.map((p) => (
-                <DropdownMenuRadioItem key={p.id} value={p.id}>
-                  {p.name}{" "}
+              {readyVoices.map((v) => (
+                <DropdownMenuRadioItem key={v.id} value={v.id}>
+                  {v.name}{" "}
                   <span className="ml-1 text-muted-foreground">
-                    {LANGUAGE_LABELS[p.language]}
+                    {entry.language ? v.provider : LANGUAGE_LABELS[v.language]}
                   </span>
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
+            {pendingVoices.length > 0 ? (
+              <>
+                <DropdownMenuSeparator />
+                {pendingVoices.map((v) => (
+                  <DropdownMenuItem key={v.id} disabled>
+                    {v.name}
+                    <span className="ml-auto pl-2 text-[10.5px] text-muted-foreground">
+                      {v.missing}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="min-w-0 max-w-64 truncate" title={lastCut?.label}>

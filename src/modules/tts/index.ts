@@ -3,8 +3,6 @@ export { TtsEngineControl } from "./components/TtsEngineControl";
 export {
   hasInstalledEngine,
   isEngineRunning,
-  modelChoices,
-  type ModelChoice,
 } from "./lib/engineControl";
 export {
   collapseWhitespace,
@@ -130,8 +128,6 @@ export {
 } from "./lib/useSpeaker";
 export { TTS_POLL_MS, useTtsRuntime } from "./lib/useTtsRuntime";
 export {
-  BUILT_IN_DEFAULTS,
-  builtInsAddedAfter,
   createProfile,
   defaultVoiceFor,
   isProfileSpeakable,
@@ -144,6 +140,28 @@ export {
   type VoiceStyle,
 } from "./lib/voices";
 export { useTtsStore, type TtsStoreState } from "./store/ttsStore";
+export {
+  missingAction,
+  readinessOf,
+  voiceOptions,
+  type VoiceKind,
+  type VoiceOption,
+  type VoiceOptionsQuery,
+  type VoiceReadiness,
+} from "./lib/catalog";
+export { useVoiceOptions, voiceOptionsNow } from "./lib/useVoiceOptions";
+export {
+  canonicalVoiceId,
+  DEFAULT_PRESET_IDS,
+  findVoice,
+  isPresetId,
+  parsePresetId,
+  presetId,
+  presetProfile,
+  presetProfiles,
+  withPresets,
+} from "./lib/presets";
+export { formatSpeed, measuredSpeed, type SpeedSamples } from "./lib/speed";
 export { encodeWav16, SAMPLE_TARGET_RATE, toMono24kWav } from "./lib/wav";
 export {
   listVoices,

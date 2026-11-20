@@ -6,6 +6,7 @@ export type SettingsTab =
   | "shortcuts"
   | "models"
   | "voice"
+  | "dictation"
   | "agents"
   | "about";
 

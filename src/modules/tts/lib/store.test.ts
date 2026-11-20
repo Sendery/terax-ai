@@ -10,14 +10,15 @@ import {
   toStoredVoices,
   TTS_VOICES_STORE_PATH,
 } from "./store";
+import { DEFAULT_PRESET_IDS, presetId } from "./presets";
 import {
-  BUILT_IN_DEFAULTS,
-  builtInsAddedAfter,
   BUILT_IN_EN_ID,
   BUILT_IN_ES_ID,
+  BUILT_IN_POCKET_ES_ID,
   createProfile,
   EMPTY_DEFAULTS,
   isVoiceProfile,
+  LEGACY_BUILT_INS,
   type VoiceProfile,
 } from "./voices";
 
@@ -82,6 +83,13 @@ describe("parseStoredDefaults", () => {
     expect(
       parseStoredDefaults({ "es-ES": "v-1", "en-US": "v-2" }, profiles),
     ).toEqual({ "es-ES": "v-1", "en-US": "v-2" });
+  });
+
+  it("accepts a preset of the right language and an explicit null", () => {
+    const lola = presetId("pocket-tts", "es-ES", "lola");
+    expect(
+      parseStoredDefaults({ "es-ES": lola, "en-US": null, "fr-FR": lola }, profiles),
+    ).toEqual({ "es-ES": lola, "en-US": null });
   });
 
   it("drops ids that are gone, empty or in another language", () => {
@@ -150,29 +158,18 @@ describe("round trip", () => {
 });
 
 describe("seedVoicesState", () => {
-  it("seeds the built-ins the first time, before anything is written", () => {
+  it("stores no profile on a fresh install and points each language at its preset", () => {
     const seeded = seedVoicesState(undefined, undefined);
     expect(seeded.seeded).toBe(true);
-    expect(seeded.profiles.map((p) => p.id)).toEqual(
-      BUILT_IN_DEFAULTS.map((p) => p.id),
-    );
-    // Every model arrives with a voice, but the defaults stay on Kokoro: the
-    // others would each want a multi-gigabyte download before they can speak.
-    expect(seeded.defaults).toEqual({
-      "es-ES": BUILT_IN_ES_ID,
-      "en-US": BUILT_IN_EN_ID,
-    });
+    expect(seeded.profiles).toEqual([]);
+    // Kokoro for every language it speaks (the smallest download), Pocket TTS
+    // for German.
+    expect(seeded.defaults).toEqual(DEFAULT_PRESET_IDS);
+    expect(seeded.defaults["es-ES"]).toBe(presetId("kokoro-82m", "es-ES", "ef_dora"));
+    expect(seeded.defaults["de-DE"]).toBe(presetId("pocket-tts", "de-DE", "juergen"));
   });
 
-  it("does not resurrect built-ins once the list was emptied by hand", () => {
-    // Emptied on purpose: not even a newly catalogued voice is pushed back in.
-    const state = seedVoicesState([], { "es-ES": BUILT_IN_ES_ID });
-    expect(state.seeded).toBe(false);
-    expect(state.profiles).toEqual([]);
-    expect(state.defaults).toEqual(EMPTY_DEFAULTS);
-  });
-
-  it("keeps stored profiles and prunes their broken defaults", () => {
+  it("keeps a current store as it is", () => {
     const state = seedVoicesState(
       [profile()],
       { "es-ES": "v-1", "en-US": "v-1" },
@@ -180,33 +177,55 @@ describe("seedVoicesState", () => {
     );
     expect(state.seeded).toBe(false);
     expect(state.profiles.map((p) => p.id)).toEqual(["v-1"]);
-    expect(state.defaults).toEqual({ "es-ES": "v-1", "en-US": null });
+    // A default in the wrong language is dropped, not kept dangling.
+    expect(state.defaults).toEqual({ "es-ES": "v-1" });
   });
 
-  it("hands an older install only the voices it has never been offered", () => {
-    // No marker: written before the version was tracked, so seed 1 is assumed
-    // seen and only what came later arrives.
-    const state = seedVoicesState([profile()], { "es-ES": "v-1" });
+  it("migrates seeded built-ins the user never touched to presets", () => {
+    const stored = LEGACY_BUILT_INS.map((p) => ({ ...p }));
+    const state = seedVoicesState(
+      stored,
+      { "es-ES": BUILT_IN_ES_ID, "en-US": BUILT_IN_EN_ID },
+      3,
+    );
     expect(state.seeded).toBe(true);
-    expect(state.profiles.map((p) => p.id)).toEqual([
-      "v-1",
-      ...builtInsAddedAfter(1).map((p) => p.id),
-    ]);
-    // The Kokoro built-ins it deleted stay deleted, and its default is intact.
-    expect(state.profiles.map((p) => p.id)).not.toContain(BUILT_IN_ES_ID);
-    expect(state.defaults["es-ES"]).toBe("v-1");
+    expect(state.profiles).toEqual([]);
+    expect(state.defaults["es-ES"]).toBe(presetId("kokoro-82m", "es-ES", "ef_dora"));
+    expect(state.defaults["en-US"]).toBe(presetId("kokoro-82m", "en-US", "af_heart"));
+    // Languages the old store never knew get their catalogue default.
+    expect(state.defaults["fr-FR"]).toBe(DEFAULT_PRESET_IDS["fr-FR"]);
   });
 
-  it("offers nothing new twice", () => {
-    const first = seedVoicesState([profile()], { "es-ES": "v-1" });
-    const second = seedVoicesState(
-      first.profiles,
-      { "es-ES": "v-1" },
-      SEED_VERSION,
+  it("keeps a built-in the user edited, with its id and default", () => {
+    const edited = LEGACY_BUILT_INS.map((p) =>
+      p.id === BUILT_IN_POCKET_ES_ID ? { ...p, params: {}, name: "Lola lenta" } : { ...p },
     );
+    const state = seedVoicesState(edited, { "es-ES": BUILT_IN_POCKET_ES_ID }, 3);
+    expect(state.profiles.map((p) => p.id)).toEqual([BUILT_IN_POCKET_ES_ID]);
+    expect(state.defaults["es-ES"]).toBe(BUILT_IN_POCKET_ES_ID);
+    // English had no stored default, so it gets the catalogue one.
+    expect(state.defaults["en-US"]).toBe(DEFAULT_PRESET_IDS["en-US"]);
+  });
+
+  it("keeps the user's own profiles and an explicit cleared default", () => {
+    const state = seedVoicesState(
+      [profile(), ...LEGACY_BUILT_INS],
+      { "es-ES": "v-1", "en-US": null },
+    );
+    expect(state.profiles.map((p) => p.id)).toEqual(["v-1"]);
+    expect(state.defaults["es-ES"]).toBe("v-1");
+    expect(state.defaults["en-US"]).toBeNull();
+  });
+
+  it("migrates once", () => {
+    const first = seedVoicesState(LEGACY_BUILT_INS, { "es-ES": BUILT_IN_ES_ID }, 2);
+    const second = seedVoicesState(first.profiles, first.defaults, SEED_VERSION);
     expect(second.seeded).toBe(false);
-    expect(second.profiles.map((p) => p.id)).toEqual(
-      first.profiles.map((p) => p.id),
-    );
+    expect(second.defaults).toEqual(first.defaults);
+  });
+
+  it("never lets a stored profile claim a preset id", () => {
+    const sneaky = profile({ id: presetId("kokoro-82m", "es-ES", "ef_dora") });
+    expect(parseStoredVoices([sneaky])).toEqual([]);
   });
 });

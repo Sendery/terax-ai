@@ -1496,9 +1496,15 @@ describe("local speech commands", () => {
     expect(
       validateCommandRequest({
         id: "tts.speak",
-        payload: { text: "hola", language: "fr-FR" },
+        payload: { text: "hola", language: "ja-JP" },
       }).ok,
     ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "tts.speak",
+        payload: { text: "bonjour", language: "fr-FR" },
+      }).ok,
+    ).toBe(true);
     expect(
       validateCommandRequest({
         id: "tts.speak",
@@ -1514,6 +1520,37 @@ describe("local speech commands", () => {
         id,
       ).toBe(false);
     }
+  });
+
+  it("filters tts.voices by language and lets tts.install skip the model", () => {
+    expect(validateCommandRequest({ id: "tts.voices" })).toEqual({
+      ok: true,
+      value: { id: "tts.voices", payload: undefined },
+    });
+    expect(
+      validateCommandRequest({ id: "tts.voices", payload: { language: "de-DE" } }),
+    ).toEqual({ ok: true, value: { id: "tts.voices", payload: { language: "de-DE" } } });
+    expect(
+      validateCommandRequest({ id: "tts.voices", payload: { language: "ja-JP" } }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({ id: "tts.install", payload: { engine: "pocket" } }),
+    ).toEqual({ ok: true, value: { id: "tts.install", payload: { engine: "pocket" } } });
+    expect(
+      validateCommandRequest({
+        id: "tts.install",
+        payload: { engine: "pocket", withModel: false },
+      }),
+    ).toEqual({
+      ok: true,
+      value: { id: "tts.install", payload: { engine: "pocket", withModel: false } },
+    });
+    expect(
+      validateCommandRequest({
+        id: "tts.install",
+        payload: { engine: "pocket", withModel: "no" },
+      }).ok,
+    ).toBe(false);
   });
 
   it("does not reach a handler when the payload is rejected", async () => {

@@ -115,7 +115,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
         command: "tts.status",
         summary: "Installed and running speech engines and downloaded models.",
       },
-      list_voices: { command: "tts.voices", summary: "Voice profiles for speak." },
+      list_voices: { command: "tts.voices", summary: "Every voice (profiles and presets), with readiness, for speak." },
       list_reader_documents: {
         command: "reader.list",
         summary: "Documents in the Reader library and where reading stopped.",
@@ -423,7 +423,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       stop_speaking: { command: "tts.stopSpeaking", summary: "Stop playback and drop the queue." },
       start_engine: { command: "tts.start", summary: "Start a speech engine." },
       stop_engine: { command: "tts.stop", summary: "Stop one engine, or all when omitted." },
-      install_engine: { command: "tts.install", summary: "Install a speech engine." },
+      install_engine: { command: "tts.install", summary: "Install a speech engine and its default model." },
       download_model: { command: "tts.download", summary: "Download a speech model." },
       open_reader: {
         command: "reader.open",

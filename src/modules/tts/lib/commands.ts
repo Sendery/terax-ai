@@ -1,3 +1,4 @@
+import { ttsDeviceFor } from "@/modules/settings/store";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   listVoices,
@@ -124,7 +125,7 @@ export function ttsStartCommand(engine: TtsEngineId): {
   engine: TtsEngineId;
   starting: true;
 } {
-  const device = usePreferencesStore.getState().ttsDevice;
+  const device = ttsDeviceFor(usePreferencesStore.getState().ttsDevices, engine);
   void ttsNative
     .start(engine, device)
     .then(() => {
@@ -165,9 +166,11 @@ export async function ttsStopCommand(
 
 export async function ttsInstallCommand(
   engine: TtsEngineId,
+  withModel = true,
 ): Promise<{ jobId: number }> {
-  // The Rust side installs the runtime first when it is missing.
-  const jobId = await fromNative(() => ttsNative.installEngine(engine));
+  // The Rust side installs the runtime first when it is missing, and the
+  // engine's default model after the engine unless told not to.
+  const jobId = await fromNative(() => ttsNative.installEngine(engine, withModel));
   return { jobId };
 }
 
@@ -178,10 +181,12 @@ export async function ttsDownloadCommand(
   return { jobId };
 }
 
-export async function ttsVoicesCommand(): Promise<{
+export async function ttsVoicesCommand(
+  language?: TtsLanguage,
+): Promise<{
   voices: VoiceListEntry[];
 }> {
-  return { voices: await fromNative(() => listVoices()) };
+  return { voices: await fromNative(() => listVoices(language)) };
 }
 
 /**

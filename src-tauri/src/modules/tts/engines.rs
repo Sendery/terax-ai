@@ -66,6 +66,18 @@ impl Engine {
         }
     }
 
+    /// The model an "Install" from Settings downloads along with the engine:
+    /// the one that speaks the most languages.
+    pub fn default_model(self) -> Model {
+        match self {
+            Engine::Kokoro => Model::Kokoro82m,
+            Engine::Chatterbox => Model::ChatterboxMultilingual,
+            Engine::Pocket => Model::PocketTts,
+            Engine::Omnivoice => Model::Omnivoice,
+            Engine::Zonos3 => Model::Zonos3Mini,
+        }
+    }
+
     pub fn requirements_file_name(self) -> &'static str {
         match self {
             Engine::Kokoro => "requirements-kokoro.txt",
@@ -397,6 +409,17 @@ mod tests {
         ] {
             assert!(Model::from_str(bad).is_err(), "{bad} must be rejected");
         }
+    }
+
+    #[test]
+    fn every_engine_installs_one_of_its_own_models_by_default() {
+        for engine in Engine::ALL {
+            assert_eq!(engine.default_model().engine(), engine, "{engine:?}");
+        }
+        assert_eq!(
+            Engine::Chatterbox.default_model(),
+            Model::ChatterboxMultilingual
+        );
     }
 
     #[test]

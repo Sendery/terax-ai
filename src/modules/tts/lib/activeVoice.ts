@@ -1,10 +1,11 @@
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import {
-  MODEL_VOICE_SOURCE,
-  type TtsLanguage,
-  type TtsModelId,
-  type VoiceSource,
+import type {
+  TtsEngineId,
+  TtsLanguage,
+  TtsModelId,
 } from "@/modules/tts/lib/engines";
+import type { VoiceKind } from "@/modules/tts/lib/catalog";
+import { voiceOptionsNow } from "@/modules/tts/lib/useVoiceOptions";
 import {
   resolveVoice,
   type ResolveVoiceRequest,
@@ -16,9 +17,16 @@ export type VoiceListEntry = {
   id: string;
   name: string;
   model: TtsModelId;
+  engine: TtsEngineId;
+  provider: string;
   language: TtsLanguage;
-  kind: VoiceSource;
+  kind: VoiceKind;
+  /** Generated preset or default voice (true) or a stored profile (false). */
+  preset: boolean;
   isDefault: boolean;
+  ready: boolean;
+  /** What must happen before this voice can speak, or null. */
+  missing: string | null;
 };
 
 /**
@@ -34,16 +42,23 @@ export async function resolveActiveVoice(
   return resolveVoice(profiles, defaults, { ttsDefaultLanguage }, request);
 }
 
-/** Flat voice list with the per-language default marked. */
-export async function listVoices(): Promise<VoiceListEntry[]> {
+/** The unified voice list (stored profiles and presets) for the enabled
+ *  languages, or one language, with readiness and the default marked. */
+export async function listVoices(
+  language?: TtsLanguage,
+): Promise<VoiceListEntry[]> {
   await useTtsStore.getState().hydrate();
-  const { profiles, defaults } = useTtsStore.getState();
-  return profiles.map((profile) => ({
-    id: profile.id,
-    name: profile.name,
-    model: profile.model,
-    language: profile.language,
-    kind: MODEL_VOICE_SOURCE[profile.model],
-    isDefault: defaults[profile.language] === profile.id,
+  return voiceOptionsNow({ language }).map((option) => ({
+    id: option.id,
+    name: option.name,
+    model: option.model,
+    engine: option.engine,
+    provider: option.provider,
+    language: option.language,
+    kind: option.kind,
+    preset: option.preset,
+    isDefault: option.isDefault,
+    ready: option.ready,
+    missing: option.missing,
   }));
 }

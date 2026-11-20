@@ -31,7 +31,7 @@ vi.mock("@/modules/tts/lib/useSpeaker", () => speakerMock);
 vi.mock("@/modules/tts/lib/activeVoice", () => voiceMock);
 
 vi.mock("@/modules/settings/preferences", () => ({
-  usePreferencesStore: { getState: () => ({ ttsDevice: "cpu" }) },
+  usePreferencesStore: { getState: () => ({ ttsDevices: { kokoro: "cpu" } }) },
 }));
 
 import {

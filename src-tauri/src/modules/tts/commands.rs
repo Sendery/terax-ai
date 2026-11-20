@@ -111,13 +111,22 @@ pub fn tts_install_engine(
     app: AppHandle,
     state: State<'_, TtsState>,
     engine: String,
+    with_model: Option<bool>,
 ) -> Result<u32, String> {
     let engine = parse_engine(&engine)?;
+    // The default since dev.26: an engine is useless without a model, so one
+    // install fetches both unless the caller asks for the engine alone.
+    let with_model = with_model.unwrap_or(true);
+    let model = with_model.then(|| engine.default_model());
     let job = state
         .jobs
-        .begin(JobKind::EngineInstall, Some(engine), None)?;
+        .begin(JobKind::EngineInstall, Some(engine), model)?;
     spawn_job(app, job, move |_, job, layout| {
-        install::install_engine(job, layout, engine)
+        if with_model {
+            install::install_provider(job, layout, engine)
+        } else {
+            install::install_engine(job, layout, engine)
+        }
     })
 }
 
@@ -434,6 +443,19 @@ mod tests {
         assert_eq!(paths[0], Some(layout.runtime_install_log()));
         assert_eq!(paths[1], Some(layout.install_log(Engine::Kokoro)));
         assert_eq!(paths[2], Some(layout.download_log(Model::ChatterboxTurbo)));
+        // A provider install that also downloads the model keeps one log: the
+        // engine's install log.
+        let provider = super::super::jobs::JobRegistry::default()
+            .begin(
+                JobKind::EngineInstall,
+                Some(Engine::Pocket),
+                Some(Model::PocketTts),
+            )
+            .unwrap();
+        assert_eq!(
+            job_log_path(&layout, &provider),
+            Some(layout.install_log(Engine::Pocket))
+        );
         assert_eq!(paths[3], None);
         for path in paths.into_iter().flatten() {
             assert!(path.starts_with(layout.logs()), "{path:?}");

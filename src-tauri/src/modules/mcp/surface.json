@@ -9,7 +9,7 @@
     {
       "name": "terax_inspect",
       "title": "Inspect Terax",
-      "description": "Read the running Terax app without changing it: window layout, tabs, spaces, terminal panes and their scrollback, notes, scheduled tasks, watches, speech, the command catalog, file content search and PNG captures of a surface. Private terminals are never listed or read.\n\nActions:\n- read_graphx(graphId): Read a GraphX document source and revision explicitly.\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_terminals(): Every terminal pane that is not private: pane id (leafId), tab, space, directory, focus and the coding agent running in it.\n- read_terminal(leafId, lines?): Tail of one terminal pane's scrollback, secrets redacted.\n- list_spaces(): Spaces (named groups of tabs) and which one is active.\n- list_watches(): Watches with their command, interval, state and last change.\n- read_watch(id): One watch with the output of its last run.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(): Voice profiles for speak.\n- list_reader_documents(): Documents in the Reader library and where reading stopped.\n- reader_state(docId?): A Reader document's position, word, timing, speed and cut points.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
+      "description": "Read the running Terax app without changing it: window layout, tabs, spaces, terminal panes and their scrollback, notes, scheduled tasks, watches, speech, the command catalog, file content search and PNG captures of a surface. Private terminals are never listed or read.\n\nActions:\n- read_graphx(graphId): Read a GraphX document source and revision explicitly.\n- status(): Whether a Terax instance is reachable from this server, and which one. Call it first when another call fails to connect.\n- snapshot(): Redacted window state: active space and tab, every tab (id, kind, title, cwd), sidebar, scheduled tasks and speech status. Tab ids from here feed the other tools.\n- list_commands(): The full registry catalog with every argument, type and enum value.\n- build_info(): Repository, branch, commit and channel of the running binary.\n- list_terminals(): Every terminal pane that is not private: pane id (leafId), tab, space, directory, focus and the coding agent running in it.\n- read_terminal(leafId, lines?): Tail of one terminal pane's scrollback, secrets redacted.\n- list_spaces(): Spaces (named groups of tabs) and which one is active.\n- list_watches(): Watches with their command, interval, state and last change.\n- read_watch(id): One watch with the output of its last run.\n- list_notes(): Note cards on the active tab.\n- list_tasks(): Scheduled tasks with their prompts and schedules.\n- speech_status(): Installed and running speech engines and downloaded models.\n- list_voices(language?): Every voice (profiles and presets), with readiness, for speak.\n- list_reader_documents(): Documents in the Reader library and where reading stopped.\n- reader_state(docId?): A Reader document's position, word, timing, speed and cut points.\n- search_content(query, root, caseInsensitive?, maxResults?): Ripgrep content search under a root; secret paths are never returned.\n- capture(target, tabId?): Rasterize a Terax surface to a PNG in the app cache and return its path. Refused while a private terminal is in scope.\n- wait(ms): Pause before reading state again, for UI changes that settle asynchronously.",
       "annotations": {
         "title": "Inspect Terax",
         "readOnlyHint": true,
@@ -60,6 +60,18 @@
           "id": {
             "type": "string",
             "description": "Id of the watch, from watch.list."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "es-ES",
+              "en-US",
+              "fr-FR",
+              "de-DE",
+              "it-IT",
+              "pt-BR"
+            ],
+            "description": "Only voices of this language."
           },
           "docId": {
             "type": "string",
@@ -172,7 +184,9 @@
         },
         "list_voices": {
           "command": "tts.voices",
-          "params": []
+          "params": [
+            "language"
+          ]
         },
         "list_reader_documents": {
           "command": "reader.list",
@@ -821,6 +835,7 @@
               "general",
               "models",
               "voice",
+              "dictation",
               "agents",
               "themes",
               "shortcuts",
@@ -1223,7 +1238,7 @@
     {
       "name": "terax_speak",
       "title": "Speak through Terax",
-      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?, split?, voiceId?): Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.\n- generate_reading(text?, path?, docId?, title?, split?, voiceId?, show?): Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine, withModel?): Install a speech engine and its default model.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?, split?, voiceId?): Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.\n- generate_reading(text?, path?, docId?, title?, split?, voiceId?, show?): Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
       "annotations": {
         "title": "Speak through Terax",
         "readOnlyHint": false,
@@ -1265,7 +1280,11 @@
             "type": "string",
             "enum": [
               "es-ES",
-              "en-US"
+              "en-US",
+              "fr-FR",
+              "de-DE",
+              "it-IT",
+              "pt-BR"
             ],
             "description": "Language whose default voice profile should speak. Omit to use the preferred language."
           },
@@ -1279,6 +1298,10 @@
               "zonos3"
             ],
             "description": "Speech engine. stop_engine stops every running engine when omitted."
+          },
+          "withModel": {
+            "type": "boolean",
+            "description": "Also download the engine's default model (Kokoro-82M, Chatterbox Multilingual, Pocket TTS, OmniVoice, ZONOS3-Mini). Default true."
           },
           "model": {
             "type": "string",
@@ -1427,7 +1450,8 @@
         "install_engine": {
           "command": "tts.install",
           "params": [
-            "engine"
+            "engine",
+            "withModel"
           ]
         },
         "download_model": {

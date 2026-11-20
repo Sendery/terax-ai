@@ -12,6 +12,7 @@ import {
   type TtsModelId,
   type TtsParamName,
 } from "./engines";
+import { DEFAULT_PRESET_IDS, findVoice, presetProfile } from "./presets";
 
 export type VoiceParams = Partial<Record<TtsParamName, number>>;
 
@@ -36,12 +37,11 @@ export type VoiceProfile = {
   createdAt: number;
 };
 
-export type VoiceDefaults = Record<TtsLanguage, string | null>;
+/** The voice id each language reads with: a stored profile or a preset id
+ *  (`preset:<model>:<language>:<voice>`). A missing language has none. */
+export type VoiceDefaults = Partial<Record<TtsLanguage, string | null>>;
 
-export const EMPTY_DEFAULTS: VoiceDefaults = {
-  "es-ES": null,
-  "en-US": null,
-};
+export const EMPTY_DEFAULTS: VoiceDefaults = {};
 
 export const MAX_STYLE_TEXT = 2000;
 export const MAX_TAGS = 32;
@@ -230,7 +230,7 @@ function clonedBuiltIn(
  *  anything, and so every model arrives with a voice that can be heard without
  *  recording anything first. The per-language defaults stay on Kokoro, the
  *  smallest download; the rest are there to be picked. */
-export const BUILT_IN_DEFAULTS: readonly VoiceProfile[] = [
+export const LEGACY_BUILT_INS: readonly VoiceProfile[] = [
   {
     id: BUILT_IN_ES_ID,
     name: "Dora",
@@ -319,49 +319,12 @@ export const BUILT_IN_DEFAULTS: readonly VoiceProfile[] = [
   ),
 ];
 
-/** The seed version each built-in arrived in, so an existing install is given
- *  what it has never seen without resurrecting what it deleted. */
-const BUILT_IN_SINCE: Record<string, number> = {
-  [BUILT_IN_ES_ID]: 1,
-  [BUILT_IN_EN_ID]: 1,
-  [BUILT_IN_CHATTERBOX_ES_ID]: 2,
-  [BUILT_IN_CHATTERBOX_EN_ID]: 2,
-  [BUILT_IN_TURBO_ID]: 2,
-  [BUILT_IN_NANO_ID]: 2,
-  [BUILT_IN_POCKET_ES_ID]: 3,
-  [BUILT_IN_POCKET_EN_ID]: 3,
-  [BUILT_IN_OMNIVOICE_ES_ID]: 3,
-  [BUILT_IN_OMNIVOICE_EN_ID]: 3,
-  [BUILT_IN_ZONOS3_ES_ID]: 3,
-  [BUILT_IN_ZONOS3_EN_ID]: 3,
-};
-
-/** Copies of the built-in voices introduced after `version`. */
-export function builtInsAddedAfter(version: number): VoiceProfile[] {
-  return BUILT_IN_DEFAULTS.filter(
-    (profile) => (BUILT_IN_SINCE[profile.id] ?? 1) > version,
-  ).map((profile) => ({ ...profile }));
-}
-
-/** Named rather than derived from the seed list: adding a voice for a new model
- *  must not silently move the default off Kokoro. */
-const DEFAULT_PROFILE_IDS: VoiceDefaults = {
-  "es-ES": BUILT_IN_ES_ID,
-  "en-US": BUILT_IN_EN_ID,
-};
-
-export function builtInDefaultsMap(): VoiceDefaults {
-  return { ...DEFAULT_PROFILE_IDS };
-}
-
 export function defaultVoiceFor(
   profiles: readonly VoiceProfile[],
   defaults: VoiceDefaults,
   language: TtsLanguage,
 ): VoiceProfile | null {
-  const id = defaults[language];
-  if (!id) return null;
-  const profile = profiles.find((p) => p.id === id);
+  const profile = findVoice(profiles, defaults[language]);
   if (!profile) return null;
   return profile.language === language ? profile : null;
 }
@@ -371,28 +334,33 @@ export type ResolveVoiceRequest = {
   language?: TtsLanguage | null;
 };
 
-/** Order: explicit voice, then the default for the asked language, then the
- *  default for the preferred language, then any profile in the asked language. */
+/** Order: explicit voice (stored profile or preset, legacy built-in ids
+ *  included), then the default for the asked language, then the default for
+ *  the preferred language, then the user's first profile in the asked
+ *  language, then the catalogue default for it. */
 export function resolveVoice(
   profiles: readonly VoiceProfile[],
   defaults: VoiceDefaults,
   prefs: { ttsDefaultLanguage: TtsLanguage },
   request: ResolveVoiceRequest = {},
 ): VoiceProfile | null {
-  if (request.voiceId) {
-    const byId = profiles.find((p) => p.id === request.voiceId);
-    if (byId) return byId;
-  }
+  const byId = findVoice(profiles, request.voiceId);
+  if (byId) return byId;
   const asked = request.language ?? prefs.ttsDefaultLanguage;
   const forAsked = defaultVoiceFor(profiles, defaults, asked);
   if (forAsked) return forAsked;
-  const preferred = defaultVoiceFor(
-    profiles,
-    defaults,
-    prefs.ttsDefaultLanguage,
+  if (!request.language) {
+    const preferred = defaultVoiceFor(
+      profiles,
+      defaults,
+      prefs.ttsDefaultLanguage,
+    );
+    if (preferred) return preferred;
+  }
+  return (
+    profiles.find((p) => p.language === asked) ??
+    presetProfile(DEFAULT_PRESET_IDS[asked])
   );
-  if (preferred) return preferred;
-  return profiles.find((p) => p.language === asked) ?? null;
 }
 
 export function profilesByLanguage(

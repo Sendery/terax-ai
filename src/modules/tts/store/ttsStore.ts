@@ -6,8 +6,13 @@ import {
 } from "@/modules/tts/lib/history";
 import type { TtsStatus } from "@/modules/tts/lib/native";
 import {
+  addSpeedSample,
+  type SpeedSamples,
+} from "@/modules/tts/lib/speed";
+import {
   hydrateVoicesState,
   persistDefaults,
+  persistSpeed,
   persistVoices,
 } from "@/modules/tts/lib/store";
 import {
@@ -39,7 +44,14 @@ export type TtsStoreState = {
   /** Last runtime status read by any surface in this window. Null until
    *  something reads it, so the ambient snapshot never triggers an IPC call. */
   status: TtsStatus | null;
+  /** Real-time factors measured per engine on this machine. */
+  speed: SpeedSamples;
   hydrate: () => Promise<void>;
+  recordSpeed: (
+    engine: TtsEngineId,
+    audioSeconds: number,
+    wallSeconds: number,
+  ) => void;
   saveProfile: (profile: VoiceProfile) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
   setDefaultProfile: (
@@ -78,6 +90,7 @@ export const useTtsStore = create<TtsStoreState>((set, get) => ({
   error: null,
   runningEngines: [],
   status: null,
+  speed: {},
 
   hydrate: () => {
     if (get().hydrated) return Promise.resolve();
@@ -85,6 +98,7 @@ export const useTtsStore = create<TtsStoreState>((set, get) => ({
       set({
         profiles: state.profiles,
         defaults: state.defaults,
+        speed: { ...state.speed, ...get().speed },
         hydrated: true,
       });
     });
@@ -139,6 +153,13 @@ export const useTtsStore = create<TtsStoreState>((set, get) => ({
     const defaults = { ...get().defaults, [language]: id };
     set({ defaults });
     await persistDefaults(defaults);
+  },
+
+  recordSpeed: (engine, audioSeconds, wallSeconds) => {
+    const next = addSpeedSample(get().speed, engine, audioSeconds, wallSeconds);
+    if (next === get().speed) return;
+    set({ speed: next });
+    void persistSpeed(next);
   },
 
   setSpeech: (patch) => set(patch),

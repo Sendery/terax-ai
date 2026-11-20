@@ -9,7 +9,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -30,13 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
-  setTtsDefaultLanguage,
   setTtsDevice,
   setTtsIdleStopMinutes,
+  ttsDeviceFor,
   TTS_IDLE_STOP_MAX,
   TTS_IDLE_STOP_MIN,
 } from "@/modules/settings/store";
@@ -52,38 +51,37 @@ import {
   EXPRESSIVENESS_TAGS,
   formatApproxBytes,
   formatBytes,
+  formatSpeed,
   BUILTIN_VOICE_ID,
   isBuiltinVoice,
   isProfileSpeakable,
   isRunning,
-  KOKORO_PRESET_VOICES,
   LANGUAGE_LABELS,
+  measuredSpeed,
   MODEL_APPROX_BYTES,
-  MODEL_BUILTIN_VOICE,
   MODEL_DESCRIPTIONS,
   MODEL_LABELS,
   MODEL_LANGUAGES,
   MODEL_PARAMS,
   MODEL_VOICE_SOURCE,
   modelsForLanguage,
+  modelsOfEngine,
   modelStatusOf,
   modelSupportsTags,
   pickJob,
   presetVoicesOf,
+  PREVIEW_SENTENCES,
   previewVoice,
   sidecarVoices,
   toMono24kWav,
-  TTS_DEVICES,
   TTS_ENGINES,
   TTS_LANGUAGES,
-  TTS_MODELS,
   ttsNative,
   useTtsRuntime,
   useTtsStore,
   type TtsCacheEntry,
   type TtsDevice,
   type TtsEngineId,
-  type TtsJob,
   type TtsLanguage,
   type TtsModelId,
   type TtsPresetVoice,
@@ -91,14 +89,10 @@ import {
   type VoiceParams,
   type VoiceProfile,
 } from "@/modules/tts";
+import { deviceChoices } from "@/modules/tts/lib/devices";
 import {
-  Add01Icon,
-  AlertCircleIcon,
-  Cancel01Icon,
-  CheckmarkCircle02Icon,
   Delete02Icon,
   Download04Icon,
-  Edit02Icon,
   FolderOpenIcon,
   HardDriveIcon,
   PlayIcon,
@@ -108,87 +102,82 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
-import { VoiceBlock } from "./VoiceBlock";
+import { LanguagesCard } from "./voice/LanguagesCard";
+import { RecordSample } from "./voice/RecordSample";
+import {
+  Card,
+  ErrorLine,
+  FieldLabel,
+  JobLog,
+  Row,
+  type Runtime,
+  StateBadge,
+} from "./voice/ui";
+import { VoicesGallery } from "./voice/VoicesGallery";
 
-type Runtime = ReturnType<typeof useTtsRuntime>;
+type VoiceTab = "voices" | "providers" | "languages" | "advanced";
 
 export function VoiceSection() {
   const runtime = useTtsRuntime();
   const hydrate = useTtsStore((s) => s.hydrate);
+  const [tab, setTab] = useState<VoiceTab>("voices");
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-5">
       <SectionHeader
         title="Voice"
-        description="Speech in and speech out. Everything under Speech output runs on this machine and lives in one folder you can delete."
+        description="The voices Terax reads with, where they come from, and in which languages. Everything runs on this machine and lives in one folder you can delete."
       />
 
-      <VoiceBlock />
+      {runtime.error ? (
+        <ErrorLine message={`Could not read the speech status: ${runtime.error}`} />
+      ) : null}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5">
-          <FieldLabel>Speech output</FieldLabel>
-          <span className="text-[10.5px] text-muted-foreground">
-            Install an engine, download a model, then define the voices Terax
-            reads with.
-          </span>
-        </div>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as VoiceTab)}>
+        <TabsList>
+          <TabsTrigger value="voices">Voices</TabsTrigger>
+          <TabsTrigger value="providers">Providers</TabsTrigger>
+          <TabsTrigger value="languages">Languages</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-        {runtime.error ? (
-          <ErrorLine
-            message={`Could not read the speech status: ${runtime.error}`}
-          />
-        ) : null}
-
-        <DefaultsCard />
-        <RuntimeCard runtime={runtime} />
-        {TTS_ENGINES.map((engine) => (
-          <EngineCard key={engine} engine={engine} runtime={runtime} />
-        ))}
-        <ModelsCard runtime={runtime} />
-        <VoicesCard status={runtime.status} />
-        <StorageCard runtime={runtime} />
-      </section>
+      {tab === "voices" ? (
+        <VoicesTab runtime={runtime} onAddLanguage={() => setTab("languages")} />
+      ) : null}
+      {tab === "providers" ? (
+        <section className="flex flex-col gap-3">
+          {TTS_ENGINES.map((engine) => (
+            <ProviderCard key={engine} engine={engine} runtime={runtime} />
+          ))}
+        </section>
+      ) : null}
+      {tab === "languages" ? <LanguagesCard status={runtime.status} /> : null}
+      {tab === "advanced" ? (
+        <section className="flex flex-col gap-3">
+          <RuntimeCard runtime={runtime} />
+          <IdleStopCard />
+          <StorageCard runtime={runtime} />
+          <OtherWeightsCard runtime={runtime} />
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function DefaultsCard() {
-  const language = usePreferencesStore((s) => s.ttsDefaultLanguage);
+function IdleStopCard() {
   const idleStop = usePreferencesStore((s) => s.ttsIdleStopMinutes);
   const [draft, setDraft] = useState(String(idleStop));
 
   useEffect(() => setDraft(String(idleStop)), [idleStop]);
 
   return (
-    <Card title="Defaults" icon={Rocket01Icon}>
-      <Row label="Language">
-        <Select
-          value={language}
-          onValueChange={(value) =>
-            void setTtsDefaultLanguage(value as TtsLanguage)
-          }
-        >
-          <SelectTrigger
-            aria-label="Default language for read aloud"
-            className="h-8 w-full text-[11.5px]"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TTS_LANGUAGES.map((id) => (
-              <SelectItem key={id} value={id} className="text-[12px]">
-                {LANGUAGE_LABELS[id]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Row>
-      <Row label="Idle stop">
+    <Card title="Idle stop" icon={Rocket01Icon}>
+      <Row label="Minutes">
         <div className="flex flex-1 items-center gap-2">
           <Input
             type="number"
@@ -202,8 +191,8 @@ function DefaultsCard() {
           />
           <span className="text-[10.5px] text-muted-foreground">
             {idleStop === 0
-              ? "Minutes. Zero keeps the engine loaded until you stop it."
-              : `Minutes of silence before the engine is stopped and its memory freed.`}
+              ? "Zero keeps engines loaded until you stop them."
+              : "Minutes of silence before an engine is stopped and its memory freed."}
           </span>
         </div>
       </Row>
@@ -268,14 +257,36 @@ function RuntimeCard({ runtime }: { runtime: Runtime }) {
   );
 }
 
-function EngineCard({
+/** Languages any of an engine's models speaks, in catalogue order. */
+function engineLanguages(engine: TtsEngineId): TtsLanguage[] {
+  const models = modelsOfEngine(engine);
+  return TTS_LANGUAGES.filter((language) =>
+    models.some((model) => MODEL_LANGUAGES[model].includes(language)),
+  );
+}
+
+const CLONING: Record<TtsEngineId, string> = {
+  kokoro: "Preset voices, no cloning",
+  chatterbox: "Clones a sample",
+  pocket: "Preset voices, no cloning",
+  omnivoice: "Clones a sample or designs a voice",
+  zonos3: "Default voices or a cloned sample",
+};
+
+/**
+ * One provider: what it is, whether this machine suits it, one Install that
+ * brings the engine and its default model, its own device, and the speed
+ * measured here once it has spoken.
+ */
+function ProviderCard({
   engine,
   runtime,
 }: {
   engine: TtsEngineId;
   runtime: Runtime;
 }) {
-  const device = usePreferencesStore((s) => s.ttsDevice);
+  const devices = usePreferencesStore((s) => s.ttsDevices);
+  const speed = useTtsStore((s) => s.speed);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const entry = engineStatusOf(runtime.status, engine);
@@ -283,8 +294,11 @@ function EngineCard({
     runtime.jobs,
     (j) =>
       j.engine === engine &&
-      (j.kind === "engine-install" || j.kind === "engine-remove"),
+      (j.kind === "engine-install" ||
+        j.kind === "engine-remove" ||
+        j.kind === "model-download"),
   );
+  const device = ttsDeviceFor(devices, engine);
 
   const run = async (label: string, action: () => Promise<unknown>) => {
     setBusy(label);
@@ -303,6 +317,21 @@ function EngineCard({
   const running = entry?.running ?? false;
   const plan = entry?.plan ?? null;
   const unsupported = plan ? !plan.supported : false;
+  const models = modelsOfEngine(engine);
+  const defaultModel = models[0];
+  const languages = engineLanguages(engine);
+  const choices = deviceChoices(engine, plan, runtime.status?.hardware);
+  const measured = measuredSpeed(speed, engine);
+  const fit = unsupported
+    ? { tone: "bad", label: "Not available here" }
+    : plan?.device === "cpu" && engine === "omnivoice"
+      ? { tone: "warn", label: "Slow here" }
+      : plan
+        ? { tone: "ok", label: "Suits this machine" }
+        : null;
+  const installBytes =
+    ENGINE_APPROX_BYTES[engine] + MODEL_APPROX_BYTES[defaultModel];
+  const working = !!busy || isRunning(job);
 
   return (
     <Card
@@ -311,16 +340,26 @@ function EngineCard({
       subtitle={ENGINE_DESCRIPTIONS[engine]}
       action={
         <div className="flex items-center gap-1.5">
-          {installed ? (
-            <StateBadge ok={running} label={running ? "Running" : "Stopped"} />
+          {fit ? (
+            <span
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px]",
+                fit.tone === "bad" && "bg-destructive/10 text-destructive",
+                fit.tone === "warn" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                fit.tone === "ok" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+              )}
+            >
+              {fit.label}
+            </span>
           ) : null}
           {installed ? (
             <>
+              <StateBadge ok={running} label={running ? "Running" : "Stopped"} />
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1.5 px-2 text-[11px]"
-                disabled={!!busy || isRunning(job)}
+                disabled={working}
                 onClick={() =>
                   void run(
                     running ? "stop" : "start",
@@ -345,7 +384,7 @@ function EngineCard({
                 size="sm"
                 variant="ghost"
                 className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                disabled={!!busy || isRunning(job)}
+                disabled={working}
                 onClick={() =>
                   void run("remove", () => ttsNative.removeEngine(engine))
                 }
@@ -359,7 +398,7 @@ function EngineCard({
               size="sm"
               variant="outline"
               className="h-7 gap-1.5 px-2 text-[11px]"
-              disabled={!!busy || isRunning(job) || unsupported}
+              disabled={working || unsupported}
               title={unsupported ? (plan?.unsupportedReason ?? undefined) : undefined}
               onClick={() =>
                 void run("install", () => ttsNative.installEngine(engine))
@@ -369,29 +408,41 @@ function EngineCard({
               (isRunning(job) && job?.kind === "engine-install") ? (
                 <Spinner className="size-3" />
               ) : (
-                <HugeiconsIcon
-                  icon={Download04Icon}
-                  size={12}
-                  strokeWidth={1.75}
-                />
+                <HugeiconsIcon icon={Download04Icon} size={12} strokeWidth={1.75} />
               )}
-              Install
+              Install, {formatApproxBytes(installBytes)}
             </Button>
           )}
         </div>
       }
     >
-      <p className="text-[10.5px] text-muted-foreground">
-        {unsupported && !installed
-          ? plan?.unsupportedReason
-          : installed
-            ? `Installed, ${formatBytes(entry?.sizeBytes ?? 0)} on disk${
-                entry?.torchBackend ? `, PyTorch ${entry.torchBackend} build` : ""
-              }.`
-            : `Not installed. The install needs about ${formatBytes(
-                ENGINE_APPROX_BYTES[engine],
-              )} and pulls the runtime first if it is missing.`}
-      </p>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10.5px] sm:grid-cols-4">
+        <div className="flex min-w-0 flex-col">
+          <dt className="text-muted-foreground">Languages</dt>
+          <dd className="truncate" title={languages.map((l) => LANGUAGE_LABELS[l]).join(", ")}>
+            {languages.map((l) => LANGUAGE_LABELS[l]).join(", ")}
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <dt className="text-muted-foreground">Voices</dt>
+          <dd>{CLONING[engine]}</dd>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <dt className="text-muted-foreground">Disk</dt>
+          <dd>
+            {installed
+              ? `${formatBytes(entry?.sizeBytes ?? 0)} installed`
+              : `About ${formatApproxBytes(installBytes)}`}
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <dt className="text-muted-foreground">Speed here</dt>
+          <dd>{measured ? `Measured: ${formatSpeed(measured)}` : "Not measured yet"}</dd>
+        </div>
+      </dl>
+      {unsupported ? (
+        <p className="text-[10.5px] text-muted-foreground">{plan?.unsupportedReason}</p>
+      ) : null}
       {plan?.supported && plan.notes.length > 0 ? (
         <div className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5">
           <span className="text-[10.5px] font-medium text-foreground">
@@ -404,30 +455,91 @@ function EngineCard({
           ))}
         </div>
       ) : null}
-      <Row label="Device">
-        <Select
-          value={device}
-          onValueChange={(value) => void setTtsDevice(value as TtsDevice)}
-        >
-          <SelectTrigger
-            aria-label={`Compute device for ${ENGINE_LABELS[engine]}`}
-            className="h-8 w-full text-[11.5px]"
+      {choices.length > 0 ? (
+        <Row label="Device">
+          <Select
+            value={device}
+            onValueChange={(value) => void setTtsDevice(engine, value as TtsDevice)}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TTS_DEVICES.map((id) => (
-              <SelectItem key={id} value={id} className="text-[12px]">
-                {DEVICE_LABELS[id]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Row>
+            <SelectTrigger
+              aria-label={`Compute device for ${ENGINE_LABELS[engine]}`}
+              className="h-8 w-full text-[11.5px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {choices.map((choice) => (
+                <SelectItem key={choice.id} value={choice.id} className="text-[12px]">
+                  {choice.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Row>
+      ) : null}
       {running && entry?.device && entry.device !== device ? (
         <p className="text-[10.5px] text-muted-foreground">
           Running on {DEVICE_LABELS[entry.device]}. Stop and start the engine to
           switch device.
+        </p>
+      ) : null}
+      {installed && models.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {models.map((model) => {
+            const status = modelStatusOf(runtime.status, model);
+            return (
+              <li
+                key={model}
+                className="flex items-center gap-2 rounded-md border border-border/50 bg-card/40 px-2.5 py-1.5"
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[11.5px] font-medium">
+                    {MODEL_LABELS[model]}
+                  </span>
+                  <span className="truncate text-[10.5px] text-muted-foreground">
+                    {MODEL_DESCRIPTIONS[model]}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[10.5px] text-muted-foreground">
+                  {status?.downloaded
+                    ? formatBytes(status.sizeBytes)
+                    : formatApproxBytes(MODEL_APPROX_BYTES[model])}
+                </span>
+                {status?.downloaded ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 shrink-0 px-2 text-[10.5px] text-muted-foreground hover:text-destructive"
+                    disabled={working}
+                    onClick={() =>
+                      void run(model, () => ttsNative.removeModel(model))
+                    }
+                  >
+                    Remove
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 shrink-0 gap-1 px-2 text-[10.5px]"
+                    disabled={working}
+                    onClick={() =>
+                      void run(model, () => ttsNative.downloadModel(model))
+                    }
+                  >
+                    {busy === model ? <Spinner className="size-3" /> : null}
+                    Download
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {engine === "pocket" ? (
+        <p className="text-[10.5px] text-muted-foreground">
+          Install fetches the Spanish and English models; French, German,
+          Italian and Portuguese download the first time they read.
         </p>
       ) : null}
       {error ? <ErrorLine message={error} /> : null}
@@ -436,7 +548,8 @@ function EngineCard({
   );
 }
 
-function ModelsCard({ runtime }: { runtime: Runtime }) {
+/** Weights in the shared cache that no current model uses. */
+function OtherWeightsCard({ runtime }: { runtime: Runtime }) {
   const [cache, setCache] = useState<TtsCacheEntry[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -471,129 +584,17 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
 
   return (
     <Card
-      title="Models"
+      title="Other cached weights"
       icon={Download04Icon}
-      subtitle="Weights are shared between engines and stored in the same folder."
+      subtitle="Downloaded by an older build or an engine Terax no longer offers. Removing them is safe."
     >
-      <ul className="flex flex-col gap-1.5">
-        {TTS_MODELS.map((model) => {
-          const engine = engineOf(model);
-          const status = modelStatusOf(runtime.status, model);
-          const engineInstalled =
-            engineStatusOf(runtime.status, engine)?.installed ?? false;
-          const job = pickJob(
-            runtime.jobs,
-            (j) => j.kind === "model-download" && j.model === model,
-          );
-          return (
-            <li
-              key={model}
-              className="flex flex-col gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2"
-            >
-              <div className="flex items-start gap-2">
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[12px] font-medium">
-                      {MODEL_LABELS[model]}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className="h-4 px-1 text-[9.5px] font-normal"
-                    >
-                      {ENGINE_LABELS[engine]}
-                    </Badge>
-                    {status?.downloaded ? (
-                      <StateBadge ok label="Downloaded" />
-                    ) : null}
-                  </div>
-                  <span className="text-[10.5px] text-muted-foreground">
-                    {MODEL_DESCRIPTIONS[model]}
-                  </span>
-                  <span className="text-[10.5px] text-muted-foreground/80">
-                    {MODEL_LANGUAGES[model]
-                      .map((l) => LANGUAGE_LABELS[l])
-                      .join(", ")}
-                    {" · "}
-                    {status?.downloaded
-                      ? formatBytes(status.sizeBytes)
-                      : formatApproxBytes(MODEL_APPROX_BYTES[model])}
-                    {" · "}
-                    {MODEL_VOICE_SOURCE[model] === "preset"
-                      ? "preset voices"
-                      : MODEL_BUILTIN_VOICE[model]
-                        ? "built-in voice or a cloned sample"
-                        : presetVoicesOf(model, MODEL_LANGUAGES[model][0]).length > 0
-                          ? "default voices or a cloned sample"
-                          : "cloned from a sample"}
-                  </span>
-                </div>
-                {status?.downloaded ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 shrink-0 gap-1.5 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                    disabled={busy === model}
-                    onClick={() =>
-                      void run(model, () => ttsNative.removeModel(model))
-                    }
-                  >
-                    <HugeiconsIcon
-                      icon={Delete02Icon}
-                      size={12}
-                      strokeWidth={1.75}
-                    />
-                    Remove
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
-                    disabled={
-                      !engineInstalled || busy === model || isRunning(job)
-                    }
-                    title={
-                      engineInstalled
-                        ? undefined
-                        : `Install ${ENGINE_LABELS[engine]} first`
-                    }
-                    onClick={() =>
-                      void run(model, () => ttsNative.downloadModel(model))
-                    }
-                  >
-                    {busy === model || isRunning(job) ? (
-                      <Spinner className="size-3" />
-                    ) : (
-                      <HugeiconsIcon
-                        icon={Download04Icon}
-                        size={12}
-                        strokeWidth={1.75}
-                      />
-                    )}
-                    Download
-                  </Button>
-                )}
-              </div>
-              {!engineInstalled && !status?.downloaded ? (
-                <p className="text-[10.5px] text-muted-foreground/80">
-                  Needs the {ENGINE_LABELS[engine]} engine.
-                </p>
-              ) : null}
-              <JobLog runtime={runtime} job={job} />
-            </li>
-          );
-        })}
-      </ul>
-
       {error ? <ErrorLine message={error} /> : null}
 
+      {unknown.length === 0 ? (
+        <p className="text-[10.5px] text-muted-foreground">Nothing to purge.</p>
+      ) : null}
       {unknown.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <FieldLabel>Other cached weights</FieldLabel>
-          <span className="text-[10.5px] text-muted-foreground">
-            Downloaded by an older build or an engine Terax no longer offers.
-            Removing them is safe.
-          </span>
           <ul className="flex flex-col gap-1">
             {unknown.map((entry) => (
               <li
@@ -628,211 +629,56 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
   );
 }
 
-function VoicesCard({ status }: { status: TtsStatus | null }) {
-  const profiles = useTtsStore((s) => s.profiles);
-  const defaults = useTtsStore((s) => s.defaults);
-  const hydrated = useTtsStore((s) => s.hydrated);
-  const setDefaultProfile = useTtsStore((s) => s.setDefaultProfile);
-  const removeProfile = useTtsStore((s) => s.removeProfile);
+/** The gallery plus the editor it opens for customizing, cloning and editing. */
+function VoicesTab({
+  runtime,
+  onAddLanguage,
+}: {
+  runtime: Runtime;
+  onAddLanguage: () => void;
+}) {
   const [editing, setEditing] = useState<VoiceProfile | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const defaultLanguage = usePreferencesStore((s) => s.ttsDefaultLanguage);
-
-  const preview = async (profile: VoiceProfile) => {
-    setError(null);
-    try {
-      await previewVoice(profile);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
 
   return (
-    <Card
-      title="Voices"
-      icon={PlayIcon}
-      subtitle="One default per language decides what read aloud uses."
-      action={
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 px-2 text-[11px]"
-          onClick={() =>
-            setEditing(
-              createProfile({
-                name: "New voice",
-                language: defaultLanguage,
-                model: "kokoro-82m",
-                voice: KOKORO_PRESET_VOICES[defaultLanguage][0]?.id ?? null,
-              }),
-            )
-          }
-        >
-          <HugeiconsIcon icon={Add01Icon} size={12} strokeWidth={1.75} />
-          New voice
-        </Button>
-      }
-    >
-      {error ? <ErrorLine message={error} /> : null}
-
-      {TTS_LANGUAGES.map((language) => {
-        const group = profiles.filter((p) => p.language === language);
-        return (
-          <div key={language} className="flex flex-col gap-1.5">
-            <FieldLabel>{LANGUAGE_LABELS[language]}</FieldLabel>
-            {group.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border/60 bg-card/30 px-3 py-3 text-center text-[10.5px] text-muted-foreground">
-                {hydrated
-                  ? `No ${LANGUAGE_LABELS[language]} voice yet. Add one to read aloud in ${LANGUAGE_LABELS[language]}.`
-                  : "Loading voices…"}
-              </p>
-            ) : (
-              <RadioGroup
-                value={defaults[language] ?? ""}
-                onValueChange={(value) =>
-                  void setDefaultProfile(language, value || null)
-                }
-                aria-label={`Default ${LANGUAGE_LABELS[language]} voice`}
-                className="flex flex-col gap-1"
-              >
-                {group.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2"
-                  >
-                    <RadioGroupItem
-                      value={profile.id}
-                      id={`default-${profile.id}`}
-                      aria-label={`Make ${profile.name} the default ${LANGUAGE_LABELS[language]} voice`}
-                    />
-                    <label
-                      htmlFor={`default-${profile.id}`}
-                      className="flex min-w-0 flex-1 cursor-pointer flex-col"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-[12px] font-medium">
-                          {profile.name}
-                        </span>
-                        {defaults[language] === profile.id ? (
-                          <Badge
-                            variant="secondary"
-                            className="h-4 px-1 text-[9.5px] font-normal"
-                          >
-                            Default
-                          </Badge>
-                        ) : null}
-                        {isProfileSpeakable(profile) ? null : (
-                          <Badge
-                            variant="outline"
-                            className="h-4 px-1 text-[9.5px] font-normal text-destructive"
-                          >
-                            Incomplete
-                          </Badge>
-                        )}
-                      </span>
-                      <span className="truncate text-[10.5px] text-muted-foreground">
-                        {MODEL_LABELS[profile.model]}
-                        {isBuiltinVoice(profile.model, profile.voice)
-                          ? ` · ${
-                              presetVoicesOf(profile.model, profile.language).find(
-                                (v) => v.id === profile.voice,
-                              )?.label ?? "built-in voice"
-                            }`
-                          : profile.voice
-                            ? ` · ${profile.voice}`
-                            : ""}
-                        {profile.sampleId ? " · cloned sample" : ""}
-                        {profile.style.tags?.length
-                          ? ` · ${profile.style.tags.length} tags`
-                          : ""}
-                      </span>
-                    </label>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
-                      disabled={
-                        !isProfileSpeakable(profile) ||
-                        !modelStatusOf(status, profile.model)?.downloaded
-                      }
-                      title={
-                        modelStatusOf(status, profile.model)?.downloaded
-                          ? "Speak a short sample"
-                          : `${MODEL_LABELS[profile.model]} is not downloaded`
-                      }
-                      onClick={() => void preview(profile)}
-                    >
-                      <HugeiconsIcon
-                        icon={PlayIcon}
-                        size={12}
-                        strokeWidth={1.75}
-                      />
-                      Preview
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-7 shrink-0"
-                      onClick={() => setEditing(profile)}
-                      aria-label={`Edit ${profile.name}`}
-                    >
-                      <HugeiconsIcon
-                        icon={Edit02Icon}
-                        size={12}
-                        strokeWidth={1.75}
-                      />
-                    </Button>
-                    {confirmDelete === profile.id ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 shrink-0 px-2 text-[11px] text-destructive"
-                        onClick={() => {
-                          setConfirmDelete(null);
-                          void removeProfile(profile.id);
-                        }}
-                      >
-                        Confirm
-                      </Button>
-                    ) : (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setConfirmDelete(profile.id)}
-                        aria-label={`Delete ${profile.name}`}
-                      >
-                        <HugeiconsIcon
-                          icon={Delete02Icon}
-                          size={12}
-                          strokeWidth={1.75}
-                        />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </RadioGroup>
-            )}
-          </div>
-        );
-      })}
-
+    <section className="flex flex-col gap-3">
+      <VoicesGallery
+        onChanged={() => void runtime.refresh()}
+        onEdit={(profile) => setEditing(profile)}
+        onCustomize={(option) =>
+          setEditing(
+            createProfile({
+              name: option.name,
+              model: option.model,
+              language: option.language,
+              voice: option.profile.voice,
+            }),
+          )
+        }
+        onNewClone={(language) => {
+          const model = (["zonos3-mini", "omnivoice", "chatterbox-multilingual"] as const).find(
+            (m) => MODEL_LANGUAGES[m].includes(language),
+          );
+          if (!model) return;
+          setEditing(
+            createProfile({
+              name: "My voice",
+              model,
+              language,
+              voice: null,
+            }),
+          );
+        }}
+        onAddLanguage={onAddLanguage}
+      />
       <VoiceEditor
         profile={editing}
-        status={status}
+        status={runtime.status}
         onClose={() => setEditing(null)}
       />
-    </Card>
+    </section>
   );
 }
 
-/**
- * The voice a model should start on. Presets keep whatever preset is already
- * chosen; clone models keep an imported sample if the draft carries one and
- * otherwise fall back to the voice in their own weights, so switching model
- * never leaves the profile unusable.
- */
 /** The voice picker's value for "clone my own sample". */
 const SAMPLE_CHOICE = "__sample__";
 
@@ -874,12 +720,15 @@ function VoiceEditor({
   const [presets, setPresets] = useState<TtsPresetVoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [sentence, setSentence] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDraft(profile);
     setError(null);
     setPresets(null);
+    setSentence(profile ? PREVIEW_SENTENCES[profile.language] : "");
   }, [profile]);
 
   const model = draft?.model ?? "kokoro-82m";
@@ -936,12 +785,12 @@ function VoiceEditor({
     });
   };
 
-  const importSample = async (file: File) => {
+  const importSample = async (file: Blob, name: string) => {
     setImporting(true);
     setError(null);
     try {
       const wav = await toMono24kWav(file);
-      const imported = await ttsNative.sampleImport(file.name, wav);
+      const imported = await ttsNative.sampleImport(name, wav);
       patch({ sampleId: imported.sampleId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -950,17 +799,34 @@ function VoiceEditor({
     }
   };
 
+  const preview = async () => {
+    setPreviewing(true);
+    setError(null);
+    try {
+      await previewVoice(createProfile({ ...draft, name: draft.name }), sentence);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const knownPresets = presetVoicesOf(draft.model, draft.language);
   // Kokoro's own list comes from the running engine (and takes blends typed by
   // hand); the other preset models are fully described by the static list.
-  const presetOptions =
-    presets && presets.length > 0
-      ? presets
-          .filter((v) => v.language === draft.language || v.language === "other")
-          .map((v) => ({ id: v.id, label: v.label || v.id }))
-      : draft.model === "kokoro-82m"
-        ? null
-        : [...knownPresets];
+  // Every preset is listed from the catalogue, so nothing has to run first; a
+  // running Kokoro adds any voice its weights carry beyond the catalogue.
+  const presetOptions = [
+    ...knownPresets,
+    ...(presets ?? [])
+      .filter((v) => v.language === draft.language || v.language === "other")
+      .filter((v) => !knownPresets.some((k) => k.id === v.id))
+      .map((v) => ({ id: v.id, label: v.label || v.id })),
+  ];
+  const customKokoro =
+    draft.model === "kokoro-82m" &&
+    !!draft.voice &&
+    !presetOptions.some((v) => v.id === draft.voice);
   const usesBuiltin = isBuiltinVoice(draft.model, draft.voice, draft.language);
   const ownVoices = MODEL_VOICE_SOURCE[draft.model] === "clone" ? knownPresets : [];
   const tagged = modelSupportsTags(draft.model);
@@ -1043,9 +909,8 @@ function VoiceEditor({
           {wantsPreset ? (
             <div className="flex flex-col gap-1">
               <FieldLabel htmlFor="voice-preset">Preset voice</FieldLabel>
-              {presetOptions ? (
-                <Select
-                  value={draft.voice ?? ""}
+              <Select
+                  value={customKokoro ? "" : (draft.voice ?? "")}
                   onValueChange={(v) => patch({ voice: v })}
                 >
                   <SelectTrigger
@@ -1062,30 +927,21 @@ function VoiceEditor({
                     ))}
                   </SelectContent>
                 </Select>
-              ) : (
+              {draft.model === "kokoro-82m" ? (
                 <>
                   <Input
-                    id="voice-preset"
-                    list="voice-preset-options"
+                    aria-label="Kokoro voice id or blend"
                     value={draft.voice ?? ""}
-                    placeholder={knownPresets[0]?.id ?? "af_heart"}
+                    placeholder="af_heart,bf_emma"
                     spellCheck={false}
                     onChange={(e) => patch({ voice: e.target.value })}
                     className="h-8 font-mono text-[11.5px]"
                   />
-                  <datalist id="voice-preset-options">
-                    {knownPresets.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </datalist>
                   <span className="text-[10.5px] text-muted-foreground">
-                    Start the engine to load its own list. Comma-separated ids
-                    blend two voices.
+                    Or type a voice id; comma-separated ids blend voices.
                   </span>
                 </>
-              )}
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -1155,8 +1011,19 @@ function VoiceEditor({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   e.target.value = "";
-                  if (file) void importSample(file);
+                  if (file) void importSample(file, file.name);
                 }}
+              />
+              <RecordSample
+                language={draft.language}
+                disabled={importing}
+                onRecorded={(blob) =>
+                  void importSample(
+                    blob,
+                    `recording-${new Date().toISOString().slice(0, 19)}.webm`,
+                  )
+                }
+                onError={setError}
               />
               <span className="text-[10.5px] text-muted-foreground">
                 About ten seconds of clean speech in{" "}
@@ -1281,6 +1148,36 @@ function VoiceEditor({
             </div>
           ) : null}
 
+          <div className="flex flex-col gap-1">
+            <FieldLabel htmlFor="voice-preview-sentence">Try it</FieldLabel>
+            <div className="flex items-center gap-2">
+              <Input
+                id="voice-preview-sentence"
+                value={sentence}
+                onChange={(e) => setSentence(e.target.value)}
+                className="h-8 text-[11.5px]"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0 gap-1.5 px-2 text-[11px]"
+                disabled={previewing || !isProfileSpeakable(createProfile({ ...draft }))}
+                onClick={() => void preview()}
+              >
+                {previewing ? (
+                  <Spinner className="size-3" />
+                ) : (
+                  <HugeiconsIcon icon={PlayIcon} size={12} strokeWidth={1.75} />
+                )}
+                Listen
+              </Button>
+            </div>
+            <span className="text-[10.5px] text-muted-foreground">
+              Plays with these settings before saving. The provider and model
+              must be installed.
+            </span>
+          </div>
+
           {error ? <ErrorLine message={error} /> : null}
         </div>
 
@@ -1390,164 +1287,5 @@ function StorageCard({ runtime }: { runtime: Runtime }) {
       {error ? <ErrorLine message={error} /> : null}
       <JobLog runtime={runtime} job={job} />
     </Card>
-  );
-}
-
-function JobLog({ runtime, job }: { runtime: Runtime; job: TtsJob | null }) {
-  if (!job) return null;
-  const log = runtime.logs[job.id];
-  const running = job.state === "running";
-  if (!running && !log) return null;
-
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-          {running ? <Spinner className="size-3" /> : null}
-          {running
-            ? "Working…"
-            : job.state === "done"
-              ? "Finished."
-              : job.state === "cancelled"
-                ? "Cancelled."
-                : `Failed with code ${job.exitCode ?? "unknown"}.`}
-        </span>
-        <div className="flex-1" />
-        {running ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 gap-1.5 px-2 text-[10.5px]"
-            onClick={() => void ttsNative.jobCancel(job.id)}
-          >
-            <HugeiconsIcon icon={Cancel01Icon} size={11} strokeWidth={1.75} />
-            Cancel
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[10.5px]"
-            onClick={() => runtime.forgetJobLog(job.id)}
-          >
-            Clear log
-          </Button>
-        )}
-      </div>
-      {log ? (
-        <pre className="max-h-40 min-w-0 overflow-auto rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 font-mono text-[10.5px] leading-relaxed whitespace-pre">
-          {log}
-        </pre>
-      ) : null}
-    </div>
-  );
-}
-
-function Card({
-  title,
-  subtitle,
-  icon,
-  action,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  icon: typeof HardDriveIcon;
-  action?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-2.5 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <HugeiconsIcon
-          icon={icon}
-          size={15}
-          strokeWidth={1.5}
-          className="mt-0.5 shrink-0 text-muted-foreground"
-        />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[12.5px] font-medium">{title}</span>
-          {subtitle ? (
-            <span className="text-[10.5px] text-muted-foreground">
-              {subtitle}
-            </span>
-          ) : null}
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-16 shrink-0 text-[11px] tracking-tight text-muted-foreground">
-        {label}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center">{children}</div>
-    </div>
-  );
-}
-
-const FIELD_LABEL_CLASS =
-  "text-[11px] font-medium tracking-tight text-muted-foreground";
-
-/** A heading with no control behind it must not render as a `<label>`. */
-function FieldLabel({
-  children,
-  htmlFor,
-}: {
-  children: React.ReactNode;
-  htmlFor?: string;
-}) {
-  if (!htmlFor) {
-    return <span className={FIELD_LABEL_CLASS}>{children}</span>;
-  }
-  return (
-    <label htmlFor={htmlFor} className={FIELD_LABEL_CLASS}>
-      {children}
-    </label>
-  );
-}
-
-function StateBadge({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <span
-      className={cn(
-        "flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]",
-        ok
-          ? "border-border/60 bg-card text-foreground"
-          : "border-border/50 bg-card/50 text-muted-foreground",
-      )}
-    >
-      <HugeiconsIcon
-        icon={ok ? CheckmarkCircle02Icon : StopIcon}
-        size={10}
-        strokeWidth={2}
-      />
-      {label}
-    </span>
-  );
-}
-
-function ErrorLine({ message }: { message: string }) {
-  return (
-    <p className="flex min-w-0 items-start gap-1.5 text-[10.5px] text-destructive">
-      <HugeiconsIcon
-        icon={AlertCircleIcon}
-        size={11}
-        strokeWidth={2}
-        className="mt-0.5 shrink-0"
-      />
-      <span className="min-w-0 break-words">{message}</span>
-    </p>
   );
 }
