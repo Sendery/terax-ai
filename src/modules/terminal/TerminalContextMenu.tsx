@@ -2,50 +2,33 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
-  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuShortcut,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { fmtShortcut, MOD_KEY } from "@/lib/platform";
 import {
-  LANGUAGE_LABELS,
-  profilesByLanguage,
-  TTS_LANGUAGES,
-  useTtsStore,
-  type TtsLanguage,
-} from "@/modules/tts";
+  type ReadAloudOptions,
+  ReadMenuItems,
+} from "@/modules/reader/components/ReadMenuItems";
+import { useSounding } from "@/modules/reader/lib/sounding";
 import {
-  AudioWave01Icon,
-  BookOpen01Icon,
   ClipboardPasteIcon,
   Copy01Icon,
   Flowchart01Icon,
-  LayoutBottomIcon,
   Note01Icon,
   Refresh01Icon,
   SparklesIcon,
-  StopIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { pasteIntoLeaf, repaintLeaf } from "./lib/rendererPool";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,
 } from "./lib/terminalClipboard";
 
-export type ReadAloudOptions = {
-  voiceId?: string;
-  language?: TtsLanguage;
-  /** Open the text in a Reader tab instead of speaking it in the background. */
-  reader?: boolean;
-  /** Read it along in the Reader panel under this tab, without leaving it. */
-  here?: boolean;
-};
+export type { ReadAloudOptions };
 
 /**
  * Selection actions shared with the floating popup that a primary-button
@@ -130,19 +113,8 @@ function MenuBody({
   // Read once at mount: the menu only mounts on open, and the selection must
   // not change under the open menu.
   const [selection] = useState(() => readSelection()?.trim() ?? "");
-  const profiles = useTtsStore((s) => s.profiles);
-  const defaults = useTtsStore((s) => s.defaults);
-  const speaking = useTtsStore((s) => s.speaking);
-  const hydrate = useTtsStore((s) => s.hydrate);
-
+  const sounding = useSounding();
   const offersSpeech = Boolean(onReadAloud) && !privateTerminal;
-
-  useEffect(() => {
-    if (!offersSpeech) return;
-    void hydrate();
-  }, [offersSpeech, hydrate]);
-
-  const grouped = useMemo(() => profilesByLanguage(profiles), [profiles]);
 
   return (
     <>
@@ -213,79 +185,12 @@ function MenuBody({
       {offersSpeech && onReadAloud ? (
         <>
           <ContextMenuSeparator />
-          <ContextMenuSub>
-            <ContextMenuSubTrigger disabled={selection.length === 0}>
-              <HugeiconsIcon
-                icon={AudioWave01Icon}
-                size={14}
-                strokeWidth={1.75}
-              />
-              <span className="flex-1">Read aloud</span>
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent className="min-w-48">
-              <ContextMenuItem onSelect={() => onReadAloud(selection, {})}>
-                Default voice
-              </ContextMenuItem>
-              {TTS_LANGUAGES.map((language) => (
-                <ContextMenuItem
-                  key={language}
-                  onSelect={() => onReadAloud(selection, { language })}
-                >
-                  {LANGUAGE_LABELS[language]}
-                </ContextMenuItem>
-              ))}
-              {profiles.length > 0 ? <ContextMenuSeparator /> : null}
-              {TTS_LANGUAGES.filter(
-                (language) => grouped[language].length > 0,
-              ).map((language) => (
-                <Fragment key={language}>
-                  <ContextMenuLabel className="text-muted-foreground">
-                    {LANGUAGE_LABELS[language]}
-                  </ContextMenuLabel>
-                  {grouped[language].map((profile) => (
-                    <ContextMenuItem
-                      key={profile.id}
-                      onSelect={() =>
-                        onReadAloud(selection, { voiceId: profile.id })
-                      }
-                    >
-                      <span className="flex-1 truncate">{profile.name}</span>
-                      {defaults[language] === profile.id ? (
-                        <span className="text-[10px] text-muted-foreground">
-                          Default
-                        </span>
-                      ) : null}
-                    </ContextMenuItem>
-                  ))}
-                </Fragment>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuItem
-            disabled={selection.length === 0}
-            onSelect={() => onReadAloud(selection, { here: true })}
-          >
-            <HugeiconsIcon
-              icon={LayoutBottomIcon}
-              size={14}
-              strokeWidth={1.75}
-            />
-            <span className="flex-1">Read here</span>
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={selection.length === 0}
-            onSelect={() => onReadAloud(selection, { reader: true })}
-          >
-            <HugeiconsIcon icon={BookOpen01Icon} size={14} strokeWidth={1.75} />
-            <span className="flex-1">Open in Reader tab</span>
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!speaking}
-            onSelect={() => onStopReading?.()}
-          >
-            <HugeiconsIcon icon={StopIcon} size={14} strokeWidth={1.75} />
-            <span className="flex-1">Stop reading</span>
-          </ContextMenuItem>
+          <ReadMenuItems
+            selection={selection}
+            onRead={onReadAloud}
+            onStop={onStopReading}
+            canStop={sounding}
+          />
         </>
       ) : null}
     </>

@@ -10,12 +10,26 @@ export type SelectionAskAiProps = {
   onAsk: () => void;
   onAddToNote: () => void;
   onOpenMermaid: () => void;
+  /**
+   * The reading actions, the same as the right-click menus. Absent where
+   * reading aloud is off (a private terminal).
+   */
+  reading?: {
+    onReadHere: () => void;
+    onReadInNewTab: () => void;
+    onSpeak: () => void;
+  };
   onDismiss: () => void;
 };
 
 const W = 168;
-const H = 93;
+const ROW = 28;
 const GAP = 10;
+
+/** Height of the popup: one row per action plus a hairline between them. */
+export function popupHeight(rows: number): number {
+  return rows * ROW + Math.max(0, rows - 1) + 2;
+}
 
 function ActionRow({
   label,
@@ -57,8 +71,10 @@ export function SelectionAskAi({
   onAsk,
   onAddToNote,
   onOpenMermaid,
+  reading,
   onDismiss,
 }: SelectionAskAiProps) {
+  const H = popupHeight(reading ? 6 : 3);
   const pos = useRef({ top: 0, left: 0 });
   const open = state === "open";
 
@@ -105,6 +121,28 @@ export function SelectionAskAi({
           label="Open Mermaid"
           onClick={onOpenMermaid}
         />
+        {reading ? (
+          <>
+            <div className="h-px bg-border/60" />
+            <ActionRow
+              disabled={!open}
+              label="Read here"
+              onClick={reading.onReadHere}
+            />
+            <div className="h-px bg-border/60" />
+            <ActionRow
+              disabled={!open}
+              label="Read in new tab"
+              onClick={reading.onReadInNewTab}
+            />
+            <div className="h-px bg-border/60" />
+            <ActionRow
+              disabled={!open}
+              label="Speak"
+              onClick={reading.onSpeak}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

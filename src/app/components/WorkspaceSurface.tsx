@@ -8,6 +8,10 @@ import { MermaidStack } from "@/modules/mermaid";
 import { PrReviewStack } from "@/modules/pr-review";
 import { PreviewStack } from "@/modules/preview";
 import { ReaderDock, ReaderStack } from "@/modules/reader";
+import {
+  ReadContextMenu,
+  type ReadContextMenuBinding,
+} from "@/modules/reader/components/ReadContextMenu";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
 import type { ComponentProps } from "react";
@@ -32,6 +36,8 @@ export type ReaderDockBinding = {
   onOpenAsTab: ReaderDockProps["onOpenAsTab"];
   onEscape: (tabId: number) => void;
   originTab: ReaderDockProps["originTab"];
+  /** A Reader tab's "Dock here": back into the panel of its origin tab. */
+  onDockHere: (tabId: number, docId: string) => void;
 };
 
 type Props = {
@@ -63,6 +69,8 @@ type Props = {
   onReaderClose: (tabId: number) => void;
   onReaderTitle: (tabId: number, title: string) => void;
   readerDock: ReaderDockBinding;
+  /** Right-click in the editor and Markdown views: clipboard and reading. */
+  editorReadMenu: ReadContextMenuBinding;
   onGitHistorySearchHandle: GitHistoryStackProps["onSearchHandle"];
   onSetRenderableView: EditorStackProps["onSetRenderableView"];
   onMermaidSourceChange: MermaidStackProps["onSourceChange"];
@@ -103,6 +111,7 @@ export function WorkspaceSurface({
   onReaderClose,
   onReaderTitle,
   readerDock,
+  editorReadMenu,
   onGitHistorySearchHandle,
   onSetRenderableView,
   onMermaidSourceChange,
@@ -152,22 +161,24 @@ export function WorkspaceSurface({
               homePath={homePath}
             />
           </div>
-          <div
-            className={cn(
-              "absolute inset-0 px-3 pt-2 pb-2",
-              !isEditorTab && "invisible pointer-events-none",
-            )}
-            aria-hidden={!isEditorTab}
-          >
-            <EditorStack
-              tabs={tabs}
-              activeId={activeId}
-              registerHandle={registerEditorHandle}
-              onDirtyChange={onEditorDirtyChange}
-              onCloseTab={onEditorCloseTab}
-              onSetRenderableView={onSetRenderableView}
-            />
-          </div>
+          <ReadContextMenu binding={editorReadMenu}>
+            <div
+              className={cn(
+                "absolute inset-0 px-3 pt-2 pb-2",
+                !isEditorTab && "invisible pointer-events-none",
+              )}
+              aria-hidden={!isEditorTab}
+            >
+              <EditorStack
+                tabs={tabs}
+                activeId={activeId}
+                registerHandle={registerEditorHandle}
+                onDirtyChange={onEditorDirtyChange}
+                onCloseTab={onEditorCloseTab}
+                onSetRenderableView={onSetRenderableView}
+              />
+            </div>
+          </ReadContextMenu>
           <div
             className={cn(
               "absolute inset-0 px-3 pt-2 pb-2",
@@ -259,6 +270,12 @@ export function WorkspaceSurface({
               activeId={activeId}
               onClose={onReaderClose}
               onTitle={onReaderTitle}
+              binding={{
+                onPick: readerDock.onPick,
+                onDeleted: readerDock.onDeleted,
+                originTab: readerDock.originTab,
+                onDockHere: readerDock.onDockHere,
+              }}
             />
           </div>
         </div>

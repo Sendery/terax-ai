@@ -3,6 +3,7 @@ import {
   getBindingTokens,
   type KeyBinding,
   matchBinding,
+  migrateShortcutOverrides,
   SHORTCUTS,
 } from "./shortcuts";
 
@@ -138,5 +139,35 @@ describe("default bindings", () => {
       ctrlKey: binding.ctrl === true,
     });
     expect(matchBinding(pressed, binding)).toBe(true);
+  });
+});
+
+describe("migrateShortcutOverrides", () => {
+  it("moves a customized tts.stop binding to speech.stop", () => {
+    const binding = [{ meta: true, key: "s" }];
+    expect(migrateShortcutOverrides({ "tts.stop": binding })).toEqual({
+      "speech.stop": binding,
+    });
+  });
+
+  it("keeps a binding already stored under the new id", () => {
+    const old = [{ meta: true, key: "s" }];
+    const current = [{ meta: true, key: "x" }];
+    expect(
+      migrateShortcutOverrides({ "tts.stop": old, "speech.stop": current }),
+    ).toEqual({ "speech.stop": current });
+  });
+
+  it("leaves everything else untouched", () => {
+    const stored = { "tab.new": [{ meta: true, key: "t" }] };
+    expect(migrateShortcutOverrides(stored)).toBe(stored);
+    expect(migrateShortcutOverrides(undefined)).toBeUndefined();
+    expect(migrateShortcutOverrides(null)).toBeNull();
+  });
+
+  it("registers speech.stop and no tts.stop shortcut", () => {
+    const ids = SHORTCUTS.map((s) => s.id as string);
+    expect(ids).toContain("speech.stop");
+    expect(ids).not.toContain("tts.stop");
   });
 });
