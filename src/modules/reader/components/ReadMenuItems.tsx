@@ -8,14 +8,13 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import { IS_MAC } from "@/lib/platform";
+import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
-  isProfileSpeakable,
   LANGUAGE_LABELS,
-  profilesByLanguage,
-  TTS_LANGUAGES,
   type TtsLanguage,
   useTtsStore,
-  type VoiceProfile,
+  useVoiceOptions,
+  type VoiceOption,
 } from "@/modules/tts";
 import {
   AudioWave01Icon,
@@ -65,60 +64,62 @@ type Props = {
   canStop: boolean;
 };
 
+/**
+ * The voices ready to speak in the enabled languages, from the same list the
+ * status bar, the Reader and Settings use: stored profiles and the providers'
+ * own voices alike.
+ */
 function useSpeakableVoices(): {
-  grouped: Record<TtsLanguage, VoiceProfile[]>;
-  defaults: Record<TtsLanguage, string | null>;
+  grouped: [TtsLanguage, VoiceOption[]][];
   any: boolean;
 } {
-  const profiles = useTtsStore((s) => s.profiles);
-  const defaults = useTtsStore((s) => s.defaults);
   const hydrate = useTtsStore((s) => s.hydrate);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+  const options = useVoiceOptions();
   return useMemo(() => {
-    const speakable = profiles.filter(isProfileSpeakable);
-    return {
-      grouped: profilesByLanguage(speakable),
-      defaults,
-      any: speakable.length > 0,
-    };
-  }, [profiles, defaults]);
+    const byLanguage = new Map<TtsLanguage, VoiceOption[]>();
+    for (const option of options) {
+      if (!option.ready) continue;
+      const list = byLanguage.get(option.language) ?? [];
+      list.push(option);
+      byLanguage.set(option.language, list);
+    }
+    const grouped = [...byLanguage.entries()].map(
+      ([language, list]): [TtsLanguage, VoiceOption[]] => [
+        language,
+        [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)),
+      ],
+    );
+    return { grouped, any: grouped.length > 0 };
+  }, [options]);
 }
 
 function VoiceItems({
   onPick,
   grouped,
-  defaults,
 }: {
   onPick: (voiceId: string) => void;
-  grouped: Record<TtsLanguage, VoiceProfile[]>;
-  defaults: Record<TtsLanguage, string | null>;
+  grouped: [TtsLanguage, VoiceOption[]][];
 }) {
   return (
     <>
-      {TTS_LANGUAGES.filter((language) => grouped[language].length > 0).map(
-        (language) => (
-          <Fragment key={language}>
-            <ContextMenuLabel className="text-muted-foreground">
-              {LANGUAGE_LABELS[language]}
-            </ContextMenuLabel>
-            {grouped[language].map((profile) => (
-              <ContextMenuItem
-                key={profile.id}
-                onSelect={() => onPick(profile.id)}
-              >
-                <span className="flex-1 truncate">{profile.name}</span>
-                {defaults[language] === profile.id ? (
-                  <span className="text-[10px] text-muted-foreground">
-                    Default
-                  </span>
-                ) : null}
-              </ContextMenuItem>
-            ))}
-          </Fragment>
-        ),
-      )}
+      {grouped.map(([language, list]) => (
+        <Fragment key={language}>
+          <ContextMenuLabel className="text-muted-foreground">
+            {LANGUAGE_LABELS[language]}
+          </ContextMenuLabel>
+          {list.map((voice) => (
+            <ContextMenuItem key={voice.id} onSelect={() => onPick(voice.id)}>
+              <span className="flex-1 truncate">{voice.name}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {voice.isDefault ? "Default" : voice.provider}
+              </span>
+            </ContextMenuItem>
+          ))}
+        </Fragment>
+      ))}
     </>
   );
 }
@@ -136,7 +137,9 @@ export function ReadMenuItems({
   onStop,
   canStop,
 }: Props) {
-  const { grouped, defaults, any } = useSpeakableVoices();
+  const { grouped, any } = useSpeakableVoices();
+  // Only the languages enabled in Settings, Voice, Languages.
+  const languages = usePreferencesStore((s) => s.ttsLanguages);
   const hasSelection = selection.length > 0;
   const canRead = hasSelection || documentFallback;
 
@@ -151,7 +154,7 @@ export function ReadMenuItems({
           <ContextMenuItem onSelect={() => onRead(selection, {})}>
             Default voice
           </ContextMenuItem>
-          {TTS_LANGUAGES.map((language) => (
+          {languages.map((language) => (
             <ContextMenuItem
               key={language}
               onSelect={() => onRead(selection, { language })}
@@ -162,7 +165,6 @@ export function ReadMenuItems({
           {any ? <ContextMenuSeparator /> : null}
           <VoiceItems
             grouped={grouped}
-            defaults={defaults}
             onPick={(voiceId) => onRead(selection, { voiceId })}
           />
         </ContextMenuSubContent>
@@ -188,7 +190,6 @@ export function ReadMenuItems({
           <ContextMenuSubContent className="min-w-48">
             <VoiceItems
               grouped={grouped}
-              defaults={defaults}
               onPick={(voiceId) => onRead(selection, { here: true, voiceId })}
             />
           </ContextMenuSubContent>

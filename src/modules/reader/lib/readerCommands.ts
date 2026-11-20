@@ -27,14 +27,16 @@ import {
 } from "./player";
 import { allCuts, pausesBySegment } from "./manifest";
 import { type ExportSplit, fragmentPlan } from "./flow";
+import { findVoice } from "@/modules/tts/lib/presets";
 import { useTtsStore } from "@/modules/tts/store/ttsStore";
 
 /** Sets the document's voice from an agent, refusing an unknown profile. */
 async function applyVoice(docId: string, voiceId: string): Promise<void> {
   const tts = useTtsStore.getState();
   await tts.hydrate();
-  if (!useTtsStore.getState().profiles.some((p) => p.id === voiceId))
-    failure(`No voice profile ${voiceId}; see list_voices`);
+  // Stored profiles and the providers' own voices (preset ids) both count.
+  if (!findVoice(useTtsStore.getState().profiles, voiceId))
+    failure(`No voice ${voiceId}; see list_voices`);
   await setReaderVoice(docId, voiceId);
 }
 

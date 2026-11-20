@@ -177,8 +177,10 @@ describe("seedVoicesState", () => {
     );
     expect(state.seeded).toBe(false);
     expect(state.profiles.map((p) => p.id)).toEqual(["v-1"]);
-    // A default in the wrong language is dropped, not kept dangling.
-    expect(state.defaults).toEqual({ "es-ES": "v-1" });
+    // A default in the wrong language is dropped, not kept dangling, and the
+    // language falls back to its catalogue voice.
+    expect(state.defaults["es-ES"]).toBe("v-1");
+    expect(state.defaults["en-US"]).toBe(DEFAULT_PRESET_IDS["en-US"]);
   });
 
   it("migrates seeded built-ins the user never touched to presets", () => {
@@ -207,14 +209,16 @@ describe("seedVoicesState", () => {
     expect(state.defaults["en-US"]).toBe(DEFAULT_PRESET_IDS["en-US"]);
   });
 
-  it("keeps the user's own profiles and an explicit cleared default", () => {
+  it("keeps the user's own profiles and gives an emptied default the catalogue voice", () => {
+    // An install whose voices were all deleted has null defaults; speech used
+    // the catalogue voice anyway, so Settings now names it.
     const state = seedVoicesState(
       [profile(), ...LEGACY_BUILT_INS],
       { "es-ES": "v-1", "en-US": null },
     );
     expect(state.profiles.map((p) => p.id)).toEqual(["v-1"]);
     expect(state.defaults["es-ES"]).toBe("v-1");
-    expect(state.defaults["en-US"]).toBeNull();
+    expect(state.defaults["en-US"]).toBe(DEFAULT_PRESET_IDS["en-US"]);
   });
 
   it("migrates once", () => {

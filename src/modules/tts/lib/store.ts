@@ -123,12 +123,22 @@ export function migrateToPresets(
           : id;
     }
   }
-  const defaults = parseStoredDefaults(remapped, profiles);
+  return { profiles, defaults: withCatalogueDefaults(parseStoredDefaults(remapped, profiles)) };
+}
+
+/**
+ * Every language gets a default voice. A missing or empty one (an install
+ * whose voices were all deleted before presets existed) takes the catalogue
+ * default, the voice speech falls back to anyway, so Settings shows the voice
+ * that actually speaks instead of "not chosen".
+ */
+export function withCatalogueDefaults(defaults: VoiceDefaults): VoiceDefaults {
   const fallback = defaultPresetDefaults();
+  const out = { ...defaults };
   for (const language of TTS_LANGUAGES) {
-    if (defaults[language] === undefined) defaults[language] = fallback[language];
+    if (!out[language]) out[language] = fallback[language];
   }
-  return { profiles, defaults };
+  return out;
 }
 
 export function toStoredVoices(profiles: readonly VoiceProfile[]): unknown {
@@ -166,7 +176,7 @@ export function seedVoicesState(
   }
   return {
     profiles: stored,
-    defaults: parseStoredDefaults(rawDefaults, stored),
+    defaults: withCatalogueDefaults(parseStoredDefaults(rawDefaults, stored)),
     seeded: false,
   };
 }
