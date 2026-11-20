@@ -38,23 +38,33 @@ shown.
 
 ## Language and Voice Selection
 
-A voice profile is `{ id, name, model, language, voice or sample, params,
-style }`. Each language has exactly one default profile, which is what makes
-"read this in Spanish" deterministic.
+Languages: `es-ES`, `en-US`, `fr-FR`, `de-DE`, `it-IT` and `pt-BR`; the user
+enables the ones they read in. Each enabled language has exactly one default
+voice, which is what makes "read this in Spanish" deterministic.
 
-1. Call `terax_call` with `tts.voices` to list profiles: `id`, `name`, `model`,
-   `language` (`es-ES` or `en-US`), `kind` (`preset` or `clone`) and `isDefault`.
-2. Pass `language` to speak with that language's default profile. Pass `voiceId`
-   to pin one exact profile. `voiceId` wins when both are given.
+A voice is either a preset the model speaks with nothing to configure (id
+`preset:<model>:<language>:<voice>`, for example `preset:pocket-tts:es-ES:lola`)
+or a profile the user made by customizing a preset or cloning a sample.
+
+1. Call `terax_call` with `tts.voices` (optionally `{ language }`) to list them:
+   `id`, `name`, `provider`, `model`, `language`, `kind` (preset, default,
+   designed, automatic, builtin, custom or cloned), `isDefault`, `ready` and
+   `missing`, the one thing to do before a voice that is not ready can speak.
+2. Pass `language` to speak with that language's default voice. Pass `voiceId`
+   to pin one exact voice; prefer a `ready` one. `voiceId` wins when both are
+   given.
 3. Pass neither to use the user's preferred language (a setting, Spanish out of
    the box).
 4. Match the language to the text, not to the conversation. Spanish text read by
-   an English profile is mangled by the phonemizer.
+   an English voice is mangled by the phonemizer.
 
-Resolution order, so a missing profile is never silent: explicit `voiceId`, then
-the default for the asked language, then the default for the preferred language,
-then any profile in the asked language. When nothing resolves, `tts.speak` fails
-with `command_failed` and the user has to add a profile in Settings, Voice.
+Resolution order, so a missing voice is never silent: explicit `voiceId` (old
+ids such as `builtin-es-dora` still resolve to their preset), then the default
+for the asked language, then, only when no language was asked, the default for
+the preferred language, then the user's first profile in the asked language,
+then the catalogue default for that language. A voice whose engine or model is
+missing fails with the action to take; `tts.install` installs an engine and its
+default model in one job.
 
 ## Text Formatting per Model
 

@@ -102,31 +102,85 @@ Notes per engine:
   machines the engine card says why it is not offered: Zyphra's CUDA and ggml
   servers need a build toolchain Terax does not install.
 
-Install order in the Voice tab: the Runtime card first (it happens
-automatically with the first engine), then **Install** on an engine card, then
-**Download** on the model you want. Each step runs as a cancellable background
-job with a live log; a failed install leaves no half-registered engine.
-**Start** and **Stop** on an engine card control the sidecar, and the Idle stop
-setting shuts it down after a few quiet minutes so an installed engine costs no
-memory when you are not using it.
+Settings, Voice has four tabs, in the order they are used:
 
-The Models card also lists any other weights it finds in the shared cache, so
-you can purge them one by one.
+- **Voices**: the default voice of each enabled language and a gallery of every
+  voice from every provider, with **Listen** and **Use**. A voice that cannot
+  speak yet says the one thing missing (Install X, Download N MB, Needs a
+  sample, Not available on this machine) and offers that action. Filter by All,
+  Ready or After install. **New cloned voice** opens the editor on a cloning
+  model.
+- **Providers**: one card per engine, as a catalogue: languages, how it gets
+  its voices, disk, its plan for this machine, and **Speed here**, the median
+  real-time factor of the last synthesis requests Terax made with it ("Not
+  measured yet" until three clips were timed). **Install** brings the runtime if
+  it is missing, the engine and its default model in one job with one log
+  (Kokoro-82M, Chatterbox Multilingual, Pocket TTS, OmniVoice, ZONOS3-Mini);
+  Chatterbox lists Turbo and Nano to download separately. Each provider has its
+  own **Device**, with the plan's choice marked as recommended; the select is
+  hidden where the plan leaves no choice (ZONOS3-Mini, Pocket TTS on Apple
+  Silicon). A dev.25 setting that forced one device on every engine is copied
+  to each engine once.
+- **Languages**: the languages Terax reads in, each with its default voice,
+  plus the language to use when unsure. **Add a language** offers French,
+  German, Italian and Portuguese when some provider speaks them, with how many
+  of those providers are installed.
+- **Advanced**: the runtime, the idle stop, storage and any other cached
+  weights to purge.
+
+Dictation (speech to text) has its own Settings section.
+
+Every install step runs as a cancellable background job with a live log; a
+failed install leaves no half-registered engine. **Start** and **Stop** control
+the sidecar, and the idle stop shuts it down after a few quiet minutes so an
+installed engine costs no memory when you are not using it.
+
+### Languages per provider
+
+| Provider | Spanish | English | French | German | Italian | Portuguese |
+| --- | --- | --- | --- | --- | --- | --- |
+| Kokoro | Dora, Alex, Santa | 12 presets | Siwis | no | Sara, Nicola | Dora, Alex, Santa |
+| Chatterbox Multilingual | built-in or clone | built-in or clone | built-in or clone | built-in or clone | built-in or clone | built-in or clone |
+| Chatterbox Turbo, Nano | no | built-in or clone | no | no | no | no |
+| Pocket TTS | Lola | 21 voices | Estelle | Juergen | Giovanni | Rafael |
+| OmniVoice | automatic, designed or clone | automatic, designed or clone | automatic, designed or clone | automatic, designed or clone | automatic, designed or clone | automatic, designed or clone |
+| ZONOS3-Mini | Ximena, Rodrigo | 10 voices | Gaspard | Liesel, Wolfgang | Ginevra, Lorenzo | Leonor, Thiago |
+
+Pocket TTS installs its Spanish and English models; the French, German,
+Italian and Portuguese ones download the first time they read. Each language's
+first voice in Pocket TTS is its native speaker; the others keep their accent.
 
 ## Voices
 
-A voice profile is a name, a model, a language (`es-ES` or `en-US`), a voice
-source, synthesis parameters and a style definition. Kokoro profiles pick a
-preset (`ef_dora`, `af_heart`, and so on, or a comma-separated blend);
-Chatterbox profiles point at an imported WAV sample, which is converted to mono
-24 kHz in the app before it is stored. A sample must be in the same language as
-the profile: cloning does not translate.
+Every voice a model speaks with nothing to configure is a voice in its own
+right: Kokoro and Pocket TTS presets, ZONOS3-Mini default voices, OmniVoice's
+automatic and designed voices, and the speaker in each Chatterbox checkpoint.
+They are generated, not stored, with ids of the form
+`preset:<model>:<language>:<voice>` (for example
+`preset:pocket-tts:es-ES:lola`). A stored **profile** exists only once you
+customize one of them (speed, parameters, style) with **Customize**, or clone
+a sample. A profile is a name, a model, a language, a preset id or sample,
+parameters and a style definition. A sample is converted to mono 24 kHz in the
+app before it is stored, and must be in the profile's language: cloning does
+not translate.
 
-Each language has exactly one default profile, which is what makes "read this in
-Spanish" deterministic. Two built-in profiles (Dora for Spanish, Heart for
-English, both Kokoro presets) are there before you configure anything. The
-**Preview** button in the voice editor speaks one short line so you can hear a
-change before saving it.
+Each language has exactly one default voice, a preset or a profile, which is
+what makes "read this in Spanish" deterministic. A fresh install points Spanish,
+English, French, Italian and Portuguese at Kokoro (the smallest download) and
+German at Pocket TTS. The same list is used everywhere: the Voices gallery, the
+status-bar picker (it lists voices of each enabled language, not models), the
+Reader's "Voice for this document" menu and `tts.voices` for agents.
+
+The voice editor has **Listen**, with a sentence you can edit, to hear the
+settings before saving, and lists every preset without starting the engine
+(Kokoro still accepts a typed id or a comma blend). To clone, **Record 10 s**
+records from the microphone while you read the sentence shown in the voice's
+language, or **Import** takes a file.
+
+Stores written by dev.25 or earlier are migrated once: seeded profiles you never
+changed are removed and the defaults that named them point at the equivalent
+preset; anything you edited stays as your own profile. Documents and history
+that still name an old id such as `builtin-es-dora` resolve to its preset.
 
 The style block holds a persona, free-form instructions and tags. It is a
 description of how the voice should sound, used when an agent writes text for
@@ -160,9 +214,9 @@ Pi reaches the feature through the command registry:
 | `tts.status` | none | runtime, engines, models, jobs, disk usage, and what is being spoken. Never a sidecar token. |
 | `tts.start` | `engine` | `{ engine, starting: true }` |
 | `tts.stop` | `engine?` | `{ stopped: [...] }` |
-| `tts.install` | `engine` | `{ jobId }` |
+| `tts.install` | `engine`, `withModel?` (default true: the engine's default model in the same job) | `{ jobId }` |
 | `tts.download` | `model` | `{ jobId }` |
-| `tts.voices` | none | the profile list with the per-language default marked |
+| `tts.voices` | `language?` | every voice (profiles and presets) of the enabled languages or one language: id, provider, kind, default, ready, missing |
 | `tts.speak` | `text`, `voiceId?`, `language?` | `{ voiceId, chunks, truncated, started: true }` |
 | `tts.stopSpeaking` | none | `{ stopped }` |
 
