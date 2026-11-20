@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.25 (2026-11-20)
+
+- Tres motores de voz locales más: Pocket TTS (Kyutai), OmniVoice (k2-fsa) y ZONOS3-Mini (Zyphra, Apple Silicon), con voces en español e inglés listas para usar.
+- Cada motor se ajusta a la máquina: dispositivo, precisión, hilos, int8, pasos de difusión y build de PyTorch, explicados en su tarjeta de Ajustes.
+- Revisión de todos los flujos para empezar, parar y retomar una lectura, en el artifact de las maquetas.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.25.md).
+
 ## Pi-Terax v0.9.0-dev.24 (2026-11-19)
 
 - Atajos globales del Reader (⌘⌥P, ⌘⌥← →, ⌘⌥= -, ⌘⌥R, ⌘⌥B) y controles multimedia del sistema: «Ahora suena», teclas multimedia y auriculares.
