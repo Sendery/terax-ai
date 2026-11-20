@@ -241,7 +241,7 @@ export function adoptDocument(
     source: stored.source,
     doc,
     state,
-    language: guessLanguage(doc),
+    language: guessLanguage(doc, usePreferencesStore.getState().ttsLanguages),
     voiceKey,
     durations: manifestDurations(stored.manifest, voiceKey),
     cached: new Set(),

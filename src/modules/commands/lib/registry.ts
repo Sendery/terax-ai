@@ -238,9 +238,9 @@ type BaseCommandPayloads = {
   "tts.status": undefined;
   "tts.start": { engine: TtsEngineId };
   "tts.stop": { engine?: TtsEngineId };
-  "tts.install": { engine: TtsEngineId };
+  "tts.install": { engine: TtsEngineId; withModel?: boolean };
   "tts.download": { model: TtsModelId };
-  "tts.voices": undefined;
+  "tts.voices": { language?: TtsLanguage } | undefined;
   "tts.speak": { text: string; voiceId?: string; language?: TtsLanguage };
   "tts.stopSpeaking": undefined;
 };
@@ -922,6 +922,7 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
           "general",
           "models",
           "voice",
+          "dictation",
           "agents",
           "themes",
           "shortcuts",
@@ -1224,7 +1225,7 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
   "tts.install": {
     id: "tts.install",
     description:
-      "Install an engine into the private speech directory, installing the Python runtime first when it is missing. Returns a job id; read its progress with tts.status.",
+      "Install an engine into the private speech directory, installing the Python runtime first when it is missing, and download its default model in the same job. Returns a job id; read its progress with tts.status. An engine the machine cannot run (tts.status shows each engine's plan) fails with the reason.",
     params: [
       {
         name: "engine",
@@ -1232,6 +1233,13 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
         required: true,
         description: "Engine to install.",
         values: TTS_ENGINES,
+      },
+      {
+        name: "withModel",
+        type: "boolean",
+        required: false,
+        description:
+          "Also download the engine's default model (Kokoro-82M, Chatterbox Multilingual, Pocket TTS, OmniVoice, ZONOS3-Mini). Default true.",
       },
     ],
   },
@@ -1252,8 +1260,16 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
   "tts.voices": {
     id: "tts.voices",
     description:
-      "List the configured voice profiles with their model, language, voice source and which one is the default for each language.",
-    params: [],
+      "List every voice: the user's profiles and every preset, default and designed voice of every model, for the enabled languages or one language. Each entry says its provider, whether it is the language's default, whether it can speak now and, if not, what is missing (install, download, a sample, or not available on this machine). Pass an entry's id as voiceId to tts.speak or reader.open.",
+    params: [
+      {
+        name: "language",
+        type: "enum",
+        required: false,
+        description: "Only voices of this language.",
+        values: TTS_LANGUAGES,
+      },
+    ],
   },
   "tts.speak": {
     id: "tts.speak",
@@ -1445,7 +1461,9 @@ export type CommandHandlers = ControlHandlers & {
   downloadTtsModel: (
     payload: CommandPayloads["tts.download"],
   ) => Promise<unknown> | unknown;
-  listTtsVoices: () => Promise<unknown> | unknown;
+  listTtsVoices: (
+    payload: CommandPayloads["tts.voices"],
+  ) => Promise<unknown> | unknown;
   speakTts: (
     payload: CommandPayloads["tts.speak"],
   ) => Promise<unknown> | unknown;
@@ -1534,6 +1552,7 @@ function validateSettingsTab(value: unknown): value is SettingsTab | undefined {
     value === "voice" ||
     value === "agents" ||
     value === "themes" ||
+    value === "dictation" ||
     value === "shortcuts" ||
     value === "about"
   );
@@ -1589,7 +1608,6 @@ export function validateCommandRequest(
     id === "tasks.resumeAll" ||
     id === "tasks.wake" ||
     id === "tts.status" ||
-    id === "tts.voices" ||
     id === "tts.stopSpeaking"
   ) {
     if (payload !== undefined && payload !== null) {
@@ -1603,7 +1621,8 @@ export function validateCommandRequest(
     id === "tab.close" ||
     id === "settings.open" ||
     id === "tasks.openEditor" ||
-    id === "tts.stop";
+    id === "tts.stop" ||
+    id === "tts.voices";
   const objectPayload =
     acceptsEmptyPayload && (payload === undefined || payload === null)
       ? ({ ok: true, value: {} } as const)
@@ -2060,7 +2079,41 @@ export function validateCommandRequest(
         `${id} requires payload.engine to be one of ${TTS_ENGINES.join(", ")}`,
       );
     }
+    if (id === "tts.install") {
+      if (obj.withModel !== undefined && typeof obj.withModel !== "boolean") {
+        return invalidPayload("tts.install payload.withModel must be a boolean");
+      }
+      return {
+        ok: true,
+        value: {
+          id,
+          payload: {
+            engine: obj.engine,
+            ...(obj.withModel !== undefined ? { withModel: obj.withModel } : {}),
+          },
+        },
+      };
+    }
     return { ok: true, value: { id, payload: { engine: obj.engine } } };
+  }
+
+  if (id === "tts.voices") {
+    const unknown = Object.keys(obj).filter((key) => key !== "language");
+    if (unknown.length > 0) {
+      return invalidPayload(`tts.voices does not accept ${unknown.join(", ")}`);
+    }
+    if (obj.language !== undefined && !isTtsLanguage(obj.language)) {
+      return invalidPayload(
+        `tts.voices payload.language must be one of ${TTS_LANGUAGES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: obj.language !== undefined ? { language: obj.language } : undefined,
+      },
+    };
   }
 
   if (id === "tts.stop") {
@@ -2383,7 +2436,7 @@ async function dispatchCommand(
     case "tts.download":
       return handlers.downloadTtsModel(request.payload);
     case "tts.voices":
-      return handlers.listTtsVoices();
+      return handlers.listTtsVoices(request.payload);
     case "tts.speak":
       return handlers.speakTts(request.payload);
     case "tts.stopSpeaking":

@@ -1,3 +1,4 @@
+import { ttsDeviceFor } from "@/modules/settings/store";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   synthesize,
@@ -46,6 +47,9 @@ export type SpeakOptions = {
   /** False for utterances that are not worth remembering, such as the
    *  one-line preview played from Settings. */
   remember?: boolean;
+  /** Speak with this exact profile, even one not saved yet (the voice
+   *  editor's preview). Wins over `voiceId` and `language`. */
+  profile?: VoiceProfile;
 };
 
 export type SpeakResult = {
@@ -302,7 +306,7 @@ export async function resolveEndpoint(voice: VoiceProfile): Promise<TtsEndpoint>
   if (entry.running && entry.port !== null && entry.token) {
     return { port: entry.port, token: entry.token };
   }
-  const device = usePreferencesStore.getState().ttsDevice;
+  const device = ttsDeviceFor(usePreferencesStore.getState().ttsDevices, engine);
   const started = await ttsNative.start(engine, device);
   useTtsStore.getState().setRunningEngines([
     ...new Set([...runningEnginesOf(status), engine]),
@@ -332,12 +336,9 @@ export async function speakText(
   await store.hydrate();
   const { profiles, defaults } = useTtsStore.getState();
   const { ttsDefaultLanguage } = usePreferencesStore.getState();
-  const voice = resolveVoice(
-    profiles,
-    defaults,
-    { ttsDefaultLanguage },
-    options,
-  );
+  const voice =
+    options.profile ??
+    resolveVoice(profiles, defaults, { ttsDefaultLanguage }, options);
   if (!voice) {
     const message = "No voice profile is configured. Add one in Settings, Voice.";
     useTtsStore.getState().setSpeech({ error: message });
@@ -406,13 +407,14 @@ export async function speakText(
 }
 
 /** Speaks the localized preview line with one specific profile. */
+/** Plays a short sample of `profile`, saved or not, with an optional
+ *  sentence of the user's own. */
 export async function previewVoice(
   profile: VoiceProfile,
+  sentence?: string,
 ): Promise<SpeakResult | null> {
-  return speakText(PREVIEW_SENTENCES[profile.language], {
-    voiceId: profile.id,
-    remember: false,
-  });
+  const text = sentence?.trim() || PREVIEW_SENTENCES[profile.language];
+  return speakText(text, { profile, remember: false });
 }
 
 /** Pauses the sound without giving up the queue or the audio already made. */

@@ -137,8 +137,10 @@ export const ttsNative = {
   layout: () => invoke<TtsLayout>("tts_layout"),
   status: () => invoke<TtsStatus>("tts_status"),
   installRuntime: () => invoke<number>("tts_install_runtime"),
-  installEngine: (engine: TtsEngineId) =>
-    invoke<number>("tts_install_engine", { engine }),
+  /** Installs the engine and, unless `withModel` is false, downloads its
+   *  default model in the same job. */
+  installEngine: (engine: TtsEngineId, withModel = true) =>
+    invoke<number>("tts_install_engine", { engine, withModel }),
   removeEngine: (engine: TtsEngineId) =>
     invoke<number>("tts_remove_engine", { engine }),
   downloadModel: (model: TtsModelId) =>

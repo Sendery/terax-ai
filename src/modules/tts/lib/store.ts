@@ -1,11 +1,15 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { TTS_LANGUAGES } from "./engines";
 import {
-  BUILT_IN_DEFAULTS,
-  builtInsAddedAfter,
-  builtInDefaultsMap,
-  EMPTY_DEFAULTS,
+  defaultPresetDefaults,
+  isPresetId,
+  LEGACY_BUILT_IN_IDS,
+  presetProfile,
+} from "./presets";
+import { parseSpeedSamples, type SpeedSamples } from "./speed";
+import {
   isVoiceProfile,
+  LEGACY_BUILT_INS,
   type VoiceDefaults,
   type VoiceProfile,
 } from "./voices";
@@ -15,16 +19,22 @@ export const TTS_VOICES_STORE_PATH = "terax-tts-voices.json";
 export const KEY_VOICES = "voices";
 export const KEY_DEFAULTS = "defaults";
 export const KEY_SEED_VERSION = "seedVersion";
+export const KEY_MEASURED_SPEED = "measuredSpeed";
 
-/** Bumped when BUILT_IN_DEFAULTS gains a voice an existing install should get.
- *  1 was the two Kokoro voices; 2 added one voice per Chatterbox model; 3 added
- *  a Spanish and an English voice for Pocket TTS, OmniVoice and ZONOS3-Mini. */
-export const SEED_VERSION = 3;
+/**
+ * 1 was the two Kokoro voices; 2 added one voice per Chatterbox model; 3 added
+ * Pocket TTS, OmniVoice and ZONOS3-Mini. 4 (dev.26) stops seeding: preset and
+ * default voices are generated, so the seeded copies the user never changed
+ * are removed and the defaults that named them point at the preset instead.
+ */
+export const SEED_VERSION = 4;
 
 export type PersistedVoicesState = {
   profiles: VoiceProfile[];
+  speed?: SpeedSamples;
   defaults: VoiceDefaults;
-  /** True when the built-in profiles were just written for the first time. */
+  /** True when the stored state must be written back (first run or a
+   *  migration). */
   seeded: boolean;
 };
 
@@ -33,13 +43,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Stored profiles are untrusted: an invalid or duplicated entry is dropped so
- *  one bad record cannot take the Voice tab down on boot. */
+ *  one bad record cannot take the Voice tab down on boot. A stored profile can
+ *  never claim a preset id. */
 export function parseStoredVoices(value: unknown): VoiceProfile[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const profiles: VoiceProfile[] = [];
   for (const entry of value) {
     if (!isVoiceProfile(entry)) continue;
+    if (isPresetId(entry.id)) continue;
     if (seen.has(entry.id)) continue;
     seen.add(entry.id);
     profiles.push(entry);
@@ -47,22 +59,76 @@ export function parseStoredVoices(value: unknown): VoiceProfile[] {
   return profiles;
 }
 
-/** A default pointing at a profile that is gone, or at one in another
- *  language, is cleared rather than kept as a dangling id. */
+/** A default may name a stored profile or a preset. One pointing at nothing,
+ *  or at a voice of another language, is cleared rather than kept. */
 export function parseStoredDefaults(
   value: unknown,
   profiles: readonly VoiceProfile[],
 ): VoiceDefaults {
-  const defaults: VoiceDefaults = { ...EMPTY_DEFAULTS };
+  const defaults: VoiceDefaults = {};
   if (!isRecord(value)) return defaults;
   for (const language of TTS_LANGUAGES) {
     const id = value[language];
+    if (id === null) {
+      defaults[language] = null;
+      continue;
+    }
     if (typeof id !== "string" || id.length === 0) continue;
-    const profile = profiles.find((p) => p.id === id);
+    const profile = profiles.find((p) => p.id === id) ?? presetProfile(id);
     if (!profile || profile.language !== language) continue;
     defaults[language] = id;
   }
   return defaults;
+}
+
+/** Whether a stored legacy built-in is still exactly what was seeded. */
+function untouchedLegacy(profile: VoiceProfile): boolean {
+  const seeded = LEGACY_BUILT_INS.find((built) => built.id === profile.id);
+  if (!seeded) return false;
+  const shape = (p: VoiceProfile) =>
+    JSON.stringify([
+      p.name,
+      p.model,
+      p.language,
+      p.voice,
+      p.sampleId,
+      Object.entries(p.params).sort(),
+      p.style.persona ?? "",
+      p.style.instructions ?? "",
+      p.style.tags ?? [],
+    ]);
+  return shape(seeded) === shape(profile);
+}
+
+/**
+ * Migrates a store written before seed 4: seeded built-ins the user never
+ * changed are dropped, and every default that named a dropped one names its
+ * preset. Edited built-ins stay as the user's own profiles. Languages with no
+ * stored default get the catalogue default.
+ */
+export function migrateToPresets(
+  stored: readonly VoiceProfile[],
+  rawDefaults: unknown,
+): { profiles: VoiceProfile[]; defaults: VoiceDefaults } {
+  const dropped = new Set(
+    stored.filter((p) => untouchedLegacy(p)).map((p) => p.id),
+  );
+  const profiles = stored.filter((p) => !dropped.has(p.id));
+  const remapped: Record<string, unknown> = {};
+  if (isRecord(rawDefaults)) {
+    for (const [language, id] of Object.entries(rawDefaults)) {
+      remapped[language] =
+        typeof id === "string" && dropped.has(id)
+          ? (LEGACY_BUILT_IN_IDS[id] ?? null)
+          : id;
+    }
+  }
+  const defaults = parseStoredDefaults(remapped, profiles);
+  const fallback = defaultPresetDefaults();
+  for (const language of TTS_LANGUAGES) {
+    if (defaults[language] === undefined) defaults[language] = fallback[language];
+  }
+  return { profiles, defaults };
 }
 
 export function toStoredVoices(profiles: readonly VoiceProfile[]): unknown {
@@ -80,42 +146,28 @@ export function toStoredDefaults(defaults: VoiceDefaults): unknown {
   return { ...defaults };
 }
 
-/** Pure hydration core. The built-ins are seeded only when the key has never
- *  been written, so emptying the list by hand is not undone on next launch.
- *  A list written by an older version is topped up instead: voices added to the
- *  catalogue since then arrive, and nothing already stored is touched. */
+/** Pure hydration core. A fresh install stores no profiles and points each
+ *  language at its catalogue default; an older store is migrated once. */
 export function seedVoicesState(
   rawVoices: unknown,
   rawDefaults: unknown,
   rawSeedVersion?: unknown,
 ): PersistedVoicesState {
   if (rawVoices === undefined) {
-    return {
-      profiles: BUILT_IN_DEFAULTS.map((profile) => ({ ...profile })),
-      defaults: builtInDefaultsMap(),
-      seeded: true,
-    };
+    return { profiles: [], defaults: defaultPresetDefaults(), seeded: true };
   }
   const stored = parseStoredVoices(rawVoices);
-  // A stored list predates the version marker, so it has at least lived through
-  // seed 1; nothing from that seed is offered again.
   const seenVersion =
     typeof rawSeedVersion === "number" && Number.isFinite(rawSeedVersion)
       ? rawSeedVersion
       : 1;
-  const added =
-    stored.length > 0
-      ? builtInsAddedAfter(seenVersion).filter(
-          (built) => !stored.some((profile) => profile.id === built.id),
-        )
-      : [];
-  const profiles = [...stored, ...added];
+  if (seenVersion < SEED_VERSION) {
+    return { ...migrateToPresets(stored, rawDefaults), seeded: true };
+  }
   return {
-    profiles,
-    defaults: parseStoredDefaults(rawDefaults, profiles),
-    // Only a write makes the top-up stick; without it the same voices would be
-    // offered again on every launch, including ones deleted on purpose.
-    seeded: added.length > 0,
+    profiles: stored,
+    defaults: parseStoredDefaults(rawDefaults, stored),
+    seeded: false,
   };
 }
 
@@ -135,16 +187,17 @@ export async function hydrateVoicesState(): Promise<PersistedVoicesState> {
       map.get(KEY_SEED_VERSION),
     );
   } catch {
-    return {
-      profiles: BUILT_IN_DEFAULTS.map((profile) => ({ ...profile })),
-      defaults: builtInDefaultsMap(),
-      seeded: false,
-    };
+    return { profiles: [], defaults: defaultPresetDefaults(), seeded: false };
   }
   if (state.seeded) {
     await persistVoices(state.profiles);
     await persistDefaults(state.defaults);
     await write(KEY_SEED_VERSION, SEED_VERSION);
+  }
+  try {
+    state.speed = parseSpeedSamples(await store.get(KEY_MEASURED_SPEED));
+  } catch {
+    state.speed = {};
   }
   return state;
 }
@@ -166,4 +219,8 @@ export function persistVoices(
 
 export function persistDefaults(defaults: VoiceDefaults): Promise<void> {
   return write(KEY_DEFAULTS, toStoredDefaults(defaults));
+}
+
+export function persistSpeed(samples: SpeedSamples): Promise<void> {
+  return write(KEY_MEASURED_SPEED, samples);
 }

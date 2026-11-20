@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from engines.base import MODELS, POCKET_LANGUAGES, POCKET_VOICES, model_info  # noqa: E402
+from engines.base import MODELS, POCKET_LANGUAGES, POCKET_PREFETCHED, POCKET_VOICES, model_info  # noqa: E402
 
 # File names verified against the HF repos; anything not listed is skipped.
 ALLOW_PATTERNS = {
@@ -81,13 +81,15 @@ def download_pocket() -> str:
     every preset voice offered in that language."""
     from pocket_tts import TTSModel
 
-    for language, name in POCKET_LANGUAGES.items():
+    for language in POCKET_PREFETCHED:
+        name = POCKET_LANGUAGES[language]
         emit_detail("loading the {} model".format(name))
         model = TTSModel.load_model(language=name)
         for voice in POCKET_VOICES:
             if voice.language == language:
                 model.get_state_for_audio_prompt(voice.id)
-    return "pocket-tts ({})".format(", ".join(POCKET_LANGUAGES.values()))
+    # French, German, Italian and Portuguese download on their first use.
+    return "pocket-tts ({})".format(", ".join(POCKET_LANGUAGES[l] for l in POCKET_PREFETCHED))
 
 
 def emit_detail(message: str) -> None:

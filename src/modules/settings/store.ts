@@ -22,9 +22,13 @@ import {
 import { isPiModelPattern } from "@/modules/ai/cli/pi";
 import type { CliPermissionMode } from "@/modules/ai/cli/types";
 import {
+  DEFAULT_ENABLED_LANGUAGES,
   isTtsDevice,
+  isTtsEngineId,
   isTtsLanguage,
+  TTS_LANGUAGES,
   type TtsDevice,
+  type TtsEngineId,
   type TtsLanguage,
 } from "@/modules/tts/lib/engines";
 import {
@@ -166,8 +170,12 @@ export type Preferences = {
   whispercppBaseURL: string;
   /** Language "read aloud" speaks in when the caller names none. */
   ttsDefaultLanguage: TtsLanguage;
-  /** Compute device the speech sidecar is started with. */
-  ttsDevice: TtsDevice;
+  /** Compute device each speech engine is started with; an engine absent
+   *  from the map runs on `auto`, which follows the machine's plan. */
+  ttsDevices: Partial<Record<TtsEngineId, TtsDevice>>;
+  /** Languages offered for reading, in Settings order. Always contains
+   *  `ttsDefaultLanguage`. */
+  ttsLanguages: TtsLanguage[];
   /** Minutes of silence before running speech engines are stopped. 0 keeps
    *  them resident. */
   ttsIdleStopMinutes: number;
@@ -252,12 +260,59 @@ const KEY_STT_PROVIDER = "sttProvider";
 const KEY_GROQ_STT_MODEL = "groqSttModel";
 const KEY_WHISPERCPP_BASE_URL = "whispercppBaseURL";
 const KEY_TTS_DEFAULT_LANGUAGE = "ttsDefaultLanguage";
-const KEY_TTS_DEVICE = "ttsDevice";
+/** Pre-dev.26 single device for every engine; read once to seed ttsDevices. */
+const LEGACY_KEY_TTS_DEVICE = "ttsDevice";
+const KEY_TTS_DEVICES = "ttsDevices";
+const KEY_TTS_LANGUAGES = "ttsLanguages";
 const KEY_TTS_IDLE_STOP_MINUTES = "ttsIdleStopMinutes";
 
 export const TTS_IDLE_STOP_MIN = 0;
 export const TTS_IDLE_STOP_MAX = 240;
 export const TTS_IDLE_STOP_DEFAULT = 10;
+
+/**
+ * Per-engine devices from storage. Before dev.26 one device applied to every
+ * engine, so a stored legacy value other than `auto` seeds every engine.
+ */
+export function coerceTtsDevices(
+  value: unknown,
+  legacy?: unknown,
+): Partial<Record<TtsEngineId, TtsDevice>> {
+  const out: Partial<Record<TtsEngineId, TtsDevice>> = {};
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const [engine, device] of Object.entries(value)) {
+      if (isTtsEngineId(engine) && isTtsDevice(device) && device !== "auto") {
+        out[engine] = device;
+      }
+    }
+    return out;
+  }
+  if (isTtsDevice(legacy) && legacy !== "auto") {
+    for (const engine of [
+      "kokoro",
+      "chatterbox",
+      "pocket",
+      "omnivoice",
+      "zonos3",
+    ] as const) {
+      out[engine] = legacy;
+    }
+  }
+  return out;
+}
+
+/** Enabled languages: valid, unique, in catalogue order, never empty, and
+ *  always including the default language. */
+export function coerceTtsLanguages(
+  value: unknown,
+  defaultLanguage: TtsLanguage,
+): TtsLanguage[] {
+  const wanted = new Set<TtsLanguage>(
+    Array.isArray(value) ? value.filter(isTtsLanguage) : DEFAULT_ENABLED_LANGUAGES,
+  );
+  wanted.add(defaultLanguage);
+  return TTS_LANGUAGES.filter((language) => wanted.has(language));
+}
 
 export function coerceTtsIdleStopMinutes(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -356,7 +411,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   groqSttModel: "whisper-large-v3-turbo",
   whispercppBaseURL: WHISPERCPP_DEFAULT_BASE_URL,
   ttsDefaultLanguage: "es-ES",
-  ttsDevice: "auto",
+  ttsDevices: {},
+  ttsLanguages: [...DEFAULT_ENABLED_LANGUAGES],
   ttsIdleStopMinutes: TTS_IDLE_STOP_DEFAULT,
   favoriteModelIds: [],
   recentModelIds: [],
@@ -504,10 +560,19 @@ export async function loadPreferences(): Promise<Preferences> {
         ? stored
         : DEFAULT_PREFERENCES.ttsDefaultLanguage;
     })(),
-    ttsDevice: ((): TtsDevice => {
-      const stored = get<unknown>(KEY_TTS_DEVICE);
-      return isTtsDevice(stored) ? stored : DEFAULT_PREFERENCES.ttsDevice;
-    })(),
+    ttsDevices: coerceTtsDevices(
+      get<unknown>(KEY_TTS_DEVICES),
+      get<unknown>(LEGACY_KEY_TTS_DEVICE),
+    ),
+    ttsLanguages: coerceTtsLanguages(
+      get<unknown>(KEY_TTS_LANGUAGES),
+      ((): TtsLanguage => {
+        const stored = get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
+        return isTtsLanguage(stored)
+          ? stored
+          : DEFAULT_PREFERENCES.ttsDefaultLanguage;
+      })(),
+    ),
     ttsIdleStopMinutes: coerceTtsIdleStopMinutes(
       get<unknown>(KEY_TTS_IDLE_STOP_MINUTES),
     ),
@@ -760,10 +825,41 @@ export async function setWhispercppBaseURL(value: string): Promise<void> {
 
 export async function setTtsDefaultLanguage(value: TtsLanguage): Promise<void> {
   await writePref(KEY_TTS_DEFAULT_LANGUAGE, value);
+  // The default language is always one of the enabled ones.
+  const enabled = coerceTtsLanguages(
+    await store.get<unknown>(KEY_TTS_LANGUAGES),
+    value,
+  );
+  await writePref(KEY_TTS_LANGUAGES, enabled);
 }
 
-export async function setTtsDevice(value: TtsDevice): Promise<void> {
-  await writePref(KEY_TTS_DEVICE, value);
+/** Sets one engine's device; `auto` removes the override. */
+export async function setTtsDevice(
+  engine: TtsEngineId,
+  value: TtsDevice,
+): Promise<void> {
+  const current = coerceTtsDevices(
+    (await store.get<unknown>(KEY_TTS_DEVICES)) ?? {},
+  );
+  if (value === "auto") delete current[engine];
+  else current[engine] = value;
+  await writePref(KEY_TTS_DEVICES, current);
+}
+
+/** The device an engine starts with. */
+export function ttsDeviceFor(
+  devices: Partial<Record<TtsEngineId, TtsDevice>>,
+  engine: TtsEngineId,
+): TtsDevice {
+  return devices[engine] ?? "auto";
+}
+
+export async function setTtsLanguages(value: TtsLanguage[]): Promise<void> {
+  const stored = await store.get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
+  const language = isTtsLanguage(stored)
+    ? stored
+    : DEFAULT_PREFERENCES.ttsDefaultLanguage;
+  await writePref(KEY_TTS_LANGUAGES, coerceTtsLanguages(value, language));
 }
 
 export async function setTtsIdleStopMinutes(value: number): Promise<void> {
@@ -918,7 +1014,8 @@ export async function onPreferencesChange(
     [KEY_GROQ_STT_MODEL]: "groqSttModel",
     [KEY_WHISPERCPP_BASE_URL]: "whispercppBaseURL",
     [KEY_TTS_DEFAULT_LANGUAGE]: "ttsDefaultLanguage",
-    [KEY_TTS_DEVICE]: "ttsDevice",
+    [KEY_TTS_DEVICES]: "ttsDevices",
+    [KEY_TTS_LANGUAGES]: "ttsLanguages",
     [KEY_TTS_IDLE_STOP_MINUTES]: "ttsIdleStopMinutes",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",

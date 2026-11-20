@@ -1,3 +1,6 @@
+import { engineOf, isTtsModelId } from "./engines";
+import { wavSecondsFromHeader } from "./speed";
+import { useTtsStore } from "@/modules/tts/store/ttsStore";
 import type { TtsLanguage, TtsModelId } from "./engines";
 import type { VoiceParams } from "./voices";
 
@@ -210,6 +213,7 @@ export async function synthesize(
   body: TtsSynthesizeRequest,
   options: RequestOptions = {},
 ): Promise<Blob> {
+  const started = performance.now();
   const res = await request(
     endpoint,
     "/synthesize",
@@ -229,7 +233,22 @@ export async function synthesize(
     },
     { ...options, timeoutMs: options.timeoutMs ?? DEFAULT_SYNTHESIZE_TIMEOUT_MS },
   );
-  return res.blob();
+  const blob = await res.blob();
+  void measure(body.model, blob, performance.now() - started);
+  return blob;
+}
+
+/** Times every synthesis so Settings can show the real speed on this machine. */
+async function measure(model: string, blob: Blob, elapsedMs: number): Promise<void> {
+  try {
+    if (!isTtsModelId(model)) return;
+    const header = await blob.slice(0, 44).arrayBuffer();
+    const seconds = wavSecondsFromHeader(header, blob.size);
+    if (seconds === null) return;
+    useTtsStore.getState().recordSpeed(engineOf(model), seconds, elapsedMs / 1000);
+  } catch {
+    // Measuring is best effort and never affects playback.
+  }
 }
 
 export async function health(

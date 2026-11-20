@@ -361,6 +361,18 @@ pub fn pip_install_args(engine: Engine, torch_backend: Option<&str>) -> Vec<Stri
     args
 }
 
+/// Settings' single "Install": the engine, then its default model, in one job
+/// and one log. A model already downloaded is not fetched again.
+pub fn install_provider(job: &Job, layout: &Layout, engine: Engine) -> Result<(), String> {
+    install_engine(job, layout, engine)?;
+    let model = engine.default_model();
+    if layout.model_dir(model).is_dir() {
+        job.step(&format!("{} is already downloaded", model.id()));
+        return Ok(());
+    }
+    download_model(job, layout, model)
+}
+
 pub fn remove_engine(job: &Job, layout: &Layout, engine: Engine) -> Result<(), String> {
     job.step(&format!("remove {}", engine.id()));
     let dir = layout.engine_dir(engine);

@@ -2930,9 +2930,10 @@ export default function App() {
       getTtsStatus: () => ttsStatusCommand(),
       startTtsEngine: ({ engine }) => ttsStartCommand(engine),
       stopTtsEngine: ({ engine }) => ttsStopCommand(engine),
-      installTtsEngine: ({ engine }) => ttsInstallCommand(engine),
+      installTtsEngine: ({ engine, withModel }) =>
+        ttsInstallCommand(engine, withModel ?? true),
       downloadTtsModel: ({ model }) => ttsDownloadCommand(model),
-      listTtsVoices: () => ttsVoicesCommand(),
+      listTtsVoices: (payload) => ttsVoicesCommand(payload?.language),
       speakTts: (payload) => ttsSpeakCommand(payload),
       stopTtsSpeaking: () => ttsStopSpeakingCommand(),
     }),
