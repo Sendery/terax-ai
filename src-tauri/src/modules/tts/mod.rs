@@ -12,6 +12,7 @@
 pub mod commands;
 pub mod engines;
 pub mod env;
+pub mod hardware;
 pub mod install;
 pub mod jobs;
 pub mod layout;
@@ -68,6 +69,11 @@ pub struct EngineStatus {
     pub device: Option<Device>,
     pub pid: Option<u32>,
     pub size_bytes: u64,
+    /// How this engine runs on this machine, and whether it can at all.
+    pub plan: hardware::EnginePlan,
+    pub python_version: &'static str,
+    /// The `--torch-backend` the installed venv was built with.
+    pub torch_backend: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -83,6 +89,8 @@ pub struct ModelStatus {
 #[serde(rename_all = "camelCase")]
 pub struct TtsStatus {
     pub runtime: RuntimeStatus,
+    pub hardware: hardware::Hardware,
+    pub hardware_summary: String,
     pub engines: Vec<EngineStatus>,
     pub models: Vec<ModelStatus>,
     pub jobs: Vec<JobInfo>,
@@ -235,6 +243,7 @@ impl TtsState {
                 .and_then(|s| s.python_version.clone()),
         };
 
+        let hw = hardware::detect();
         let engines = Engine::ALL
             .into_iter()
             .map(|engine| {
@@ -252,6 +261,9 @@ impl TtsState {
                     device: live.as_ref().map(|s| s.device),
                     pid: live.as_ref().map(|s| s.pid),
                     size_bytes: sizes.engines.get(&engine).copied().unwrap_or(0),
+                    plan: hardware::plan(engine, hw),
+                    python_version: engine.python_version(),
+                    torch_backend: state.as_ref().and_then(|s| s.torch_backend.clone()),
                 }
             })
             .collect();
@@ -271,6 +283,8 @@ impl TtsState {
 
         TtsStatus {
             runtime,
+            hardware: hw.clone(),
+            hardware_summary: hw.summary(),
             engines,
             models,
             jobs: self.jobs.list(),
@@ -298,8 +312,8 @@ mod tests {
         let status = state.status(&layout);
         assert!(!status.runtime.installed);
         assert_eq!(status.runtime.uv_version, None);
-        assert_eq!(status.engines.len(), 2);
-        assert_eq!(status.models.len(), 4);
+        assert_eq!(status.engines.len(), Engine::ALL.len());
+        assert_eq!(status.models.len(), Model::ALL.len());
         assert_eq!(status.disk_usage_bytes, 0);
         assert!(status.jobs.is_empty());
         for engine in status.engines {
@@ -370,11 +384,19 @@ mod tests {
             "\"downloaded\"",
             "\"jobs\"",
             "\"diskUsageBytes\"",
+            "\"hardware\"",
+            "\"hardwareSummary\"",
+            "\"plan\"",
+            "\"unsupportedReason\"",
+            "\"torchBackend\"",
         ] {
             assert!(json.contains(key), "{key} missing from {json}");
         }
         assert!(json.contains("\"id\":\"kokoro\""), "{json}");
         assert!(json.contains("\"id\":\"kokoro-82m\""), "{json}");
+        for id in ["pocket", "omnivoice", "zonos3", "pocket-tts", "zonos3-mini"] {
+            assert!(json.contains(&format!("\"id\":\"{id}\"")), "{id} missing");
+        }
     }
 
     #[test]

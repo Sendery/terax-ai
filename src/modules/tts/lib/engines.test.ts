@@ -24,16 +24,29 @@ import {
   TTS_ENGINES,
   TTS_LANGUAGES,
   TTS_MODELS,
+  BUILTIN_VOICE_ID,
+  defaultPresetVoice,
+  isBuiltinVoice,
+  presetVoicesOf,
 } from "./engines";
 
 describe("engine and model lists", () => {
   it("keeps both lists closed", () => {
-    expect(TTS_ENGINES).toEqual(["kokoro", "chatterbox"]);
+    expect(TTS_ENGINES).toEqual([
+      "kokoro",
+      "chatterbox",
+      "pocket",
+      "omnivoice",
+      "zonos3",
+    ]);
     expect(TTS_MODELS).toEqual([
       "kokoro-82m",
       "chatterbox-multilingual",
       "chatterbox-turbo",
       "chatterbox-nano",
+      "pocket-tts",
+      "omnivoice",
+      "zonos3-mini",
     ]);
     expect(TTS_LANGUAGES).toEqual(["es-ES", "en-US"]);
   });
@@ -76,6 +89,9 @@ describe("language support", () => {
     expect(modelsForLanguage("es-ES")).toEqual([
       "kokoro-82m",
       "chatterbox-multilingual",
+      "pocket-tts",
+      "omnivoice",
+      "zonos3-mini",
     ]);
     expect(modelsForLanguage("en-US")).toEqual(TTS_MODELS);
   });
@@ -142,5 +158,57 @@ describe("guards", () => {
     expect(isTtsDevice("gpu")).toBe(false);
     expect(isTtsEngineId(null)).toBe(false);
     expect(isTtsModelId(3)).toBe(false);
+  });
+});
+
+describe("voices a model speaks without a sample", () => {
+  it("lists each model's own voices per language", () => {
+    expect(presetVoicesOf("pocket-tts", "es-ES")[0]?.id).toBe("lola");
+    expect(presetVoicesOf("pocket-tts", "en-US").map((v) => v.id)).toContain(
+      "alba",
+    );
+    expect(presetVoicesOf("zonos3-mini", "es-ES").map((v) => v.label)).toEqual([
+      "Ximena",
+      "Rodrigo",
+    ]);
+    expect(presetVoicesOf("omnivoice", "en-US")[0]?.id).toBe("auto");
+    expect(presetVoicesOf("chatterbox-turbo", "en-US")).toEqual([
+      { id: BUILTIN_VOICE_ID, label: "Built-in voice" },
+    ]);
+  });
+
+  it("starts a profile on the model's first voice", () => {
+    expect(defaultPresetVoice("pocket-tts", "es-ES")).toBe("lola");
+    expect(defaultPresetVoice("zonos3-mini", "en-US")).toBe(
+      "default_de4d191ca7574982",
+    );
+    expect(defaultPresetVoice("chatterbox-multilingual", "es-ES")).toBe(
+      BUILTIN_VOICE_ID,
+    );
+  });
+
+  it("counts a default voice as built in only for clone models and its language", () => {
+    expect(isBuiltinVoice("zonos3-mini", "default_43e790fc116fd62a")).toBe(
+      true,
+    );
+    expect(
+      isBuiltinVoice("zonos3-mini", "default_43e790fc116fd62a", "en-US"),
+    ).toBe(false);
+    expect(isBuiltinVoice("omnivoice", "design-f-british", "en-US")).toBe(true);
+    expect(isBuiltinVoice("omnivoice", "someone")).toBe(false);
+    // Pocket voices are presets, not built-in voices of a clone model.
+    expect(isBuiltinVoice("pocket-tts", "lola")).toBe(false);
+    expect(isBuiltinVoice("chatterbox-nano", BUILTIN_VOICE_ID)).toBe(true);
+  });
+
+  it("gives OmniVoice speed and steps, ZONOS3 temperature and Pocket nothing", () => {
+    expect(MODEL_PARAMS.omnivoice.map((p) => p.name)).toEqual([
+      "speed",
+      "steps",
+    ]);
+    expect(MODEL_PARAMS["zonos3-mini"].map((p) => p.name)).toEqual([
+      "temperature",
+    ]);
+    expect(MODEL_PARAMS["pocket-tts"]).toEqual([]);
   });
 });

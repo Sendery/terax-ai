@@ -28,6 +28,7 @@ export {
 } from "./lib/client";
 export {
   BUILTIN_VOICE_ID,
+  defaultPresetVoice,
   DEVICE_LABELS,
   ENGINE_APPROX_BYTES,
   ENGINE_DESCRIPTIONS,
@@ -53,7 +54,9 @@ export {
   modelsOfEngine,
   modelSupportsLanguage,
   modelSupportsTags,
+  presetVoicesOf,
   PREVIEW_SENTENCES,
+  type PresetVoice,
   TTS_DEVICES,
   TTS_ENGINES,
   TTS_LANGUAGES,

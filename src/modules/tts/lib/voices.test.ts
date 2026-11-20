@@ -75,9 +75,9 @@ describe("isVoiceProfile", () => {
     expect(isVoiceProfile(profile({ style: { tags: [1] } as never }))).toBe(
       false,
     );
-    expect(isVoiceProfile(profile({ style: { tags: "[laugh]" } as never }))).toBe(
-      false,
-    );
+    expect(
+      isVoiceProfile(profile({ style: { tags: "[laugh]" } as never })),
+    ).toBe(false);
     expect(isVoiceProfile(profile({ style: { mood: "sad" } as never }))).toBe(
       false,
     );
@@ -158,7 +158,16 @@ describe("createProfile", () => {
 });
 
 describe("defaultVoiceFor", () => {
-  const profiles = [profile(), profile({ id: "v-2", language: "en-US", model: "kokoro-82m", voice: "af_heart", name: "Heart" })];
+  const profiles = [
+    profile(),
+    profile({
+      id: "v-2",
+      language: "en-US",
+      model: "kokoro-82m",
+      voice: "af_heart",
+      name: "Heart",
+    }),
+  ];
 
   it("returns the profile the language points at", () => {
     const defaults: VoiceDefaults = { "es-ES": "v-1", "en-US": "v-2" };
@@ -168,7 +177,11 @@ describe("defaultVoiceFor", () => {
 
   it("ignores a dangling id or a cross-language default", () => {
     expect(
-      defaultVoiceFor(profiles, { ...EMPTY_DEFAULTS, "es-ES": "gone" }, "es-ES"),
+      defaultVoiceFor(
+        profiles,
+        { ...EMPTY_DEFAULTS, "es-ES": "gone" },
+        "es-ES",
+      ),
     ).toBeNull();
     expect(
       defaultVoiceFor(profiles, { ...EMPTY_DEFAULTS, "es-ES": "v-2" }, "es-ES"),
@@ -277,10 +290,51 @@ describe("built-in defaults", () => {
   it("ships one usable voice per model, none of them needing a sample", () => {
     for (const model of TTS_MODELS) {
       const voices = BUILT_IN_DEFAULTS.filter((p) => p.model === model);
-      expect(voices.length, `${model} has no built-in voice`).toBeGreaterThan(0);
+      expect(voices.length, `${model} has no built-in voice`).toBeGreaterThan(
+        0,
+      );
       for (const voice of voices) {
         expect(voice.sampleId).toBeNull();
         expect(isProfileSpeakable(voice)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("profiles of the dev.25 models", () => {
+  it("keeps a clone model's default voice and drops the sample", () => {
+    const profile = createProfile({
+      name: "Ximena",
+      model: "zonos3-mini",
+      language: "es-ES",
+      voice: "default_43e790fc116fd62a",
+      sampleId: "s-1",
+    });
+    expect(profile.voice).toBe("default_43e790fc116fd62a");
+    expect(profile.sampleId).toBeNull();
+    expect(isProfileSpeakable(profile)).toBe(true);
+  });
+
+  it("treats another language's default voice as needing a sample", () => {
+    const profile = createProfile({
+      name: "Wrong",
+      model: "zonos3-mini",
+      language: "es-ES",
+      voice: "default_de4d191ca7574982",
+    });
+    expect(profile.voice).toBeNull();
+    expect(isProfileSpeakable(profile)).toBe(false);
+  });
+
+  it("seeds a speakable Spanish and English voice for each new model", () => {
+    for (const model of ["pocket-tts", "omnivoice", "zonos3-mini"] as const) {
+      for (const language of ["es-ES", "en-US"] as const) {
+        const seeded = BUILT_IN_DEFAULTS.find(
+          (p) => p.model === model && p.language === language,
+        );
+        expect(seeded, `${model} ${language}`).toBeDefined();
+        expect(isVoiceProfile(seeded)).toBe(true);
+        expect(isProfileSpeakable(seeded as VoiceProfile)).toBe(true);
       }
     }
   });

@@ -42,6 +42,7 @@ import {
 } from "@/modules/settings/store";
 import {
   createProfile,
+  defaultPresetVoice,
   DEVICE_LABELS,
   ENGINE_APPROX_BYTES,
   ENGINE_DESCRIPTIONS,
@@ -68,6 +69,7 @@ import {
   modelStatusOf,
   modelSupportsTags,
   pickJob,
+  presetVoicesOf,
   previewVoice,
   sidecarVoices,
   toMono24kWav,
@@ -299,6 +301,8 @@ function EngineCard({
 
   const installed = entry?.installed ?? false;
   const running = entry?.running ?? false;
+  const plan = entry?.plan ?? null;
+  const unsupported = plan ? !plan.supported : false;
 
   return (
     <Card
@@ -355,7 +359,8 @@ function EngineCard({
               size="sm"
               variant="outline"
               className="h-7 gap-1.5 px-2 text-[11px]"
-              disabled={!!busy || isRunning(job)}
+              disabled={!!busy || isRunning(job) || unsupported}
+              title={unsupported ? (plan?.unsupportedReason ?? undefined) : undefined}
               onClick={() =>
                 void run("install", () => ttsNative.installEngine(engine))
               }
@@ -377,12 +382,28 @@ function EngineCard({
       }
     >
       <p className="text-[10.5px] text-muted-foreground">
-        {installed
-          ? `Installed, ${formatBytes(entry?.sizeBytes ?? 0)} on disk.`
-          : `Not installed. The install needs about ${formatBytes(
-              ENGINE_APPROX_BYTES[engine],
-            )} and pulls the runtime first if it is missing.`}
+        {unsupported && !installed
+          ? plan?.unsupportedReason
+          : installed
+            ? `Installed, ${formatBytes(entry?.sizeBytes ?? 0)} on disk${
+                entry?.torchBackend ? `, PyTorch ${entry.torchBackend} build` : ""
+              }.`
+            : `Not installed. The install needs about ${formatBytes(
+                ENGINE_APPROX_BYTES[engine],
+              )} and pulls the runtime first if it is missing.`}
       </p>
+      {plan?.supported && plan.notes.length > 0 ? (
+        <div className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5">
+          <span className="text-[10.5px] font-medium text-foreground">
+            Tuned for {runtime.status?.hardwareSummary ?? "this machine"}
+          </span>
+          {plan.notes.map((note) => (
+            <span key={note} className="text-[10.5px] text-muted-foreground">
+              {note}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <Row label="Device">
         <Select
           value={device}
@@ -501,7 +522,9 @@ function ModelsCard({ runtime }: { runtime: Runtime }) {
                       ? "preset voices"
                       : MODEL_BUILTIN_VOICE[model]
                         ? "built-in voice or a cloned sample"
-                        : "cloned from a sample"}
+                        : presetVoicesOf(model, MODEL_LANGUAGES[model][0]).length > 0
+                          ? "default voices or a cloned sample"
+                          : "cloned from a sample"}
                   </span>
                 </div>
                 {status?.downloaded ? (
@@ -711,7 +734,11 @@ function VoicesCard({ status }: { status: TtsStatus | null }) {
                       <span className="truncate text-[10.5px] text-muted-foreground">
                         {MODEL_LABELS[profile.model]}
                         {isBuiltinVoice(profile.model, profile.voice)
-                          ? " · built-in voice"
+                          ? ` · ${
+                              presetVoicesOf(profile.model, profile.language).find(
+                                (v) => v.id === profile.voice,
+                              )?.label ?? "built-in voice"
+                            }`
                           : profile.voice
                             ? ` · ${profile.voice}`
                             : ""}
@@ -806,17 +833,31 @@ function VoicesCard({ status }: { status: TtsStatus | null }) {
  * otherwise fall back to the voice in their own weights, so switching model
  * never leaves the profile unusable.
  */
+/** The voice picker's value for "clone my own sample". */
+const SAMPLE_CHOICE = "__sample__";
+
+/** A Kokoro preset id, or a comma blend of them (`af_heart,bf_emma`). */
+const KOKORO_VOICE_ID = /^[a-z][fm]_[a-z]+(\s*,\s*[a-z][fm]_[a-z]+)*$/;
+
 function defaultVoiceIdFor(
   model: TtsModelId,
   language: TtsLanguage,
   draft: { voice: string | null; sampleId: string | null },
 ): string | null {
+  const presets = presetVoicesOf(model, language);
+  const fallback = defaultPresetVoice(model, language);
   if (MODEL_VOICE_SOURCE[model] === "preset") {
-    return draft.voice ?? KOKORO_PRESET_VOICES[language][0]?.id ?? null;
+    // A Kokoro id typed by hand (or a blend) stays; another model's preset
+    // does not carry over.
+    if (model === "kokoro-82m" && draft.voice && KOKORO_VOICE_ID.test(draft.voice)) {
+      return draft.voice;
+    }
+    return presets.some((p) => p.id === draft.voice) ? draft.voice : fallback;
   }
-  const builtin = MODEL_BUILTIN_VOICE[model];
-  if (!builtin) return null;
-  return draft.sampleId && !isBuiltinVoice(model, draft.voice) ? null : builtin;
+  if (draft.sampleId && !isBuiltinVoice(model, draft.voice, language)) {
+    return null;
+  }
+  return presets.some((p) => p.id === draft.voice) ? draft.voice : fallback;
 }
 
 function VoiceEditor({
@@ -884,7 +925,8 @@ function VoiceEditor({
       model: next,
       voice,
       sampleId:
-        MODEL_VOICE_SOURCE[next] === "preset" || voice === BUILTIN_VOICE_ID
+        MODEL_VOICE_SOURCE[next] === "preset" ||
+        isBuiltinVoice(next, voice, draft.language)
           ? null
           : draft.sampleId,
       params: {},
@@ -908,14 +950,19 @@ function VoiceEditor({
     }
   };
 
+  const knownPresets = presetVoicesOf(draft.model, draft.language);
+  // Kokoro's own list comes from the running engine (and takes blends typed by
+  // hand); the other preset models are fully described by the static list.
   const presetOptions =
     presets && presets.length > 0
       ? presets
           .filter((v) => v.language === draft.language || v.language === "other")
           .map((v) => ({ id: v.id, label: v.label || v.id }))
-      : null;
-  const knownPresets = KOKORO_PRESET_VOICES[draft.language];
-  const usesBuiltin = isBuiltinVoice(draft.model, draft.voice);
+      : draft.model === "kokoro-82m"
+        ? null
+        : [...knownPresets];
+  const usesBuiltin = isBuiltinVoice(draft.model, draft.voice, draft.language);
+  const ownVoices = MODEL_VOICE_SOURCE[draft.model] === "clone" ? knownPresets : [];
   const tagged = modelSupportsTags(draft.model);
   const params = MODEL_PARAMS[draft.model];
 
@@ -1042,16 +1089,16 @@ function VoiceEditor({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {MODEL_BUILTIN_VOICE[draft.model] ? (
+              {ownVoices.length > 0 ? (
                 <div className="flex flex-col gap-1">
                   <FieldLabel htmlFor="voice-source">Voice</FieldLabel>
                   <Select
-                    value={usesBuiltin ? "builtin" : "sample"}
+                    value={usesBuiltin && draft.voice ? draft.voice : SAMPLE_CHOICE}
                     onValueChange={(v) =>
                       patch(
-                        v === "builtin"
-                          ? { voice: BUILTIN_VOICE_ID, sampleId: null }
-                          : { voice: null },
+                        v === SAMPLE_CHOICE
+                          ? { voice: null }
+                          : { voice: v, sampleId: null },
                       )
                     }
                   >
@@ -1062,18 +1109,22 @@ function VoiceEditor({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="builtin" className="text-[12px]">
-                        Built-in voice
-                      </SelectItem>
-                      <SelectItem value="sample" className="text-[12px]">
+                      {ownVoices.map((v) => (
+                        <SelectItem key={v.id} value={v.id} className="text-[12px]">
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={SAMPLE_CHOICE} className="text-[12px]">
                         Cloned from a sample
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   <span className="text-[10.5px] text-muted-foreground">
-                    {usesBuiltin
-                      ? `The speaker ${MODEL_LABELS[draft.model]} carries in its own weights. Nothing to record.`
-                      : "Your own recording, cloned by the model."}
+                    {!usesBuiltin
+                      ? "Your own recording, cloned by the model."
+                      : draft.voice === BUILTIN_VOICE_ID
+                        ? `The speaker ${MODEL_LABELS[draft.model]} carries in its own weights. Nothing to record.`
+                        : `A voice ${MODEL_LABELS[draft.model]} speaks without a sample. Nothing to record.`}
                   </span>
                 </div>
               ) : null}

@@ -21,6 +21,7 @@ PARAM_RANGES = {
     "exaggeration": (0.0, 2.0),
     "cfgWeight": (0.0, 1.0),
     "temperature": (0.05, 2.0),
+    "steps": (4.0, 64.0),
 }
 
 # Documented for Turbo and Nano. The README covers [laugh], [cough] and
@@ -66,6 +67,11 @@ class ModelInfo:
     tags: tuple = ()
     #: Id of the voice baked into the weights, empty when there is none.
     builtin_voice: str = ""
+    #: Voices a clone model speaks without a sample (VoiceInfo), besides
+    #: `builtin_voice`; for a preset model, its whole catalogue.
+    preset_voices: tuple = ()
+    #: Files (relative to a snapshot) every download must have produced.
+    required_files: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,42 @@ MODELS = (
         builtin_voice=BUILTIN_VOICE_ID,
     ),
     ModelInfo(
+        id="pocket-tts",
+        engine="pocket",
+        repo="kyutai/pocket-tts-without-voice-cloning",
+        languages=("es-ES", "en-US"),
+        voice_source="preset",
+        sample_rate=24000,
+        required_files=(
+            "languages/english/model.safetensors",
+            "languages/spanish/model.safetensors",
+        ),
+    ),
+    ModelInfo(
+        id="omnivoice",
+        engine="omnivoice",
+        repo="k2-fsa/OmniVoice",
+        languages=("es-ES", "en-US"),
+        voice_source="clone",
+        sample_rate=24000,
+        params=("speed", "steps"),
+        required_files=("model.safetensors", "audio_tokenizer/model.safetensors"),
+    ),
+    ModelInfo(
+        id="zonos3-mini",
+        engine="zonos3",
+        repo="Zyphra/ZONOS3-Mini",
+        languages=("es-ES", "en-US"),
+        voice_source="clone",
+        sample_rate=44100,
+        params=("temperature",),
+        required_files=(
+            "gguf/backbone-ptq.gguf",
+            "gguf/zac-keep2.gguf",
+            "gguf/spk-encoder.gguf",
+        ),
+    ),
+    ModelInfo(
         id="fake-model",
         engine="fake",
         repo="",
@@ -128,7 +170,92 @@ MODELS = (
     ),
 )
 
+# Pocket TTS ships one precomputed state per voice for every language model, so
+# any voice reads either language; the list per language puts the native
+# speakers first.
+POCKET_VOICES = (
+    VoiceInfo("lola", "Lola (Spanish)", "es-ES"),
+    VoiceInfo("rafael", "Rafael (Portuguese)", "es-ES"),
+    VoiceInfo("giovanni", "Giovanni (Italian)", "es-ES"),
+    VoiceInfo("estelle", "Estelle (French)", "es-ES"),
+) + tuple(
+    VoiceInfo(name, name.replace("_", " ").title(), "en-US")
+    for name in (
+        "alba", "marius", "javert", "jean", "fantine", "cosette", "eponine",
+        "azelma", "anna", "vera", "charles", "paul", "george", "mary", "jane",
+        "michael", "eve", "bill_boerst", "peter_yearsley", "stuart_bell", "caro_davy",
+    )
+)
+POCKET_DEFAULT_VOICES = {"es-ES": "lola", "en-US": "alba"}
+POCKET_LANGUAGES = {"es-ES": "spanish", "en-US": "english"}
+
+# OmniVoice speaks without a sample in two ways: it picks a voice itself, or it
+# designs one from attributes. Voice design was trained on English and Chinese
+# only, so the Spanish ones leave accents out and are the less predictable.
+OMNIVOICE_AUTO_VOICE = "auto"
+OMNIVOICE_DESIGNS = {
+    "design-f-young": "female, young adult, moderate pitch",
+    "design-m-middle": "male, middle-aged, low pitch",
+    "design-f-elderly": "female, elderly, moderate pitch",
+    "design-m-young": "male, young adult, moderate pitch",
+    "design-f-american": "female, young adult, moderate pitch, american accent",
+    "design-m-american": "male, middle-aged, low pitch, american accent",
+    "design-f-british": "female, middle-aged, moderate pitch, british accent",
+    "design-m-british": "male, young adult, moderate pitch, british accent",
+    "design-f-whisper": "female, young adult, whisper",
+}
+OMNIVOICE_VOICES = (
+    VoiceInfo(OMNIVOICE_AUTO_VOICE, "Automatic", "es-ES"),
+    VoiceInfo("design-f-young", "Designed: young woman", "es-ES"),
+    VoiceInfo("design-m-middle", "Designed: middle-aged man, low", "es-ES"),
+    VoiceInfo("design-f-elderly", "Designed: elderly woman", "es-ES"),
+    VoiceInfo("design-m-young", "Designed: young man", "es-ES"),
+    VoiceInfo(OMNIVOICE_AUTO_VOICE, "Automatic", "en-US"),
+    VoiceInfo("design-f-american", "Designed: American woman", "en-US"),
+    VoiceInfo("design-m-american", "Designed: American man, low", "en-US"),
+    VoiceInfo("design-f-british", "Designed: British woman", "en-US"),
+    VoiceInfo("design-m-british", "Designed: British man", "en-US"),
+    VoiceInfo("design-f-whisper", "Designed: whispering woman", "en-US"),
+)
+OMNIVOICE_LANGUAGES = {"es-ES": "es", "en-US": "en"}
+
+# ZONOS3-Mini default voices: the ids `GET /v2/speakers` returns for the
+# gguf/voices folder of the pinned weights.
+ZONOS3_VOICES = (
+    VoiceInfo("default_43e790fc116fd62a", "Ximena", "es-ES"),
+    VoiceInfo("default_87250baa043e5bba", "Rodrigo", "es-ES"),
+    VoiceInfo("default_de4d191ca7574982", "Savannah (American)", "en-US"),
+    VoiceInfo("default_34370fd91e3484ef", "Wyatt (American)", "en-US"),
+    VoiceInfo("default_b78b28baf5c31a1d", "Imogen (British)", "en-US"),
+    VoiceInfo("default_3765f0d1140c05c0", "Rupert (British)", "en-US"),
+    VoiceInfo("default_2c5123a959875341", "Cillian (Irish)", "en-US"),
+    VoiceInfo("default_3c00e421e684f949", "Thaddeus (announcer)", "en-US"),
+    VoiceInfo("default_c95cf57259ed7313", "Jett (energetic)", "en-US"),
+    VoiceInfo("default_940eaff39a929da0", "Willow (ASMR)", "en-US"),
+    VoiceInfo("default_40a3ba1017bfb68a", "Morgana (witch)", "en-US"),
+    VoiceInfo("default_c5e098c322aae901", "Sakura (anime)", "en-US"),
+)
+ZONOS3_LANGUAGES = {"es-ES": "es", "en-US": "en_us"}
+
+_PRESETS_BY_MODEL = {
+    "pocket-tts": POCKET_VOICES,
+    "omnivoice": OMNIVOICE_VOICES,
+    "zonos3-mini": ZONOS3_VOICES,
+}
+MODELS = tuple(
+    ModelInfo(**{**m.__dict__, "preset_voices": _PRESETS_BY_MODEL.get(m.id, m.preset_voices)})
+    for m in MODELS
+)
+
 MODELS_BY_ID = {m.id: m for m in MODELS}
+
+
+def sample_free_voices(info: ModelInfo, language: str) -> frozenset:
+    """Voice ids a clone model speaks in `language` without a sample."""
+    ids = {v.id for v in info.preset_voices if v.language == language}
+    if info.builtin_voice:
+        ids.add(info.builtin_voice)
+    return frozenset(ids)
 
 KOKORO_LANG_CODES = {"es-ES": "e", "en-US": "a"}
 CHATTERBOX_LANG_IDS = {"es-ES": "es", "en-US": "en"}
@@ -264,9 +391,17 @@ def is_downloaded(info: ModelInfo) -> bool:
         return False
     try:
         with os.scandir(snapshots) as entries:
-            return any(entry.is_dir() for entry in entries)
+            revisions = [entry.path for entry in entries if entry.is_dir()]
     except OSError:
         return False
+    if not revisions:
+        return False
+    # Pocket TTS pins each file to its own revision, so a required file may
+    # sit in any snapshot.
+    return all(
+        any(os.path.isfile(os.path.join(rev, rel)) for rev in revisions)
+        for rel in info.required_files
+    )
 
 
 def to_pcm16_bytes(samples: Any) -> bytes:

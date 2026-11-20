@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from engines.base import MODELS, model_info  # noqa: E402
+from engines.base import MODELS, POCKET_LANGUAGES, POCKET_VOICES, model_info  # noqa: E402
 
 # File names verified against the HF repos; anything not listed is skipped.
 ALLOW_PATTERNS = {
@@ -33,6 +33,23 @@ ALLOW_PATTERNS = {
     ),
     "chatterbox-turbo": None,
     "chatterbox-nano": None,
+    "omnivoice": (
+        "*.json",
+        "*.txt",
+        "model.safetensors",
+        "audio_tokenizer/*",
+    ),
+    # Only what reading aloud loads: the quantized backbone, the compact
+    # decoder, the speaker encoder, the steering bundle and the default voices.
+    # The raw-reference encoders (5.5 GB) and the editing weights stay out.
+    "zonos3-mini": (
+        "gguf/backbone-ptq.gguf",
+        "gguf/zac-keep2.gguf",
+        "gguf/spk-encoder.gguf",
+        "gguf/steer.gguf",
+        "gguf/voices/*",
+        "gguf/voices/*/*",
+    ),
 }
 IGNORE_PATTERNS = ("*.md", ".gitattributes")
 
@@ -58,7 +75,29 @@ def targets(model: str, engine: str) -> list:
     raise SystemExit("--model or --engine is required")
 
 
+def download_pocket() -> str:
+    """Pocket TTS pins every file to its own revision, so the library itself
+    fetches exactly what it will load: each language model and the state of
+    every preset voice offered in that language."""
+    from pocket_tts import TTSModel
+
+    for language, name in POCKET_LANGUAGES.items():
+        emit_detail("loading the {} model".format(name))
+        model = TTSModel.load_model(language=name)
+        for voice in POCKET_VOICES:
+            if voice.language == language:
+                model.get_state_for_audio_prompt(voice.id)
+    return "pocket-tts ({})".format(", ".join(POCKET_LANGUAGES.values()))
+
+
+def emit_detail(message: str) -> None:
+    sys.stderr.write("[tts] {}\n".format(message))
+    sys.stderr.flush()
+
+
 def download(info) -> str:
+    if info.id == "pocket-tts":
+        return download_pocket()
     from huggingface_hub import snapshot_download
 
     allow = ALLOW_PATTERNS.get(info.id)

@@ -1,0 +1,11 @@
+# k2-fsa OmniVoice. The package lists its demo and training stack as hard
+# dependencies; excludes-omnivoice.txt drops what inference never imports.
+omnivoice==0.2.1
+torch==2.15.0
+torchaudio==2.11.1
+transformers==5.23.0
+accelerate==1.16.0
+huggingface_hub==2.4.0
+soundfile==0.13.1
+pydub==0.25.1
+numpy==2.4.6

@@ -17,8 +17,9 @@ export const KEY_DEFAULTS = "defaults";
 export const KEY_SEED_VERSION = "seedVersion";
 
 /** Bumped when BUILT_IN_DEFAULTS gains a voice an existing install should get.
- *  1 was the two Kokoro voices; 2 added one voice per Chatterbox model. */
-export const SEED_VERSION = 2;
+ *  1 was the two Kokoro voices; 2 added one voice per Chatterbox model; 3 added
+ *  a Spanish and an English voice for Pocket TTS, OmniVoice and ZONOS3-Mini. */
+export const SEED_VERSION = 3;
 
 export type PersistedVoicesState = {
   profiles: VoiceProfile[];

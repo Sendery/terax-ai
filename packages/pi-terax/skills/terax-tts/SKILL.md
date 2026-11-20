@@ -100,6 +100,25 @@ it colors, and used sparingly. Stacked tags degrade the whole utterance. Never
 put a tag in text sent to Kokoro or Chatterbox Multilingual, where it is read
 out as literal words.
 
+### Pocket TTS (`pocket-tts`, both languages, preset voices)
+
+Plain prose, no tags and no parameters. Spanish reads best with `lola`, English
+with `alba` or any of the other English presets. It is the fastest engine on a
+Mac, so prefer it for long readings when the user has it installed.
+
+### OmniVoice (`omnivoice`, both languages)
+
+Plain prose. A profile speaks in an automatic voice (`auto`), a designed one
+(`design-*`), or a cloned sample. `speed` (0.5 to 2) and `steps` (4 to 64,
+diffusion steps: more is cleaner and slower) are profile parameters. Do not add
+tags: the model's own inline tags are not exposed by Terax.
+
+### ZONOS3-Mini (`zonos3-mini`, both languages, Apple Silicon only)
+
+Plain prose. Default voices (Ximena and Rodrigo in Spanish, ten English ones)
+or a cloned sample; `temperature` (default 0.75) is the only parameter. It
+normalizes numbers and dates itself, so write them as digits.
+
 ## Voice Format Definitions
 
 A profile carries a `style` object with `persona`, `instructions` and `tags`.

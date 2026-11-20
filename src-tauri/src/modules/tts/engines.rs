@@ -11,7 +11,11 @@ use serde::{Deserialize, Serialize};
 /// recognised as stale without reinstalling to find out.
 pub const KOKORO_SPEC_VERSION: u32 = 1;
 pub const CHATTERBOX_SPEC_VERSION: u32 = 2;
+pub const POCKET_SPEC_VERSION: u32 = 1;
+pub const OMNIVOICE_SPEC_VERSION: u32 = 1;
+pub const ZONOS3_SPEC_VERSION: u32 = 1;
 
+/// The interpreter every engine gets unless it needs a newer one.
 pub const PYTHON_VERSION: &str = "3.11";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -19,15 +23,27 @@ pub const PYTHON_VERSION: &str = "3.11";
 pub enum Engine {
     Kokoro,
     Chatterbox,
+    Pocket,
+    Omnivoice,
+    Zonos3,
 }
 
 impl Engine {
-    pub const ALL: [Engine; 2] = [Engine::Kokoro, Engine::Chatterbox];
+    pub const ALL: [Engine; 5] = [
+        Engine::Kokoro,
+        Engine::Chatterbox,
+        Engine::Pocket,
+        Engine::Omnivoice,
+        Engine::Zonos3,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
             Engine::Kokoro => "kokoro",
             Engine::Chatterbox => "chatterbox",
+            Engine::Pocket => "pocket",
+            Engine::Omnivoice => "omnivoice",
+            Engine::Zonos3 => "zonos3",
         }
     }
 
@@ -35,6 +51,18 @@ impl Engine {
         match self {
             Engine::Kokoro => KOKORO_SPEC_VERSION,
             Engine::Chatterbox => CHATTERBOX_SPEC_VERSION,
+            Engine::Pocket => POCKET_SPEC_VERSION,
+            Engine::Omnivoice => OMNIVOICE_SPEC_VERSION,
+            Engine::Zonos3 => ZONOS3_SPEC_VERSION,
+        }
+    }
+
+    /// ZONOS3's packages declare `requires-python >= 3.12`; the rest keep the
+    /// interpreter their pins were verified against.
+    pub fn python_version(self) -> &'static str {
+        match self {
+            Engine::Zonos3 => "3.12",
+            _ => PYTHON_VERSION,
         }
     }
 
@@ -42,7 +70,28 @@ impl Engine {
         match self {
             Engine::Kokoro => "requirements-kokoro.txt",
             Engine::Chatterbox => "requirements-chatterbox.txt",
+            Engine::Pocket => "requirements-pocket.txt",
+            Engine::Omnivoice => "requirements-omnivoice.txt",
+            Engine::Zonos3 => "requirements-zonos3.txt",
         }
+    }
+
+    /// Packages left out of the resolution. OmniVoice declares its Gradio demo
+    /// and training stack as hard dependencies; inference never imports them,
+    /// and excluding them saves about a gigabyte.
+    pub fn excludes_file_name(self) -> Option<&'static str> {
+        match self {
+            Engine::Omnivoice => Some("excludes-omnivoice.txt"),
+            _ => None,
+        }
+    }
+
+    pub fn excludes(self) -> Option<&'static str> {
+        let name = self.excludes_file_name()?;
+        SERVER_FILES
+            .iter()
+            .find(|file| file.rel == name)
+            .map(|file| file.body)
     }
 
     /// The embedded requirements file, so the pins recorded in `state.json`
@@ -88,6 +137,9 @@ impl FromStr for Engine {
         match value {
             "kokoro" => Ok(Engine::Kokoro),
             "chatterbox" => Ok(Engine::Chatterbox),
+            "pocket" => Ok(Engine::Pocket),
+            "omnivoice" => Ok(Engine::Omnivoice),
+            "zonos3" => Ok(Engine::Zonos3),
             other => Err(format!("unknown tts engine: {other}")),
         }
     }
@@ -103,14 +155,23 @@ pub enum Model {
     ChatterboxTurbo,
     #[serde(rename = "chatterbox-nano")]
     ChatterboxNano,
+    #[serde(rename = "pocket-tts")]
+    PocketTts,
+    #[serde(rename = "omnivoice")]
+    Omnivoice,
+    #[serde(rename = "zonos3-mini")]
+    Zonos3Mini,
 }
 
 impl Model {
-    pub const ALL: [Model; 4] = [
+    pub const ALL: [Model; 7] = [
         Model::Kokoro82m,
         Model::ChatterboxMultilingual,
         Model::ChatterboxTurbo,
         Model::ChatterboxNano,
+        Model::PocketTts,
+        Model::Omnivoice,
+        Model::Zonos3Mini,
     ];
 
     pub fn id(self) -> &'static str {
@@ -119,6 +180,9 @@ impl Model {
             Model::ChatterboxMultilingual => "chatterbox-multilingual",
             Model::ChatterboxTurbo => "chatterbox-turbo",
             Model::ChatterboxNano => "chatterbox-nano",
+            Model::PocketTts => "pocket-tts",
+            Model::Omnivoice => "omnivoice",
+            Model::Zonos3Mini => "zonos3-mini",
         }
     }
 
@@ -132,6 +196,11 @@ impl Model {
             Model::ChatterboxMultilingual => "ResembleAI/chatterbox",
             Model::ChatterboxTurbo => "ResembleAI/chatterbox-turbo",
             Model::ChatterboxNano => "ResembleAI/chatterbox-nano",
+            // The voice-cloning weights are gated behind a Hugging Face login;
+            // this repo carries the same models with the preset voices only.
+            Model::PocketTts => "kyutai/pocket-tts-without-voice-cloning",
+            Model::Omnivoice => "k2-fsa/OmniVoice",
+            Model::Zonos3Mini => "Zyphra/ZONOS3-Mini",
         }
     }
 
@@ -142,6 +211,9 @@ impl Model {
             Model::ChatterboxMultilingual => "models--ResembleAI--chatterbox",
             Model::ChatterboxTurbo => "models--ResembleAI--chatterbox-turbo",
             Model::ChatterboxNano => "models--ResembleAI--chatterbox-nano",
+            Model::PocketTts => "models--kyutai--pocket-tts-without-voice-cloning",
+            Model::Omnivoice => "models--k2-fsa--OmniVoice",
+            Model::Zonos3Mini => "models--Zyphra--ZONOS3-Mini",
         }
     }
 }
@@ -152,6 +224,9 @@ pub fn engine_of(model: Model) -> Engine {
         Model::ChatterboxMultilingual | Model::ChatterboxTurbo | Model::ChatterboxNano => {
             Engine::Chatterbox
         }
+        Model::PocketTts => Engine::Pocket,
+        Model::Omnivoice => Engine::Omnivoice,
+        Model::Zonos3Mini => Engine::Zonos3,
     }
 }
 
@@ -164,6 +239,9 @@ impl FromStr for Model {
             "chatterbox-multilingual" => Ok(Model::ChatterboxMultilingual),
             "chatterbox-turbo" => Ok(Model::ChatterboxTurbo),
             "chatterbox-nano" => Ok(Model::ChatterboxNano),
+            "pocket-tts" => Ok(Model::PocketTts),
+            "omnivoice" => Ok(Model::Omnivoice),
+            "zonos3-mini" => Ok(Model::Zonos3Mini),
             other => Err(format!("unknown tts model: {other}")),
         }
     }
@@ -238,6 +316,38 @@ pub const SERVER_FILES: &[EmbeddedFile] = &[
     EmbeddedFile {
         rel: "engines/chatterbox.py",
         body: include_str!("../../../resources/tts/engines/chatterbox.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/plan.py",
+        body: include_str!("../../../resources/tts/engines/plan.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/pocket.py",
+        body: include_str!("../../../resources/tts/engines/pocket.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/omnivoice.py",
+        body: include_str!("../../../resources/tts/engines/omnivoice.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/zonos3.py",
+        body: include_str!("../../../resources/tts/engines/zonos3.py"),
+    },
+    EmbeddedFile {
+        rel: "requirements-pocket.txt",
+        body: include_str!("../../../resources/tts/requirements-pocket.txt"),
+    },
+    EmbeddedFile {
+        rel: "requirements-omnivoice.txt",
+        body: include_str!("../../../resources/tts/requirements-omnivoice.txt"),
+    },
+    EmbeddedFile {
+        rel: "excludes-omnivoice.txt",
+        body: include_str!("../../../resources/tts/excludes-omnivoice.txt"),
+    },
+    EmbeddedFile {
+        rel: "requirements-zonos3.txt",
+        body: include_str!("../../../resources/tts/requirements-zonos3.txt"),
     },
     EmbeddedFile {
         rel: "requirements-kokoro.txt",
@@ -362,7 +472,9 @@ mod tests {
         );
         assert!(archive.ends_with(".tar.gz"), "{archive}");
         assert!(
-            !chatterbox.iter().any(|pin| pin.starts_with("huggingface_hub==0.35")),
+            !chatterbox
+                .iter()
+                .any(|pin| pin.starts_with("huggingface_hub==0.35")),
             "the 0.35 line cannot satisfy transformers 5.x: {chatterbox:?}"
         );
         for engine in Engine::ALL {

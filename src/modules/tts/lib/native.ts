@@ -16,6 +16,39 @@ export type TtsRuntimeInfo = {
   pythonVersion: string | null;
 };
 
+/** What Terax detected about this machine (hardware.rs). */
+export type TtsHardware = {
+  os: string;
+  arch: string;
+  cpu: string | null;
+  appleSilicon: boolean;
+  performanceCores: number | null;
+  efficiencyCores: number | null;
+  logicalCpus: number;
+  memoryBytes: number | null;
+  avx2: boolean;
+  avx512: boolean;
+  nvidia: {
+    name: string;
+    memoryMb: number | null;
+    driver: string | null;
+  } | null;
+};
+
+/** How one engine runs on this machine, for the `auto` device. */
+export type TtsEnginePlan = {
+  supported: boolean;
+  unsupportedReason: string | null;
+  /** `cpu`, `mps`, `cuda` or `mlx`. */
+  device: string;
+  dtype: string | null;
+  threads: number | null;
+  quantize: boolean;
+  steps: number | null;
+  torchBackend: string | null;
+  notes: string[];
+};
+
 export type TtsEngineStatus = {
   id: TtsEngineId;
   installed: boolean;
@@ -30,6 +63,10 @@ export type TtsEngineStatus = {
   device: TtsDevice | null;
   pid: number | null;
   sizeBytes: number;
+  /** Absent from a status read before dev.25. */
+  plan?: TtsEnginePlan;
+  pythonVersion?: string;
+  torchBackend?: string | null;
 };
 
 export type TtsModelStatus = {
@@ -66,6 +103,8 @@ export type TtsStatus = {
   models: TtsModelStatus[];
   jobs: TtsJob[];
   diskUsageBytes: number;
+  hardware?: TtsHardware;
+  hardwareSummary?: string;
 };
 
 export type TtsJobLogs = {
