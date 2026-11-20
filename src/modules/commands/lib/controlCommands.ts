@@ -119,6 +119,8 @@ export type ControlPayloads = {
     stdin?: boolean;
     placement?: (typeof READER_PLACEMENTS)[number];
     tabId?: number;
+    /** Set by `terax --read`: the pty of the terminal that ran it. */
+    callerPtyId?: number;
   };
   "reader.list": undefined;
   "reader.state": { docId?: string };
@@ -510,7 +512,7 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
   },
   "reader.open": {
     description:
-      "Open a text in the Reader, a read-along view that speaks it with the local voice and highlights each word. By default it opens in the Reader panel docked under the tab on screen (or under tabId), so the user stays on that tab; placement tab opens a Reader tab instead. Give the text itself, or the absolute path of a UTF-8 file (up to 2 MiB; Markdown is laid out). The same text always reopens the same document, with its reading position and cut points. Returns the tab id, the placement, the document id and the title.",
+      "Open a text in the Reader, a read-along view that speaks it with the local voice and highlights each word. By default it opens in the Reader panel docked under the tab on screen (or under tabId), so the user stays on that tab; placement tab opens a Reader tab instead. Give the text itself, or the absolute path of a UTF-8 file (up to 2 MiB; Markdown is laid out). The same text always reopens the same document, with its reading position and cut points. It opens paused unless play is true, so an agent never talks over what the user is hearing; a person's own actions start it themselves. Returns the tab id, the placement, the document id and the title.",
     params: [
       {
         name: "text",
@@ -532,7 +534,8 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
         name: "title",
         type: "string",
         required: false,
-        description: "Title for the tab; defaults to the file name.",
+        description:
+          "Title shown in the panel header and the library; defaults to the file name or the first words.",
         maxLength: 200,
       },
       {
@@ -559,6 +562,14 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
         type: "integer",
         required: false,
         description: "Tab to dock the panel under, from the snapshot; defaults to the tab on screen.",
+        min: 0,
+      },
+      {
+        name: "callerPtyId",
+        type: "integer",
+        required: false,
+        description:
+          "Set by terax-read: the terminal that ran it, so the panel opens under that terminal's tab while it is open. Ignored when tabId is given or that terminal is gone.",
         min: 0,
       },
     ],
@@ -692,7 +703,8 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
         name: "show",
         type: "boolean",
         required: false,
-        description: "Also show the reading in the Reader panel under the tab on screen.",
+        description:
+          "Also show the reading: in the Reader panel under the tab on screen, or in a Reader tab beside it when the tab on screen is a Reader tab. The reply's shown field says where.",
       },
     ],
     anyOf: ["text", "path", "docId"],

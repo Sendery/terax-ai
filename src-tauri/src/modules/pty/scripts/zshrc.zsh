@@ -98,7 +98,7 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
     bindkey '\ef' emacs-forward-word
   fi
 
-  # Opens a file or piped text in this Terax's Reader tab.
+  # Opens a file or piped text in the Reader panel under this terminal (--tab: a Reader tab).
   terax-read() {
     if [[ -z "$TERAX_APP_EXE" ]]; then
       print -u2 'terax-read: TERAX_APP_EXE is unset; run it inside a Terax terminal'

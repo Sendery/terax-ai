@@ -85,6 +85,8 @@ export type ReaderHost = {
   closeDock: (tabId: number) => void;
   /** Lets panels and Reader tabs go of deleted documents. */
   forgetDeleted: (ids: string[]) => void;
+  /** The tab holding the terminal with this pty, if it is still open. */
+  tabOfPty?: (ptyId: number) => number | null;
 };
 
 const DOC_ID = /^[0-9a-f]{12}$/;
@@ -208,8 +210,16 @@ export function createReaderHandlers(
         failure("reader.open path must be absolute");
       }
       const placement = payload.placement ?? "dock";
+      // terax-read names the terminal it ran in; while that terminal is open
+      // its tab takes the panel, even when another tab is on screen.
+      const callerTab =
+        payload.tabId === undefined && payload.callerPtyId !== undefined
+          ? (host.tabOfPty?.(payload.callerPtyId) ?? undefined)
+          : undefined;
       const hostTab =
-        placement === "dock" ? targetTab(host, payload.tabId) : null;
+        placement === "dock"
+          ? targetTab(host, payload.tabId ?? callerTab)
+          : null;
       const fromStdin = payload.stdin === true && path !== undefined;
       const title =
         payload.title?.trim() ||
@@ -414,13 +424,34 @@ export function createReaderHandlers(
       }
       if (payload.voiceId !== undefined)
         await applyVoice(doc.id, payload.voiceId);
-      if (payload.show && !shownSomewhere(host.tabs(), doc.id))
-        host.dockReading(host.activeId(), doc);
+      let shown: { placement: "dock" | "tab"; tabId: number } | null = null;
+      if (payload.show) {
+        const already = host.tabs().find((t) => docShownBy(t) === doc.id);
+        if (already) {
+          shown = {
+            placement: already.kind === "reader" ? "tab" : "dock",
+            tabId: already.id,
+          };
+        } else if (host.dockReading(host.activeId(), doc)) {
+          shown = { placement: "dock", tabId: host.activeId() };
+        } else {
+          // The tab on screen is a Reader tab, which has no panel: a Reader
+          // tab of its own beside it, rather than nothing.
+          shown = {
+            placement: "tab",
+            tabId: host.openReaderTab({
+              docId: doc.id,
+              title: doc.state.title,
+            }),
+          };
+        }
+      }
       const split = payload.split ?? "paragraph";
       const started = startExport(doc.id, split);
       const fresh = useReaderStore.getState().docs[doc.id] ?? doc;
       return {
         ...started,
+        shown,
         title: fresh.state.title,
         words: fresh.doc.words.length,
         segments: fresh.doc.segments.length,

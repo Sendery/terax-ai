@@ -468,6 +468,30 @@ describe("Pi extension", () => {
     expect(harness.call).toHaveBeenCalledWith("tts.speak", { text: "Done." });
   });
 
+  it("runs the Reader actions through the same commands as the MCP tool", async () => {
+    const harness = speakHarness();
+
+    await harness.speak?.execute("speak-4", {
+      action: "open_reader",
+      text: "A long article.",
+      args: { placement: "dock", play: true },
+    });
+    expect(harness.call).toHaveBeenCalledWith("reader.open", {
+      placement: "dock",
+      play: true,
+      text: "A long article.",
+    });
+
+    await harness.speak?.execute("speak-5", {
+      action: "control_reader",
+      args: { op: "pause" },
+    });
+    expect(harness.call).toHaveBeenCalledWith("reader.control", { op: "pause" });
+
+    await harness.speak?.execute("speak-6", { action: "stop_speaking" });
+    expect(harness.call).toHaveBeenCalledWith("tts.stopSpeaking", undefined);
+  });
+
   it("rejects empty speech text before any transport", async () => {
     const harness = speakHarness();
 

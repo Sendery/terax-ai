@@ -39,7 +39,8 @@ function context(
     readSelectionAloud: noop,
     readSelectionAloudSpanish: noop,
     readSelectionAloudEnglish: noop,
-    openSelectionInReader: noop,
+    readHere: noop,
+    readInNewTab: noop,
     resumeLastReader: noop,
     stopReading: noop,
     openVoiceSettings: noop,
@@ -135,7 +136,10 @@ describe("createCommandItems", () => {
       "tts.readSelection",
       "tts.readSelection.es",
       "tts.readSelection.en",
-      "tts.stop",
+      "reader.readHere",
+      "reader.readInNewTab",
+      "reader.resume",
+      "speech.stop",
       "tts.settings",
     ]) {
       const item = items.find((entry) => entry.id === id);
@@ -163,8 +167,44 @@ describe("createCommandItems", () => {
     }
     // Stopping is about playback, not about a selection.
     expect(
-      withoutSelection.find((entry) => entry.id === "tts.stop")?.disabledReason,
+      withoutSelection.find((entry) => entry.id === "speech.stop")?.disabledReason,
     ).toBeUndefined();
+  });
+
+  it("says why a tab cannot speak, read here or stop instead of hiding it", () => {
+    const items = createCommandItems(
+      context({
+        hasSelection: true,
+        speakDisabled: "Private terminal: reading aloud is off",
+        readHereDisabled: "Private terminal: reading aloud is off",
+        readInNewTabDisabled: "Nothing to read in this tab",
+        stopDisabled: "Nothing is playing",
+      }),
+    );
+    const reason = (id: string) =>
+      items.find((entry) => entry.id === id)?.disabledReason;
+    expect(reason("tts.readSelection")).toBe(
+      "Private terminal: reading aloud is off",
+    );
+    expect(reason("reader.readHere")).toBe(
+      "Private terminal: reading aloud is off",
+    );
+    expect(reason("reader.readInNewTab")).toBe("Nothing to read in this tab");
+    expect(reason("speech.stop")).toBe("Nothing is playing");
+  });
+
+  it("names each reading action once, with the shared labels", () => {
+    const items = createCommandItems(context({ hasSelection: true }));
+    const title = (id: string) => items.find((entry) => entry.id === id)?.title;
+    expect(title("tts.readSelection")).toBe("Speak selection");
+    expect(title("reader.readHere")).toBe("Read here");
+    expect(title("reader.readInNewTab")).toBe("Read in new tab");
+    expect(title("reader.resume")).toBe("Resume");
+    expect(title("speech.stop")).toBe("Stop");
+    const ids = items.map((entry) => entry.id);
+    expect(ids).not.toContain("reader.openSelection");
+    expect(ids).not.toContain("reader.openFile");
+    expect(ids).not.toContain("tts.stop");
   });
 
   it("wires each voice entry to its own handler", () => {
@@ -187,7 +227,7 @@ describe("createCommandItems", () => {
     items.find((item) => item.id === "tts.readSelection")?.run?.();
     items.find((item) => item.id === "tts.readSelection.es")?.run?.();
     items.find((item) => item.id === "tts.readSelection.en")?.run?.();
-    items.find((item) => item.id === "tts.stop")?.run?.();
+    items.find((item) => item.id === "speech.stop")?.run?.();
     items.find((item) => item.id === "tts.settings")?.run?.();
 
     expect(readSelectionAloud).toHaveBeenCalledTimes(1);

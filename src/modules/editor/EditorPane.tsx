@@ -54,6 +54,12 @@ export type EditorPaneHandle = {
   clearQuery: () => void;
   focus: () => void;
   getSelection: () => string | null;
+  /** The whole buffer, unsaved edits included; null when no editor is up. */
+  getText: () => string | null;
+  /** True when the source editor is on screen and accepts input. */
+  isEditable: () => boolean;
+  /** Replaces the selection (or inserts at the cursor), for Cut and Paste. */
+  replaceSelection: (text: string) => void;
   getPath: () => string;
   /** Re-read the file from disk. Skips silently if the buffer is dirty. */
   reload: () => boolean;
@@ -348,6 +354,19 @@ export const EditorPane = forwardRef<EditorPaneHandle, Props>(
           const { from, to } = view.state.selection.main;
           if (from === to) return null;
           return view.state.sliceDoc(from, to);
+        },
+        getText: () => {
+          const view = cmRef.current?.view;
+          return view ? view.state.doc.toString() : null;
+        },
+        isEditable: () =>
+          presentation.current.viewMode !== "rendered" &&
+          Boolean(cmRef.current?.view),
+        replaceSelection: (text: string) => {
+          const view = cmRef.current?.view;
+          if (!view) return;
+          view.dispatch(view.state.replaceSelection(text));
+          view.focus();
         },
         getPath: () => path,
         reload: () => reloadRef.current(),

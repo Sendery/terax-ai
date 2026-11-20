@@ -203,23 +203,56 @@ const defaultDependencies: ExtensionDependencies = {
   platform: process.platform,
 };
 
+/**
+ * The actions of terax_speak, the same names and commands as the MCP tool of
+ * the same name, so any agent can speak and also open, drive, export and
+ * delete readings. `speak` plays at once; a reading an agent opens stays
+ * paused until `play: true` or `control_reader` with op `play`.
+ */
+export const TERAX_SPEAK_ACTIONS = {
+  speak: "tts.speak",
+  stop_speaking: "tts.stopSpeaking",
+  start_engine: "tts.start",
+  stop_engine: "tts.stop",
+  install_engine: "tts.install",
+  download_model: "tts.download",
+  open_reader: "reader.open",
+  dock_reader: "reader.dock",
+  delete_reader_documents: "reader.delete",
+  control_reader: "reader.control",
+  mark_reader: "reader.mark",
+  export_reader: "reader.export",
+  generate_reading: "reader.generate",
+} as const;
+
+type SpeakAction = keyof typeof TERAX_SPEAK_ACTIONS;
+const SPEAK_ACTION_NAMES = Object.keys(TERAX_SPEAK_ACTIONS) as SpeakAction[];
+
 function createSpeakTool(dependencies: ExtensionDependencies) {
   return defineTool({
     name: "terax_speak",
     label: "Speak through Terax",
     description:
-      "Read a short text aloud on the user's machine with Terax's local speech engine. Returns as soon as playback starts, not when it ends. Use it for confirmations and requested summaries, never to dump logs or long output. Call terax_call with tts.voices to list voices and with tts.status to follow progress.",
+      "Speak short text aloud on the user's machine with Terax's local speech engine, manage the engines, and run the Reader (a read-along view for long texts in a panel under a tab or a tab of its own). action defaults to speak, which returns as soon as playback starts; use it for confirmations and requested summaries, never to dump logs. Readings an agent opens stay paused unless play is true. Other actions take their arguments in args, as the matching command documents them (terax_call with app.commands lists them): open_reader (text or path, placement, tabId, play), control_reader (op, docId), generate_reading (text, path or docId, split, show) and so on. Call terax_call with tts.voices to list voices and tts.status or reader.state to follow progress.",
     parameters: Type.Object({
-      text: Type.String({
-        minLength: 1,
-        maxLength: 8192,
-        description:
-          "Plain prose to speak. Markup, code and ANSI noise are spoken literally or stripped, so write it as it should sound.",
-      }),
+      action: Type.Optional(
+        Type.Union(
+          SPEAK_ACTION_NAMES.map((name) => Type.Literal(name)),
+          { description: "What to do; defaults to speak." },
+        ),
+      ),
+      text: Type.Optional(
+        Type.String({
+          minLength: 1,
+          maxLength: 300_000,
+          description:
+            "For speak (up to 8192 characters), open_reader and generate_reading: plain prose, written as it should sound.",
+        }),
+      ),
       language: Type.Optional(
         Type.Union([Type.Literal("es-ES"), Type.Literal("en-US")], {
           description:
-            "Language whose default voice profile should speak. Omit to use the user's preferred language.",
+            "For speak: the language whose default voice profile should speak. Omit to use the user's preferred language.",
         }),
       ),
       voiceId: Type.Optional(
@@ -229,19 +262,33 @@ function createSpeakTool(dependencies: ExtensionDependencies) {
             "Voice profile id from tts.voices. Wins over language when both are given.",
         }),
       ),
+      args: Type.Optional(
+        Type.Record(Type.String(), Type.Unknown(), {
+          description:
+            "The other arguments of the action's command, for example { docId, op } for control_reader or { path, placement, play } for open_reader.",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal) {
+      const action: SpeakAction = params.action ?? "speak";
+      const command = TERAX_SPEAK_ACTIONS[action];
+      if (!command) throw new Error(`terax_speak has no action ${action}`);
       const text = typeof params.text === "string" ? params.text.trim() : "";
-      if (text.length === 0) {
+      if (action === "speak" && text.length === 0) {
         throw new Error("terax_speak requires text to speak");
       }
-      const discovery = await dependencies.discover({ signal });
-      const client = dependencies.createClient(discovery, signal);
-      const result = await client.call("tts.speak", {
-        text,
+      const payload: Record<string, unknown> = {
+        ...(params.args ?? {}),
+        ...(text.length > 0 ? { text } : {}),
         ...(params.language === undefined ? {} : { language: params.language }),
         ...(params.voiceId === undefined ? {} : { voiceId: params.voiceId }),
-      });
+      };
+      const discovery = await dependencies.discover({ signal });
+      const client = dependencies.createClient(discovery, signal);
+      const result = await client.call(
+        command,
+        Object.keys(payload).length > 0 ? payload : undefined,
+      );
       return textResult(JSON.stringify(result, null, 2), { result });
     },
   });

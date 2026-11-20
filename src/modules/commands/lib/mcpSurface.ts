@@ -474,7 +474,8 @@ export const EXTENSION_TOOL_ALIGNMENT: Record<
   terax_call: { mcp: { tool: "*" } },
   terax_run: { mcp: { tool: "*" } },
   terax_wait: { mcp: { tool: "terax_inspect", action: "wait" } },
-  terax_speak: { mcp: { tool: "terax_speak", action: "speak" } },
+  // Every action, under the same names: see TERAX_SPEAK_ACTIONS in the extension.
+  terax_speak: { mcp: { tool: "terax_speak" } },
   terax_development_guide: {
     piOnly:
       "Guides Pi's own development workflow and ships with the extension's skills.",

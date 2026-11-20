@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { MODEL_LABELS } from "@/modules/tts/lib/engines";
 import { formatClock } from "@/modules/tts/lib/format";
@@ -39,6 +40,11 @@ const ACTION =
  * engine or has something to replay, so the feature costs no pixels and no
  * listeners until it is used.
  */
+/** Where the other history lives: everything opened in the Reader. */
+export const PILL_HISTORY_FOOTER = `Longer readings are in the Reader library: the book in a Reader panel, or ${
+  IS_MAC ? "⌥⌘B" : "Ctrl+Alt+B"
+}.`;
+
 export function SpeakingPill() {
   const {
     speaking,
@@ -136,8 +142,8 @@ export function SpeakingPill() {
             type="button"
             className={ACTION}
             onClick={() => stop()}
-            aria-label="Stop reading aloud"
-            title="Stop reading aloud"
+            aria-label="Stop"
+            title="Stop"
           >
             <HugeiconsIcon icon={StopIcon} size={11} strokeWidth={2} />
           </button>
@@ -219,6 +225,10 @@ export function SpeakingPill() {
                   </span>
                 </DropdownMenuItem>
               ))}
+              <DropdownMenuSeparator />
+              <p className="px-2 py-1.5 text-[10.5px] text-muted-foreground">
+                {PILL_HISTORY_FOOTER}
+              </p>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

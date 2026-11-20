@@ -38,3 +38,9 @@ export {
   type ReaderSummary,
 } from "./lib/player";
 export { useReaderStore } from "./store/readerStore";
+export { isSoundingNow, stopEverything, useSounding } from "./lib/sounding";
+export {
+  READ_LABELS,
+  ReadMenuItems,
+  type ReadAloudOptions,
+} from "./components/ReadMenuItems";

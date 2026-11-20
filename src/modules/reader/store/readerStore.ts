@@ -104,6 +104,11 @@ type ReaderStore = {
    * opens in the panel of the tab on screen.
    */
   followOrigin: boolean;
+  /**
+   * A reading whose Play button should take the keyboard once it renders: a
+   * library pick resumes paused, ready for Space or Return.
+   */
+  focusPlay: string | null;
   exports: Record<string, ExportOutcome>;
   setExport: (docId: string, outcome: ExportOutcome) => void;
   putDoc: (entry: DocEntry) => void;
@@ -112,6 +117,7 @@ type ReaderStore = {
   setPlayback: (patch: Partial<ReaderPlayback>) => void;
   setFloating: (floating: boolean) => void;
   setFollowOrigin: (followOrigin: boolean) => void;
+  requestFocusPlay: (docId: string | null) => void;
 };
 
 export const useReaderStore = create<ReaderStore>((set) => ({
@@ -119,6 +125,7 @@ export const useReaderStore = create<ReaderStore>((set) => ({
   playback: IDLE_PLAYBACK,
   floating: readFlag(FLOATING_KEY, false),
   followOrigin: readFlag(FOLLOW_ORIGIN_KEY, true),
+  focusPlay: null,
   exports: {},
   setExport: (docId, outcome) =>
     set((s) => ({ exports: { ...s.exports, [docId]: outcome } })),
@@ -145,4 +152,5 @@ export const useReaderStore = create<ReaderStore>((set) => ({
     writeFlag(FOLLOW_ORIGIN_KEY, followOrigin);
     set({ followOrigin });
   },
+  requestFocusPlay: (focusPlay) => set({ focusPlay }),
 }));

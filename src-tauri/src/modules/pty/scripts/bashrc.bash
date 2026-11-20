@@ -75,7 +75,7 @@ if [ -z "$__TERAX_HOOKS_LOADED" ]; then
     fi
   fi
 
-  # Opens a file or piped text in this Terax's Reader tab.
+  # Opens a file or piped text in the Reader panel under this terminal (--tab: a Reader tab).
   terax-read() {
     if [ -z "$TERAX_APP_EXE" ]; then
       printf '%s\n' 'terax-read: TERAX_APP_EXE is unset; run it inside a Terax terminal' >&2

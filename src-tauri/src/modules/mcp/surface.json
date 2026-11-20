@@ -1223,7 +1223,7 @@
     {
       "name": "terax_speak",
       "title": "Speak through Terax",
-      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?, split?, voiceId?): Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.\n- generate_reading(text?, path?, docId?, title?, split?, voiceId?, show?): Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
+      "description": "Read short text aloud on the user's machine with Terax's local speech engines, manage those engines, and run the Reader: a read-along view for long texts, docked as a panel under the tab on screen or in a tab of its own, with word highlighting, bookmarks, scripted pauses, audio export and a library of past readings. Use speech for confirmations and requested summaries, never for logs. Engine installs and model downloads fetch from the network; delete_reader_documents deletes readings and their audio.\n\nActions:\n- speak(text, voiceId?, language?): Speak plain prose; returns once playback starts.\n- stop_speaking(): Stop playback and drop the queue.\n- start_engine(engine): Start a speech engine.\n- stop_engine(engine?): Stop one engine, or all when omitted.\n- install_engine(engine): Install a speech engine.\n- download_model(model): Download a speech model.\n- open_reader(text?, path?, title?, play?, stdin?, placement?, tabId?, callerPtyId?): Open a text or file in the Reader panel under a tab (or a Reader tab), optionally playing it.\n- dock_reader(tabId?, docId?, close?): Show a reading or the library in the Reader panel under a tab, or close it.\n- delete_reader_documents(docId?, all?): Delete one reading, or all of them, with their audio.\n- control_reader(op, docId?, wordIndex?, positionMs?, speedPercent?): Play, pause, stop, step, seek or change the speed of a Reader document.\n- mark_reader(wordIndex, kind, docId?, label?, pauseMs?, remove?): Place or remove a bookmark, scripted pause or stop before a word.\n- export_reader(docId?, split?, voiceId?): Start exporting a reading as one WAV, or as one WAV per section, paragraph or sentence; poll reader_state.\n- generate_reading(text?, path?, docId?, title?, split?, voiceId?, show?): Generate audio fragments of a text, file or reading in the background (paragraph, heading, sentence or one file); poll reader_state.",
       "annotations": {
         "title": "Speak through Terax",
         "readOnlyHint": false,
@@ -1299,7 +1299,7 @@
           },
           "title": {
             "type": "string",
-            "description": "open_reader: Title for the tab; defaults to the file name. generate_reading: Title, also the export folder name; defaults to the file name or the first words."
+            "description": "open_reader: Title shown in the panel header and the library; defaults to the file name or the first words. generate_reading: Title, also the export folder name; defaults to the file name or the first words."
           },
           "play": {
             "type": "boolean",
@@ -1320,6 +1320,10 @@
           "tabId": {
             "type": "integer",
             "description": "open_reader: Tab to dock the panel under, from the snapshot; defaults to the tab on screen. dock_reader: Tab whose panel to change, from the snapshot."
+          },
+          "callerPtyId": {
+            "type": "integer",
+            "description": "Set by terax-read: the terminal that ran it, so the panel opens under that terminal's tab while it is open. Ignored when tabId is given or that terminal is gone."
           },
           "docId": {
             "type": "string",
@@ -1391,7 +1395,7 @@
           },
           "show": {
             "type": "boolean",
-            "description": "Also show the reading in the Reader panel under the tab on screen."
+            "description": "Also show the reading: in the Reader panel under the tab on screen, or in a Reader tab beside it when the tab on screen is a Reader tab. The reply's shown field says where."
           }
         },
         "required": [
@@ -1445,7 +1449,8 @@
             "play",
             "stdin",
             "placement",
-            "tabId"
+            "tabId",
+            "callerPtyId"
           ]
         },
         "dock_reader": {

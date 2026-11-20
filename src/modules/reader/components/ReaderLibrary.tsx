@@ -1,3 +1,4 @@
+import { IS_MAC } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { type LibraryEntry, readerNative } from "@/modules/reader/lib/native";
 import { deleteReaderDocs } from "@/modules/reader/lib/player";
@@ -12,6 +13,12 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export type OriginTab = { id: number; label: string };
+
+const READ_HERE_CHORD = IS_MAC ? "⌥⌘R" : "Ctrl+Alt+R";
+
+/** Where the other history lives: what Speak said, without the Reader. */
+export const LIBRARY_FOOTER =
+  "Short texts spoken with Speak are listed under the clock in the status bar.";
 
 type Props = {
   /** The reading shown where the library opened from, marked in the list. */
@@ -162,7 +169,8 @@ export function ReaderLibrary({
         <div className="px-2 py-3 text-muted-foreground">Loading...</div>
       ) : entries.length === 0 ? (
         <div className="px-2 py-3 text-muted-foreground">
-          No readings yet. Right-click a selection and choose Read here, or run{" "}
+          No readings yet. Right-click a selection in a terminal, an editor or a
+          Markdown view and choose Read here, press {READ_HERE_CHORD}, or run{" "}
           <code className="font-mono">terax-read</code> in a terminal.
         </div>
       ) : (
@@ -240,6 +248,9 @@ export function ReaderLibrary({
           })}
         </ul>
       )}
+      <p className="shrink-0 px-2 pt-1 text-[11px] text-muted-foreground">
+        {LIBRARY_FOOTER}
+      </p>
     </div>
   );
 }

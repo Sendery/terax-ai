@@ -100,7 +100,7 @@ export function ReaderMiniPlayer({ visibleDocId, onOpenDoc }: Props) {
             <button
               type="button"
               className={ICON}
-              title="Stop reading"
+              title="Stop"
               onClick={() => stopReader()}
             >
               <HugeiconsIcon icon={Cancel01Icon} size={14} />

@@ -153,7 +153,8 @@ pub fn spawn(
 
     #[cfg(feature = "ghostty-engine")]
     let mut shell_token = if matches!(&sink, OutputSink::Engine { .. }) { Some(engine::shell::ShellToken::generate()?) } else { None };
-    let cmd = shell_init::build_command(cwd, workspace, blocks)?;
+    let mut cmd = shell_init::build_command(cwd, workspace, blocks)?;
+    cmd.env(shell_init::PTY_ID_ENV, id.to_string());
     #[cfg(feature = "ghostty-engine")]
     let cmd = {
         let mut cmd = cmd;

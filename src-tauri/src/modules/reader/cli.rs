@@ -1,6 +1,7 @@
 //! `terax --read`: hands a file or piped text to the running Terax, which
-//! opens it in a Reader tab. Like `--mcp`, it runs before any Tauri state
-//! exists and talks to the instance over the Pi bridge.
+//! opens it in the Reader panel under the terminal that ran it (or a Reader
+//! tab with `--tab`). Like `--mcp`, it runs before any Tauri state exists and
+//! talks to the instance over the Pi bridge.
 
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -21,19 +22,18 @@ const USAGE: &str = "\
 Usage: terax --read [FILE] [--title TITLE] [--no-play] [--tab]
        <command> | terax --read [--title TITLE] [--no-play] [--tab]
 
-Opens FILE, or text piped on stdin, in the Terax Reader panel of the tab on
-screen.
-  --title TITLE   name shown on the tab
+Opens FILE, or text piped on stdin, in the Terax Reader panel under this
+terminal (the tab on screen when run outside a Terax terminal).
+  --title TITLE   name shown in the panel and the library
   --no-play       open without starting playback
-  --tab           open in a Reader tab instead of the panel under the
-                  tab on screen";
+  --tab           open in a Reader tab instead of the panel";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReadArgs {
     pub file: Option<String>,
     pub title: Option<String>,
     pub play: bool,
-    /// Open in a Reader tab rather than the panel under the current tab.
+    /// Open in a Reader tab rather than the panel under the terminal.
     pub tab: bool,
 }
 
@@ -93,6 +93,22 @@ pub fn parse_read_args(args: &[String]) -> Result<ReadCommand, String> {
         play,
         tab,
     }))
+}
+
+/// The pty of the Terax terminal this runs in, from `TERAX_PTY_ID`.
+pub fn caller_pty_id(value: Option<&str>) -> Option<u64> {
+    value?.trim().parse().ok()
+}
+
+/// Names the calling terminal, so the panel opens under its tab. Left out
+/// with `--tab`, which never docks.
+pub fn add_caller(payload: &mut Value, pty_id: Option<u64>, tab: bool) {
+    if tab {
+        return;
+    }
+    if let (Some(id), Value::Object(fields)) = (pty_id, payload) {
+        fields.insert("callerPtyId".into(), json!(id));
+    }
 }
 
 fn base_payload(title: Option<&str>, play: bool) -> Map<String, Value> {
@@ -225,6 +241,8 @@ fn run_open(args: ReadArgs, bridge: &dyn Bridge) -> i32 {
             fields.insert("placement".into(), json!("tab"));
         }
     }
+    let pty = std::env::var(crate::modules::pty::shell_init::PTY_ID_ENV).ok();
+    add_caller(&mut payload, caller_pty_id(pty.as_deref()), args.tab);
     match bridge.call("reader.open", payload) {
         Ok(reply) => {
             let shown = title.map(str::to_string).unwrap_or(fallback);
@@ -422,6 +440,27 @@ mod tests {
             tab: false,
         };
         assert_eq!(run_open(args, &failing), 1);
+    }
+
+    #[test]
+    fn the_calling_terminal_is_named_unless_a_tab_was_asked_for() {
+        assert_eq!(caller_pty_id(Some("42")), Some(42));
+        assert_eq!(caller_pty_id(Some(" 7\n")), Some(7));
+        assert_eq!(caller_pty_id(Some("")), None);
+        assert_eq!(caller_pty_id(Some("abc")), None);
+        assert_eq!(caller_pty_id(None), None);
+
+        let mut docked = json!({ "text": "hi" });
+        add_caller(&mut docked, Some(42), false);
+        assert_eq!(docked["callerPtyId"], json!(42));
+
+        let mut tabbed = json!({ "text": "hi", "placement": "tab" });
+        add_caller(&mut tabbed, Some(42), true);
+        assert!(tabbed.get("callerPtyId").is_none());
+
+        let mut outside = json!({ "text": "hi" });
+        add_caller(&mut outside, None, false);
+        assert!(outside.get("callerPtyId").is_none());
     }
 
     #[test]

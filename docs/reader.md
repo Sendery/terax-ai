@@ -16,18 +16,22 @@ It uses the speech stack described in [tts.md](tts.md). Nothing leaves the machi
   terax-read --no-play spec.md
   ```
 
-  The text opens in the panel under the tab on screen. `--tab` opens a Reader tab instead.
+  The text opens in the panel under the terminal that ran it, even if you have moved to another tab meanwhile: each Terax terminal exports `TERAX_PTY_ID`, and `terax-read` sends it along. Outside a Terax terminal it opens under the tab on screen. `--tab` opens a Reader tab instead.
 
   It calls the app binary with `--read`, which talks to the running Terax over the same local bridge as the MCP server. Outside Terax, run the binary directly: `/Applications/Pi-Terax.app/Contents/MacOS/terax --read notes.md`.
-- **From a terminal selection.** Right-click, then choose Read here for the panel, or Open in Reader tab.
-- **From the command palette:**
-  - Read here, in the Reader panel: the selection, or the whole file in an editor or Markdown tab (as saved on disk). A selection in the rendered Markdown view counts too.
-  - Show or hide the Reader panel, which opens on the list of readings.
-  - Play or pause the Reader, from any tab.
-  - Open selection in Reader tab.
-  - Open this file in Reader, when an editor or Markdown tab is active.
-  - Resume last Reader document.
-- **From an agent.** Agents use `reader.open` with `text`, or with an absolute `path`. It docks in the panel unless they pass `placement: "tab"`.
+- **Right-click.** The terminal, the editor and both Markdown views (rendered and raw) share one set of reading actions:
+  - **Speak** says the selection without showing it, with the default voice, a language or one voice;
+  - **Read here** opens it in the panel under the tab; with nothing selected in an editor or a Markdown view it reads the whole document, unsaved edits included;
+  - **Read here with** does the same with a voice chosen for that document;
+  - **Read in new tab** opens it in a Reader tab;
+  - **Stop** silences whatever is sounding, Speak or the Reader.
+- **The selection popup** that a selection raises offers Read here, Read in new tab and Speak beside Ask Terax.
+- **From the command palette:** Speak selection, Read here, Read in new tab, Show or hide the Reader panel, Play or pause the Reader, Resume and Stop. An entry that cannot apply to the tab on screen says why instead of disappearing: a private terminal, or a view with no text such as a preview or a diff.
+- **From an agent.** Agents use `reader.open` with `text`, or with an absolute `path`. It docks in the panel unless they pass `placement: "tab"`, and it opens paused unless they pass `play: true`, so an agent never talks over what you are hearing. `tts.speak` is different: it is a short spoken message and plays at once.
+
+Everything you start yourself plays at once. A reading picked from the library comes back paused, with the keyboard on its Play button, so Space or Return goes on.
+
+Private terminals never read aloud: the right-click menu leaves the reading actions out, and the shortcuts and the palette say "Private terminal: reading aloud is off".
 
 The same text always reopens the same document, because its id is a hash of the text, so reopening it resumes where it stopped.
 
@@ -65,8 +69,9 @@ These chords work from any tab while a reading is open, and can be changed in Se
 | ⌘⌥P | Ctrl+Alt+P | Play or pause. |
 | ⌘⌥← ⌘⌥→ | Ctrl+Alt+← → | Previous or next sentence. |
 | ⌘⌥= ⌘⌥- | Ctrl+Alt+= - | Faster or slower. |
-| ⌘⌥R | Ctrl+Alt+R | Read here: the selection, or the file on screen, in the panel. |
-| ⌘⌥B | Ctrl+Alt+B | Show or hide the Reader panel. |
+| ⌘⌥R | Ctrl+Alt+R | Read here: the selection, or the document on screen, in the panel. |
+| ⌘⌥B | Ctrl+Alt+B | Show or hide the Reader panel; in a Reader tab, open its list of readings. |
+| ⌘⇧. | Ctrl+Shift+. | Stop whatever is sounding. |
 
 They act on the reading that is sounding, else the one on screen, else the one left paused.
 
@@ -95,10 +100,12 @@ The header holds:
 - the book button, which opens the list of readings;
 - the document's title and where it came from;
 - the progress;
-- Open in a Reader tab, which moves the reading to a tab of its own;
+- Move to a tab, which moves the reading to a tab of its own;
 - close, which stops the reading unless a Reader tab or another panel still shows it.
 
 When you switch to another tab, the reading goes on and the floating controls follow you.
+
+A Reader tab's header has the same book button, and **Dock here**, which moves the reading back into the panel of the tab it was made in (or the last tab you worked in) and closes the Reader tab. Playback goes on.
 
 ## Readings
 
@@ -108,6 +115,10 @@ The chain button at the top decides where it opens:
 
 - **Chain on** (the default): it opens in the panel of the tab it was made in, and Terax switches to that tab. If that tab is closed, it opens here.
 - **Chain off**: it opens in the panel you are looking at, and you stay on this tab.
+
+Picked from a Reader tab, which has no panel, it goes to the last tab you worked in. **Resume** in the palette follows the same rules with the newest reading, and plays it.
+
+The list's footer points at the other history: short texts said with Speak are under the clock in the status bar, whose footer points back here.
 
 A reading belongs to the first tab it was opened in while that tab stays open. Tabs keep their identity across restarts for this, even though their numbers change.
 
@@ -210,6 +221,6 @@ Without a `docId`, a command acts on the document playing, else on the one on sc
 - Texts up to 2 MiB. Through the bridge, a `text` argument is limited to 300,000 characters; longer texts go by `path`. `terax-read` handles this on its own.
 - One document plays at a time. Starting "read aloud" elsewhere pauses the Reader, and the Reader stops "read aloud".
 - The export is WAV only.
-- Read here on a file reads it as saved on disk, not unsaved edits; select the text to read those.
+- Read here on an editor with unsaved edits reads the buffer as a new document, so it does not reopen the saved file's reading.
 - Audio made for a sentence that later changed, or for a voice no longer used, stays in the document's folder until the reading is deleted.
 - Kokoro reads its Spanish voices through espeak, so the language guess only picks the default voice. Choose a voice for each document in the controls.

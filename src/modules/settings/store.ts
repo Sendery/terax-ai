@@ -27,7 +27,11 @@ import {
   type TtsDevice,
   type TtsLanguage,
 } from "@/modules/tts/lib/engines";
-import type { KeyBinding, ShortcutId } from "@/modules/shortcuts/shortcuts";
+import {
+  type KeyBinding,
+  migrateShortcutOverrides,
+  type ShortcutId,
+} from "@/modules/shortcuts/shortcuts";
 import {
   sanitizeHiddenFilesMap,
   type HiddenFilesMap,
@@ -561,7 +565,9 @@ export async function loadPreferences(): Promise<Preferences> {
       get<unknown>(KEY_RESTORE_AGENT_SESSIONS),
     ),
     shortcuts:
-      get<Record<ShortcutId, KeyBinding[]>>(KEY_SHORTCUTS) ??
+      (migrateShortcutOverrides(
+        get<Record<string, KeyBinding[]>>(KEY_SHORTCUTS),
+      ) as Record<ShortcutId, KeyBinding[]> | null | undefined) ??
       DEFAULT_PREFERENCES.shortcuts,
     editorAutoSave:
       get<boolean>(KEY_EDITOR_AUTO_SAVE) ??

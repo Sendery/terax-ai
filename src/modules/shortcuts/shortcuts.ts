@@ -41,7 +41,7 @@ export type ShortcutId =
   | "ai.askSelection"
   | "notes.addSelection"
   | "tts.readSelection"
-  | "tts.stop"
+  | "speech.stop"
   | "reader.togglePlayback"
   | "reader.previous"
   | "reader.next"
@@ -278,13 +278,13 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     id: "tts.readSelection",
-    label: "Read selection aloud",
+    label: "Speak selection",
     group: "Voice",
     defaultBindings: [{ [MOD_PROP]: true, shift: true, key: "r" }],
   },
   {
-    id: "tts.stop",
-    label: "Stop reading aloud",
+    id: "speech.stop",
+    label: "Stop (speech or the Reader)",
     group: "Voice",
     // Both encodings of the same chord: `e.key` is the shifted character on a
     // US layout and the unshifted one on layouts where Shift+. stays a period.
@@ -332,7 +332,7 @@ export const SHORTCUTS: Shortcut[] = [
   },
   {
     id: "reader.readHere",
-    label: "Reader: read here, in the panel",
+    label: "Read here",
     group: "Voice",
     defaultBindings: [{ [MOD_PROP]: true, alt: true, key: "r" }],
   },
@@ -410,6 +410,35 @@ export const SHORTCUTS: Shortcut[] = [
     defaultBindings: [{ [MOD_PROP]: true, key: "y" }],
   },
 ];
+
+/**
+ * Ids renamed since a user could have customized them. `tts.stop` became
+ * `speech.stop` when it started stopping the Reader too, and the bridge
+ * command of the same old name kept meaning "stop the engine".
+ */
+const RENAMED_SHORTCUT_IDS: Record<string, ShortcutId> = {
+  "tts.stop": "speech.stop",
+};
+
+/**
+ * Carries customized bindings stored under a renamed id over to the new id.
+ * A binding already stored under the new id wins; unknown ids pass through
+ * untouched, so nothing a user set is dropped.
+ */
+export function migrateShortcutOverrides<T>(
+  stored: Record<string, T> | null | undefined,
+): Record<string, T> | null | undefined {
+  if (!stored) return stored;
+  let changed = false;
+  const out: Record<string, T> = { ...stored };
+  for (const [oldId, newId] of Object.entries(RENAMED_SHORTCUT_IDS)) {
+    if (!(oldId in out)) continue;
+    if (!(newId in out)) out[newId] = out[oldId];
+    delete out[oldId];
+    changed = true;
+  }
+  return changed ? out : stored;
+}
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   "General",

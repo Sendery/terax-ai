@@ -73,17 +73,26 @@ export type CommandPaletteActionContext = {
   readSelectionAloud: () => void;
   readSelectionAloudSpanish: () => void;
   readSelectionAloudEnglish: () => void;
-  openSelectionInReader: () => void;
-  /** Reads the selection, else the file on screen, in the panel under the tab. */
-  readHere?: () => void;
-  /** Opens the Reader panel with the library, or closes it. */
+  /**
+   * Why Speak cannot use this tab (a private terminal, a view with no text),
+   * shown as the entry's reason; absent when it can.
+   */
+  speakDisabled?: string;
+  /** Reads the selection, else the document on screen, in the panel under the tab. */
+  readHere: () => void;
+  readHereDisabled?: string;
+  /** The same in a Reader tab of its own. */
+  readInNewTab: () => void;
+  readInNewTabDisabled?: string;
+  /** Opens the Reader panel with the library, or closes it; on a Reader tab, its library. */
   toggleReaderPanel?: () => void;
   /** Present while a reading is open somewhere. */
   toggleReaderPlayback?: () => void;
-  /** Present when the active tab is a file. */
-  openFileInReader?: () => void;
   resumeLastReader: () => void;
+  /** Stops whatever is sounding, one-shot speech or the Reader. */
   stopReading: () => void;
+  /** Present when nothing is sounding. */
+  stopDisabled?: string;
   openVoiceSettings: () => void;
   openSettings: () => void;
   openKeyboardShortcuts: () => void;
@@ -386,53 +395,70 @@ export function createCommandItems(
     },
     {
       id: "tts.readSelection",
-      title: "Read selection aloud",
+      title: "Speak selection",
       group: "Voice",
-      keywords: ["speak", "tts", "voice", "selection", "read", "audio"],
+      keywords: ["speak", "tts", "voice", "selection", "read aloud", "audio"],
       icon: AudioWave01Icon,
       shortcutId: "tts.readSelection",
-      disabledReason: selectionDisabled,
+      disabledReason: ctx.speakDisabled ?? selectionDisabled,
       run: ctx.readSelectionAloud,
     },
     {
       id: "tts.readSelection.es",
-      title: "Read selection aloud in Spanish",
+      title: "Speak selection in Spanish",
       group: "Voice",
-      keywords: ["speak", "tts", "voice", "spanish", "espanol", "read"],
+      keywords: ["speak", "tts", "voice", "spanish", "espanol", "read aloud"],
       icon: AudioWave01Icon,
-      disabledReason: selectionDisabled,
+      disabledReason: ctx.speakDisabled ?? selectionDisabled,
       run: ctx.readSelectionAloudSpanish,
     },
     {
       id: "tts.readSelection.en",
-      title: "Read selection aloud in English",
+      title: "Speak selection in English",
       group: "Voice",
-      keywords: ["speak", "tts", "voice", "english", "read"],
+      keywords: ["speak", "tts", "voice", "english", "read aloud"],
       icon: AudioWave01Icon,
-      disabledReason: selectionDisabled,
+      disabledReason: ctx.speakDisabled ?? selectionDisabled,
       run: ctx.readSelectionAloudEnglish,
     },
-    ...(ctx.readHere
-      ? [
-          {
-            id: "reader.readHere",
-            shortcutId: "reader.readHere" as const,
-            title: "Read here, in the Reader panel",
-            group: "Voice" as const,
-            keywords: [
-              "reader",
-              "read along",
-              "panel",
-              "dock",
-              "tts",
-              "listen",
-              "here",
-            ],
-            icon: LayoutBottomIcon,
-            run: ctx.readHere,
-          },
-        ]
-      : []),
+    {
+      id: "reader.readHere",
+      shortcutId: "reader.readHere",
+      title: "Read here",
+      group: "Voice",
+      keywords: [
+        "reader",
+        "read along",
+        "panel",
+        "dock",
+        "tts",
+        "listen",
+        "document",
+        "file",
+      ],
+      icon: LayoutBottomIcon,
+      disabledReason: ctx.readHereDisabled,
+      run: ctx.readHere,
+    },
+    {
+      id: "reader.readInNewTab",
+      title: "Read in new tab",
+      group: "Voice",
+      keywords: [
+        "reader",
+        "read along",
+        "tts",
+        "karaoke",
+        "voice",
+        "listen",
+        "document",
+        "file",
+        "selection",
+      ],
+      icon: BookOpen01Icon,
+      disabledReason: ctx.readInNewTabDisabled,
+      run: ctx.readInNewTab,
+    },
     ...(ctx.toggleReaderPanel
       ? [
           {
@@ -460,41 +486,28 @@ export function createCommandItems(
         ]
       : []),
     {
-      id: "reader.openSelection",
-      title: "Open selection in Reader tab",
-      group: "Voice",
-      keywords: ["reader", "read along", "tts", "karaoke", "voice", "listen"],
-      icon: BookOpen01Icon,
-      disabledReason: selectionDisabled,
-      run: ctx.openSelectionInReader,
-    },
-    ...(ctx.openFileInReader
-      ? [
-          {
-            id: "reader.openFile",
-            title: "Open this file in Reader",
-            group: "Voice" as const,
-            keywords: ["reader", "read along", "tts", "listen", "document"],
-            icon: BookOpen01Icon,
-            run: ctx.openFileInReader,
-          },
-        ]
-      : []),
-    {
       id: "reader.resume",
-      title: "Resume last Reader document",
+      title: "Resume",
       group: "Voice",
-      keywords: ["reader", "resume", "continue", "library", "listen"],
+      keywords: [
+        "reader",
+        "resume",
+        "continue",
+        "last reading",
+        "library",
+        "listen",
+      ],
       icon: BookOpen01Icon,
       run: ctx.resumeLastReader,
     },
     {
-      id: "tts.stop",
-      title: "Stop reading",
+      id: "speech.stop",
+      title: "Stop",
       group: "Voice",
-      keywords: ["speak", "tts", "voice", "stop", "silence", "quiet"],
+      keywords: ["speak", "tts", "voice", "reader", "stop", "silence", "quiet"],
       icon: StopIcon,
-      shortcutId: "tts.stop",
+      shortcutId: "speech.stop",
+      disabledReason: ctx.stopDisabled,
       run: ctx.stopReading,
     },
     ...(ctx.openTerminalLab
