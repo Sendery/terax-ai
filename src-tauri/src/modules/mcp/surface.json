@@ -1273,7 +1273,10 @@
             "type": "string",
             "enum": [
               "kokoro",
-              "chatterbox"
+              "chatterbox",
+              "pocket",
+              "omnivoice",
+              "zonos3"
             ],
             "description": "Speech engine. stop_engine stops every running engine when omitted."
           },
@@ -1283,7 +1286,10 @@
               "kokoro-82m",
               "chatterbox-multilingual",
               "chatterbox-turbo",
-              "chatterbox-nano"
+              "chatterbox-nano",
+              "pocket-tts",
+              "omnivoice",
+              "zonos3-mini"
             ],
             "description": "Model to download."
           },

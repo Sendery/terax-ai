@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 
 use super::engines::{EmbeddedFile, Engine, Model, PYTHON_VERSION, SERVER_FILES};
 use super::env::{apply_env, child_env, HostDirs};
+use super::hardware;
 use super::jobs::{now_ms, Job};
 use super::layout::{set_private, Layout};
 use super::runtime;
@@ -35,6 +36,9 @@ pub struct EngineStateFile {
     pub spec_version: u32,
     pub installed_at: u64,
     pub pins: Vec<String>,
+    /// The `--torch-backend` the install used; absent before dev.25 and on macOS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub torch_backend: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -261,6 +265,18 @@ fn install_runtime_locked(job: &Job, layout: &Layout) -> Result<(), String> {
 }
 
 pub fn install_engine(job: &Job, layout: &Layout, engine: Engine) -> Result<(), String> {
+    let hw = hardware::detect();
+    let plan = hardware::plan(engine, hw);
+    if !plan.supported {
+        return Err(plan
+            .unsupported_reason
+            .unwrap_or_else(|| format!("{} cannot run on this machine", engine.id())));
+    }
+    job.step(&format!("plan for {}", hw.summary()));
+    for note in &plan.notes {
+        job.log(&format!("{note}\n"));
+    }
+
     job.step("ensure the runtime");
     ensure_runtime(job, layout)?;
     layout.ensure().map_err(|e| e.to_string())?;
@@ -285,21 +301,26 @@ pub fn install_engine(job: &Job, layout: &Layout, engine: Engine) -> Result<(), 
         if venv.exists() {
             fs::remove_dir_all(&venv).map_err(|e| e.to_string())?;
         }
-        job.step(&format!("uv venv --python {PYTHON_VERSION}"));
+        let python = engine.python_version();
+        job.step(&format!("uv venv --python {python}"));
         let mut create = uv_command(layout);
-        create.args(["venv", "--python", PYTHON_VERSION]).arg(&venv);
+        create.args(["venv", "--python", python]).arg(&venv);
         job.run("uv venv", create)?;
 
-        job.step(&format!(
-            "uv pip install -r {}",
-            engine.requirements_file_name()
-        ));
+        let args = pip_install_args(engine, plan.torch_backend.as_deref());
+        job.step(&format!("uv {}", args.join(" ")));
         let mut install = uv_command(layout);
         install
             .args(["pip", "install", "--python"])
             .arg(layout.venv_python(engine))
             .arg("-r")
             .arg(layout.requirements(engine));
+        if let Some(name) = engine.excludes_file_name() {
+            install.arg("--excludes").arg(layout.server().join(name));
+        }
+        if let Some(backend) = plan.torch_backend.as_deref() {
+            install.args(["--torch-backend", backend]);
+        }
         job.run("uv pip install", install)?;
         Ok(())
     })();
@@ -315,9 +336,29 @@ pub fn install_engine(job: &Job, layout: &Layout, engine: Engine) -> Result<(), 
         spec_version: engine.spec_version(),
         installed_at: now_ms(),
         pins: engine.pins(),
+        torch_backend: plan.torch_backend.clone(),
     };
     write_json(&state_path, &state)?;
     Ok(())
+}
+
+/// The install command as the job log names it.
+pub fn pip_install_args(engine: Engine, torch_backend: Option<&str>) -> Vec<String> {
+    let mut args = vec![
+        "pip".to_string(),
+        "install".to_string(),
+        "-r".to_string(),
+        engine.requirements_file_name().to_string(),
+    ];
+    if let Some(name) = engine.excludes_file_name() {
+        args.push("--excludes".into());
+        args.push(name.into());
+    }
+    if let Some(backend) = torch_backend {
+        args.push("--torch-backend".into());
+        args.push(backend.into());
+    }
+    args
 }
 
 pub fn remove_engine(job: &Job, layout: &Layout, engine: Engine) -> Result<(), String> {
@@ -432,6 +473,7 @@ mod tests {
                 spec_version: 1,
                 installed_at: 1,
                 pins: vec!["kokoro==0.9.4".into()],
+                torch_backend: None,
             },
         )
         .unwrap();
@@ -466,11 +508,29 @@ mod tests {
             spec_version: 3,
             installed_at: 42,
             pins: vec!["a==1".into()],
+            torch_backend: Some("cpu".into()),
         })
         .unwrap();
         assert!(json.contains("\"specVersion\":3"), "{json}");
         assert!(json.contains("\"installedAt\":42"), "{json}");
         assert!(json.contains("\"pins\""), "{json}");
+        assert!(json.contains("\"torchBackend\":\"cpu\""), "{json}");
+        // A state file written before dev.25 has no backend and still reads.
+        let old: EngineStateFile =
+            serde_json::from_str(r#"{"specVersion":1,"installedAt":1,"pins":[]}"#).unwrap();
+        assert_eq!(old.torch_backend, None);
+    }
+
+    #[test]
+    fn install_args_carry_the_exclusions_and_the_torch_backend() {
+        assert_eq!(
+            pip_install_args(Engine::Omnivoice, Some("cpu")).join(" "),
+            "pip install -r requirements-omnivoice.txt --excludes excludes-omnivoice.txt --torch-backend cpu"
+        );
+        assert_eq!(
+            pip_install_args(Engine::Pocket, None).join(" "),
+            "pip install -r requirements-pocket.txt"
+        );
     }
 
     #[test]

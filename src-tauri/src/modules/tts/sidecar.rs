@@ -144,6 +144,9 @@ pub async fn request_shutdown(port: u16, token: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The engine plan, as JSON, for the sidecar adapters (`engines/plan.py`).
+pub const PLAN_VAR: &str = "TERAX_TTS_PLAN";
+
 pub fn spawn(
     layout: &Layout,
     engine: Engine,
@@ -178,10 +181,18 @@ pub fn spawn(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    apply_env(
-        &mut cmd,
-        &child_env(layout, &HostDirs::resolve(), Some(&token)),
+    let mut env = child_env(layout, &HostDirs::resolve(), Some(&token));
+    let plan = super::hardware::plan(engine, super::hardware::detect());
+    if !plan.supported {
+        return Err(plan
+            .unsupported_reason
+            .unwrap_or_else(|| format!("{} cannot run on this machine", engine.id())));
+    }
+    env.insert(
+        PLAN_VAR.to_string(),
+        serde_json::to_string(&plan).map_err(|e| e.to_string())?,
     );
+    apply_env(&mut cmd, &env);
     crate::modules::proc::hide_console(&mut cmd);
 
     let child = Arc::new(SharedChild::spawn(&mut cmd).map_err(|e| e.to_string())?);

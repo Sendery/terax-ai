@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { hasInstalledEngine, isEngineRunning, modelChoices } from "./engineControl";
+import {
+  hasInstalledEngine,
+  isEngineRunning,
+  modelChoices,
+} from "./engineControl";
 import { BUILTIN_VOICE_ID, type TtsEngineId, type TtsModelId } from "./engines";
 import type { TtsEngineStatus, TtsModelStatus, TtsStatus } from "./native";
 import { BUILT_IN_DEFAULTS, createProfile, type VoiceProfile } from "./voices";
@@ -79,6 +83,9 @@ describe("modelChoices", () => {
       "chatterbox-multilingual",
       "chatterbox-turbo",
       "chatterbox-nano",
+      "pocket-tts",
+      "omnivoice",
+      "zonos3-mini",
     ]);
     const multilingual = choices.find(
       (c) => c.id === "chatterbox-multilingual",
@@ -96,12 +103,14 @@ describe("modelChoices", () => {
     const choices = modelChoices(status(), PROFILES, "es-ES");
     // Turbo is English-only and undownloaded: both reasons are real, and the
     // download is the one the user can act on first.
-    expect(choices.find((c) => c.id === "chatterbox-turbo")?.blockedReason).toBe(
-      "Not downloaded",
-    );
+    expect(
+      choices.find((c) => c.id === "chatterbox-turbo")?.blockedReason,
+    ).toBe("Not downloaded");
 
     const noEngine = modelChoices(
-      status({ engines: [engine("kokoro"), engine("chatterbox", { installed: false })] }),
+      status({
+        engines: [engine("kokoro"), engine("chatterbox", { installed: false })],
+      }),
       PROFILES,
       "es-ES",
     );
@@ -138,5 +147,34 @@ describe("modelChoices", () => {
     expect(
       choices.find((c) => c.id === "chatterbox-multilingual")?.profileId,
     ).toBe(builtin.id);
+  });
+});
+
+describe("models the machine cannot run", () => {
+  it("are listed but blocked with the reason", () => {
+    const plan = {
+      supported: false,
+      unsupportedReason: "needs Apple Silicon",
+      device: "cpu",
+      dtype: null,
+      threads: null,
+      quantize: false,
+      steps: null,
+      torchBackend: null,
+      notes: [],
+    };
+    const choices = modelChoices(
+      status({
+        engines: [
+          engine("kokoro"),
+          engine("zonos3", { installed: false, plan }),
+        ],
+      }),
+      PROFILES,
+      "es-ES",
+    );
+    expect(choices.find((c) => c.id === "zonos3-mini")?.blockedReason).toBe(
+      "Not available on this Mac",
+    );
   });
 });

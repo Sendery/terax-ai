@@ -1,0 +1,9 @@
+# Zyphra ZONOS3-Mini through its MLX server (Apple Silicon). Pinned to one
+# commit of the official repo; its uv workspace resolves the FuseAlign
+# submodule, so installing needs `git` on PATH, as Chatterbox does.
+zonos3 @ git+https://github.com/Zyphra/ZONOS3-Mini@a50e14117d99181ba7f28047b451ba03ba1a09a9#subdirectory=model
+zonos3-mlx @ git+https://github.com/Zyphra/ZONOS3-Mini@a50e14117d99181ba7f28047b451ba03ba1a09a9#subdirectory=servers/mlx
+# FuseAlign caps huggingface_hub below 1.0.
+huggingface_hub==0.36.2
+mlx==0.32.4
+torch==2.9.1

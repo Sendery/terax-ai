@@ -1,4 +1,10 @@
-export const TTS_ENGINES = ["kokoro", "chatterbox"] as const;
+export const TTS_ENGINES = [
+  "kokoro",
+  "chatterbox",
+  "pocket",
+  "omnivoice",
+  "zonos3",
+] as const;
 export type TtsEngineId = (typeof TTS_ENGINES)[number];
 
 export const TTS_MODELS = [
@@ -6,6 +12,9 @@ export const TTS_MODELS = [
   "chatterbox-multilingual",
   "chatterbox-turbo",
   "chatterbox-nano",
+  "pocket-tts",
+  "omnivoice",
+  "zonos3-mini",
 ] as const;
 export type TtsModelId = (typeof TTS_MODELS)[number];
 
@@ -22,7 +31,8 @@ export const LANGUAGE_LABELS: Record<TtsLanguage, string> = {
 
 /** Short localized line used by the voice preview button. */
 export const PREVIEW_SENTENCES: Record<TtsLanguage, string> = {
-  "es-ES": "Hola, soy tu voz en Terax. Puedo leer en voz alta lo que selecciones.",
+  "es-ES":
+    "Hola, soy tu voz en Terax. Puedo leer en voz alta lo que selecciones.",
   "en-US": "Hi, this is your Terax voice. I can read your selection out loud.",
 };
 
@@ -36,6 +46,9 @@ export const DEVICE_LABELS: Record<TtsDevice, string> = {
 export const ENGINE_LABELS: Record<TtsEngineId, string> = {
   kokoro: "Kokoro",
   chatterbox: "Chatterbox",
+  pocket: "Pocket TTS",
+  omnivoice: "OmniVoice",
+  zonos3: "ZONOS3-Mini",
 };
 
 export const ENGINE_DESCRIPTIONS: Record<TtsEngineId, string> = {
@@ -43,12 +56,21 @@ export const ENGINE_DESCRIPTIONS: Record<TtsEngineId, string> = {
     "Small and fast on CPU. Speaks from built-in voice presets in English and Spanish.",
   chatterbox:
     "Clones a voice from a short sample and adds expressive control. Much larger and slower.",
+  pocket:
+    "Kyutai's 100M model. Runs on the CPU many times faster than real time, with preset voices in English and Spanish.",
+  omnivoice:
+    "k2-fsa's 600-language model. Clones a sample, designs a voice from a description, or picks one itself.",
+  zonos3:
+    "Zyphra's model through its MLX server on the Apple GPU: 44.1 kHz audio, default voices and cloning from a sample.",
 };
 
 /** Approximate installed size of the engine venv, wheels included. */
 export const ENGINE_APPROX_BYTES: Record<TtsEngineId, number> = {
   kokoro: 700 * 1024 * 1024,
   chatterbox: 2_500 * 1024 * 1024,
+  pocket: 800 * 1024 * 1024,
+  omnivoice: 1_600 * 1024 * 1024,
+  zonos3: 1_800 * 1024 * 1024,
 };
 
 export const MODEL_ENGINE: Record<TtsModelId, TtsEngineId> = {
@@ -56,6 +78,9 @@ export const MODEL_ENGINE: Record<TtsModelId, TtsEngineId> = {
   "chatterbox-multilingual": "chatterbox",
   "chatterbox-turbo": "chatterbox",
   "chatterbox-nano": "chatterbox",
+  "pocket-tts": "pocket",
+  omnivoice: "omnivoice",
+  "zonos3-mini": "zonos3",
 };
 
 export function engineOf(model: TtsModelId): TtsEngineId {
@@ -67,6 +92,9 @@ export const MODEL_LABELS: Record<TtsModelId, string> = {
   "chatterbox-multilingual": "Chatterbox Multilingual",
   "chatterbox-turbo": "Chatterbox Turbo",
   "chatterbox-nano": "Chatterbox Nano",
+  "pocket-tts": "Pocket TTS",
+  omnivoice: "OmniVoice",
+  "zonos3-mini": "ZONOS3-Mini",
 };
 
 export const MODEL_DESCRIPTIONS: Record<TtsModelId, string> = {
@@ -78,6 +106,12 @@ export const MODEL_DESCRIPTIONS: Record<TtsModelId, string> = {
     "English only, clones from a sample and reads paralinguistic tags.",
   "chatterbox-nano":
     "Smaller English-only sibling of Turbo with the same tag support.",
+  "pocket-tts":
+    "English and Spanish models with their preset voices. Cloning is not offered: those weights need a Hugging Face login.",
+  omnivoice:
+    "Clones a sample (transcribed once with Whisper, a 1.6 GB download on first use), designs a voice, or chooses one.",
+  "zonos3-mini":
+    "Quantized backbone, compact decoder and speaker encoder only: the 5.5 GB raw-reference encoders are left out.",
 };
 
 export const MODEL_APPROX_BYTES: Record<TtsModelId, number> = {
@@ -85,6 +119,9 @@ export const MODEL_APPROX_BYTES: Record<TtsModelId, number> = {
   "chatterbox-multilingual": 3_200 * 1024 * 1024,
   "chatterbox-turbo": 4_000 * 1024 * 1024,
   "chatterbox-nano": 3_000 * 1024 * 1024,
+  "pocket-tts": 480 * 1024 * 1024,
+  omnivoice: 3_300 * 1024 * 1024,
+  "zonos3-mini": 1_200 * 1024 * 1024,
 };
 
 export const MODEL_LANGUAGES: Record<TtsModelId, readonly TtsLanguage[]> = {
@@ -92,6 +129,9 @@ export const MODEL_LANGUAGES: Record<TtsModelId, readonly TtsLanguage[]> = {
   "chatterbox-multilingual": ["es-ES", "en-US"],
   "chatterbox-turbo": ["en-US"],
   "chatterbox-nano": ["en-US"],
+  "pocket-tts": ["es-ES", "en-US"],
+  omnivoice: ["es-ES", "en-US"],
+  "zonos3-mini": ["es-ES", "en-US"],
 };
 
 export type VoiceSource = "preset" | "clone";
@@ -101,6 +141,9 @@ export const MODEL_VOICE_SOURCE: Record<TtsModelId, VoiceSource> = {
   "chatterbox-multilingual": "clone",
   "chatterbox-turbo": "clone",
   "chatterbox-nano": "clone",
+  "pocket-tts": "preset",
+  omnivoice: "clone",
+  "zonos3-mini": "clone",
 };
 
 /**
@@ -115,15 +158,139 @@ export const MODEL_BUILTIN_VOICE: Record<TtsModelId, string | null> = {
   "chatterbox-multilingual": BUILTIN_VOICE_ID,
   "chatterbox-turbo": BUILTIN_VOICE_ID,
   "chatterbox-nano": BUILTIN_VOICE_ID,
+  "pocket-tts": null,
+  omnivoice: null,
+  "zonos3-mini": null,
 };
 
-/** Whether `voice` is the one baked into `model`'s weights. */
+export type PresetVoice = { id: string; label: string };
+
+/** OmniVoice's designed voices; the attributes live in the sidecar. */
+const OMNIVOICE_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
+  "es-ES": [
+    { id: "auto", label: "Automatic" },
+    { id: "design-f-young", label: "Designed: young woman" },
+    { id: "design-m-middle", label: "Designed: middle-aged man, low" },
+    { id: "design-f-elderly", label: "Designed: elderly woman" },
+    { id: "design-m-young", label: "Designed: young man" },
+  ],
+  "en-US": [
+    { id: "auto", label: "Automatic" },
+    { id: "design-f-american", label: "Designed: American woman" },
+    { id: "design-m-american", label: "Designed: American man, low" },
+    { id: "design-f-british", label: "Designed: British woman" },
+    { id: "design-m-british", label: "Designed: British man" },
+    { id: "design-f-whisper", label: "Designed: whispering woman" },
+  ],
+};
+
+/** ZONOS3-Mini default voices, by the ids its server gives them. */
+const ZONOS3_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
+  "es-ES": [
+    { id: "default_43e790fc116fd62a", label: "Ximena" },
+    { id: "default_87250baa043e5bba", label: "Rodrigo" },
+  ],
+  "en-US": [
+    { id: "default_de4d191ca7574982", label: "Savannah (American)" },
+    { id: "default_34370fd91e3484ef", label: "Wyatt (American)" },
+    { id: "default_b78b28baf5c31a1d", label: "Imogen (British)" },
+    { id: "default_3765f0d1140c05c0", label: "Rupert (British)" },
+    { id: "default_2c5123a959875341", label: "Cillian (Irish)" },
+    { id: "default_3c00e421e684f949", label: "Thaddeus (announcer)" },
+    { id: "default_c95cf57259ed7313", label: "Jett (energetic)" },
+    { id: "default_940eaff39a929da0", label: "Willow (ASMR)" },
+    { id: "default_40a3ba1017bfb68a", label: "Morgana (witch)" },
+    { id: "default_c5e098c322aae901", label: "Sakura (anime)" },
+  ],
+};
+
+/** Pocket TTS presets; every voice exists for both language models. */
+const POCKET_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
+  "es-ES": [
+    { id: "lola", label: "Lola (Spanish)" },
+    { id: "rafael", label: "Rafael (Portuguese)" },
+    { id: "giovanni", label: "Giovanni (Italian)" },
+    { id: "estelle", label: "Estelle (French)" },
+  ],
+  "en-US": [
+    "alba",
+    "marius",
+    "javert",
+    "jean",
+    "fantine",
+    "cosette",
+    "eponine",
+    "azelma",
+    "anna",
+    "vera",
+    "charles",
+    "paul",
+    "george",
+    "mary",
+    "jane",
+    "michael",
+    "eve",
+    "bill_boerst",
+    "peter_yearsley",
+    "stuart_bell",
+    "caro_davy",
+  ].map((id) => ({
+    id,
+    label: id
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" "),
+  })),
+};
+
+/**
+ * Voices `model` speaks in `language` with nothing to clone: a preset model's
+ * catalogue, or a clone model's default and designed voices. Chatterbox owns
+ * one speaker in its weights, listed here as the built-in voice.
+ */
+export function presetVoicesOf(
+  model: TtsModelId,
+  language: TtsLanguage,
+): readonly PresetVoice[] {
+  switch (model) {
+    case "kokoro-82m":
+      return KOKORO_PRESET_VOICES[language];
+    case "pocket-tts":
+      return POCKET_PRESET_VOICES[language];
+    case "omnivoice":
+      return OMNIVOICE_PRESET_VOICES[language];
+    case "zonos3-mini":
+      return ZONOS3_PRESET_VOICES[language];
+    default: {
+      const builtin = MODEL_BUILTIN_VOICE[model];
+      return builtin ? [{ id: builtin, label: "Built-in voice" }] : [];
+    }
+  }
+}
+
+/** The voice a profile of `model` starts with when it has no sample. */
+export function defaultPresetVoice(
+  model: TtsModelId,
+  language: TtsLanguage,
+): string | null {
+  return presetVoicesOf(model, language)[0]?.id ?? null;
+}
+
+/**
+ * Whether `voice` is one a clone model speaks without a sample: the one baked
+ * into Chatterbox's weights, or a default or designed voice of the newer
+ * models. With a language, only that language's voices count.
+ */
 export function isBuiltinVoice(
   model: TtsModelId,
   voice: string | null | undefined,
+  language?: TtsLanguage,
 ): boolean {
-  const builtin = MODEL_BUILTIN_VOICE[model];
-  return !!builtin && voice === builtin;
+  if (!voice || MODEL_VOICE_SOURCE[model] !== "clone") return false;
+  const languages = language ? [language] : MODEL_LANGUAGES[model];
+  return languages.some((l) =>
+    presetVoicesOf(model, l).some((preset) => preset.id === voice),
+  );
 }
 
 export const TTS_PARAMS = [
@@ -131,6 +298,7 @@ export const TTS_PARAMS = [
   "exaggeration",
   "cfgWeight",
   "temperature",
+  "steps",
 ] as const;
 export type TtsParamName = (typeof TTS_PARAMS)[number];
 
@@ -181,6 +349,15 @@ const PARAM_SPECS: Record<TtsParamName, TtsParamSpec> = {
     step: 0.05,
     default: 0.8,
   },
+  steps: {
+    name: "steps",
+    label: "Diffusion steps",
+    hint: "More steps sound cleaner and take longer. Empty uses the value Terax picked for this machine.",
+    min: 4,
+    max: 64,
+    step: 1,
+    default: 16,
+  },
 };
 
 export const MODEL_PARAMS: Record<TtsModelId, readonly TtsParamSpec[]> = {
@@ -200,6 +377,9 @@ export const MODEL_PARAMS: Record<TtsModelId, readonly TtsParamSpec[]> = {
     PARAM_SPECS.cfgWeight,
     PARAM_SPECS.temperature,
   ],
+  "pocket-tts": [],
+  omnivoice: [PARAM_SPECS.speed, PARAM_SPECS.steps],
+  "zonos3-mini": [{ ...PARAM_SPECS.temperature, default: 0.75 }],
 };
 
 export type ExpressivenessTag = {
@@ -232,7 +412,10 @@ export const EXPRESSIVENESS_TAGS: readonly ExpressivenessTag[] = [
   { tag: "[whispering]", label: "Whispering", documented: false },
 ];
 
-const TAG_MODELS: readonly TtsModelId[] = ["chatterbox-turbo", "chatterbox-nano"];
+const TAG_MODELS: readonly TtsModelId[] = [
+  "chatterbox-turbo",
+  "chatterbox-nano",
+];
 
 export function modelSupportsTags(model: TtsModelId): boolean {
   return TAG_MODELS.includes(model);
@@ -267,13 +450,15 @@ export const KOKORO_PRESET_VOICES: Record<
 
 export function isTtsEngineId(value: unknown): value is TtsEngineId {
   return (
-    typeof value === "string" && (TTS_ENGINES as readonly string[]).includes(value)
+    typeof value === "string" &&
+    (TTS_ENGINES as readonly string[]).includes(value)
   );
 }
 
 export function isTtsModelId(value: unknown): value is TtsModelId {
   return (
-    typeof value === "string" && (TTS_MODELS as readonly string[]).includes(value)
+    typeof value === "string" &&
+    (TTS_MODELS as readonly string[]).includes(value)
   );
 }
 
@@ -286,7 +471,8 @@ export function isTtsLanguage(value: unknown): value is TtsLanguage {
 
 export function isTtsDevice(value: unknown): value is TtsDevice {
   return (
-    typeof value === "string" && (TTS_DEVICES as readonly string[]).includes(value)
+    typeof value === "string" &&
+    (TTS_DEVICES as readonly string[]).includes(value)
   );
 }
 

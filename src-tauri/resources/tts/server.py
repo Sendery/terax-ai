@@ -26,6 +26,7 @@ from engines.base import (  # noqa: E402
     is_downloaded,
     collapse_whitespace,
     model_info,
+    sample_free_voices,
     to_pcm16_bytes,
 )
 
@@ -237,10 +238,13 @@ def validate_synthesize(host: Host, payload: dict) -> dict:
     params = validate_params(info.params, payload.get("params"))
     sample_path = validate_sample_path(host.samples_dir, payload.get("samplePath"))
     if info.voice_source == "clone" and sample_path is None:
-        # The voice baked into the weights is the one clone models can speak
-        # without being given anything to clone.
-        if not info.builtin_voice or voice != info.builtin_voice:
+        # A clone model speaks without a sample only in a voice it owns: the
+        # one baked into its weights, or one of its default voices.
+        if voice not in sample_free_voices(info, language):
             raise HttpError(400, "sample_required", "{} needs a voice sample".format(info.id))
+    if info.voice_source == "preset" and info.preset_voices and voice is not None:
+        if voice not in {v.id for v in info.preset_voices}:
+            raise HttpError(400, "unknown_voice", "{} has no voice {}".format(info.id, voice))
 
     known = {"model", "text", "language", "voice", "samplePath", "params"}
     unknown = sorted(set(payload) - known)
@@ -405,6 +409,10 @@ class Handler(BaseHTTPRequestHandler):
                     "languages": list(info.languages),
                     "voiceSource": info.voice_source,
                     "builtinVoice": info.builtin_voice or None,
+                    "sampleFreeVoices": {
+                        language: sorted(sample_free_voices(info, language))
+                        for language in info.languages
+                    },
                 }
                 for info in self.host.engine.models()
             ]
@@ -487,8 +495,8 @@ def build_server(engine: str, device: str, samples_dir: str, token: str, host: s
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Terax local TTS sidecar")
-    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "fake"])
-    parser.add_argument("--device", required=True, choices=["auto", "cpu", "mps", "cuda"])
+    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "pocket", "omnivoice", "zonos3", "fake"])
+    parser.add_argument("--device", required=True, choices=["auto", "cpu", "mps", "cuda", "mlx"])
     parser.add_argument("--samples-dir", required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)

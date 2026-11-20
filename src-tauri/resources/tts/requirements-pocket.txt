@@ -1,0 +1,9 @@
+# Kyutai Pocket TTS. Verified on Apple M4 Pro with these pins: about 13x
+# faster than real time on two CPU threads, so the GPU is never needed there.
+pocket-tts==4.0.1
+torch==2.15.0
+numpy==2.4.6
+huggingface_hub==2.4.0
+# int8 dynamic quantization helps x86 CPUs; on Apple Silicon it measured no
+# faster, so the extra stays off the Mac.
+torchao==0.18.0 ; sys_platform != "darwin"

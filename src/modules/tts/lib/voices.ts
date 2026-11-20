@@ -51,7 +51,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isValidParams(model: TtsModelId, value: unknown): value is VoiceParams {
+function isValidParams(
+  model: TtsModelId,
+  value: unknown,
+): value is VoiceParams {
   if (!isRecord(value)) return false;
   for (const [name, raw] of Object.entries(value)) {
     const spec = MODEL_PARAMS[model].find((s) => s.name === name);
@@ -83,8 +86,17 @@ function isValidStyle(value: unknown): value is VoiceStyle {
 
 export function isVoiceProfile(value: unknown): value is VoiceProfile {
   if (!isRecord(value)) return false;
-  const { id, name, model, language, voice, sampleId, params, style, createdAt } =
-    value;
+  const {
+    id,
+    name,
+    model,
+    language,
+    voice,
+    sampleId,
+    params,
+    style,
+    createdAt,
+  } = value;
   if (typeof id !== "string" || id.length === 0) return false;
   if (typeof name !== "string" || name.length === 0 || name.length > MAX_NAME) {
     return false;
@@ -96,7 +108,8 @@ export function isVoiceProfile(value: unknown): value is VoiceProfile {
   if (sampleId !== null && typeof sampleId !== "string") return false;
   if (!isValidParams(model, params)) return false;
   if (!isValidStyle(style)) return false;
-  if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) return false;
+  if (typeof createdAt !== "number" || !Number.isFinite(createdAt))
+    return false;
   if (createdAt < 0) return false;
   return true;
 }
@@ -106,8 +119,11 @@ export function isProfileSpeakable(profile: VoiceProfile): boolean {
   if (MODEL_VOICE_SOURCE[profile.model] === "preset") {
     return !!profile.voice && profile.voice.trim().length > 0;
   }
-  // A clone model speaks its own built-in voice with nothing to clone from.
-  return !!profile.sampleId || isBuiltinVoice(profile.model, profile.voice);
+  // A clone model speaks its own voices with nothing to clone from.
+  return (
+    !!profile.sampleId ||
+    isBuiltinVoice(profile.model, profile.voice, profile.language)
+  );
 }
 
 export type VoiceProfileInput = {
@@ -158,15 +174,15 @@ export function createProfile(input: VoiceProfileInput): VoiceProfile {
   const name = input.name.trim().slice(0, MAX_NAME) || "New voice";
   const preset = MODEL_VOICE_SOURCE[input.model] === "preset";
   const asked = input.voice?.trim() || null;
-  // A clone model stores no preset id, but it does store which of its two
-  // sources to use: the voice in its weights, or an imported sample.
-  const builtin = !preset && isBuiltinVoice(input.model, asked);
+  // A clone model stores which source to use: one of its own voices (the one
+  // in Chatterbox's weights, or a default or designed voice), or a sample.
+  const builtin = !preset && isBuiltinVoice(input.model, asked, input.language);
   return {
     id: input.id ?? newProfileId(),
     name,
     model: input.model,
     language: input.language,
-    voice: preset ? asked : builtin ? BUILTIN_VOICE_ID : null,
+    voice: preset || builtin ? asked : null,
     sampleId: preset || builtin ? null : (input.sampleId ?? null),
     params: clampParams(input.model, input.params ?? {}),
     style: normalizeStyle(input.model, input.style ?? {}),
@@ -183,19 +199,26 @@ export const BUILT_IN_CHATTERBOX_ES_ID = "builtin-es-chatterbox";
 export const BUILT_IN_CHATTERBOX_EN_ID = "builtin-en-chatterbox";
 export const BUILT_IN_TURBO_ID = "builtin-en-turbo";
 export const BUILT_IN_NANO_ID = "builtin-en-nano";
+export const BUILT_IN_POCKET_ES_ID = "builtin-es-pocket-lola";
+export const BUILT_IN_POCKET_EN_ID = "builtin-en-pocket-alba";
+export const BUILT_IN_OMNIVOICE_ES_ID = "builtin-es-omnivoice";
+export const BUILT_IN_OMNIVOICE_EN_ID = "builtin-en-omnivoice";
+export const BUILT_IN_ZONOS3_ES_ID = "builtin-es-zonos3-ximena";
+export const BUILT_IN_ZONOS3_EN_ID = "builtin-en-zonos3-savannah";
 
 function clonedBuiltIn(
   id: string,
   name: string,
   model: TtsModelId,
   language: TtsLanguage,
+  voice: string = BUILTIN_VOICE_ID,
 ): VoiceProfile {
   return {
     id,
     name,
     model,
     language,
-    voice: BUILTIN_VOICE_ID,
+    voice,
     sampleId: null,
     params: {},
     style: {},
@@ -244,6 +267,56 @@ export const BUILT_IN_DEFAULTS: readonly VoiceProfile[] = [
   ),
   clonedBuiltIn(BUILT_IN_TURBO_ID, "Turbo", "chatterbox-turbo", "en-US"),
   clonedBuiltIn(BUILT_IN_NANO_ID, "Nano", "chatterbox-nano", "en-US"),
+  {
+    id: BUILT_IN_POCKET_ES_ID,
+    name: "Lola (Pocket)",
+    model: "pocket-tts",
+    language: "es-ES",
+    voice: "lola",
+    sampleId: null,
+    params: {},
+    style: {},
+    createdAt: 0,
+  },
+  {
+    id: BUILT_IN_POCKET_EN_ID,
+    name: "Alba (Pocket)",
+    model: "pocket-tts",
+    language: "en-US",
+    voice: "alba",
+    sampleId: null,
+    params: {},
+    style: {},
+    createdAt: 0,
+  },
+  clonedBuiltIn(
+    BUILT_IN_OMNIVOICE_ES_ID,
+    "OmniVoice (Spanish)",
+    "omnivoice",
+    "es-ES",
+    "auto",
+  ),
+  clonedBuiltIn(
+    BUILT_IN_OMNIVOICE_EN_ID,
+    "OmniVoice (English)",
+    "omnivoice",
+    "en-US",
+    "auto",
+  ),
+  clonedBuiltIn(
+    BUILT_IN_ZONOS3_ES_ID,
+    "Ximena (ZONOS3)",
+    "zonos3-mini",
+    "es-ES",
+    "default_43e790fc116fd62a",
+  ),
+  clonedBuiltIn(
+    BUILT_IN_ZONOS3_EN_ID,
+    "Savannah (ZONOS3)",
+    "zonos3-mini",
+    "en-US",
+    "default_de4d191ca7574982",
+  ),
 ];
 
 /** The seed version each built-in arrived in, so an existing install is given
@@ -255,6 +328,12 @@ const BUILT_IN_SINCE: Record<string, number> = {
   [BUILT_IN_CHATTERBOX_EN_ID]: 2,
   [BUILT_IN_TURBO_ID]: 2,
   [BUILT_IN_NANO_ID]: 2,
+  [BUILT_IN_POCKET_ES_ID]: 3,
+  [BUILT_IN_POCKET_EN_ID]: 3,
+  [BUILT_IN_OMNIVOICE_ES_ID]: 3,
+  [BUILT_IN_OMNIVOICE_EN_ID]: 3,
+  [BUILT_IN_ZONOS3_ES_ID]: 3,
+  [BUILT_IN_ZONOS3_EN_ID]: 3,
 };
 
 /** Copies of the built-in voices introduced after `version`. */
@@ -307,7 +386,11 @@ export function resolveVoice(
   const asked = request.language ?? prefs.ttsDefaultLanguage;
   const forAsked = defaultVoiceFor(profiles, defaults, asked);
   if (forAsked) return forAsked;
-  const preferred = defaultVoiceFor(profiles, defaults, prefs.ttsDefaultLanguage);
+  const preferred = defaultVoiceFor(
+    profiles,
+    defaults,
+    prefs.ttsDefaultLanguage,
+  );
   if (preferred) return preferred;
   return profiles.find((p) => p.language === asked) ?? null;
 }

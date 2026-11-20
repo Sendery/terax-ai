@@ -11,7 +11,10 @@ import {
   modelStatusOf,
   type TtsStatus,
 } from "@/modules/tts/lib/native";
-import { isProfileSpeakable, type VoiceProfile } from "@/modules/tts/lib/voices";
+import {
+  isProfileSpeakable,
+  type VoiceProfile,
+} from "@/modules/tts/lib/voices";
 
 export type ModelChoice = {
   id: TtsModelId;
@@ -67,7 +70,9 @@ function blockedReason(
   engine: TtsEngineId,
   profile: VoiceProfile | undefined,
 ): string | null {
-  if (!engineStatusOf(status, engine)?.installed) {
+  const entry = engineStatusOf(status, engine);
+  if (entry?.plan && !entry.plan.supported) return "Not available on this Mac";
+  if (!entry?.installed) {
     return "Engine not installed";
   }
   if (!modelStatusOf(status, model)?.downloaded) return "Not downloaded";

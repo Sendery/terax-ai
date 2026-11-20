@@ -499,6 +499,157 @@ class BuiltinVoiceValidationTests(unittest.TestCase):
         self.assertEqual(request["samplePath"], os.path.realpath(self.sample))
 
 
+class NewEngineContractTests(unittest.TestCase):
+    """Validation of the dev.25 engines; nothing imports their libraries."""
+
+    class _Host:
+        def __init__(self, engine_name, samples_dir):
+            self.engine_name = engine_name
+            self.samples_dir = samples_dir
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.samples_dir = os.path.join(self._tmp.name, "samples")
+        os.makedirs(self.samples_dir)
+        self.sample = os.path.join(self.samples_dir, "voice.wav")
+        with open(self.sample, "wb") as handle:
+            handle.write(b"RIFF")
+        self._downloaded = server.is_downloaded
+        server.is_downloaded = lambda info: True
+        self.addCleanup(setattr, server, "is_downloaded", self._downloaded)
+
+    def validate(self, engine, **body):
+        return server.validate_synthesize(self._Host(engine, self.samples_dir), body)
+
+    def code(self, engine, **body):
+        with self.assertRaises(server.HttpError) as caught:
+            self.validate(engine, **body)
+        return caught.exception.code
+
+    def test_zonos3_speaks_its_default_voices_without_a_sample(self):
+        request = self.validate(
+            "zonos3", model="zonos3-mini", text="Hola", language="es-ES", voice="default_43e790fc116fd62a"
+        )
+        self.assertIsNone(request["samplePath"])
+
+    def test_zonos3_refuses_an_english_voice_for_spanish_without_a_sample(self):
+        self.assertEqual(
+            self.code("zonos3", model="zonos3-mini", text="Hola", language="es-ES", voice="default_de4d191ca7574982"),
+            "sample_required",
+        )
+
+    def test_zonos3_clones_a_sample_and_takes_only_temperature(self):
+        request = self.validate(
+            "zonos3", model="zonos3-mini", text="Hi", language="en-US", samplePath=self.sample,
+            params={"temperature": 0.7},
+        )
+        self.assertEqual(request["params"], {"temperature": 0.7})
+        self.assertEqual(
+            self.code("zonos3", model="zonos3-mini", text="Hi", language="en-US", samplePath=self.sample,
+                      params={"speed": 1.0}),
+            "unknown_param",
+        )
+
+    def test_omnivoice_accepts_auto_designed_voices_and_steps(self):
+        for voice in ("auto", "design-f-young"):
+            self.validate("omnivoice", model="omnivoice", text="Hola", language="es-ES", voice=voice,
+                          params={"steps": 16, "speed": 1.1})
+        self.assertEqual(
+            self.code("omnivoice", model="omnivoice", text="Hola", language="es-ES", voice="auto",
+                      params={"steps": 200}),
+            "param_out_of_range",
+        )
+
+    def test_pocket_takes_its_presets_and_refuses_others(self):
+        self.validate("pocket", model="pocket-tts", text="Hola", language="es-ES", voice="lola")
+        self.assertEqual(
+            self.code("pocket", model="pocket-tts", text="Hola", language="es-ES", voice="af_heart"),
+            "unknown_voice",
+        )
+        self.assertEqual(
+            self.code("pocket", model="pocket-tts", text="Hola", language="es-ES", voice="lola",
+                      params={"speed": 1.0}),
+            "unknown_param",
+        )
+
+    def test_a_model_of_another_engine_is_refused(self):
+        self.assertEqual(self.code("pocket", model="zonos3-mini", text="Hi", language="en-US"), "wrong_engine")
+
+
+class AdapterHelperTests(unittest.TestCase):
+    def test_plan_parses_and_falls_back_on_garbage(self):
+        from engines.plan import Plan, load_plan, resolve_device
+
+        plan = load_plan('{"device":"mps","dtype":"float16","threads":2,"quantize":true,"steps":16,"notes":[]}')
+        self.assertEqual(plan, Plan("mps", "float16", 2, True, 16))
+        for raw in ("", "not json", "[]", '{"device":"tpu","threads":0,"steps":true,"quantize":1}'):
+            self.assertEqual(load_plan(raw), Plan())
+        self.assertEqual(resolve_device("auto", plan), "mps")
+        self.assertEqual(resolve_device("cpu", plan), "cpu")
+
+    def test_omnivoice_modes(self):
+        from engines.omnivoice import resolve_mode
+
+        self.assertEqual(resolve_mode(None, "/s.wav"), ("clone", "/s.wav"))
+        self.assertEqual(resolve_mode("auto", None), ("auto", None))
+        self.assertEqual(resolve_mode(None, None), ("auto", None))
+        mode, instruct = resolve_mode("design-f-british", None)
+        self.assertEqual(mode, "design")
+        self.assertIn("british accent", instruct)
+        with self.assertRaises(ValueError):
+            resolve_mode("someone", None)
+
+    def test_zonos3_request_and_wav_decoding(self):
+        from engines.zonos3 import build_request, decode_wav
+
+        body = build_request("Hola", "es-ES", "default_43e790fc116fd62a", None, {"temperature": 0.6})
+        self.assertEqual(body["language"], "es")
+        self.assertEqual(body["speaker_embedding_id"], "default_43e790fc116fd62a")
+        self.assertEqual((body["stream"], body["format"], body["temperature"]), (False, "wav", 0.6))
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = os.path.join(tmp, "me.wav")
+            with open(sample, "wb") as handle:
+                handle.write(b"RIFFdata")
+            cloned = build_request("Hi", "en-US", None, sample, {})
+            self.assertEqual(cloned["speaker_mode"], "embedding")
+            self.assertEqual(cloned["language"], "en_us")
+            self.assertNotIn("speaker_embedding_id", cloned)
+        with self.assertRaises(ValueError):
+            build_request("Hi", "en-US", "nobody", None, {})
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            self.skipTest("numpy is not installed")
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as writer:
+            writer.setnchannels(2)
+            writer.setsampwidth(2)
+            writer.setframerate(44100)
+            writer.writeframes(b"\x00\x40\x00\x40" * 10)
+        samples, rate = decode_wav(buffer.getvalue())
+        self.assertEqual((rate, len(samples)), (44100, 10))
+        self.assertAlmostEqual(float(samples[0]), 0.5)
+
+    def test_downloaded_means_every_required_file_in_some_snapshot(self):
+        from engines import base
+
+        info = base.model_info("pocket-tts")
+        with tempfile.TemporaryDirectory() as hub:
+            old = os.environ.get("HF_HUB_CACHE")
+            os.environ["HF_HUB_CACHE"] = hub
+            self.addCleanup(lambda: os.environ.pop("HF_HUB_CACHE") if old is None else os.environ.__setitem__("HF_HUB_CACHE", old))
+            root = os.path.join(hub, "models--kyutai--pocket-tts-without-voice-cloning", "snapshots")
+            english = os.path.join(root, "rev-a", "languages", "english")
+            os.makedirs(english)
+            open(os.path.join(english, "model.safetensors"), "wb").close()
+            self.assertFalse(base.is_downloaded(info))
+            spanish = os.path.join(root, "rev-b", "languages", "spanish")
+            os.makedirs(spanish)
+            open(os.path.join(spanish, "model.safetensors"), "wb").close()
+            self.assertTrue(base.is_downloaded(info))
+
+
 class SplitSentencesTests(unittest.TestCase):
     def test_collapses_and_packs(self):
         self.assertEqual(split_sentences("Uno.  Dos.\n\tTres.", 200), ["Uno. Dos. Tres."])

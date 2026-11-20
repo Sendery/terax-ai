@@ -420,12 +420,18 @@ describe("local speech in the snapshot", () => {
       engines: [
         { id: "kokoro", installed: true, running: true },
         { id: "chatterbox", installed: false, running: false },
+        { id: "pocket", installed: false, running: false },
+        { id: "omnivoice", installed: false, running: false },
+        { id: "zonos3", installed: false, running: false },
       ],
       models: [
         { id: "kokoro-82m", downloaded: true },
         { id: "chatterbox-multilingual", downloaded: false },
         { id: "chatterbox-turbo", downloaded: false },
         { id: "chatterbox-nano", downloaded: false },
+        { id: "pocket-tts", downloaded: false },
+        { id: "omnivoice", downloaded: false },
+        { id: "zonos3-mini", downloaded: false },
       ],
       speaking: true,
     });
@@ -462,7 +468,28 @@ describe("local speech in the snapshot", () => {
 });
 
 it("reports GraphX coordination without exposing its source", () => {
-  const snapshot=buildAppSnapshot({tabs:[{id:1,kind:"graphx",spaceId:"s",title:"Map",graphId:"map",documentId:"00000000-0000-4000-8000-000000000001",revision:4,source:"private source details",placement:"floating"}],activeTabId:1,activeSpaceId:"s"});
-  expect(snapshot.tabs[0]).toMatchObject({graphId:"map",revision:4,placement:"floating",sourceCharacters:22});
+  const snapshot = buildAppSnapshot({
+    tabs: [
+      {
+        id: 1,
+        kind: "graphx",
+        spaceId: "s",
+        title: "Map",
+        graphId: "map",
+        documentId: "00000000-0000-4000-8000-000000000001",
+        revision: 4,
+        source: "private source details",
+        placement: "floating",
+      },
+    ],
+    activeTabId: 1,
+    activeSpaceId: "s",
+  });
+  expect(snapshot.tabs[0]).toMatchObject({
+    graphId: "map",
+    revision: 4,
+    placement: "floating",
+    sourceCharacters: 22,
+  });
   expect(JSON.stringify(snapshot)).not.toContain("private source details");
 });
