@@ -26,8 +26,10 @@ import {
   TTS_MODELS,
   BUILTIN_VOICE_ID,
   defaultPresetVoice,
+  downloadsOnFirstUse,
   isBuiltinVoice,
   presetVoicesOf,
+  RECORDING_SENTENCES,
 } from "./engines";
 
 describe("engine and model lists", () => {
@@ -48,7 +50,14 @@ describe("engine and model lists", () => {
       "omnivoice",
       "zonos3-mini",
     ]);
-    expect(TTS_LANGUAGES).toEqual(["es-ES", "en-US"]);
+    expect(TTS_LANGUAGES).toEqual([
+      "es-ES",
+      "en-US",
+      "fr-FR",
+      "de-DE",
+      "it-IT",
+      "pt-BR",
+    ]);
   });
 
   it("derives the engine from the model", () => {
@@ -73,7 +82,17 @@ describe("engine and model lists", () => {
     for (const language of TTS_LANGUAGES) {
       expect(LANGUAGE_LABELS[language]).toBeTruthy();
       expect(PREVIEW_SENTENCES[language].length).toBeGreaterThan(10);
-      expect(KOKORO_PRESET_VOICES[language].length).toBeGreaterThan(0);
+      expect(RECORDING_SENTENCES[language].length).toBeGreaterThan(40);
+      // Kokoro has no German voice; every other language has one.
+      expect(KOKORO_PRESET_VOICES[language].length > 0).toBe(language !== "de-DE");
+      // Every language has at least one sample-free voice somewhere.
+      expect(
+        TTS_MODELS.some(
+          (model) =>
+            MODEL_LANGUAGES[model].includes(language) &&
+            presetVoicesOf(model, language).length > 0,
+        ),
+      ).toBe(true);
     }
   });
 });
@@ -210,5 +229,33 @@ describe("voices a model speaks without a sample", () => {
       "temperature",
     ]);
     expect(MODEL_PARAMS["pocket-tts"]).toEqual([]);
+  });
+});
+
+describe("languages beyond Spanish and English", () => {
+  it("covers each new language per model", () => {
+    expect(MODEL_LANGUAGES["kokoro-82m"]).toEqual([
+      "es-ES",
+      "en-US",
+      "fr-FR",
+      "it-IT",
+      "pt-BR",
+    ]);
+    expect(MODEL_LANGUAGES["chatterbox-turbo"]).toEqual(["en-US"]);
+    for (const model of ["pocket-tts", "omnivoice", "zonos3-mini", "chatterbox-multilingual"] as const) {
+      expect(MODEL_LANGUAGES[model]).toEqual(TTS_LANGUAGES);
+    }
+    expect(presetVoicesOf("pocket-tts", "de-DE")[0]?.id).toBe("juergen");
+    expect(presetVoicesOf("zonos3-mini", "pt-BR").map((v) => v.label)).toEqual([
+      "Leonor",
+      "Thiago",
+    ]);
+    expect(presetVoicesOf("omnivoice", "it-IT")[0]?.id).toBe("auto");
+  });
+
+  it("knows which Pocket languages download on first use", () => {
+    expect(downloadsOnFirstUse("pocket-tts", "es-ES")).toBe(false);
+    expect(downloadsOnFirstUse("pocket-tts", "de-DE")).toBe(true);
+    expect(downloadsOnFirstUse("kokoro-82m", "fr-FR")).toBe(false);
   });
 });

@@ -500,83 +500,68 @@ export function parseManifest(
 
 // ---------------------------------------------------------------------------
 
-const SPANISH_HINTS = new Set([
-  "el",
-  "la",
-  "los",
-  "las",
-  "de",
-  "que",
-  "y",
-  "en",
-  "un",
-  "una",
-  "por",
-  "con",
-  "para",
-  "es",
-  "del",
-  "se",
-  "lo",
-  "como",
-  "más",
-  "pero",
-  "su",
-  "al",
-  "este",
-  "esta",
-  "también",
-  "porque",
-  "muy",
-  "sin",
-  "sobre",
-  "entre",
-  "cuando",
-]);
-const ENGLISH_HINTS = new Set([
-  "the",
-  "and",
-  "of",
-  "to",
-  "in",
-  "is",
-  "that",
-  "it",
-  "for",
-  "with",
-  "as",
-  "was",
-  "on",
-  "are",
-  "this",
-  "be",
-  "by",
-  "from",
-  "or",
-  "an",
-  "have",
-  "not",
-  "but",
-  "which",
-  "you",
-  "they",
-  "we",
-  "can",
-  "will",
-  "their",
-  "there",
-]);
+/** Frequent function words per language; together they tell six languages
+ *  apart well enough to pick a default voice. */
+const LANGUAGE_HINTS: Record<TtsLanguage, ReadonlySet<string>> = {
+  "es-ES": new Set(
+    "el la los las de del que y en un una es por con para no se lo como más pero su al este esta también porque muy sin sobre entre cuando".split(" "),
+  ),
+  "en-US": new Set(
+    "the and of to in is that it for with as was on are this be by from or an have not but which you they we can will their there".split(" "),
+  ),
+  "fr-FR": new Set(
+    "le la les des du et est une un que qui dans pour pas sur au aux avec ce cette il elle nous vous ils sont mais ou plus être".split(" "),
+  ),
+  "de-DE": new Set(
+    "der die das und ist nicht ein eine zu den von mit sich des auf für im dem auch es an als wird sie wir ich oder aber".split(" "),
+  ),
+  "it-IT": new Set(
+    "il lo gli di che e è un una per non con del della sono come anche nel alla questo questa ma più se si ha".split(" "),
+  ),
+  "pt-BR": new Set(
+    "o os as de do da dos das que e é um uma para com não em no na se por mais como mas foi são ao também você".split(" "),
+  ),
+};
 
-/** A cheap guess from stop words, enough to pick a default voice. */
-export function guessLanguage(doc: ReaderDocument): TtsLanguage | null {
-  let es = 0;
-  let en = 0;
+/** Letters only one or two of the languages use. */
+const LANGUAGE_LETTERS: Partial<Record<TtsLanguage, RegExp>> = {
+  "es-ES": /[ñ¿¡]/u,
+  "de-DE": /[äöüß]/u,
+  "pt-BR": /[ãõ]/u,
+  "fr-FR": /[œæ]/u,
+};
+
+/**
+ * A cheap guess from stop words among the languages the user reads in,
+ * enough to pick that language's default voice. Null when the text gives too
+ * little to go on.
+ */
+export function guessLanguage(
+  doc: ReaderDocument,
+  candidates: readonly TtsLanguage[] = ["es-ES", "en-US"],
+): TtsLanguage | null {
+  if (candidates.length === 0) return null;
+  const scores = new Map<TtsLanguage, number>(candidates.map((l) => [l, 0]));
   for (const word of doc.words.slice(0, 4000)) {
-    const bare = word.text.toLowerCase().replace(/[^\p{L}]/gu, "");
-    if (SPANISH_HINTS.has(bare)) es++;
-    if (ENGLISH_HINTS.has(bare)) en++;
-    if (/[ñáéíóú¿¡]/u.test(word.text.toLowerCase())) es += 0.5;
+    const lower = word.text.toLowerCase();
+    const bare = lower.replace(/[^\p{L}]/gu, "");
+    for (const language of candidates) {
+      let score = scores.get(language) ?? 0;
+      if (LANGUAGE_HINTS[language].has(bare)) score += 1;
+      if (LANGUAGE_LETTERS[language]?.test(lower)) score += 0.5;
+      scores.set(language, score);
+    }
   }
-  if (es + en < 3) return null;
-  return es >= en ? "es-ES" : "en-US";
+  let best: TtsLanguage | null = null;
+  let bestScore = 0;
+  let total = 0;
+  for (const language of candidates) {
+    const score = scores.get(language) ?? 0;
+    total += score;
+    if (score > bestScore) {
+      best = language;
+      bestScore = score;
+    }
+  }
+  return total < 3 ? null : best;
 }

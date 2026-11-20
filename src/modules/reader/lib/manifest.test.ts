@@ -212,3 +212,27 @@ describe("guessLanguage", () => {
     expect(guessLanguage(parseDocument("xyz"))).toBeNull();
   });
 });
+
+describe("guessLanguage among the enabled languages", () => {
+  const all = ["es-ES", "en-US", "fr-FR", "de-DE", "it-IT", "pt-BR"] as const;
+  it("tells the six languages apart", () => {
+    const cases: [string, (typeof all)[number]][] = [
+      ["El perro de la casa come cuando quiere porque es muy listo.", "es-ES"],
+      ["The dog of the house eats when it wants because it is clever.", "en-US"],
+      ["Le chien de la maison mange quand il veut, mais il est sage.", "fr-FR"],
+      ["Der Hund ist nicht im Haus, und die Katze schläft auf dem Sofa.", "de-DE"],
+      ["Il cane della casa non mangia quando piove, ma è sempre felice.", "it-IT"],
+      ["O cachorro não come quando chove, mas você é muito gentil com ele.", "pt-BR"],
+    ];
+    for (const [text, language] of cases) {
+      expect(guessLanguage(parseDocument(text), all), text).toBe(language);
+    }
+  });
+
+  it("only picks among the candidates, and gives up on too little text", () => {
+    const french = parseDocument("Le chien de la maison mange quand il veut, mais il est sage.");
+    expect(guessLanguage(french, ["es-ES", "en-US"])).not.toBe("fr-FR");
+    expect(guessLanguage(parseDocument("Le chien."), all)).toBeNull();
+    expect(guessLanguage(french, [])).toBeNull();
+  });
+});

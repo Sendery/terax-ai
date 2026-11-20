@@ -18,7 +18,14 @@ export const TTS_MODELS = [
 ] as const;
 export type TtsModelId = (typeof TTS_MODELS)[number];
 
-export const TTS_LANGUAGES = ["es-ES", "en-US"] as const;
+export const TTS_LANGUAGES = [
+  "es-ES",
+  "en-US",
+  "fr-FR",
+  "de-DE",
+  "it-IT",
+  "pt-BR",
+] as const;
 export type TtsLanguage = (typeof TTS_LANGUAGES)[number];
 
 export const TTS_DEVICES = ["auto", "cpu", "mps", "cuda"] as const;
@@ -27,13 +34,47 @@ export type TtsDevice = (typeof TTS_DEVICES)[number];
 export const LANGUAGE_LABELS: Record<TtsLanguage, string> = {
   "es-ES": "Spanish",
   "en-US": "English",
+  "fr-FR": "French",
+  "de-DE": "German",
+  "it-IT": "Italian",
+  "pt-BR": "Portuguese",
 };
+
+/** Languages a fresh install reads in; more are added in Settings, Voice. */
+export const DEFAULT_ENABLED_LANGUAGES: readonly TtsLanguage[] = [
+  "es-ES",
+  "en-US",
+];
 
 /** Short localized line used by the voice preview button. */
 export const PREVIEW_SENTENCES: Record<TtsLanguage, string> = {
   "es-ES":
     "Hola, soy tu voz en Terax. Puedo leer en voz alta lo que selecciones.",
   "en-US": "Hi, this is your Terax voice. I can read your selection out loud.",
+  "fr-FR":
+    "Bonjour, je suis ta voix dans Terax. Je peux lire à voix haute ce que tu sélectionnes.",
+  "de-DE":
+    "Hallo, ich bin deine Stimme in Terax. Ich kann vorlesen, was du markierst.",
+  "it-IT":
+    "Ciao, sono la tua voce in Terax. Posso leggere ad alta voce quello che selezioni.",
+  "pt-BR":
+    "Olá, sou a sua voz no Terax. Posso ler em voz alta o que você selecionar.",
+};
+
+/** A sentence to read aloud when recording a voice sample. */
+export const RECORDING_SENTENCES: Record<TtsLanguage, string> = {
+  "es-ES":
+    "El viento del norte y el sol discutían sobre cuál de los dos era más fuerte, cuando pasó un viajero envuelto en una capa.",
+  "en-US":
+    "The North Wind and the Sun were disputing which was the stronger, when a traveler came along wrapped in a warm cloak.",
+  "fr-FR":
+    "La bise et le soleil se disputaient, chacun assurant qu'il était le plus fort, quand ils virent un voyageur qui s'avançait, enveloppé dans son manteau.",
+  "de-DE":
+    "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre, als ein Wanderer, der in einen warmen Mantel gehüllt war, des Weges kam.",
+  "it-IT":
+    "Si bisticciavano un giorno il vento di tramontana e il sole, l'uno pretendendo d'esser più forte dell'altro, quando videro un viaggiatore avvolto nel mantello.",
+  "pt-BR":
+    "O vento norte e o sol discutiam qual dos dois era o mais forte, quando passou um viajante envolto numa capa.",
 };
 
 export const DEVICE_LABELS: Record<TtsDevice, string> = {
@@ -125,14 +166,27 @@ export const MODEL_APPROX_BYTES: Record<TtsModelId, number> = {
 };
 
 export const MODEL_LANGUAGES: Record<TtsModelId, readonly TtsLanguage[]> = {
-  "kokoro-82m": ["es-ES", "en-US"],
-  "chatterbox-multilingual": ["es-ES", "en-US"],
+  // Kokoro has no German voices.
+  "kokoro-82m": ["es-ES", "en-US", "fr-FR", "it-IT", "pt-BR"],
+  "chatterbox-multilingual": TTS_LANGUAGES,
   "chatterbox-turbo": ["en-US"],
   "chatterbox-nano": ["en-US"],
-  "pocket-tts": ["es-ES", "en-US"],
-  omnivoice: ["es-ES", "en-US"],
-  "zonos3-mini": ["es-ES", "en-US"],
+  "pocket-tts": TTS_LANGUAGES,
+  omnivoice: TTS_LANGUAGES,
+  "zonos3-mini": TTS_LANGUAGES,
 };
+
+/**
+ * Languages a model downloads on first use rather than with the model: Pocket
+ * TTS ships one checkpoint per language and the install fetches Spanish and
+ * English only.
+ */
+export function downloadsOnFirstUse(
+  model: TtsModelId,
+  language: TtsLanguage,
+): boolean {
+  return model === "pocket-tts" && language !== "es-ES" && language !== "en-US";
+}
 
 export type VoiceSource = "preset" | "clone";
 
@@ -165,15 +219,23 @@ export const MODEL_BUILTIN_VOICE: Record<TtsModelId, string | null> = {
 
 export type PresetVoice = { id: string; label: string };
 
+/** OmniVoice voices without an accent attribute, for every language but
+ *  English: voice design was trained on English and Chinese only. */
+const OMNIVOICE_NEUTRAL_VOICES: readonly PresetVoice[] = [
+  { id: "auto", label: "Automatic" },
+  { id: "design-f-young", label: "Designed: young woman" },
+  { id: "design-m-middle", label: "Designed: middle-aged man, low" },
+  { id: "design-f-elderly", label: "Designed: elderly woman" },
+  { id: "design-m-young", label: "Designed: young man" },
+];
+
 /** OmniVoice's designed voices; the attributes live in the sidecar. */
 const OMNIVOICE_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
-  "es-ES": [
-    { id: "auto", label: "Automatic" },
-    { id: "design-f-young", label: "Designed: young woman" },
-    { id: "design-m-middle", label: "Designed: middle-aged man, low" },
-    { id: "design-f-elderly", label: "Designed: elderly woman" },
-    { id: "design-m-young", label: "Designed: young man" },
-  ],
+  "es-ES": OMNIVOICE_NEUTRAL_VOICES,
+  "fr-FR": OMNIVOICE_NEUTRAL_VOICES,
+  "de-DE": OMNIVOICE_NEUTRAL_VOICES,
+  "it-IT": OMNIVOICE_NEUTRAL_VOICES,
+  "pt-BR": OMNIVOICE_NEUTRAL_VOICES,
   "en-US": [
     { id: "auto", label: "Automatic" },
     { id: "design-f-american", label: "Designed: American woman" },
@@ -202,10 +264,41 @@ const ZONOS3_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
     { id: "default_40a3ba1017bfb68a", label: "Morgana (witch)" },
     { id: "default_c5e098c322aae901", label: "Sakura (anime)" },
   ],
+  "fr-FR": [{ id: "default_517319c805b927e9", label: "Gaspard" }],
+  "de-DE": [
+    { id: "default_09d206a5b067ae71", label: "Liesel" },
+    { id: "default_ec650ef042ed1f14", label: "Wolfgang" },
+  ],
+  "it-IT": [
+    { id: "default_792987ff6236e50d", label: "Ginevra" },
+    { id: "default_ccb71e6596453e72", label: "Lorenzo" },
+  ],
+  "pt-BR": [
+    { id: "default_e11f53895cad62fa", label: "Leonor" },
+    { id: "default_4562e98e005b69cc", label: "Thiago" },
+  ],
 };
 
-/** Pocket TTS presets; every voice exists for both language models. */
+/** Pocket TTS presets. Every voice exists for every language model; the
+ *  native speaker of each language comes first, the rest keep their accent. */
 const POCKET_PRESET_VOICES: Record<TtsLanguage, readonly PresetVoice[]> = {
+  "fr-FR": [
+    { id: "estelle", label: "Estelle (French)" },
+    { id: "giovanni", label: "Giovanni (Italian)" },
+    { id: "rafael", label: "Rafael (Portuguese)" },
+  ],
+  "de-DE": [
+    { id: "juergen", label: "Juergen (German)" },
+    { id: "estelle", label: "Estelle (French)" },
+  ],
+  "it-IT": [
+    { id: "giovanni", label: "Giovanni (Italian)" },
+    { id: "rafael", label: "Rafael (Portuguese)" },
+  ],
+  "pt-BR": [
+    { id: "rafael", label: "Rafael (Portuguese)" },
+    { id: "giovanni", label: "Giovanni (Italian)" },
+  ],
   "es-ES": [
     { id: "lola", label: "Lola (Spanish)" },
     { id: "rafael", label: "Rafael (Portuguese)" },
@@ -445,6 +538,17 @@ export const KOKORO_PRESET_VOICES: Record<
     { id: "bf_isabella", label: "Isabella (British)" },
     { id: "bm_george", label: "George (British)" },
     { id: "bm_lewis", label: "Lewis (British)" },
+  ],
+  "fr-FR": [{ id: "ff_siwis", label: "Siwis" }],
+  "de-DE": [],
+  "it-IT": [
+    { id: "if_sara", label: "Sara" },
+    { id: "im_nicola", label: "Nicola" },
+  ],
+  "pt-BR": [
+    { id: "pf_dora", label: "Dora" },
+    { id: "pm_alex", label: "Alex" },
+    { id: "pm_santa", label: "Santa" },
   ],
 };
 

@@ -121,7 +121,7 @@ class FakeEngineTests(ServerCase):
         models = payload["models"]
         self.assertEqual([m["id"] for m in models], ["fake-model"])
         self.assertIs(models[0]["downloaded"], True)
-        self.assertEqual(sorted(models[0]["languages"]), ["en-US", "es-ES"])
+        self.assertEqual(sorted(models[0]["languages"]), ["de-DE", "en-US", "es-ES", "fr-FR", "it-IT", "pt-BR"])
         self.assertEqual(models[0]["voiceSource"], "preset")
 
     def test_voices(self):
@@ -188,7 +188,7 @@ class FakeEngineTests(ServerCase):
 
     def test_rejects_unknown_language(self):
         self.assertEqual(
-            self.error_code("/synthesize", self.synth_body(language="fr-FR")),
+            self.error_code("/synthesize", self.synth_body(language="ja-JP")),
             (400, "unsupported_language"),
         )
 
@@ -575,6 +575,75 @@ class NewEngineContractTests(unittest.TestCase):
 
     def test_a_model_of_another_engine_is_refused(self):
         self.assertEqual(self.code("pocket", model="zonos3-mini", text="Hi", language="en-US"), "wrong_engine")
+
+
+class LanguageTests(unittest.TestCase):
+    """The dev.26 languages: French, German, Italian and Brazilian Portuguese."""
+
+    def setUp(self):
+        self._downloaded = server.is_downloaded
+        server.is_downloaded = lambda info: True
+        self.addCleanup(setattr, server, "is_downloaded", self._downloaded)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def validate(self, engine, **body):
+        host = NewEngineContractTests._Host(engine, self._tmp.name)
+        return server.validate_synthesize(host, body)
+
+    def test_kokoro_speaks_french_italian_portuguese_but_not_german(self):
+        from engines.base import kokoro_lang_code
+
+        self.assertEqual(kokoro_lang_code("fr-FR", "ff_siwis"), "f")
+        self.assertEqual(kokoro_lang_code("it-IT", "im_nicola"), "i")
+        self.assertEqual(kokoro_lang_code("pt-BR", "pf_dora"), "p")
+        # A voice of another language falls back to the language's own code.
+        self.assertEqual(kokoro_lang_code("it-IT", "af_heart"), "i")
+        self.assertEqual(kokoro_lang_code("en-US", "bf_emma"), "b")
+        self.validate("kokoro", model="kokoro-82m", text="Bonjour", language="fr-FR", voice="ff_siwis")
+        with self.assertRaises(server.HttpError) as caught:
+            self.validate("kokoro", model="kokoro-82m", text="Hallo", language="de-DE", voice="af_heart")
+        self.assertEqual(caught.exception.code, "unsupported_language_for_model")
+
+    def test_every_engine_but_kokoro_and_the_english_chatterboxes_speaks_all_six(self):
+        from engines.base import LANGUAGES, MODELS
+
+        self.assertEqual(LANGUAGES, ("es-ES", "en-US", "fr-FR", "de-DE", "it-IT", "pt-BR"))
+        for info in MODELS:
+            if info.id in ("chatterbox-turbo", "chatterbox-nano"):
+                self.assertEqual(info.languages, ("en-US",))
+            elif info.id == "kokoro-82m":
+                self.assertNotIn("de-DE", info.languages)
+            else:
+                self.assertEqual(info.languages, LANGUAGES, info.id)
+
+    def test_zonos3_default_voices_and_codes_per_language(self):
+        from engines.base import MODELS_BY_ID, sample_free_voices
+        from engines.zonos3 import build_request
+
+        info = MODELS_BY_ID["zonos3-mini"]
+        self.assertEqual(
+            sorted(sample_free_voices(info, "de-DE")),
+            ["default_09d206a5b067ae71", "default_ec650ef042ed1f14"],
+        )
+        self.assertEqual(build_request("Olá", "pt-BR", "default_e11f53895cad62fa", None, {})["language"], "pt_br")
+        self.assertEqual(build_request("Salut", "fr-FR", "default_517319c805b927e9", None, {})["language"], "fr_fr")
+
+    def test_pocket_has_a_native_voice_for_each_language(self):
+        from engines.base import POCKET_DEFAULT_VOICES, POCKET_LANGUAGES, POCKET_VOICES
+
+        for language, voice in POCKET_DEFAULT_VOICES.items():
+            self.assertIn(language, POCKET_LANGUAGES)
+            self.assertTrue(any(v.id == voice and v.language == language for v in POCKET_VOICES), language)
+        self.validate("pocket", model="pocket-tts", text="Hallo", language="de-DE", voice="juergen")
+
+    def test_chatterbox_and_omnivoice_language_ids(self):
+        from engines.base import CHATTERBOX_LANG_IDS, LANGUAGES, OMNIVOICE_LANGUAGES
+
+        for language in LANGUAGES:
+            self.assertIn(language, CHATTERBOX_LANG_IDS)
+            self.assertIn(language, OMNIVOICE_LANGUAGES)
+        self.validate("omnivoice", model="omnivoice", text="Ciao", language="it-IT", voice="design-f-young")
 
 
 class AdapterHelperTests(unittest.TestCase):

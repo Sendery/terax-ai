@@ -14,7 +14,8 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Optional
 
-LANGUAGES = ("es-ES", "en-US")
+LANGUAGES = ("es-ES", "en-US", "fr-FR", "de-DE", "it-IT", "pt-BR")
+KOKORO_LANGUAGES = ("es-ES", "en-US", "fr-FR", "it-IT", "pt-BR")
 
 PARAM_RANGES = {
     "speed": (0.5, 2.0),
@@ -86,7 +87,7 @@ MODELS = (
         id="kokoro-82m",
         engine="kokoro",
         repo="hexgrad/Kokoro-82M",
-        languages=("es-ES", "en-US"),
+        languages=KOKORO_LANGUAGES,
         voice_source="preset",
         sample_rate=24000,
         params=("speed",),
@@ -95,7 +96,7 @@ MODELS = (
         id="chatterbox-multilingual",
         engine="chatterbox",
         repo="ResembleAI/chatterbox",
-        languages=("es-ES", "en-US"),
+        languages=LANGUAGES,
         voice_source="clone",
         sample_rate=24000,
         params=("exaggeration", "cfgWeight", "temperature"),
@@ -127,7 +128,7 @@ MODELS = (
         id="pocket-tts",
         engine="pocket",
         repo="kyutai/pocket-tts-without-voice-cloning",
-        languages=("es-ES", "en-US"),
+        languages=LANGUAGES,
         voice_source="preset",
         sample_rate=24000,
         required_files=(
@@ -139,7 +140,7 @@ MODELS = (
         id="omnivoice",
         engine="omnivoice",
         repo="k2-fsa/OmniVoice",
-        languages=("es-ES", "en-US"),
+        languages=LANGUAGES,
         voice_source="clone",
         sample_rate=24000,
         params=("speed", "steps"),
@@ -149,7 +150,7 @@ MODELS = (
         id="zonos3-mini",
         engine="zonos3",
         repo="Zyphra/ZONOS3-Mini",
-        languages=("es-ES", "en-US"),
+        languages=LANGUAGES,
         voice_source="clone",
         sample_rate=44100,
         params=("temperature",),
@@ -163,7 +164,7 @@ MODELS = (
         id="fake-model",
         engine="fake",
         repo="",
-        languages=("es-ES", "en-US"),
+        languages=LANGUAGES,
         voice_source="preset",
         sample_rate=24000,
         params=("speed",),
@@ -186,8 +187,35 @@ POCKET_VOICES = (
         "michael", "eve", "bill_boerst", "peter_yearsley", "stuart_bell", "caro_davy",
     )
 )
-POCKET_DEFAULT_VOICES = {"es-ES": "lola", "en-US": "alba"}
-POCKET_LANGUAGES = {"es-ES": "spanish", "en-US": "english"}
+POCKET_VOICES = POCKET_VOICES + (
+    VoiceInfo("estelle", "Estelle (French)", "fr-FR"),
+    VoiceInfo("giovanni", "Giovanni (Italian)", "fr-FR"),
+    VoiceInfo("rafael", "Rafael (Portuguese)", "fr-FR"),
+    VoiceInfo("juergen", "Juergen (German)", "de-DE"),
+    VoiceInfo("estelle", "Estelle (French)", "de-DE"),
+    VoiceInfo("giovanni", "Giovanni (Italian)", "it-IT"),
+    VoiceInfo("rafael", "Rafael (Portuguese)", "it-IT"),
+    VoiceInfo("rafael", "Rafael (Portuguese)", "pt-BR"),
+    VoiceInfo("giovanni", "Giovanni (Italian)", "pt-BR"),
+)
+POCKET_DEFAULT_VOICES = {
+    "es-ES": "lola",
+    "en-US": "alba",
+    "fr-FR": "estelle",
+    "de-DE": "juergen",
+    "it-IT": "giovanni",
+    "pt-BR": "rafael",
+}
+POCKET_LANGUAGES = {
+    "es-ES": "spanish",
+    "en-US": "english",
+    "fr-FR": "french",
+    "de-DE": "german",
+    "it-IT": "italian",
+    "pt-BR": "portuguese",
+}
+# The install downloads these; the other languages download on first use.
+POCKET_PREFETCHED = ("es-ES", "en-US")
 
 # OmniVoice speaks without a sample in two ways: it picks a voice itself, or it
 # designs one from attributes. Voice design was trained on English and Chinese
@@ -216,8 +244,18 @@ OMNIVOICE_VOICES = (
     VoiceInfo("design-f-british", "Designed: British woman", "en-US"),
     VoiceInfo("design-m-british", "Designed: British man", "en-US"),
     VoiceInfo("design-f-whisper", "Designed: whispering woman", "en-US"),
+) + tuple(
+    VoiceInfo(voice_id, label, language)
+    for language in ("fr-FR", "de-DE", "it-IT", "pt-BR")
+    for voice_id, label in (
+        (OMNIVOICE_AUTO_VOICE, "Automatic"),
+        ("design-f-young", "Designed: young woman"),
+        ("design-m-middle", "Designed: middle-aged man, low"),
+        ("design-f-elderly", "Designed: elderly woman"),
+        ("design-m-young", "Designed: young man"),
+    )
 )
-OMNIVOICE_LANGUAGES = {"es-ES": "es", "en-US": "en"}
+OMNIVOICE_LANGUAGES = {"es-ES": "es", "en-US": "en", "fr-FR": "fr", "de-DE": "de", "it-IT": "it", "pt-BR": "pt"}
 
 # ZONOS3-Mini default voices: the ids `GET /v2/speakers` returns for the
 # gguf/voices folder of the pinned weights.
@@ -234,8 +272,16 @@ ZONOS3_VOICES = (
     VoiceInfo("default_940eaff39a929da0", "Willow (ASMR)", "en-US"),
     VoiceInfo("default_40a3ba1017bfb68a", "Morgana (witch)", "en-US"),
     VoiceInfo("default_c5e098c322aae901", "Sakura (anime)", "en-US"),
+    VoiceInfo("default_517319c805b927e9", "Gaspard", "fr-FR"),
+    VoiceInfo("default_09d206a5b067ae71", "Liesel", "de-DE"),
+    VoiceInfo("default_ec650ef042ed1f14", "Wolfgang", "de-DE"),
+    VoiceInfo("default_792987ff6236e50d", "Ginevra", "it-IT"),
+    VoiceInfo("default_ccb71e6596453e72", "Lorenzo", "it-IT"),
+    VoiceInfo("default_e11f53895cad62fa", "Leonor", "pt-BR"),
+    VoiceInfo("default_4562e98e005b69cc", "Thiago", "pt-BR"),
 )
-ZONOS3_LANGUAGES = {"es-ES": "es", "en-US": "en_us"}
+# Server codes from zonos3/registries/languages.json at the pinned commit.
+ZONOS3_LANGUAGES = {"es-ES": "es", "en-US": "en_us", "fr-FR": "fr_fr", "de-DE": "de", "it-IT": "it", "pt-BR": "pt_br"}
 
 _PRESETS_BY_MODEL = {
     "pocket-tts": POCKET_VOICES,
@@ -257,8 +303,8 @@ def sample_free_voices(info: ModelInfo, language: str) -> frozenset:
         ids.add(info.builtin_voice)
     return frozenset(ids)
 
-KOKORO_LANG_CODES = {"es-ES": "e", "en-US": "a"}
-CHATTERBOX_LANG_IDS = {"es-ES": "es", "en-US": "en"}
+KOKORO_LANG_CODES = {"es-ES": "e", "en-US": "a", "fr-FR": "f", "it-IT": "i", "pt-BR": "p"}
+CHATTERBOX_LANG_IDS = {"es-ES": "es", "en-US": "en", "fr-FR": "fr", "de-DE": "de", "it-IT": "it", "pt-BR": "pt"}
 
 # lang_code, region label, sex suffix, given names.
 _KOKORO_PRESETS = (
@@ -268,13 +314,19 @@ _KOKORO_PRESETS = (
     ("b", "British", "m", ("daniel", "fable", "george", "lewis")),
     ("e", "Spanish", "f", ("dora",)),
     ("e", "Spanish", "m", ("alex", "santa")),
+    ("f", "French", "f", ("siwis",)),
+    ("i", "Italian", "f", ("sara",)),
+    ("i", "Italian", "m", ("nicola",)),
+    ("p", "Brazilian", "f", ("dora",)),
+    ("p", "Brazilian", "m", ("alex", "santa")),
 )
+_KOKORO_CODE_LANGUAGE = {"a": "en-US", "b": "en-US", "e": "es-ES", "f": "fr-FR", "i": "it-IT", "p": "pt-BR"}
 
 
 def _kokoro_voices() -> tuple:
     out = []
     for code, region, sex, names in _KOKORO_PRESETS:
-        language = "es-ES" if code == "e" else "en-US"
+        language = _KOKORO_CODE_LANGUAGE[code]
         for name in names:
             out.append(
                 VoiceInfo(
@@ -288,7 +340,13 @@ def _kokoro_voices() -> tuple:
 
 KOKORO_VOICES = _kokoro_voices()
 KOKORO_VOICE_IDS = frozenset(v.id for v in KOKORO_VOICES)
-KOKORO_DEFAULT_VOICES = {"es-ES": "ef_dora", "en-US": "af_heart"}
+KOKORO_DEFAULT_VOICES = {
+    "es-ES": "ef_dora",
+    "en-US": "af_heart",
+    "fr-FR": "ff_siwis",
+    "it-IT": "if_sara",
+    "pt-BR": "pf_dora",
+}
 
 
 def model_info(model_id: str) -> Optional[ModelInfo]:
@@ -305,9 +363,7 @@ def kokoro_lang_code(language: str, voice: Optional[str]) -> str:
     head = (voice or "").split(",")[0].strip()
     if len(head) >= 2 and head[1] in ("f", "m"):
         code = head[0]
-        if code == "e" and language == "es-ES":
-            return "e"
-        if code in ("a", "b") and language == "en-US":
+        if _KOKORO_CODE_LANGUAGE.get(code) == language:
             return code
     return default
 
