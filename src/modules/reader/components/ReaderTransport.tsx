@@ -40,7 +40,7 @@ import {
   VolumeHighIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 const BUTTON =
   "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-40";
@@ -78,6 +78,19 @@ export function ReaderTransport({
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // A library pick hands the keyboard to Play, so Space or Return resumes.
+  // The compact mini player never takes it: the panel or tab does.
+  const playRef = useRef<HTMLButtonElement>(null);
+  const focusPlay = useReaderStore((s) => s.focusPlay);
+  const hasEntry = Boolean(entry);
+  useEffect(() => {
+    if (compact || !hasEntry || focusPlay !== docId) return;
+    const button = playRef.current;
+    if (!button) return;
+    button.focus();
+    useReaderStore.getState().requestFocusPlay(null);
+  }, [compact, hasEntry, focusPlay, docId]);
 
   if (!entry) return null;
   const live = playback.docId === docId;
@@ -133,6 +146,7 @@ export function ReaderTransport({
           <HugeiconsIcon icon={GoBackward10SecIcon} size={15} />
         </button>
         <button
+          ref={playRef}
           type="button"
           onClick={toggle}
           title={playing ? "Pause (Space)" : "Play (Space)"}

@@ -1,9 +1,3 @@
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import type { LibraryEntry } from "@/modules/reader/lib/native";
 import { useReaderStore } from "@/modules/reader/store/readerStore";
 import {
@@ -13,11 +7,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRef, useState } from "react";
+import { READ_LABELS } from "./ReadMenuItems";
 import { ReaderLibrary, type OriginTab } from "./ReaderLibrary";
+import { READER_ICON_BUTTON, ReaderLibraryButton } from "./ReaderLibraryButton";
 import { ReaderPane } from "./ReaderPane";
 
-const ICON =
-  "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60";
+const ICON = READER_ICON_BUTTON;
 
 const MIN = 0.18;
 const MAX = 0.8;
@@ -55,7 +50,6 @@ export function ReaderDock({
 }: Props) {
   const rootRef = useRef<HTMLElement>(null);
   const [dragHeight, setDragHeight] = useState<number | null>(null);
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const title = useReaderStore((s) =>
     docId ? (s.docs[docId]?.state.title ?? null) : null,
   );
@@ -88,36 +82,13 @@ export function ReaderDock({
     target.addEventListener("pointercancel", end);
   };
 
-  const pick = (entry: LibraryEntry) => {
-    setLibraryOpen(false);
-    onPick(entry);
-  };
-
   const libraryButton = (
-    <Popover open={libraryOpen} onOpenChange={setLibraryOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(ICON, libraryOpen && "bg-accent text-foreground")}
-          title="Readings"
-          aria-label="Readings"
-        >
-          <HugeiconsIcon icon={BookOpen01Icon} size={14} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="max-h-[min(460px,60vh)] w-[min(420px,90vw)] gap-0 rounded-xl p-2"
-      >
-        <ReaderLibrary
-          currentDocId={docId}
-          originTab={originTab}
-          onPick={pick}
-          onDeleted={onDeleted}
-        />
-      </PopoverContent>
-    </Popover>
+    <ReaderLibraryButton
+      currentDocId={docId}
+      originTab={originTab}
+      onPick={onPick}
+      onDeleted={onDeleted}
+    />
   );
 
   const closeButton = (
@@ -161,8 +132,8 @@ export function ReaderDock({
               <button
                 type="button"
                 className={ICON}
-                title="Open in a Reader tab"
-                aria-label="Open in a Reader tab"
+                title={READ_LABELS.moveToTab}
+                aria-label={READ_LABELS.moveToTab}
                 onClick={() => onOpenAsTab(docId, title ?? "Reader")}
               >
                 <HugeiconsIcon icon={LinkSquare02Icon} size={14} />

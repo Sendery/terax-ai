@@ -89,11 +89,29 @@ import {
   setReaderOrigin,
   setReaderSpeed,
   stepReader,
+  setReaderVoice,
   stepSpeed,
+  stopEverything,
+  isSoundingNow,
   stopReader,
   toggleReader,
   useReaderStore,
 } from "@/modules/reader";
+import type { ReadContextMenuBinding } from "@/modules/reader/components/ReadContextMenu";
+import { requestReaderLibrary } from "@/modules/reader/components/ReaderLibraryButton";
+import {
+  dockTarget,
+  NOTHING_TO_READ_REASON,
+  PRIVATE_READ_REASON,
+  readHereReason,
+  readsWholeDocument,
+  speakReason,
+} from "@/modules/reader/lib/readingAvailability";
+import { titleFromText } from "@/modules/reader/lib/readerCommands";
+import {
+  readTerminalClipboard,
+  writeTerminalClipboard,
+} from "@/modules/terminal/lib/terminalClipboard";
 import type { DocEntry } from "@/modules/reader/store/readerStore";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -181,6 +199,7 @@ import {
   disposeSession,
   findLeafCwd,
   hasLeaf,
+  leafIdForPty,
   leafIds,
   navigateFocusedBlocks,
   respawnSession,
@@ -201,7 +220,6 @@ import {
 import { ThemeProvider, useThemeFileEditing } from "@/modules/theme";
 import {
   speakText,
-  stopSpeaking,
   ttsDownloadCommand,
   ttsInstallCommand,
   ttsSpeakCommand,
@@ -726,6 +744,47 @@ export default function App() {
     return null;
   }, [tabs, activeId]);
 
+  /** The tab on screen, read at call time rather than from the last render. */
+  const activeTabNow = useCallback(
+    () => tabsRef.current.find((t) => t.id === activeIdRef.current),
+    [],
+  );
+
+  /** The selection reading aloud may use: never a private terminal's. */
+  const captureReadableSelection = useCallback((): string | null => {
+    if (speakReason(activeTabNow()) === PRIVATE_READ_REASON) return null;
+    return captureActiveSelection();
+  }, [activeTabNow, captureActiveSelection]);
+
+  /**
+   * What an editor or Markdown tab reads with nothing selected: the buffer
+   * when it has unsaved edits, so what is heard is what is on screen, else
+   * the file itself.
+   */
+  const activeDocumentSource = useCallback(():
+    | { text: string; title: string }
+    | { path: string }
+    | null => {
+    const tab = activeTabNow();
+    if (!tab || !readsWholeDocument(tab)) return null;
+    if (tab.kind !== "editor" && tab.kind !== "markdown") return null;
+    if (tab.dirty) {
+      const text = editorRefs.current.get(tab.id)?.getText();
+      if (text?.trim()) {
+        const name = tab.path.split(/[\\/]/).filter(Boolean).pop() ?? tab.path;
+        return { text, title: name };
+      }
+    }
+    return { path: tab.path };
+  }, [activeTabNow]);
+
+  /** The last tab with content on screen: where a reading lands when it must. */
+  const lastContentTabRef = useRef<number | null>(null);
+  useEffect(() => {
+    const tab = tabs.find((t) => t.id === activeId);
+    if (tab && tab.kind !== "reader") lastContentTabRef.current = tab.id;
+  }, [tabs, activeId]);
+
   // A real toggle in every state. Without a provider the panel shows the
   // connect bar rather than jumping to Settings: that bar carries the same
   // action, and routing elsewhere left the shortcut unable to close what the
@@ -844,19 +903,20 @@ export default function App() {
       source: { text?: string; path?: string; title?: string },
       play = true,
       placement: "dock" | "tab" = "tab",
+      voiceId?: string,
     ) => {
       try {
         const title =
           source.title ??
-          (source.text
-            ? `${source.text.trim().split(/\s+/).slice(0, 6).join(" ")}...`
-            : undefined);
+          (source.text ? titleFromText(source.text) : undefined);
         const entry = await openStored({ ...source, title });
         const from = activeIdRef.current;
         if (placement !== "dock" || !dockReading(from, entry)) {
           recordReaderOrigin(from, entry);
           openReaderTab({ docId: entry.id, title: entry.state.title });
         }
+        // A voice picked in Read here with is the document's from now on.
+        if (voiceId) await setReaderVoice(entry.id, voiceId);
         if (play) await playReader(entry.id);
       } catch (error: unknown) {
         toast.error(
@@ -867,23 +927,47 @@ export default function App() {
     [openReaderTab, dockReading, recordReaderOrigin],
   );
 
-  const speakAloud = useCallback((
-    text: string,
-    options: SpeakOptions & { reader?: boolean; here?: boolean } = {},
-  ) => {
-    if (!text.trim()) return;
-    if (options.reader || options.here) {
-      void openInReader({ text }, true, options.here ? "dock" : "tab");
-      return;
-    }
-    void speakText(text, options).catch((error: unknown) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Reading aloud failed. Check Settings, Voice.",
-      );
-    });
-  }, [openInReader]);
+  /**
+   * Every reading action a menu offers. Empty text with Read here or Read in
+   * new tab means the document on screen; Speak always needs text.
+   */
+  const speakAloud = useCallback(
+    (
+      text: string,
+      options: SpeakOptions & { reader?: boolean; here?: boolean } = {},
+    ) => {
+      if (options.reader || options.here) {
+        const source = text.trim() ? { text } : activeDocumentSource();
+        if (!source) {
+          toast.message("Select the text to read first");
+          return;
+        }
+        void openInReader(
+          source,
+          true,
+          options.here ? "dock" : "tab",
+          options.voiceId ?? undefined,
+        );
+        return;
+      }
+      if (!text.trim()) return;
+      void speakText(text, options)
+        .then((result) => {
+          if (result?.truncated)
+            toast.message("Read up to 8 KB", {
+              description: "The rest was left out. Read here reads any length.",
+            });
+        })
+        .catch((error: unknown) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Reading aloud failed. Check Settings, Voice.",
+          );
+        });
+    },
+    [openInReader, activeDocumentSource],
+  );
 
   /** Reopens the most recent Reader document where it was left. */
   const resumeLastReader = useCallback(async () => {
@@ -896,24 +980,51 @@ export default function App() {
         return;
       }
       const entry = await loadStored(last.id);
-      openReaderTab({ docId: entry.id, title: entry.state.title });
+      // Like a pick in the library: the panel of the tab it was made in when
+      // the chain is on, else the panel here. A tab only when no tab can
+      // hold a panel at all.
+      const origin = useReaderStore.getState().followOrigin
+        ? (readerOriginTab(last.originKey)?.id ?? null)
+        : null;
+      const target = dockTarget({
+        tabs: tabsRef.current,
+        origin,
+        preferred: activeIdRef.current,
+        lastContent: lastContentTabRef.current,
+      });
+      if (target !== null && dockReading(target, entry)) {
+        if (target !== activeIdRef.current) setActiveId(target);
+      } else {
+        openReaderTab({ docId: entry.id, title: entry.state.title });
+      }
       await playReader(entry.id);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
-  }, [openReaderTab]);
+  }, [openReaderTab, readerOriginTab, dockReading, setActiveId]);
 
   const readSelectionAloud = useCallback(
     (options: SpeakOptions = {}) => {
+      const reason = speakReason(activeTabNow());
+      if (reason) {
+        toast.message(reason);
+        return;
+      }
       const selection = captureActiveSelection();
-      if (!selection?.trim()) return;
+      if (!selection?.trim()) {
+        toast.message("Select text to speak first", {
+          description: "Read here reads the whole document instead.",
+        });
+        return;
+      }
       speakAloud(selection, options);
     },
-    [captureActiveSelection, speakAloud],
+    [activeTabNow, captureActiveSelection, speakAloud],
   );
 
+  /** The one Stop: one-shot speech and the Reader alike. */
   const stopReading = useCallback(() => {
-    stopSpeaking();
+    stopEverything();
   }, []);
 
   const {
@@ -1446,7 +1557,7 @@ export default function App() {
       "ai.askSelection": askFromSelection,
       "notes.addSelection": addSelectionToNote,
       "tts.readSelection": () => readSelectionAloud(),
-      "tts.stop": stopReading,
+      "speech.stop": stopReading,
       "reader.togglePlayback": () => {
         const docId = defaultReaderDoc();
         if (docId)
@@ -1521,14 +1632,19 @@ export default function App() {
           getSelection: captureActiveSelection,
         });
       }
-      if (id === "notes.addSelection" || id === "tts.readSelection") {
+      if (id === "notes.addSelection") {
         // Only claim the binding when there is a selection to act on;
         // otherwise let the key fall through (never preventDefault when
         // disabled).
         return !captureActiveSelection()?.trim();
       }
-      if (id === "tts.stop") {
-        return !useTtsStore.getState().speaking;
+      if (id === "tts.readSelection") {
+        // Claimed wherever text could be selected, so an empty selection or
+        // a private terminal answers with a short reason instead of silence.
+        return speakReason(activeTab) === NOTHING_TO_READ_REASON;
+      }
+      if (id === "speech.stop") {
+        return !isSoundingNow();
       }
       if (
         id === "reader.togglePlayback" ||
@@ -1540,8 +1656,14 @@ export default function App() {
         // Only claim the chord while there is a reading to drive.
         return defaultReaderDoc() === null;
       }
-      if (id === "reader.readHere" || id === "reader.togglePanel") {
-        return !activeTab || activeTab.kind === "reader";
+      if (id === "reader.readHere") {
+        // A private terminal claims the key to say why; a view with no text
+        // lets it fall through.
+        const reason = readHereReason(activeTab);
+        return reason !== null && reason !== PRIVATE_READ_REASON;
+      }
+      if (id === "reader.togglePanel") {
+        return !activeTab;
       }
       if (id === "terminal.clear") {
         // Only intercept ⌘K while a terminal is focused; elsewhere let the key
@@ -1878,28 +2000,66 @@ export default function App() {
     [setReaderDock],
   );
 
-  /** Reads the selection, else the file on screen, in the panel under the tab. */
+  /**
+   * Reads the selection, else the document on screen (unsaved edits
+   * included), in the panel under the tab.
+   */
   const readHere = useCallback(() => {
-    const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    if (!tab || tab.kind === "reader") return;
-    const selection = captureActiveSelection();
-    if (selection?.trim()) {
-      void openInReader({ text: selection }, true, "dock");
-    } else if (tab.kind === "editor" || tab.kind === "markdown") {
-      void openInReader({ path: tab.path }, true, "dock");
-    } else {
-      toast.message("Select the text to read first", {
-        description: "Or right-click a selection and choose Read here.",
-      });
+    const tab = activeTabNow();
+    const reason = readHereReason(tab);
+    if (reason) {
+      toast.message(reason);
+      return;
     }
-  }, [captureActiveSelection, openInReader]);
+    const selection = captureActiveSelection();
+    const source = selection?.trim()
+      ? { text: selection }
+      : activeDocumentSource();
+    if (source) {
+      void openInReader(source, true, "dock");
+      return;
+    }
+    toast.message("Select the text to read first", {
+      description: "Then right-click it and choose Read here.",
+    });
+  }, [
+    activeTabNow,
+    captureActiveSelection,
+    activeDocumentSource,
+    openInReader,
+  ]);
+
+  /** The same in a Reader tab of its own. */
+  const readInNewTab = useCallback(() => {
+    const reason = readHereReason(activeTabNow());
+    if (reason) {
+      toast.message(reason);
+      return;
+    }
+    const selection = captureActiveSelection();
+    const source = selection?.trim()
+      ? { text: selection }
+      : activeDocumentSource();
+    if (source) void openInReader(source, true, "tab");
+    else toast.message("Select the text to read first");
+  }, [
+    activeTabNow,
+    captureActiveSelection,
+    activeDocumentSource,
+    openInReader,
+  ]);
 
   const toggleReaderPanel = useCallback(() => {
-    const tab = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    if (!tab || tab.kind === "reader") return;
+    const tab = activeTabNow();
+    if (!tab) return;
+    // A Reader tab has no panel; its own library button opens instead.
+    if (tab.kind === "reader") {
+      requestReaderLibrary(tab.id);
+      return;
+    }
     if (tab.readerDock) closeReaderDock(tab.id);
     else showReaderLibrary(tab.id);
-  }, [closeReaderDock, showReaderLibrary]);
+  }, [activeTabNow, closeReaderDock, showReaderLibrary]);
 
   readerActionsRef.current = { readHere, togglePanel: toggleReaderPanel };
 
@@ -1915,16 +2075,56 @@ export default function App() {
       try {
         const entry = await loadStored(picked.id);
         const origin = useReaderStore.getState().followOrigin
-          ? readerOriginTab(picked.originKey)
+          ? (readerOriginTab(picked.originKey)?.id ?? null)
           : null;
-        const target = origin?.id ?? fromTabId;
-        if (!dockReading(target, entry)) return;
+        // Picked from a Reader tab, which has no panel: the last tab with
+        // content takes it.
+        const target = dockTarget({
+          tabs: tabsRef.current,
+          origin,
+          preferred: fromTabId,
+          lastContent: lastContentTabRef.current,
+        });
+        if (target === null || !dockReading(target, entry)) return;
         if (target !== activeIdRef.current) setActiveId(target);
+        // Resumes paused, with the keyboard on Play: Space or Return goes on.
+        useReaderStore.getState().requestFocusPlay(entry.id);
       } catch (error: unknown) {
         toast.error(error instanceof Error ? error.message : String(error));
       }
     },
     [dockReading, readerOriginTab, setActiveId],
+  );
+
+  /**
+   * A Reader tab's "Dock here": the reading moves into the panel of the tab
+   * it was made in (or the last tab with content), and the Reader tab closes.
+   * Playback goes on.
+   */
+  const dockReaderTabHere = useCallback(
+    async (readerTabId: number, docId: string) => {
+      try {
+        const entry =
+          useReaderStore.getState().docs[docId] ?? (await loadStored(docId));
+        const target = dockTarget({
+          tabs: tabsRef.current,
+          origin: readerOriginTab(entry.state.origin?.key ?? null)?.id ?? null,
+          preferred: null,
+          lastContent: lastContentTabRef.current,
+        });
+        if (target === null || !dockReading(target, entry)) {
+          toast.message("No tab to dock it under", {
+            description: "Open a terminal or a file first.",
+          });
+          return;
+        }
+        setActiveId(target);
+        void handleClose(readerTabId);
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [readerOriginTab, dockReading, setActiveId, handleClose],
   );
 
   /** Deleted readings leave the panels and Reader tabs that showed them. */
@@ -1962,6 +2162,7 @@ export default function App() {
       },
       onEscape: focusTabContent,
       originTab: readerOriginTab,
+      onDockHere: (tabId, docId) => void dockReaderTabHere(tabId, docId),
     }),
     [
       setReaderDock,
@@ -1971,7 +2172,32 @@ export default function App() {
       openReaderTab,
       focusTabContent,
       readerOriginTab,
+      dockReaderTabHere,
     ],
+  );
+
+  /** Right-click in the editor and Markdown views. */
+  const editorReadMenu = useMemo<ReadContextMenuBinding>(
+    () => ({
+      readSelection: captureReadableSelection,
+      blockedReason: () => readHereReason(activeTabNow()),
+      documentFallback: () => readsWholeDocument(activeTabNow()),
+      editable: () => {
+        const tab = activeTabNow();
+        return tab
+          ? (editorRefs.current.get(tab.id)?.isEditable() ?? false)
+          : false;
+      },
+      onReplaceSelection: (text) => {
+        const tab = activeTabNow();
+        if (tab) editorRefs.current.get(tab.id)?.replaceSelection(text);
+      },
+      onCopy: (text) => void writeTerminalClipboard(text),
+      readClipboard: readTerminalClipboard,
+      onRead: speakAloud,
+      onStop: stopReading,
+    }),
+    [captureReadableSelection, activeTabNow, speakAloud, stopReading],
   );
 
   const readerPanelHost = useMemo(
@@ -1981,6 +2207,15 @@ export default function App() {
       showLibrary: showReaderLibrary,
       closeDock: closeReaderDock,
       forgetDeleted: forgetDeletedReadings,
+      tabOfPty: (ptyId: number) => {
+        const leaf = leafIdForPty(ptyId);
+        if (leaf === null) return null;
+        return (
+          tabsRef.current.find(
+            (t) => t.kind === "terminal" && leafIds(t.paneTree).includes(leaf),
+          )?.id ?? null
+        );
+      },
     }),
     [
       dockReading,
@@ -2097,28 +2332,24 @@ export default function App() {
             newScheduledTask: openNewTaskEditor,
             toggleAi: togglePanelAndFocus,
             askAiSelection: askFromSelection,
-            hasSelection: Boolean(captureActiveSelection()?.trim()),
+            hasSelection: Boolean(captureReadableSelection()?.trim()),
+            speakDisabled: speakReason(activeTab) ?? undefined,
             readSelectionAloud: () => readSelectionAloud(),
             readSelectionAloudSpanish: () =>
               readSelectionAloud({ language: "es-ES" }),
             readSelectionAloudEnglish: () =>
               readSelectionAloud({ language: "en-US" }),
-            openSelectionInReader: () => {
-              const selection = captureActiveSelection();
-              if (selection?.trim()) void openInReader({ text: selection });
-            },
-            openFileInReader:
-              activeTab &&
-              (activeTab.kind === "editor" || activeTab.kind === "markdown")
-                ? () => void openInReader({ path: activeTab.path }, false)
-                : undefined,
             resumeLastReader: () => void resumeLastReader(),
-            readHere:
-              activeTab && activeTab.kind !== "reader" ? readHere : undefined,
-            toggleReaderPanel:
-              activeTab && activeTab.kind !== "reader"
-                ? toggleReaderPanel
-                : undefined,
+            readHere,
+            readHereDisabled: readHereReason(activeTab) ?? undefined,
+            readInNewTab,
+            readInNewTabDisabled:
+              readHereReason(activeTab) ??
+              (readsWholeDocument(activeTab) ||
+              captureReadableSelection()?.trim()
+                ? undefined
+                : "No selection"),
+            toggleReaderPanel: activeTab ? toggleReaderPanel : undefined,
             toggleReaderPlayback: (() => {
               const { playback } = useReaderStore.getState();
               const docId = pickDefaultDoc(
@@ -2137,6 +2368,7 @@ export default function App() {
                 : undefined;
             })(),
             stopReading,
+            stopDisabled: isSoundingNow() ? undefined : "Nothing is playing",
             openVoiceSettings: () => void openSettingsWindow("voice"),
             openSettings: () => void openSettingsWindow(),
             openKeyboardShortcuts: () => void openSettingsWindow("shortcuts"),
@@ -2171,11 +2403,11 @@ export default function App() {
       openNewTaskEditor,
       togglePanelAndFocus,
       askFromSelection,
-      captureActiveSelection,
+      captureReadableSelection,
       readSelectionAloud,
-      openInReader,
       resumeLastReader,
       readHere,
+      readInNewTab,
       toggleReaderPanel,
       activeTab,
       stopReading,
@@ -2931,6 +3163,7 @@ export default function App() {
                         onReaderClose={(id) => void handleClose(id)}
                         onReaderTitle={handleReaderTitle}
                         readerDock={readerDockBinding}
+                        editorReadMenu={editorReadMenu}
                         onGitHistorySearchHandle={setGitHistoryHandle}
                         onSetRenderableView={setRenderableView}
                         onMermaidSourceChange={updateMermaidSource}
@@ -3138,6 +3371,16 @@ export default function App() {
               onAddToNote={onAddToNoteFromSelection}
               onOpenMermaid={() =>
                 runSelectionAction(onOpenMermaidFromSelection)
+              }
+              reading={
+                speakReason(activeTab) === PRIVATE_READ_REASON
+                  ? undefined
+                  : {
+                      onReadHere: () => runSelectionAction(readHere),
+                      onReadInNewTab: () => runSelectionAction(readInNewTab),
+                      onSpeak: () =>
+                        runSelectionAction(() => readSelectionAloud()),
+                    }
               }
               onDismiss={() => setAskPopup(null)}
             />
