@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.26 (2026-11-20)
+
+- Un menú «Read» en el terminal, el editor y el Markdown, un solo Stop para todo, `terax-read` bajo su terminal y la pestaña Reader con biblioteca y «Dock here».
+- Ajustes, Voz por tareas: galería de voces con Escuchar y Usar, catálogo de proveedores con velocidad medida, un solo Install y dispositivo por proveedor.
+- Francés, alemán, italiano y portugués, detección del idioma en el Reader, y grabar la muestra para clonar.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.26.md).
+
 ## Pi-Terax v0.9.0-dev.25 (2026-11-20)
 
 - Tres motores de voz locales más: Pocket TTS (Kyutai), OmniVoice (k2-fsa) y ZONOS3-Mini (Zyphra, Apple Silicon), con voces en español e inglés listas para usar.
