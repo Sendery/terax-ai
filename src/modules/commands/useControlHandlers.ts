@@ -43,7 +43,12 @@ type Params = {
   /** How the Reader panel under a tab is driven, from App. */
   readerPanel: Pick<
     ReaderHost,
-    "dockReading" | "recordOrigin" | "showLibrary" | "closeDock" | "forgetDeleted"
+    | "dockReading"
+    | "recordOrigin"
+    | "showLibrary"
+    | "closeDock"
+    | "forgetDeleted"
+    | "tabOfPty"
   >;
 };
 

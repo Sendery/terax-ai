@@ -136,20 +136,22 @@ that voice; it is not sent to the engine as a prompt.
 
 | Surface | How |
 | --- | --- |
-| Terminal | Select text, right-click, **Read aloud**: default voice, a language, or one specific profile. **Stop reading** is in the same menu while audio plays. |
-| Editor | Same shortcut and palette entries; the selection comes from the focused editor. |
-| Shortcut | `Mod+Shift+R` reads the current selection, `Mod+Shift+.` stops. Both only claim the key when they apply, so they never swallow a keystroke the shell wanted. |
-| Command palette | The **Voice** group: read the selection, read it in Spanish, read it in English, stop reading, open voice settings. |
+| Terminal, editor, Markdown | Select text, right-click, **Speak**: default voice, a language, or one specific profile. **Stop** is in the same menu while anything plays, Speak or the Reader. The same menu offers the Reader's Read here and Read in new tab. |
+| Selection popup | **Speak** beside Ask Terax, Read here and Read in new tab. |
+| Shortcut | `Mod+Shift+R` speaks the current selection, or says why it cannot (nothing selected, a private terminal). `Mod+Shift+.` stops whatever is sounding and only claims the key while something is. |
+| Command palette | The **Voice** group: Speak selection, in Spanish, in English, Stop, open voice settings. |
 
 Long text is stripped of ANSI escapes and prompt noise, split into
 sentence-sized chunks and played as a queue, so audio starts before the whole
 text is synthesized. Total speech is capped at 8192 characters; the rest is
-dropped and the result says so. The status bar shows a pill while it speaks,
+dropped, the result says so, and a "Read up to 8 KB" notice tells you when it
+happened from a menu or a shortcut. The status bar shows a pill while it speaks,
 with the voice name, the chunk position and a stop button, and a compact
 "TTS ready" pill while an engine is loaded and idle.
 
-Private terminals do not offer **Read aloud**. They are hidden from the AI and
-from snapshots, and speech keeps the same boundary.
+Private terminals do not offer **Speak**. They are hidden from the AI and from
+snapshots, and speech keeps the same boundary: the shortcut and the palette say
+so instead of reading.
 
 ## Pi and the AI agent
 

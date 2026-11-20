@@ -103,6 +103,26 @@ describe("Pi-Terax extension alignment", () => {
     }
   });
 
+  it("gives Pi's terax_speak exactly the MCP terax_speak actions and commands", () => {
+    const block = extensionSource.match(
+      /export const TERAX_SPEAK_ACTIONS = \{([\s\S]*?)\} as const;/,
+    );
+    expect(block).not.toBeNull();
+    const piActions = Object.fromEntries(
+      [...(block?.[1] ?? "").matchAll(/([a-z_]+): "([a-zA-Z.]+)"/g)].map(
+        (m) => [m[1], m[2]],
+      ),
+    );
+    const tool = surface.tools.find((t) => t.name === "terax_speak");
+    const mcpActions = Object.fromEntries(
+      Object.entries(tool?.actions ?? {}).map(([name, spec]) => [
+        name,
+        "command" in spec ? spec.command : null,
+      ]),
+    );
+    expect(piActions).toEqual(mcpActions);
+  });
+
   it("gives every MCP-only action a Pi counterpart", () => {
     const covered = new Set(
       Object.values(EXTENSION_TOOL_ALIGNMENT).flatMap((e) =>

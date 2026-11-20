@@ -92,7 +92,7 @@ function __terax_install_prompt
 end
 __terax_install_prompt
 
-# Opens a file or piped text in this Terax's Reader tab.
+# Opens a file or piped text in the Reader panel under this terminal (--tab: a Reader tab).
 function terax-read
     if not set -q TERAX_APP_EXE; or test -z "$TERAX_APP_EXE"
         echo 'terax-read: TERAX_APP_EXE is unset; run it inside a Terax terminal' >&2
