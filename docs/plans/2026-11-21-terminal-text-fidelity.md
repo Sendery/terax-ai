@@ -35,7 +35,7 @@ next to "Conversation compacted".
 | F1 | 2 and the joined rows in the screenshots | Ghostty keeps a row's soft-wrap flag on EL 2 (`ESC[2K`), on purpose, to match xterm. Ink programs repaint by erasing whole lines, so a row split by the reflow stays marked as continuing into a row that now holds another line. Copy joins them without a newline; widening joins them into one row with a gap. | `pinned_ghostty_keeps_the_soft_wrap_on_erase_complete_line`: copy gives `"X         Y"`. EL 0, ECH and ED 0 do reset the flag. | Done: the engine follows every EL 2 with an EL 0 (`erase_wrap.rs`), which changes no cell. |
 | F2 | 4 | Claude Code repaints the whole screen on every SIGWINCH without clearing the history, and Terax sent one resize per animation frame during a drag or an animated panel. Each repaint whose rows overflow the screen leaves a copy behind; enough copies push the real history out of the scrollback limit. | Replay of a real capture after 80 lines of shell history: a 20-step drag leaves the Claude Code banner 20 times in the history, a single resize leaves it once. | Done: resizes are coalesced per gesture (`RESIZE_SETTLE_MS` 120). |
 | F3 | 1 (zsh) | zsh redraws its prompt on SIGWINCH by moving up the rows it believes the prompt used. After a reflow that count is wrong: narrowing leaves a second copy of the first prompt row, widening erases output lines above the prompt. Terax emits `OSC 133;A` from `precmd`, outside `PS1`, so zsh's redraw never re-marks the prompt and Ghostty's prompt clearing on resize cannot find it. | Real zsh capture with the user's two-line prompt: after resizing to 50, 120 and 80 columns, the last `cat` line is gone and the prompt row appears twice. Marking inside `PS1` alone did not fix it. | In progress (Fable). |
-| F4 | 3 | Claude Code wraps paragraphs itself: hard newlines and a two-column indent (`CSI 2 G`), and it places words with `CSI G` instead of spaces. The terminal cannot tell those newlines from real ones. Ghostty, iTerm2 and others copy the same. | Capture: `Quick[8Gsafety[15Gcheck:` and continuation lines starting at column 2. | In progress (Fable): rejoin wrapped paragraphs when copying from an agent pane, with a way to copy exactly as shown. |
+| F4 | 3 | Claude Code wraps paragraphs itself: hard newlines and a two-column indent (`CSI 2 G`), and it places words with `CSI G` instead of spaces. The terminal cannot tell those newlines from real ones. Ghostty, iTerm2 and others copy the same. | Capture: `Quick[8Gsafety[15Gcheck:` and continuation lines starting at column 2. | Done: while an agent runs in the pane, Copy rejoins the rows the width forced apart (`agentCopy.ts`, a pure function of the copied text and the pane width) and the context menu adds "Copy as shown". Other panes are untouched. |
 
 Verified correct, no change needed: soft-wrapped lines copy as one line;
 hard newlines, lines that exactly fill the row and blank lines survive copy;
@@ -67,6 +67,10 @@ every reflowing terminal shows that once per resize.
 | W3 | Pinned Ghostty still keeps the flag (filter still needed) | `pinned_ghostty_keeps_the_soft_wrap_on_erase_complete_line` |
 | E1 | Filter: EL 2 only, split reads, string payloads | `erase_wrap::tests` |
 | G1 | A drag sends one resize; a gesture back to the start sends none | `engineSession.test.ts`, "coalesces a resize gesture" |
+| A1 | A Claude Code screen at 100 and 60 columns copies as paragraphs; markers, tool output, the input box and the status rows stay | `agentCopy.test.ts`, "rejoins a Claude Code screen" |
+| A2 | Written breaks, lists, tool output, code, tables and truncated rows are kept | `agentCopy.test.ts` |
+| A3 | Wide characters, URLs cut at the edge, history wrapped for a wider pane, a selection that starts mid-row | `agentCopy.test.ts` |
+| A4 | A pane with no agent copies unchanged; the menu offers both texts only when they differ | `agentCopy.test.ts`, `terminalCopyText` and `selectionCopyChoices` |
 
 Replays (manual run of `replay_capture`, captures in the scratch area):
 Claude Code with history across five resizes; Claude Code 20-step drag vs one
@@ -93,6 +97,15 @@ resize; zsh with the user's prompt, plain and with Terax integration.
 
 ## Follow-ups
 
+- Copy from agent panes (F4) works from the copied text alone. Three things
+  would make it exact instead of heuristic: the column where the selection
+  starts (the engine knows it, the reply of `gterm_selection` does not carry
+  it), the width each history row was written at (text wrapped for a narrower
+  pane is not rejoined today), and cell styles, which would tell code printed
+  with no fence from prose.
+- Codex and Gemini CLI layouts were not captured; the rule is the same for
+  every detected agent and their markers (`•`, `›`, `✦`, `└`) are recognised,
+  but only Claude Code 2.1.322 was checked against real output.
 - Reset the previous row's soft wrap too when EL 2 erases a continuation row.
   The stream filter cannot reach the row above; it needs a change in the
   native core (`eraseLine`, `.complete`), built on the M2 producer.
