@@ -91,7 +91,7 @@ vi.mock("@/modules/workspace", () => ({
   currentWorkspaceEnv: () => ({ kind: "local" }),
 }));
 
-const { EngineSession, engineAvailable } = await import(
+const { EngineSession, engineAvailable, RESIZE_SETTLE_MS } = await import(
   "@/modules/terminal/gl/engineSession"
 );
 
@@ -365,6 +365,63 @@ describe("EngineSession commands", () => {
     ]);
     const write = commands("pty_write")[0];
     expect(Array.from(write.args as Uint8Array)).toEqual([108, 115, 13]);
+  });
+
+  it("coalesces a resize gesture into one resize once it settles", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      const renderer = new FakeRenderer();
+      const session = await openSession(renderer);
+      vi.advanceTimersByTime(1000);
+      // The first change after a quiet period applies at once.
+      session.resize(80, 24);
+      expect(commands("gterm_resize")).toHaveLength(1);
+      // A drag: one size per frame, none sent until the gesture settles.
+      for (let cols = 81; cols <= 120; cols++) {
+        vi.advanceTimersByTime(16);
+        session.resize(cols, 24);
+      }
+      expect(commands("gterm_resize")).toHaveLength(1);
+      vi.advanceTimersByTime(RESIZE_SETTLE_MS);
+      expect(commands("gterm_resize").map((c) => c.args)).toEqual([
+        { id: 9, cols: 80, rows: 24, cellWidth: 8, cellHeight: 16 },
+        { id: 9, cols: 120, rows: 24, cellWidth: 8, cellHeight: 16 },
+      ]);
+      // A gesture that returns to the applied size sends nothing.
+      vi.advanceTimersByTime(1000);
+      session.resize(100, 24);
+      expect(commands("gterm_resize")[2].args).toMatchObject({ cols: 100 });
+      vi.advanceTimersByTime(16);
+      session.resize(110, 24);
+      vi.advanceTimersByTime(16);
+      session.resize(100, 24);
+      vi.advanceTimersByTime(RESIZE_SETTLE_MS);
+      expect(commands("gterm_resize")).toHaveLength(3);
+      vi.advanceTimersByTime(1000);
+      session.resize(90, 20);
+      vi.advanceTimersByTime(16);
+      session.resize(100, 24);
+      vi.advanceTimersByTime(RESIZE_SETTLE_MS);
+      expect(commands("gterm_resize")).toHaveLength(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a pending resize when the session closes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      const session = await openSession(new FakeRenderer());
+      vi.advanceTimersByTime(1000);
+      session.resize(80, 24);
+      vi.advanceTimersByTime(16);
+      session.resize(90, 24);
+      void session.close();
+      vi.advanceTimersByTime(RESIZE_SETTLE_MS * 2);
+      expect(commands("gterm_resize")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens a bench session with the payload arguments", async () => {
