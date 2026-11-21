@@ -50,6 +50,80 @@ PARALINGUISTIC_TAGS = (
 )
 
 
+# Dictation takes 16 kHz mono 16-bit PCM, the rate every ASR model here uses.
+TRANSCRIPTION_SAMPLE_RATE = 16000
+# The names Qwen3-ASR (and so Rumble-2-Flash) takes for a forced language;
+# "auto" lets the model detect it.
+TRANSCRIPTION_LANGUAGES = {
+    "es-ES": "Spanish",
+    "en-US": "English",
+    "fr-FR": "French",
+    "de-DE": "German",
+    "it-IT": "Italian",
+    "pt-BR": "Portuguese",
+}
+TRANSCRIPTION_LANGUAGE_TAGS = {name: tag for tag, name in TRANSCRIPTION_LANGUAGES.items()}
+RUMBLE_REQUIRED_FILES = (
+    "model.safetensors",
+    "config.json",
+    "chat_template.jinja",
+    "tokenizer.json",
+    "preprocessor_config.json",
+    "processor_config.json",
+)
+# Long dictation is transcribed in windows of at most this many seconds, cut at
+# the quietest stretch near the end of each window so no word is split.
+WINDOW_SECONDS = 30.0
+WINDOW_SEARCH_SECONDS = 5.0
+QUIET_MS = 200
+BLOCK_MS = 50
+
+
+def split_windows(samples, rate: int, window_s: float = WINDOW_SECONDS,
+                  search_s: float = WINDOW_SEARCH_SECONDS, quiet_ms: int = QUIET_MS) -> list:
+    """(start, end) sample ranges covering `samples`, each at most `window_s`.
+
+    Every cut except the last falls in the middle of the quietest `quiet_ms`
+    inside the final `search_s` of its window. `samples` is any indexable
+    sequence of numbers (int16 or float); only the energy matters.
+    """
+    total = len(samples)
+    window = int(window_s * rate)
+    if total <= window:
+        return [(0, total)] if total else []
+    block = max(1, int(rate * BLOCK_MS / 1000))
+    per_quiet = max(1, quiet_ms // BLOCK_MS)
+    search = int(search_s * rate)
+    ranges = []
+    start = 0
+    while total - start > window:
+        end = start + window
+        lo = max(start + 1, end - search)
+        energies = []
+        for b in range(lo, end - block + 1, block):
+            chunk = samples[b:b + block]
+            energies.append(sum(float(v) * float(v) for v in chunk))
+        cut = end
+        if len(energies) >= per_quiet:
+            best = None
+            best_index = 0
+            for i in range(len(energies) - per_quiet + 1):
+                energy = sum(energies[i:i + per_quiet])
+                if best is None or energy < best:
+                    best = energy
+                    best_index = i
+            cut = lo + best_index * block + (per_quiet * block) // 2
+        ranges.append((start, cut))
+        start = cut
+    ranges.append((start, total))
+    return ranges
+
+
+def join_pieces(pieces) -> str:
+    """Window transcripts joined with single spaces, empty ones dropped."""
+    return " ".join(p.strip() for p in pieces if p and p.strip())
+
+
 # Every chatterbox checkpoint ships a `conds.pt`: a speaker the model falls back
 # to when no audio prompt is given. It is the only voice a clone model owns, so
 # it needs no sample and works in every language the model supports.
@@ -159,6 +233,23 @@ MODELS = (
             "gguf/zac-keep2.gguf",
             "gguf/spk-encoder.gguf",
         ),
+    ),
+    ModelInfo(
+        id="rumble-2-flash",
+        engine="rumble",
+        repo="Reson8/Rumble-2-Flash",
+        languages=LANGUAGES,
+        voice_source="none",
+        sample_rate=TRANSCRIPTION_SAMPLE_RATE,
+        required_files=RUMBLE_REQUIRED_FILES,
+    ),
+    ModelInfo(
+        id="fake-stt-model",
+        engine="fake-stt",
+        repo="",
+        languages=LANGUAGES,
+        voice_source="none",
+        sample_rate=TRANSCRIPTION_SAMPLE_RATE,
     ),
     ModelInfo(
         id="fake-model",
@@ -477,6 +568,8 @@ class Engine(abc.ABC):
     """One resident model per process; load() replaces whatever was loaded."""
 
     id = ""
+    #: "speech" reads text aloud; "transcription" turns speech into text.
+    kind = "speech"
 
     @abc.abstractmethod
     def models(self) -> list:
@@ -505,6 +598,22 @@ class Engine(abc.ABC):
         params: dict,
     ) -> tuple:
         raise NotImplementedError
+
+    def transcribe(
+        self,
+        model: str,
+        pcm,
+        language: Optional[str],
+        context: Optional[str],
+        options: dict,
+    ) -> dict:
+        """Text for 16 kHz mono int16 `pcm` (an array of int16 values).
+
+        `language` is an app tag (es-ES) or None to detect it; `options` holds
+        the booleans `filler`, `verbatim` and `digits`. Returns
+        {"text": str, "language": app tag, model language name or None}.
+        """
+        raise NotImplementedError("{} does not transcribe".format(self.id))
 
     def effective_device(self) -> Optional[str]:
         return None

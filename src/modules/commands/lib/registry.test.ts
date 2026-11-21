@@ -155,6 +155,11 @@ function handlers(): CommandHandlers {
       started: true,
     })),
     stopTtsSpeaking: vi.fn(() => ({ stopped: true })),
+    getDictationStatus: vi.fn(() => ({ engines: [] })),
+    installDictation: vi.fn(() => ({ jobId: 7 })),
+    startDictation: vi.fn(() => ({ engine: "rumble", starting: true })),
+    stopDictation: vi.fn(() => ({ stopped: [] })),
+    transcribeDictation: vi.fn(() => ({ text: "Hola." })),
   };
 }
 
@@ -776,6 +781,11 @@ describe("command registry", () => {
       "tts.voices",
       "tts.speak",
       "tts.stopSpeaking",
+      "dictation.status",
+      "dictation.install",
+      "dictation.start",
+      "dictation.stop",
+      "dictation.transcribe",
       "terminal.list",
       "terminal.read",
       "terminal.open",
@@ -1388,6 +1398,90 @@ describe("surfaces that had no bridge command", () => {
     expect(result).toMatchObject({
       ok: false,
       error: { code: "invalid_payload" },
+    });
+  });
+});
+
+describe("local dictation commands", () => {
+  it("routes every dictation command to its handler", async () => {
+    const h = handlers();
+    const reg = createCommandRegistry(h);
+
+    expect((await reg.call({ id: "dictation.status" })).ok).toBe(true);
+    expect((await reg.call({ id: "dictation.install" })).ok).toBe(true);
+    expect((await reg.call({ id: "dictation.start" })).ok).toBe(true);
+    expect((await reg.call({ id: "dictation.stop", payload: {} })).ok).toBe(true);
+    expect(
+      (
+        await reg.call({
+          id: "dictation.transcribe",
+          payload: {
+            path: "/tmp/clip.wav",
+            spokenLanguage: "es-ES",
+            writingStyle: "formal",
+          },
+        })
+      ).ok,
+    ).toBe(true);
+
+    expect(h.getDictationStatus).toHaveBeenCalledTimes(1);
+    expect(h.installDictation).toHaveBeenCalledWith({});
+    expect(h.startDictation).toHaveBeenCalledTimes(1);
+    expect(h.stopDictation).toHaveBeenCalledTimes(1);
+    expect(h.transcribeDictation).toHaveBeenCalledWith({
+      path: "/tmp/clip.wav",
+      spokenLanguage: "es-ES",
+      writingStyle: "formal",
+    });
+  });
+
+  it("validates dictation payloads", () => {
+    expect(validateCommandRequest({ id: "dictation.status", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({ id: "dictation.install", payload: { withModel: false } }),
+    ).toEqual({
+      ok: true,
+      value: { id: "dictation.install", payload: { withModel: false } },
+    });
+    expect(
+      validateCommandRequest({ id: "dictation.install", payload: { withModel: "no" } })
+        .ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({ id: "dictation.start", payload: { engine: "rumble" } })
+        .ok,
+    ).toBe(false);
+    expect(validateCommandRequest({ id: "dictation.transcribe", payload: {} }).ok).toBe(
+      false,
+    );
+    expect(
+      validateCommandRequest({ id: "dictation.transcribe", payload: { path: "  " } }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "dictation.transcribe",
+        payload: { path: "/a.wav", spokenLanguage: "es" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "dictation.transcribe",
+        payload: { path: "/a.wav", writingStyle: "shouty" },
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateCommandRequest({
+        id: "dictation.transcribe",
+        payload: { path: "/a.wav", spokenLanguage: "auto" },
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        id: "dictation.transcribe",
+        payload: { path: "/a.wav", spokenLanguage: "auto" },
+      },
     });
   });
 });

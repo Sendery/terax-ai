@@ -1123,13 +1123,23 @@ export function getAutocompleteEligibleModels(): readonly ModelInfo[] {
   );
 }
 
-export type SttProvider = "openai" | "groq" | "whispercpp";
+export type SttProvider = "local" | "openai" | "groq" | "whispercpp";
 
 export const STT_PROVIDER_LABELS: Record<SttProvider, string> = {
+  local: "Terax, on this machine",
   openai: "OpenAI Whisper",
   groq: "Groq Whisper",
   whispercpp: "Whisper.cpp (local)",
 };
+
+export function isSttProvider(value: unknown): value is SttProvider {
+  return (
+    value === "local" ||
+    value === "openai" ||
+    value === "groq" ||
+    value === "whispercpp"
+  );
+}
 
 export const DEFAULT_STT_PROVIDER: SttProvider = "openai";
 export const WHISPERCPP_DEFAULT_BASE_URL = "http://127.0.0.1:8080";

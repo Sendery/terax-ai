@@ -232,6 +232,11 @@ fn is_allowed_command(command: &str) -> bool {
             | "tts.voices"
             | "tts.speak"
             | "tts.stopSpeaking"
+            | "dictation.status"
+            | "dictation.install"
+            | "dictation.start"
+            | "dictation.stop"
+            | "dictation.transcribe"
             | "terminal.list"
             | "terminal.read"
             | "terminal.open"
@@ -664,6 +669,11 @@ mod tests {
             "tts.voices",
             "tts.speak",
             "tts.stopSpeaking",
+            "dictation.status",
+            "dictation.install",
+            "dictation.start",
+            "dictation.stop",
+            "dictation.transcribe",
         ] {
             let line = format!(r#"{{"version":1,"id":"r","token":"tok","command":"{command}"}}"#);
             let request = decode_request_line(line.as_bytes(), "tok")

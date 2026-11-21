@@ -231,6 +231,13 @@ import {
   useTtsStore,
   type SpeakOptions,
 } from "@/modules/tts";
+import {
+  dictationInstallCommand,
+  dictationStartCommand,
+  dictationStatusCommand,
+  dictationStopCommand,
+  dictationTranscribeCommand,
+} from "@/modules/stt/lib/commands";
 import { UpdaterDialog } from "@/modules/updater";
 import { useWorkspaceEnvStore, type WorkspaceEnv } from "@/modules/workspace";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
@@ -2936,6 +2943,12 @@ export default function App() {
       listTtsVoices: (payload) => ttsVoicesCommand(payload?.language),
       speakTts: (payload) => ttsSpeakCommand(payload),
       stopTtsSpeaking: () => ttsStopSpeakingCommand(),
+      getDictationStatus: () => dictationStatusCommand(),
+      installDictation: (payload) =>
+        dictationInstallCommand("rumble", payload?.withModel ?? true),
+      startDictation: () => dictationStartCommand(),
+      stopDictation: () => dictationStopCommand(),
+      transcribeDictation: (payload) => dictationTranscribeCommand(payload),
     }),
     [
       controlHandlers,

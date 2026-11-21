@@ -236,6 +236,31 @@ work is accepted and progress shows up in `tts.status`.
 downloaded, and whether the window is speaking. It never carries the text being
 read, a token, or a sample path.
 
+## Dictation engine
+
+Dictation (speech to text) runs on the same private runtime: same uv, same
+Python, same hardware plan, same loopback sidecar with its own token. The
+dictation engines are listed apart from the reading ones (`transcribers` and
+`transcriberModels` in the status) so no voice list ever shows them. Plan and
+tiers: `docs/plans/2026-11-21-local-dictation.md`.
+
+| Engine | Model | Languages | Weights | How it runs |
+| --- | --- | --- | --- | --- |
+| Rumble | `rumble-2-flash` (Reson8, 0.5B, Apache 2.0) | 45 detected; the six app languages can be forced | ~1.0 GB, bf16 | `mps` or `cuda` in bfloat16 (float16 on GPUs without it), `cpu` in float32 |
+
+Measured on an M4 Pro through the sidecar: 11.3 s of Spanish in 0.33 s on MPS
+and 1.05 s on the CPU; 88 s in 2.5 s on MPS (three 30 s windows); four seconds
+of silence come back empty. The process footprint is about 2.0 GB on MPS
+(weights, PyTorch and the Metal allocations) and 2.4 GB on the CPU in float32.
+
+`POST /transcribe` takes a 16 kHz mono 16-bit WAV body (up to 20 MB) with
+`model`, `language` (`auto` or an app tag) and the `filler`, `verbatim` and
+`digits` switches in the query, and the dictionary terms in the
+`X-Terax-Context` header (URL-encoded, up to 2000 characters), which the model
+uses as context biasing. `/warmup` on a dictation engine also transcribes one
+second of silence and reports `selfTest`. `/synthesize` on a dictation engine,
+and `/transcribe` on a reading engine, answer 409 `wrong_kind`.
+
 ## Removing everything
 
 - **Stop** an engine to free its memory, or let Idle stop do it.

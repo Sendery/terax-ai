@@ -14,6 +14,7 @@ import {
   migrateLegacyCompatEndpoint,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
   WHISPERCPP_DEFAULT_BASE_URL,
+  isSttProvider,
   type AutocompleteProviderId,
   type CustomEndpoint,
   type ModelId,
@@ -31,6 +32,19 @@ import {
   type TtsEngineId,
   type TtsLanguage,
 } from "@/modules/tts/lib/engines";
+import {
+  coerceSttDevice,
+  coerceSttDictionary,
+  coerceSttLanguage,
+  coerceSttLocalModel,
+  coerceSttMode,
+  DEFAULT_STT_LOCAL_MODEL,
+  DEFAULT_STT_MODE,
+  type SttDictionaryEntry,
+  type SttLanguage,
+  type SttLocalModel,
+  type SttMode,
+} from "@/modules/stt/lib/settings";
 import {
   type KeyBinding,
   migrateShortcutOverrides,
@@ -168,6 +182,19 @@ export type Preferences = {
   sttProvider: SttProvider;
   groqSttModel: string;
   whispercppBaseURL: string;
+  /** Model the local dictation engine transcribes with. */
+  sttLocalModel: SttLocalModel;
+  /** Language dictation expects; `auto` detects it per segment. */
+  sttLanguage: SttLanguage;
+  /** How dictated text is tidied before it is inserted. */
+  sttMode: SttMode;
+  /** Terms the local engine is biased towards, with optional corrections. */
+  sttDictionary: SttDictionaryEntry[];
+  /** Transcribe while recording, cutting at pauses, so only the last
+   *  segment is left when the key is released. */
+  sttLiveSegments: boolean;
+  /** Compute device the local dictation engine starts with. */
+  sttDevice: TtsDevice;
   /** Language "read aloud" speaks in when the caller names none. */
   ttsDefaultLanguage: TtsLanguage;
   /** Compute device each speech engine is started with; an engine absent
@@ -259,6 +286,12 @@ const KEY_CLI_AGENT_PERMISSION = "cliAgentPermission";
 const KEY_STT_PROVIDER = "sttProvider";
 const KEY_GROQ_STT_MODEL = "groqSttModel";
 const KEY_WHISPERCPP_BASE_URL = "whispercppBaseURL";
+const KEY_STT_LOCAL_MODEL = "sttLocalModel";
+const KEY_STT_LANGUAGE = "sttLanguage";
+const KEY_STT_MODE = "sttMode";
+const KEY_STT_DICTIONARY = "sttDictionary";
+const KEY_STT_LIVE_SEGMENTS = "sttLiveSegments";
+const KEY_STT_DEVICE = "sttDevice";
 const KEY_TTS_DEFAULT_LANGUAGE = "ttsDefaultLanguage";
 /** Pre-dev.26 single device for every engine; read once to seed ttsDevices. */
 const LEGACY_KEY_TTS_DEVICE = "ttsDevice";
@@ -410,6 +443,12 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sttProvider: DEFAULT_STT_PROVIDER,
   groqSttModel: "whisper-large-v3-turbo",
   whispercppBaseURL: WHISPERCPP_DEFAULT_BASE_URL,
+  sttLocalModel: DEFAULT_STT_LOCAL_MODEL,
+  sttLanguage: "auto",
+  sttMode: DEFAULT_STT_MODE,
+  sttDictionary: [],
+  sttLiveSegments: true,
+  sttDevice: "auto",
   ttsDefaultLanguage: "es-ES",
   ttsDevices: {},
   ttsLanguages: [...DEFAULT_ENABLED_LANGUAGES],
@@ -548,12 +587,21 @@ export async function loadPreferences(): Promise<Preferences> {
     cliAgentPermission:
       get<CliPermissionMode>(KEY_CLI_AGENT_PERMISSION) ??
       DEFAULT_PREFERENCES.cliAgentPermission,
-    sttProvider:
-      get<SttProvider>(KEY_STT_PROVIDER) ?? DEFAULT_PREFERENCES.sttProvider,
+    sttProvider: ((): SttProvider => {
+      const stored = get<unknown>(KEY_STT_PROVIDER);
+      return isSttProvider(stored) ? stored : DEFAULT_PREFERENCES.sttProvider;
+    })(),
     groqSttModel:
       get<string>(KEY_GROQ_STT_MODEL) ?? DEFAULT_PREFERENCES.groqSttModel,
     whispercppBaseURL:
       get<string>(KEY_WHISPERCPP_BASE_URL) ?? DEFAULT_PREFERENCES.whispercppBaseURL,
+    sttLocalModel: coerceSttLocalModel(get<unknown>(KEY_STT_LOCAL_MODEL)),
+    sttLanguage: coerceSttLanguage(get<unknown>(KEY_STT_LANGUAGE)),
+    sttMode: coerceSttMode(get<unknown>(KEY_STT_MODE)),
+    sttDictionary: coerceSttDictionary(get<unknown>(KEY_STT_DICTIONARY)),
+    sttLiveSegments:
+      get<boolean>(KEY_STT_LIVE_SEGMENTS) ?? DEFAULT_PREFERENCES.sttLiveSegments,
+    sttDevice: coerceSttDevice(get<unknown>(KEY_STT_DEVICE)),
     ttsDefaultLanguage: ((): TtsLanguage => {
       const stored = get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
       return isTtsLanguage(stored)
@@ -823,6 +871,32 @@ export async function setWhispercppBaseURL(value: string): Promise<void> {
   await writePref(KEY_WHISPERCPP_BASE_URL, value.trim());
 }
 
+export async function setSttLocalModel(value: SttLocalModel): Promise<void> {
+  await writePref(KEY_STT_LOCAL_MODEL, coerceSttLocalModel(value));
+}
+
+export async function setSttLanguage(value: SttLanguage): Promise<void> {
+  await writePref(KEY_STT_LANGUAGE, coerceSttLanguage(value));
+}
+
+export async function setSttMode(value: SttMode): Promise<void> {
+  await writePref(KEY_STT_MODE, coerceSttMode(value));
+}
+
+export async function setSttDictionary(
+  value: SttDictionaryEntry[],
+): Promise<void> {
+  await writePref(KEY_STT_DICTIONARY, coerceSttDictionary(value));
+}
+
+export async function setSttLiveSegments(value: boolean): Promise<void> {
+  await writePref(KEY_STT_LIVE_SEGMENTS, value === true);
+}
+
+export async function setSttDevice(value: TtsDevice): Promise<void> {
+  await writePref(KEY_STT_DEVICE, coerceSttDevice(value));
+}
+
 export async function setTtsDefaultLanguage(value: TtsLanguage): Promise<void> {
   await writePref(KEY_TTS_DEFAULT_LANGUAGE, value);
   // The default language is always one of the enabled ones.
@@ -1013,6 +1087,12 @@ export async function onPreferencesChange(
     [KEY_STT_PROVIDER]: "sttProvider",
     [KEY_GROQ_STT_MODEL]: "groqSttModel",
     [KEY_WHISPERCPP_BASE_URL]: "whispercppBaseURL",
+    [KEY_STT_LOCAL_MODEL]: "sttLocalModel",
+    [KEY_STT_LANGUAGE]: "sttLanguage",
+    [KEY_STT_MODE]: "sttMode",
+    [KEY_STT_DICTIONARY]: "sttDictionary",
+    [KEY_STT_LIVE_SEGMENTS]: "sttLiveSegments",
+    [KEY_STT_DEVICE]: "sttDevice",
     [KEY_TTS_DEFAULT_LANGUAGE]: "ttsDefaultLanguage",
     [KEY_TTS_DEVICES]: "ttsDevices",
     [KEY_TTS_LANGUAGES]: "ttsLanguages",

@@ -481,6 +481,7 @@ pub fn run() {
             tts::commands::tts_purge_all,
             tts::commands::tts_reveal_dir,
             tts::commands::tts_sample_import,
+            tts::commands::stt_read_audio_file,
             tts::commands::tts_sample_remove,
             reader::reader_open,
             reader::reader_load,

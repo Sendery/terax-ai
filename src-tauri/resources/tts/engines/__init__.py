@@ -1,4 +1,4 @@
-"""TTS engine adapters. Third-party imports stay inside load()/synthesize()."""
+"""Speech and transcription engine adapters. Third-party imports stay inside load()/synthesize()."""
 
 from __future__ import annotations
 
@@ -8,6 +8,14 @@ def create_engine(name: str):
         from .fake import FakeEngine
 
         return FakeEngine()
+    if name == "fake-stt":
+        from .fake_stt import FakeTranscriber
+
+        return FakeTranscriber()
+    if name == "rumble":
+        from .rumble import RumbleEngine
+
+        return RumbleEngine()
     if name == "kokoro":
         from .kokoro import KokoroEngine
 

@@ -116,6 +116,10 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
         summary: "Installed and running speech engines and downloaded models.",
       },
       list_voices: { command: "tts.voices", summary: "Every voice (profiles and presets), with readiness, for speak." },
+      dictation_status: {
+        command: "dictation.status",
+        summary: "Local dictation: provider, engine, model, install jobs, style and memory tiers.",
+      },
       list_reader_documents: {
         command: "reader.list",
         summary: "Documents in the Reader library and where reading stopped.",
@@ -425,6 +429,17 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       stop_engine: { command: "tts.stop", summary: "Stop one engine, or all when omitted." },
       install_engine: { command: "tts.install", summary: "Install a speech engine and its default model." },
       download_model: { command: "tts.download", summary: "Download a speech model." },
+      install_dictation: {
+        command: "dictation.install",
+        summary: "Install the local dictation engine (Rumble-2-Flash, about 1 GB) and its model.",
+      },
+      start_dictation: { command: "dictation.start", summary: "Start the local dictation engine." },
+      stop_dictation: { command: "dictation.stop", summary: "Stop the local dictation engine." },
+      transcribe_audio: {
+        command: "dictation.transcribe",
+        summary:
+          "Transcribe an audio file on this machine with the local dictation engine and the user's dictionary and style.",
+      },
       open_reader: {
         command: "reader.open",
         summary:

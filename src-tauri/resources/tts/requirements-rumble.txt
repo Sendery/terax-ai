@@ -1,0 +1,10 @@
+# Reson8 Rumble-2-Flash, the Light dictation tier (0.5B, Qwen3-ASR
+# architecture). Verified on Apple M4 Pro with these pins: 11.3 s of Spanish in
+# 0.32 s in bf16 on MPS (1.5 GB of MPS memory), 1.04 s in fp32 on four CPU
+# threads. Loaded with plain transformers, so accelerate stays out.
+transformers==5.24.0
+torch==2.15.0
+numpy==2.4.6
+huggingface_hub==2.4.0
+tokenizers==0.23.3
+safetensors==0.8.0

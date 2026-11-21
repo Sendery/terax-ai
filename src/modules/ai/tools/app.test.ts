@@ -22,7 +22,7 @@ describe("appCommandNeedsApproval", () => {
 
   it("only names real registry commands", () => {
     const risky = COMMAND_IDS.filter((id) => appCommandNeedsApproval(id));
-    expect(risky.length).toBe(22);
+    expect(risky.length).toBe(24);
   });
 
   it("asks before anything that runs shell input or ends a shell", () => {
