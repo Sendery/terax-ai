@@ -79,6 +79,7 @@ describe("dictation commands", () => {
     invoke.mockResolvedValueOnce(status());
     const report = await dictationStatusCommand();
     expect(report.engines[0]).not.toHaveProperty("token");
+    expect(report.engines[0].ready).toBe(false);
     expect(report.jobs.map((job) => job.id)).toEqual([1]);
     expect(report.dictionaryTerms).toBe(1);
     expect(report.tiers.map((tier) => tier.state)).toEqual([

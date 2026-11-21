@@ -262,6 +262,11 @@ export async function resolveTranscriber(
   return endpoint;
 }
 
+/** Whether this launch already loaded `model` in the sidecar on `port`. */
+export function isTranscriberWarm(port: number, model: SttLocalModel): boolean {
+  return warmed.has(`${port}:${model}`);
+}
+
 /** Forgets loaded models, e.g. after the engine was stopped from Settings. */
 export function forgetWarmTranscribers(): void {
   warmed.clear();

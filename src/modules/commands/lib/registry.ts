@@ -1351,7 +1351,7 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
   "dictation.start": {
     id: "dictation.start",
     description:
-      "Start the dictation engine on the configured device and load its model. Returns as soon as the start is requested; poll dictation.status until the engine reports running.",
+      "Start the dictation engine on the configured device and load its model. Returns as soon as the start is requested; poll dictation.status until the engine reports ready (running with the model loaded and self-tested).",
     params: [],
   },
   "dictation.stop": {
@@ -1362,7 +1362,7 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
   },
   "dictation.transcribe": {
     id: "dictation.transcribe",
-    description: `Transcribe an audio file on this machine with the local dictation engine, then apply the user's dictionary and writing style. Accepts wav, mp3, m4a, aac, flac, ogg, opus, webm, aiff and caf up to ${MAX_TRANSCRIBE_FILE_SECONDS} s. The engine must be running (dictation.start). Returns the text, the raw transcript, the detected language and timings.`,
+    description: `Transcribe an audio file on this machine with the local dictation engine, then apply the user's dictionary and writing style. Accepts wav, mp3, m4a, aac, flac, ogg, opus, webm, aiff and caf up to ${MAX_TRANSCRIBE_FILE_SECONDS} s. The engine must be running (dictation.start; wait for ready). Returns the text, the raw transcript, the detected language and timings.`,
     params: [
       {
         name: "path",

@@ -8,7 +8,12 @@ import {
   STT_TIERS,
   type SttEngineId,
 } from "./catalog";
-import { forgetWarmTranscribers, transcribePcm, warmupTranscriber } from "./client";
+import {
+  forgetWarmTranscribers,
+  isTranscriberWarm,
+  resolveTranscriber,
+  transcribePcm,
+} from "./client";
 import {
   type SttEngineStatus,
   type SttModelStatus,
@@ -18,7 +23,12 @@ import {
 } from "./native";
 import { dictionaryContext, finishDictation, modeQuery } from "./postprocess";
 import { STT_SAMPLE_RATE } from "./segmenter";
-import { MAX_TRANSCRIBE_FILE_SECONDS, type SttLanguage, type SttMode } from "./settings";
+import {
+  MAX_TRANSCRIBE_FILE_SECONDS,
+  type SttLanguage,
+  type SttLocalModel,
+  type SttMode,
+} from "./settings";
 
 /**
  * The dictation commands agents reach through the bridge (`dictation.*`): the
@@ -26,7 +36,10 @@ import { MAX_TRANSCRIBE_FILE_SECONDS, type SttLanguage, type SttMode } from "./s
  * file in place of the microphone.
  */
 
-export type DictationEngineReport = Omit<SttEngineStatus, "token">;
+export type DictationEngineReport = Omit<SttEngineStatus, "token"> & {
+  /** Running with the model loaded and self-tested: transcribe answers at once. */
+  ready: boolean;
+};
 
 export type DictationStatusReport = {
   provider: string;
@@ -93,7 +106,7 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
 
 /** How long a transcription waits for a model that is still loading, inside
  *  the bridge's 15 s answer window. */
-const LOADING_WAIT_MS = 10_000;
+const LOADING_WAIT_MS = 8_000;
 const LOADING_POLL_MS = 500;
 
 async function whileLoading<T>(run: () => Promise<T>, waitMs = LOADING_WAIT_MS): Promise<T> {
@@ -109,9 +122,10 @@ async function whileLoading<T>(run: () => Promise<T>, waitMs = LOADING_WAIT_MS):
   }
 }
 
-function withoutToken(entry: SttEngineStatus): DictationEngineReport {
+function reportOf(entry: SttEngineStatus, model: SttLocalModel): DictationEngineReport {
   const { token: _token, ...rest } = entry;
-  return rest;
+  const ready = entry.running && entry.port !== null && isTranscriberWarm(entry.port, model);
+  return { ...rest, ready };
 }
 
 export async function dictationStatusCommand(): Promise<DictationStatusReport> {
@@ -125,7 +139,7 @@ export async function dictationStatusCommand(): Promise<DictationStatusReport> {
     mode: prefs.sttMode,
     liveSegments: prefs.sttLiveSegments,
     dictionaryTerms: prefs.sttDictionary.length,
-    engines: (status.transcribers ?? []).map(withoutToken),
+    engines: (status.transcribers ?? []).map((entry) => reportOf(entry, prefs.sttLocalModel)),
     models: status.transcriberModels ?? [],
     jobs: status.jobs.filter((job) => job.engine !== null && engines.has(job.engine)),
     tiers: STT_TIERS.map((tier) => ({
@@ -152,17 +166,18 @@ export async function dictationInstallCommand(
 
 /**
  * Fire and forget, like `tts.start`: loading the model outlasts the bridge's
- * timeout, so the caller polls `dictation.status` until the engine runs.
+ * timeout, so the caller polls `dictation.status` until the engine is ready.
  */
 export function dictationStartCommand(engine: SttEngineId = "rumble"): {
   engine: SttEngineId;
   starting: true;
 } {
   const { sttDevice, sttLocalModel } = usePreferencesStore.getState();
-  void sttNative
-    .start(engine, sttDevice)
-    .then((endpoint) => warmupTranscriber(endpoint, sttLocalModel))
-    .catch((error) => console.warn("dictation.start", messageOf(error)));
+  // Starts the sidecar when needed, loads the model and runs the self-test;
+  // the engine reports ready once that is done.
+  void resolveTranscriber(sttLocalModel, sttDevice).catch((error) =>
+    console.warn("dictation.start", messageOf(error)),
+  );
   return { engine, starting: true };
 }
 
@@ -209,7 +224,7 @@ export async function dictationTranscribeCommand(
     }
     if (!entry.running || entry.port === null || !entry.token) {
       throw new Error(
-        "The dictation engine is not running. Run dictation.start and poll dictation.status until it runs.",
+        "The dictation engine is not running. Run dictation.start and poll dictation.status until the engine is ready.",
       );
     }
     const bytes = await invoke<ArrayBuffer>("stt_read_audio_file", { path: request.path });
