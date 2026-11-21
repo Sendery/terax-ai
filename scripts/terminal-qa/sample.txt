@@ -1,0 +1,8 @@
+short line
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+exactly eighty columns zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+
+tab	separated	values
+unicode: café 中文 🚀 ⏺ ✻ ⎿
+a very long sentence that keeps going and going well past the edge of the terminal so that it has to wrap at least once or twice when shown
