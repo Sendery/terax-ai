@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
-use engines::{Device, Engine, Model};
+use engines::{Device, Engine, EngineKind, Model};
 use jobs::{JobInfo, JobRegistry};
 use layout::{dir_size, Layout};
 use sidecar::Sidecar;
@@ -91,8 +91,13 @@ pub struct TtsStatus {
     pub runtime: RuntimeStatus,
     pub hardware: hardware::Hardware,
     pub hardware_summary: String,
+    /// The engines that read aloud, and their models.
     pub engines: Vec<EngineStatus>,
     pub models: Vec<ModelStatus>,
+    /// The dictation engines and their models, kept apart so every voice list
+    /// stays a list of voices.
+    pub transcribers: Vec<EngineStatus>,
+    pub transcriber_models: Vec<ModelStatus>,
     pub jobs: Vec<JobInfo>,
     pub disk_usage_bytes: u64,
 }
@@ -244,9 +249,7 @@ impl TtsState {
         };
 
         let hw = hardware::detect();
-        let engines = Engine::ALL
-            .into_iter()
-            .map(|engine| {
+        let engine_status = |engine: Engine| {
                 let state = install::read_engine_state(layout, engine);
                 let live = self.sidecar(engine);
                 EngineStatus {
@@ -265,21 +268,30 @@ impl TtsState {
                     python_version: engine.python_version(),
                     torch_backend: state.as_ref().and_then(|s| s.torch_backend.clone()),
                 }
-            })
-            .collect();
-
-        let models = Model::ALL
+        };
+        let model_status = |model: Model| {
+            let size = sizes.models.get(&model).copied().unwrap_or(0);
+            ModelStatus {
+                id: model,
+                engine: model.engine(),
+                downloaded: size > 0 && layout.model_dir(model).is_dir(),
+                size_bytes: size,
+            }
+        };
+        let models_of = |kind: EngineKind| -> Vec<ModelStatus> {
+            Model::ALL
+                .into_iter()
+                .filter(|model| model.engine().kind() == kind)
+                .map(model_status)
+                .collect()
+        };
+        let engines = Engine::SPEECH.into_iter().map(engine_status).collect();
+        let transcribers = Engine::TRANSCRIPTION
             .into_iter()
-            .map(|model| {
-                let size = sizes.models.get(&model).copied().unwrap_or(0);
-                ModelStatus {
-                    id: model,
-                    engine: model.engine(),
-                    downloaded: size > 0 && layout.model_dir(model).is_dir(),
-                    size_bytes: size,
-                }
-            })
+            .map(engine_status)
             .collect();
+        let models = models_of(EngineKind::Speech);
+        let transcriber_models = models_of(EngineKind::Transcription);
 
         TtsStatus {
             runtime,
@@ -287,6 +299,8 @@ impl TtsState {
             hardware_summary: hw.summary(),
             engines,
             models,
+            transcribers,
+            transcriber_models,
             jobs: self.jobs.list(),
             disk_usage_bytes: sizes.disk_usage,
         }
@@ -312,8 +326,25 @@ mod tests {
         let status = state.status(&layout);
         assert!(!status.runtime.installed);
         assert_eq!(status.runtime.uv_version, None);
-        assert_eq!(status.engines.len(), Engine::ALL.len());
-        assert_eq!(status.models.len(), Model::ALL.len());
+        assert_eq!(status.engines.len(), Engine::SPEECH.len());
+        assert_eq!(status.transcribers.len(), Engine::TRANSCRIPTION.len());
+        assert_eq!(
+            status.models.len() + status.transcriber_models.len(),
+            Model::ALL.len()
+        );
+        assert!(status
+            .engines
+            .iter()
+            .all(|e| e.id.kind() == EngineKind::Speech));
+        assert!(status
+            .models
+            .iter()
+            .all(|m| m.engine.kind() == EngineKind::Speech));
+        assert_eq!(status.transcribers[0].id, Engine::Rumble);
+        assert_eq!(status.transcriber_models[0].id, Model::Rumble2Flash);
+        let json = serde_json::to_value(&status).unwrap();
+        assert!(json.get("transcribers").is_some());
+        assert!(json.get("transcriberModels").is_some());
         assert_eq!(status.disk_usage_bytes, 0);
         assert!(status.jobs.is_empty());
         for engine in status.engines {

@@ -14,6 +14,7 @@ pub const CHATTERBOX_SPEC_VERSION: u32 = 2;
 pub const POCKET_SPEC_VERSION: u32 = 1;
 pub const OMNIVOICE_SPEC_VERSION: u32 = 1;
 pub const ZONOS3_SPEC_VERSION: u32 = 1;
+pub const RUMBLE_SPEC_VERSION: u32 = 1;
 
 /// The interpreter every engine gets unless it needs a newer one.
 pub const PYTHON_VERSION: &str = "3.11";
@@ -26,16 +27,48 @@ pub enum Engine {
     Pocket,
     Omnivoice,
     Zonos3,
+    /// Speech to text: Reson8's Rumble-2-Flash, the Light dictation tier.
+    Rumble,
+}
+
+/// What an engine does: read text aloud, or turn speech into text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EngineKind {
+    Speech,
+    Transcription,
 }
 
 impl Engine {
-    pub const ALL: [Engine; 5] = [
+    /// Every engine, for the loops that must not miss one (purge, sizes,
+    /// kill on exit).
+    pub const ALL: [Engine; 6] = [
+        Engine::Kokoro,
+        Engine::Chatterbox,
+        Engine::Pocket,
+        Engine::Omnivoice,
+        Engine::Zonos3,
+        Engine::Rumble,
+    ];
+
+    /// The engines that read aloud; every voice list is built from these.
+    pub const SPEECH: [Engine; 5] = [
         Engine::Kokoro,
         Engine::Chatterbox,
         Engine::Pocket,
         Engine::Omnivoice,
         Engine::Zonos3,
     ];
+
+    /// The engines that transcribe dictation.
+    pub const TRANSCRIPTION: [Engine; 1] = [Engine::Rumble];
+
+    pub fn kind(self) -> EngineKind {
+        match self {
+            Engine::Rumble => EngineKind::Transcription,
+            _ => EngineKind::Speech,
+        }
+    }
 
     pub fn id(self) -> &'static str {
         match self {
@@ -44,6 +77,7 @@ impl Engine {
             Engine::Pocket => "pocket",
             Engine::Omnivoice => "omnivoice",
             Engine::Zonos3 => "zonos3",
+            Engine::Rumble => "rumble",
         }
     }
 
@@ -54,6 +88,7 @@ impl Engine {
             Engine::Pocket => POCKET_SPEC_VERSION,
             Engine::Omnivoice => OMNIVOICE_SPEC_VERSION,
             Engine::Zonos3 => ZONOS3_SPEC_VERSION,
+            Engine::Rumble => RUMBLE_SPEC_VERSION,
         }
     }
 
@@ -75,6 +110,7 @@ impl Engine {
             Engine::Pocket => Model::PocketTts,
             Engine::Omnivoice => Model::Omnivoice,
             Engine::Zonos3 => Model::Zonos3Mini,
+            Engine::Rumble => Model::Rumble2Flash,
         }
     }
 
@@ -85,6 +121,7 @@ impl Engine {
             Engine::Pocket => "requirements-pocket.txt",
             Engine::Omnivoice => "requirements-omnivoice.txt",
             Engine::Zonos3 => "requirements-zonos3.txt",
+            Engine::Rumble => "requirements-rumble.txt",
         }
     }
 
@@ -152,6 +189,7 @@ impl FromStr for Engine {
             "pocket" => Ok(Engine::Pocket),
             "omnivoice" => Ok(Engine::Omnivoice),
             "zonos3" => Ok(Engine::Zonos3),
+            "rumble" => Ok(Engine::Rumble),
             other => Err(format!("unknown tts engine: {other}")),
         }
     }
@@ -173,10 +211,12 @@ pub enum Model {
     Omnivoice,
     #[serde(rename = "zonos3-mini")]
     Zonos3Mini,
+    #[serde(rename = "rumble-2-flash")]
+    Rumble2Flash,
 }
 
 impl Model {
-    pub const ALL: [Model; 7] = [
+    pub const ALL: [Model; 8] = [
         Model::Kokoro82m,
         Model::ChatterboxMultilingual,
         Model::ChatterboxTurbo,
@@ -184,6 +224,7 @@ impl Model {
         Model::PocketTts,
         Model::Omnivoice,
         Model::Zonos3Mini,
+        Model::Rumble2Flash,
     ];
 
     pub fn id(self) -> &'static str {
@@ -195,6 +236,7 @@ impl Model {
             Model::PocketTts => "pocket-tts",
             Model::Omnivoice => "omnivoice",
             Model::Zonos3Mini => "zonos3-mini",
+            Model::Rumble2Flash => "rumble-2-flash",
         }
     }
 
@@ -213,6 +255,7 @@ impl Model {
             Model::PocketTts => "kyutai/pocket-tts-without-voice-cloning",
             Model::Omnivoice => "k2-fsa/OmniVoice",
             Model::Zonos3Mini => "Zyphra/ZONOS3-Mini",
+            Model::Rumble2Flash => "Reson8/Rumble-2-Flash",
         }
     }
 
@@ -226,6 +269,7 @@ impl Model {
             Model::PocketTts => "models--kyutai--pocket-tts-without-voice-cloning",
             Model::Omnivoice => "models--k2-fsa--OmniVoice",
             Model::Zonos3Mini => "models--Zyphra--ZONOS3-Mini",
+            Model::Rumble2Flash => "models--Reson8--Rumble-2-Flash",
         }
     }
 }
@@ -239,6 +283,7 @@ pub fn engine_of(model: Model) -> Engine {
         Model::PocketTts => Engine::Pocket,
         Model::Omnivoice => Engine::Omnivoice,
         Model::Zonos3Mini => Engine::Zonos3,
+        Model::Rumble2Flash => Engine::Rumble,
     }
 }
 
@@ -254,6 +299,7 @@ impl FromStr for Model {
             "pocket-tts" => Ok(Model::PocketTts),
             "omnivoice" => Ok(Model::Omnivoice),
             "zonos3-mini" => Ok(Model::Zonos3Mini),
+            "rumble-2-flash" => Ok(Model::Rumble2Flash),
             other => Err(format!("unknown tts model: {other}")),
         }
     }
@@ -362,6 +408,18 @@ pub const SERVER_FILES: &[EmbeddedFile] = &[
         body: include_str!("../../../resources/tts/requirements-zonos3.txt"),
     },
     EmbeddedFile {
+        rel: "engines/fake_stt.py",
+        body: include_str!("../../../resources/tts/engines/fake_stt.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/rumble.py",
+        body: include_str!("../../../resources/tts/engines/rumble.py"),
+    },
+    EmbeddedFile {
+        rel: "requirements-rumble.txt",
+        body: include_str!("../../../resources/tts/requirements-rumble.txt"),
+    },
+    EmbeddedFile {
         rel: "requirements-kokoro.txt",
         body: include_str!("../../../resources/tts/requirements-kokoro.txt"),
     },
@@ -431,6 +489,30 @@ mod tests {
         for model in Model::ALL {
             assert_eq!(model.engine(), engine_of(model));
         }
+    }
+
+    #[test]
+    fn speech_and_transcription_split_every_engine_exactly_once() {
+        let mut seen: Vec<Engine> = Engine::SPEECH
+            .into_iter()
+            .chain(Engine::TRANSCRIPTION)
+            .collect();
+        for engine in Engine::SPEECH {
+            assert_eq!(engine.kind(), EngineKind::Speech, "{engine:?}");
+        }
+        for engine in Engine::TRANSCRIPTION {
+            assert_eq!(engine.kind(), EngineKind::Transcription, "{engine:?}");
+        }
+        seen.sort();
+        let mut all = Engine::ALL.to_vec();
+        all.sort();
+        assert_eq!(seen, all);
+        assert_eq!(Engine::Rumble.default_model(), Model::Rumble2Flash);
+        assert_eq!(Model::Rumble2Flash.hf_repo(), "Reson8/Rumble-2-Flash");
+        assert_eq!(
+            serde_json::to_string(&EngineKind::Transcription).unwrap(),
+            "\"transcription\""
+        );
     }
 
     #[test]
