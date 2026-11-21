@@ -1,3 +1,4 @@
+import type { LocalDictationSettings } from "@/modules/stt/lib/session";
 import type { ProviderKeys } from "./keyring";
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
@@ -143,6 +144,8 @@ function assertLoopbackUrl(baseURL: string): void {
 export type SttOptions = {
   groqSttModel?: string;
   whispercppBaseURL?: string;
+  /** Settings for the engine Terax runs itself (provider `local`). */
+  local?: Omit<LocalDictationSettings, "live">;
 };
 
 export async function transcribeAudio(
@@ -152,6 +155,11 @@ export async function transcribeAudio(
   options: SttOptions = {},
 ): Promise<string> {
   switch (provider) {
+    case "local": {
+      if (!options.local) throw new Error("Local dictation is not configured");
+      const { transcribeBlobLocally } = await import("@/modules/stt/lib/session");
+      return transcribeBlobLocally(blob, options.local);
+    }
     case "openai": {
       const key = apiKeys.openai;
       if (!key) throw new Error("OpenAI API key is not configured");

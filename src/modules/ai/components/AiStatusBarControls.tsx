@@ -135,7 +135,9 @@ export function AiStatusBarControls() {
           title={
             !c.voice.hasKey
               ? `Voice needs a ${STT_PROVIDER_LABELS[c.voice.sttProvider]} key`
-              : c.voice.recording
+              : c.voice.unavailableReason && !c.voice.recording
+                ? c.voice.unavailableReason
+                : c.voice.recording
                 ? "Stop & transcribe"
                 : c.voice.transcribing
                   ? "Transcribing…"
