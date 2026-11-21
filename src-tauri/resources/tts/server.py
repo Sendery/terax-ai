@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Loopback TTS sidecar. Standard library only; engines own their deps.
 
-Contract: docs/plans/2026-09-02-local-tts.md, "Sidecar HTTP API".
+Contract: docs/plans/2026-09-02-local-tts.md, "Sidecar HTTP API", and for
+dictation engines docs/plans/2026-11-21-local-dictation.md ("/transcribe").
 """
 
 from __future__ import annotations
@@ -13,9 +14,11 @@ import json
 import os
 import sys
 import threading
+import time
 import wave
+from array import array
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,6 +26,7 @@ from engines import create_engine  # noqa: E402
 from engines.base import (  # noqa: E402
     LANGUAGES,
     PARAM_RANGES,
+    TRANSCRIPTION_SAMPLE_RATE,
     is_downloaded,
     collapse_whitespace,
     model_info,
@@ -31,6 +35,15 @@ from engines.base import (  # noqa: E402
 )
 
 MAX_BODY_BYTES = 64 * 1024
+# Ten minutes of 16 kHz mono 16-bit audio plus its header.
+MAX_AUDIO_BYTES = 20 * 1024 * 1024
+MAX_CONTEXT_CHARS = 2000
+CONTEXT_HEADER = "X-Terax-Context"
+# Under a tenth of a second there is nothing to transcribe.
+MIN_TRANSCRIBE_FRAMES = TRANSCRIPTION_SAMPLE_RATE // 10
+TRANSCRIBE_PARAMS = ("model", "language", "filler", "verbatim", "digits")
+TRANSCRIBE_DEFAULTS = {"filler": False, "verbatim": True, "digits": True}
+SELF_TEST_SECONDS = 1
 MAX_TEXT_CHARS = 8192
 MIN_TOKEN_CHARS = 16
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -122,6 +135,46 @@ class Host:
             except (Exception, SystemExit) as exc:
                 log("synthesis failed: {}".format(exc))
                 raise HttpError(500, "synthesis_failed", "synthesis failed")
+
+    @property
+    def kind(self) -> str:
+        return getattr(self.engine, "kind", "speech")
+
+    def transcribe(self, request: dict) -> dict:
+        self._guard_loading()
+        with self._work:
+            self._ensure_loaded(request["model"])
+            try:
+                return self.engine.transcribe(
+                    request["model"],
+                    request["pcm"],
+                    request["language"],
+                    request["context"],
+                    request["options"],
+                )
+            except HttpError:
+                raise
+            except (Exception, SystemExit) as exc:
+                log("transcription failed: {}".format(exc))
+                raise HttpError(500, "transcription_failed", "transcription failed")
+
+    def self_test(self, model: str) -> dict:
+        """One second of silence must come back empty: the model loads, runs,
+        and does not invent words."""
+        started = time.monotonic()
+        silence = array("h", bytes(2 * TRANSCRIPTION_SAMPLE_RATE * SELF_TEST_SECONDS))
+        try:
+            result = self.transcribe(
+                {"model": model, "pcm": silence, "language": None, "context": None,
+                 "options": dict(TRANSCRIBE_DEFAULTS)}
+            )
+            ok = not (result.get("text") or "").strip()
+        except HttpError as error:
+            log("self-test failed: {}".format(error.message))
+            ok = False
+        elapsed = int((time.monotonic() - started) * 1000)
+        log("self-test {} in {} ms".format("passed" if ok else "FAILED", elapsed))
+        return {"ok": ok, "elapsedMs": elapsed}
 
     def close(self) -> None:
         try:
@@ -263,6 +316,91 @@ def validate_synthesize(host: Host, payload: dict) -> dict:
     }
 
 
+def require_kind(host: Host, kind: str) -> None:
+    if host.kind != kind:
+        raise HttpError(
+            409,
+            "wrong_kind",
+            "engine {} is a {} engine".format(host.engine_name, host.kind),
+        )
+
+
+def parse_flag(name: str, raw: str) -> bool:
+    value = raw.strip().lower()
+    if value in ("1", "true"):
+        return True
+    if value in ("0", "false"):
+        return False
+    raise HttpError(400, "bad_request", "{} must be 0 or 1".format(name))
+
+
+def validate_context(raw) -> "str | None":
+    if raw is None:
+        return None
+    try:
+        text = unquote(raw, encoding="utf-8", errors="strict")
+    except UnicodeDecodeError:
+        raise HttpError(400, "bad_context", "{} is not URL-encoded UTF-8".format(CONTEXT_HEADER))
+    text = collapse_whitespace("".join(ch if ch.isprintable() else " " for ch in text))
+    if len(text) > MAX_CONTEXT_CHARS:
+        raise HttpError(400, "context_too_long", "context exceeds {} chars".format(MAX_CONTEXT_CHARS))
+    return text or None
+
+
+def decode_pcm_wav(body: bytes) -> array:
+    """The int16 frames of a 16 kHz mono 16-bit PCM WAV, else a 400."""
+    try:
+        with wave.open(io.BytesIO(body), "rb") as reader:
+            channels = reader.getnchannels()
+            width = reader.getsampwidth()
+            rate = reader.getframerate()
+            frames = reader.readframes(reader.getnframes())
+    except (wave.Error, EOFError):
+        raise HttpError(400, "bad_audio", "body must be a PCM WAV file")
+    if channels != 1 or width != 2 or rate != TRANSCRIPTION_SAMPLE_RATE:
+        raise HttpError(
+            400,
+            "bad_audio",
+            "audio must be mono 16-bit PCM at {} Hz".format(TRANSCRIPTION_SAMPLE_RATE),
+        )
+    pcm = array("h")
+    pcm.frombytes(frames[: len(frames) - (len(frames) % 2)])
+    if sys.byteorder == "big":
+        pcm.byteswap()
+    return pcm
+
+
+def validate_transcribe(host: Host, query: str, context_header) -> dict:
+    """Everything but the audio: model, language, switches and context."""
+    params = parse_qs(query, keep_blank_values=True)
+    unknown = sorted(set(params) - set(TRANSCRIBE_PARAMS))
+    if unknown:
+        raise HttpError(400, "bad_request", "unknown parameter: {}".format(unknown[0]))
+    for key, values in params.items():
+        if len(values) != 1:
+            raise HttpError(400, "bad_request", "{} given more than once".format(key))
+    single = {key: values[0] for key, values in params.items()}
+    info = validate_model(host, single.get("model"))
+    language = single.get("language", "auto") or "auto"
+    if language != "auto" and language not in LANGUAGES:
+        raise HttpError(
+            400,
+            "unsupported_language",
+            "language must be auto or one of {}".format(list(LANGUAGES)),
+        )
+    options = dict(TRANSCRIBE_DEFAULTS)
+    for key in TRANSCRIBE_DEFAULTS:
+        if key in single:
+            options[key] = parse_flag(key, single[key])
+    return {
+        "info": info,
+        "model": info.id,
+        "language": None if language == "auto" else language,
+        "context": validate_context(context_header),
+        "options": options,
+    }
+
+
 # The webview is a different origin from a loopback port, so every authorised
 # request is preceded by a CORS preflight. Answering it is what lets the window
 # speak at all; the reply is limited to the origins Terax itself runs under, and
@@ -331,7 +469,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "authorization, content-type")
+        self.send_header(
+            "Access-Control-Allow-Headers", "authorization, content-type, x-terax-context"
+        )
         self.send_header("Access-Control-Max-Age", "600")
         self.send_header("Vary", "Origin")
         self.send_header("Content-Length", "0")
@@ -372,6 +512,21 @@ class Handler(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise HttpError(400, "invalid_json", "body is not valid JSON")
 
+    def _read_audio(self) -> bytes:
+        raw_length = self.headers.get("Content-Length")
+        try:
+            length = int(raw_length) if raw_length else 0
+        except ValueError:
+            raise HttpError(400, "bad_request", "invalid Content-Length")
+        if length <= 0:
+            raise HttpError(400, "empty_audio", "audio body is empty")
+        if length > MAX_AUDIO_BYTES:
+            raise HttpError(413, "body_too_large", "audio exceeds 20 MiB")
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise HttpError(400, "bad_request", "truncated body")
+        return raw
+
     def do_GET(self):
         self._dispatch(self._route_get)
 
@@ -396,6 +551,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "engine": self.host.engine_name,
+                    "kind": self.host.kind,
                     "device": self.host.effective_device(),
                     "loadedModel": self.host.loaded_model,
                 },
@@ -405,6 +561,7 @@ class Handler(BaseHTTPRequestHandler):
             models = [
                 {
                     "id": info.id,
+                    "kind": self.host.kind,
                     "downloaded": is_downloaded(info),
                     "languages": list(info.languages),
                     "voiceSource": info.voice_source,
@@ -433,6 +590,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route_post(self, url) -> None:
         if url.path == "/synthesize":
+            require_kind(self.host, "speech")
             request = validate_synthesize(self.host, self._read_body())
             samples, sample_rate = self.host.synthesize(request)
             self._send(200, encode_wav(samples, sample_rate), "audio/wav")
@@ -442,7 +600,32 @@ class Handler(BaseHTTPRequestHandler):
             info = validate_model(self.host, payload.get("model") if isinstance(payload, dict) else None)
             ensure_downloaded(info)
             self.host.warmup(info.id)
-            self._send_json(200, {"ok": True})
+            reply = {"ok": True}
+            if self.host.kind == "transcription":
+                reply["selfTest"] = self.host.self_test(info.id)
+            self._send_json(200, reply)
+            return
+        if url.path == "/transcribe":
+            require_kind(self.host, "transcription")
+            request = validate_transcribe(self.host, url.query, self.headers.get(CONTEXT_HEADER))
+            pcm = decode_pcm_wav(self._read_audio())
+            ensure_downloaded(request["info"])
+            audio_ms = int(len(pcm) * 1000 / TRANSCRIPTION_SAMPLE_RATE)
+            started = time.monotonic()
+            if len(pcm) < MIN_TRANSCRIBE_FRAMES:
+                result = {"text": "", "language": request["language"]}
+            else:
+                request["pcm"] = pcm
+                result = self.host.transcribe(request)
+            self._send_json(
+                200,
+                {
+                    "text": (result.get("text") or "").strip(),
+                    "language": result.get("language"),
+                    "audioMs": audio_ms,
+                    "elapsedMs": int((time.monotonic() - started) * 1000),
+                },
+            )
             return
         if url.path == "/shutdown":
             self._read_body()
@@ -495,7 +678,7 @@ def build_server(engine: str, device: str, samples_dir: str, token: str, host: s
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Terax local TTS sidecar")
-    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "pocket", "omnivoice", "zonos3", "fake"])
+    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "pocket", "omnivoice", "zonos3", "rumble", "fake", "fake-stt"])
     parser.add_argument("--device", required=True, choices=["auto", "cpu", "mps", "cuda", "mlx"])
     parser.add_argument("--samples-dir", required=True)
     parser.add_argument("--host", default="127.0.0.1")

@@ -50,6 +50,9 @@ ALLOW_PATTERNS = {
         "gguf/voices/*",
         "gguf/voices/*/*",
     ),
+    # Rumble-2-Flash: the bf16 weights, the processor and tokenizer files and
+    # the chat template that carries the digits/filler/verbatim switches.
+    "rumble-2-flash": ("*.json", "*.jinja", "*.txt", "model.safetensors"),
 }
 IGNORE_PATTERNS = ("*.md", ".gitattributes")
 

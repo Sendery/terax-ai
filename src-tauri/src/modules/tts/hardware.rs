@@ -240,6 +240,7 @@ pub fn plan(engine: Engine, hw: &Hardware) -> EnginePlan {
                 p
             }
         }
+        Engine::Rumble => rumble_plan(hw, cores),
     };
     if plan.supported {
         wheel_note(&mut plan);
@@ -253,6 +254,52 @@ pub fn plan(engine: Engine, hw: &Hardware) -> EnginePlan {
         }
     }
     plan
+}
+
+/// VRAM below which a GPU is not worth it for Rumble-2-Flash: 1.0 GB of bf16
+/// weights plus activations measured 1.5 GB resident on MPS.
+const RUMBLE_MIN_VRAM_MB: u64 = 2048;
+
+/// Rumble-2-Flash, the Light dictation tier: half precision on a GPU keeps it
+/// near 1 GB; on a CPU, float32 is what PyTorch runs fast.
+fn rumble_plan(hw: &Hardware, cores: u32) -> EnginePlan {
+    let usable_gpu = hw
+        .nvidia
+        .as_ref()
+        .filter(|gpu| gpu.memory_mb.is_none_or(|mb| mb >= RUMBLE_MIN_VRAM_MB));
+    if let Some(gpu) = usable_gpu {
+        let mut p = base("cuda", hw);
+        p.dtype = Some("bfloat16".into());
+        p.notes.push(format!(
+            "Runs on {} in bfloat16: about 1.0 GB of weights, no quantization.",
+            gpu.name
+        ));
+        p.notes.push(
+            "GPUs older than Ampere, which lack bfloat16, get float16 when the model loads.".into(),
+        );
+        p
+    } else if hw.apple_silicon {
+        let mut p = base("mps", hw);
+        p.dtype = Some("bfloat16".into());
+        p.notes.push(
+            "Runs on the Apple GPU (MPS) in bfloat16: about 1.0 GB of weights, no quantization, about 35 times faster than real time on an M4 Pro.".into(),
+        );
+        p
+    } else {
+        let mut p = base("cpu", hw);
+        p.threads = Some(cores.min(8));
+        p.notes.push(format!(
+            "Runs on the CPU in float32 with {} threads: about 2 GB of memory, roughly 10 times faster than real time on 4 Apple cores.",
+            cores.min(8)
+        ));
+        if let Some(gpu) = &hw.nvidia {
+            p.notes.push(format!(
+                "{} has less than 2 GB of memory, so the CPU is used instead.",
+                gpu.name
+            ));
+        }
+        p
+    }
 }
 
 static PROBED: OnceLock<Hardware> = OnceLock::new();
@@ -509,6 +556,39 @@ mod tests {
             assert!(!p.supported);
             assert!(p.unsupported_reason.is_some());
         }
+    }
+
+    #[test]
+    fn rumble_runs_in_half_precision_on_a_gpu_and_float32_on_a_cpu() {
+        let mac = plan(Engine::Rumble, &m4_pro());
+        assert!(mac.supported);
+        assert_eq!(
+            (mac.device.as_str(), mac.dtype.as_deref(), mac.torch_backend.as_deref()),
+            ("mps", Some("bfloat16"), None)
+        );
+        let gpu = plan(Engine::Rumble, &linux_cuda());
+        assert_eq!(
+            (gpu.device.as_str(), gpu.dtype.as_deref(), gpu.torch_backend.as_deref()),
+            ("cuda", Some("bfloat16"), Some("auto"))
+        );
+        let cpu = plan(Engine::Rumble, &linux_cpu());
+        assert_eq!(
+            (cpu.device.as_str(), cpu.dtype.as_deref(), cpu.threads),
+            ("cpu", Some("float32"), Some(8))
+        );
+        assert_eq!(cpu.torch_backend.as_deref(), Some("cpu"));
+        assert!(!cpu.quantize && !gpu.quantize && !mac.quantize);
+    }
+
+    #[test]
+    fn rumble_skips_a_gpu_with_too_little_memory() {
+        let mut small = linux_cuda();
+        if let Some(gpu) = small.nvidia.as_mut() {
+            gpu.memory_mb = Some(1024);
+        }
+        let p = plan(Engine::Rumble, &small);
+        assert_eq!(p.device, "cpu");
+        assert!(p.notes.iter().any(|n| n.contains("less than 2 GB")), "{:?}", p.notes);
     }
 
     #[test]
