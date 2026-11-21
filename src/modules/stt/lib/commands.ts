@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { TtsClientError } from "@/modules/tts/lib/client";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { TtsJob } from "@/modules/tts/lib/native";
 import {
@@ -79,8 +80,32 @@ async function guarded<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error) throw error;
+    if (
+      error &&
+      typeof error === "object" &&
+      (error as { code?: unknown }).code === "command_failed"
+    ) {
+      throw error;
+    }
     throw failed(messageOf(error));
+  }
+}
+
+/** How long a transcription waits for a model that is still loading, inside
+ *  the bridge's 15 s answer window. */
+const LOADING_WAIT_MS = 10_000;
+const LOADING_POLL_MS = 500;
+
+async function whileLoading<T>(run: () => Promise<T>, waitMs = LOADING_WAIT_MS): Promise<T> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return await run();
+    } catch (error) {
+      const loading = error instanceof TtsClientError && error.code === "loading";
+      if (!loading || Date.now() + LOADING_POLL_MS > deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, LOADING_POLL_MS));
+    }
   }
 }
 
@@ -201,12 +226,16 @@ export async function dictationTranscribeCommand(
       );
     }
     const mode = request.writingStyle ?? prefs.sttMode;
-    const result = await transcribePcm({ port: entry.port, token: entry.token }, pcm, {
-      model,
-      language: request.spokenLanguage ?? prefs.sttLanguage,
-      ...modeQuery(mode),
-      context: dictionaryContext(prefs.sttDictionary),
-    });
+    const endpoint = { port: entry.port, token: entry.token };
+    // Right after dictation.start the model may still be loading.
+    const result = await whileLoading(() =>
+      transcribePcm(endpoint, pcm, {
+        model,
+        language: request.spokenLanguage ?? prefs.sttLanguage,
+        ...modeQuery(mode),
+        context: dictionaryContext(prefs.sttDictionary),
+      }),
+    );
     return {
       text: finishDictation([result.text], mode, prefs.sttDictionary),
       raw: result.text,

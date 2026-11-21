@@ -125,4 +125,42 @@ describe("dictation commands", () => {
     expect(report.text).toBe("Abre Pi-Terax.");
     expect(report.mode).toBe("formal");
   });
+
+  it("waits for a model that is still loading", async () => {
+    invoke.mockResolvedValueOnce(status()).mockResolvedValueOnce(new ArrayBuffer(8));
+    const loading = () =>
+      new Response(JSON.stringify({ error: "loading", message: "a model is loading" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    const ok = new Response(
+      JSON.stringify({ text: "hola", language: "es-ES", audioMs: 1000, elapsedMs: 30 }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+    const responses = [loading(), loading(), ok];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => responses.shift() as Response),
+    );
+    const report = await dictationTranscribeCommand({ path: "/tmp/a.wav" });
+    expect(report.raw).toBe("hola");
+    expect(responses).toHaveLength(0);
+  });
+
+  it("reports a refused request as a plain command failure", async () => {
+    invoke.mockResolvedValueOnce(status()).mockResolvedValueOnce(new ArrayBuffer(8));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "bad_audio", message: "not a wav" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+    await expect(dictationTranscribeCommand({ path: "/tmp/a.wav" })).rejects.toMatchObject({
+      code: "command_failed",
+    });
+  });
 });
