@@ -6,24 +6,12 @@ import { Downsampler, Segmenter, type SegmenterOptions } from "./segmenter";
  * segmenter hands out pieces that end in a pause.
  */
 
-const WORKLET_SOURCE = `
-class TeraxDictationTap extends AudioWorkletProcessor {
-  process(inputs) {
-    const input = inputs[0];
-    if (input && input.length > 0 && input[0].length > 0) {
-      const frames = input[0].length;
-      const mono = new Float32Array(frames);
-      for (let c = 0; c < input.length; c++) {
-        const channel = input[c];
-        for (let i = 0; i < frames; i++) mono[i] += channel[i] / input.length;
-      }
-      this.port.postMessage(mono, [mono.buffer]);
-    }
-    return true;
-  }
-}
-registerProcessor("terax-dictation-tap", TeraxDictationTap);
-`;
+/**
+ * The worklet is a static file served by the app (public/stt/dictation-tap.js):
+ * the CSP's script-src allows 'self' but not blob: URLs, and worklets are
+ * scripts.
+ */
+const WORKLET_URL = "/stt/dictation-tap.js";
 
 export type DictationRecorderOptions = {
   onSegment: (pcm16k: Float32Array) => void;
@@ -38,7 +26,7 @@ export class DictationRecorder {
   private context: AudioContext | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private node: AudioWorkletNode | ScriptProcessorNode | null = null;
-  private moduleUrl: string | null = null;
+  private sink: GainNode | null = null;
   private segmenter: Segmenter;
   private downsampler: Downsampler | null = null;
   private stopped = false;
@@ -90,28 +78,38 @@ export class DictationRecorder {
       if (this.stopped || !this.downsampler) return;
       this.segmenter.push(this.downsampler.push(samples));
     };
+    // A silent sink to the destination: WebKit only renders nodes the
+    // destination pulls, so a tap with no route there would never run.
+    const sink = context.createGain();
+    sink.gain.value = 0;
+    sink.connect(context.destination);
+    this.sink = sink;
+    let node: AudioWorkletNode | ScriptProcessorNode | null = null;
     if (context.audioWorklet) {
-      this.moduleUrl = URL.createObjectURL(
-        new Blob([WORKLET_SOURCE], { type: "application/javascript" }),
-      );
-      await context.audioWorklet.addModule(this.moduleUrl);
-      const node = new AudioWorkletNode(context, "terax-dictation-tap", {
-        numberOfInputs: 1,
-        numberOfOutputs: 0,
-      });
-      node.port.onmessage = (event: MessageEvent<Float32Array>) =>
-        onSamples(event.data);
-      this.source.connect(node);
-      this.node = node;
-    } else {
-      // Older webviews without AudioWorklet.
-      const node = context.createScriptProcessor(4096, 1, 1);
-      node.onaudioprocess = (event) =>
-        onSamples(Float32Array.from(event.inputBuffer.getChannelData(0)));
-      this.source.connect(node);
-      node.connect(context.destination);
-      this.node = node;
+      try {
+        await context.audioWorklet.addModule(WORKLET_URL);
+        const tap = new AudioWorkletNode(context, "terax-dictation-tap", {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+        });
+        tap.port.onmessage = (event: MessageEvent<Float32Array>) =>
+          onSamples(event.data);
+        node = tap;
+      } catch (err) {
+        console.warn("stt.worklet unavailable, using ScriptProcessor", err);
+      }
     }
+    if (!node) {
+      // Older webviews, or a worklet that failed to load.
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (event) =>
+        onSamples(Float32Array.from(event.inputBuffer.getChannelData(0)));
+      node = processor;
+    }
+    this.source.connect(node);
+    node.connect(sink);
+    this.node = node;
     if (context.state === "suspended") await context.resume();
   }
 
@@ -152,9 +150,11 @@ export class DictationRecorder {
       void this.context.close().catch(() => undefined);
       this.context = null;
     }
-    if (this.moduleUrl) {
-      URL.revokeObjectURL(this.moduleUrl);
-      this.moduleUrl = null;
+    try {
+      this.sink?.disconnect();
+    } catch {
+      // Already disconnected.
     }
+    this.sink = null;
   }
 }
