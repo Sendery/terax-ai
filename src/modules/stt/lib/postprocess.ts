@@ -63,14 +63,74 @@ function replacementsOf(entries: SttDictionaryEntry[]): Replacement[] {
     .sort((a, b) => b.pattern.length - a.pattern.length);
 }
 
+/** Shortest one-word term the near-miss pass corrects; shorter words collide
+ *  with everyday ones too easily. */
+const NEAR_MISS_MIN_CHARS = 6;
+
+/** Optimal string alignment distance, stopping early once it exceeds 1. */
+function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let prev2: number[] = [];
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let value = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        value = Math.min(value, prev2[j - 2] + 1);
+      }
+      row.push(value);
+      best = Math.min(best, value);
+    }
+    if (best > 1) return false;
+    prev2 = prev;
+    prev = row;
+  }
+  return prev[b.length] <= 1;
+}
+
+/**
+ * The recogniser often lands one letter off a name it has never seen
+ * ("Senderi" for "Sendery"). A capitalised word, which is how the model
+ * marks a name it guessed, of six or more letters that starts like a one-word
+ * term and is a single edit away from it is taken to be that term. Lower-case
+ * words are left alone, so "sendero" stays the Spanish word.
+ */
+function applyNearMisses(text: string, entries: SttDictionaryEntry[]): string {
+  const terms = entries
+    .map((entry) => entry.written.trim())
+    .filter((written) => /^[\p{L}\p{N}]+$/u.test(written))
+    .map((written) => ({ written, folded: foldPattern(written) }))
+    .filter((term) => term.folded.length >= NEAR_MISS_MIN_CHARS);
+  if (terms.length === 0) return text;
+  return text.replace(/[\p{L}\p{N}]+/gu, (word) => {
+    if (!/^\p{Lu}/u.test(word)) return word;
+    const folded = foldPattern(word);
+    if (folded.length < NEAR_MISS_MIN_CHARS - 1) return word;
+    if (terms.some((term) => term.folded === folded)) return word;
+    const match = terms.find(
+      (term) => term.folded[0] === folded[0] && withinOneEdit(term.folded, folded),
+    );
+    return match ? match.written : word;
+  });
+}
+
 /**
  * Replaces every whole-phrase occurrence of a term's spoken form or of the
- * term itself, ignoring case and accents, with the term as written.
+ * term itself, ignoring case and accents, with the term as written, then
+ * corrects one-letter near misses of long one-word terms.
  */
 export function applyDictionary(
   text: string,
   entries: SttDictionaryEntry[],
 ): string {
+  return applyNearMisses(applyExact(text, entries), entries);
+}
+
+function applyExact(text: string, entries: SttDictionaryEntry[]): string {
   const replacements = replacementsOf(entries);
   if (replacements.length === 0 || text.length === 0) return text;
   const source = text.replace(/[ \t]+/g, " ");

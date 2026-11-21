@@ -114,3 +114,21 @@ describe("dictionaryContext", () => {
     expect(context.split(", ").every((t) => /^termino\d+$/.test(t))).toBe(true);
   });
 });
+
+describe("dictionary near misses", () => {
+  const terms = [{ written: "Sendery" }, { written: "Kokoro" }, { written: "diff" }];
+
+  it("corrects a long term heard one letter off", () => {
+    expect(applyDictionary("el panel de Senderi", terms)).toBe("el panel de Sendery");
+    expect(applyDictionary("lanza Kokorro ya", terms)).toBe("lanza Kokoro ya");
+    expect(applyDictionary("lanza Kookro ya", terms)).toBe("lanza Kokoro ya");
+  });
+
+  it("leaves short terms, other initials, lower-case words and distant words alone", () => {
+    expect(applyDictionary("un Dif rapido", terms)).toBe("un Dif rapido");
+    expect(applyDictionary("Tenderi", terms)).toBe("Tenderi");
+    expect(applyDictionary("un sendero corto", terms)).toBe("un sendero corto");
+    expect(applyDictionary("Sendas", terms)).toBe("Sendas");
+    expect(applyDictionary("Sender", terms)).toBe("Sendery");
+  });
+});

@@ -74,6 +74,11 @@ form. Matching ignores case and accents and only replaces whole words. The
 engine receives the terms that fit in 2000 characters; corrections apply to
 all of them.
 
+A one-word term of six or more letters is also restored when the engine writes
+it capitalised and one letter off ("Senderi" becomes "Sendery"). Lower-case
+words are never touched this way, so everyday words that happen to look like a
+term stay as they are.
+
 Import a text file with one term per line and `heard -> written` for
 corrections, or paste the list. "Copy as JSON" copies the dictionary so you can
 keep it outside the Terax settings file.
