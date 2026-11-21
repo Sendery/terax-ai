@@ -161,6 +161,7 @@ export function useWhisperRecording({
         mode: prefs.sttMode,
         dictionary: prefs.sttDictionary,
         live: prefs.sttLiveSegments,
+        idleStopMinutes: prefs.ttsIdleStopMinutes,
       });
       startingRef.current = false;
       if (stopRequestedRef.current) void stopLocal();

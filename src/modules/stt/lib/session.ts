@@ -1,6 +1,11 @@
 import type { TtsEndpoint } from "@/modules/tts/lib/client";
 import type { TtsDevice } from "@/modules/tts/lib/engines";
-import { resolveTranscriber, transcribePcm } from "./client";
+import {
+  cancelTranscriberIdleStop,
+  resolveTranscriber,
+  scheduleTranscriberIdleStop,
+  transcribePcm,
+} from "./client";
 import { dictionaryContext, finishDictation, modeQuery } from "./postprocess";
 import { DictationRecorder } from "./recorder";
 import { STT_SAMPLE_RATE } from "./segmenter";
@@ -19,6 +24,8 @@ export type LocalDictationSettings = {
   dictionary: SttDictionaryEntry[];
   /** Transcribe each segment as soon as a pause closes it. */
   live: boolean;
+  /** Minutes without dictation before the engine is stopped; 0 never. */
+  idleStopMinutes?: number;
 };
 
 export type SegmentTranscriber = (
@@ -121,8 +128,11 @@ export type LocalDictation = {
 export async function startLocalDictation(
   settings: LocalDictationSettings,
 ): Promise<LocalDictation> {
+  cancelTranscriberIdleStop();
   const query = modeQuery(settings.mode);
   const context = dictionaryContext(settings.dictionary);
+  const idle = () =>
+    scheduleTranscriberIdleStop(settings.model, settings.idleStopMinutes ?? 0);
   const queue = new SegmentQueue(
     {
       resolve: (signal) => resolveTranscriber(settings.model, settings.device, signal),
@@ -154,6 +164,7 @@ export async function startLocalDictation(
   } catch (err) {
     recorder.cancel();
     queue.cancel();
+    idle();
     throw err;
   }
   ready.catch(() => {
@@ -163,12 +174,17 @@ export async function startLocalDictation(
     level: () => recorder.level,
     stop: async () => {
       recorder.stop();
-      const parts = await queue.finish();
-      return finishDictation(parts, settings.mode, settings.dictionary);
+      try {
+        const parts = await queue.finish();
+        return finishDictation(parts, settings.mode, settings.dictionary);
+      } finally {
+        idle();
+      }
     },
     cancel: () => {
       recorder.cancel();
       queue.cancel();
+      idle();
     },
   };
 }

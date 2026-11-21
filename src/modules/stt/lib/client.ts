@@ -267,6 +267,35 @@ export function forgetWarmTranscribers(): void {
   warmed.clear();
 }
 
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Stops the dictation engine after `minutes` without dictation, so an idle
+ * install gives its memory back. Shares the reading engines' idle setting;
+ * zero keeps it loaded.
+ */
+export function scheduleTranscriberIdleStop(
+  model: SttLocalModel,
+  minutes: number,
+): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+  if (!(minutes > 0)) return;
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    void sttNative
+      .stop(STT_MODEL_ENGINE[model])
+      .then(() => warmed.clear())
+      .catch(() => undefined);
+  }, minutes * 60_000);
+}
+
+/** Cancels a pending idle stop: a dictation is starting. */
+export function cancelTranscriberIdleStop(): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = null;
+}
+
 // Measured speed and the last self-test, per model, for Settings. Kept in
 // memory and mirrored to localStorage; losing them costs nothing.
 
