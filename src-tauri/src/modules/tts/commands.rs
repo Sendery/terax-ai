@@ -374,6 +374,56 @@ pub async fn tts_sample_import(
     .await
 }
 
+/// Audio a dictation command may read: what the webview can decode, nothing
+/// else, so the command cannot be turned into a general file reader.
+const AUDIO_EXTENSIONS: &[&str] = &[
+    "wav", "wave", "mp3", "m4a", "aac", "mp4", "flac", "ogg", "oga", "opus", "webm", "aif", "aiff",
+    "caf",
+];
+/// About ten minutes of 48 kHz stereo WAV; longer files are refused before
+/// they are read into memory.
+pub const MAX_AUDIO_FILE_BYTES: u64 = 128 * 1024 * 1024;
+
+/// An absolute path to an existing audio file of a decodable type and size.
+pub fn validate_audio_path(path: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err("the audio path must be absolute".into());
+    }
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !AUDIO_EXTENSIONS.contains(&extension.as_str()) {
+        return Err(format!(
+            "not an audio file Terax can decode (expected one of: {})",
+            AUDIO_EXTENSIONS.join(", ")
+        ));
+    }
+    let meta = fs::metadata(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    if !meta.is_file() {
+        return Err(format!("{} is not a file", path.display()));
+    }
+    if meta.len() > MAX_AUDIO_FILE_BYTES {
+        return Err(format!(
+            "{} is larger than {} MB",
+            path.display(),
+            MAX_AUDIO_FILE_BYTES / (1024 * 1024)
+        ));
+    }
+    Ok(path)
+}
+
+/// The bytes of an audio file for `dictation.transcribe`; the webview decodes
+/// and resamples them before they reach the sidecar.
+#[tauri::command]
+pub async fn stt_read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let path = validate_audio_path(&path)?;
+    let bytes = blocking(move || fs::read(&path).map_err(|e| e.to_string())).await?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[tauri::command]
 pub async fn tts_sample_remove(app: AppHandle, sample_id: String) -> Result<(), String> {
     samples::validate_sample_id(&sample_id)?;
@@ -471,6 +521,24 @@ mod tests {
         assert!(parse_model("chatterbox").is_err());
         assert_eq!(Device::from_str("auto"), Ok(Device::Auto));
         assert!(Device::from_str("gpu").is_err());
+    }
+
+    #[test]
+    fn audio_paths_must_be_absolute_existing_audio_files() {
+        let dir = std::env::temp_dir().join(format!("terax-audio-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let wav = dir.join("clip.WAV");
+        fs::write(&wav, b"RIFF").unwrap();
+        let text = dir.join("notes.txt");
+        fs::write(&text, b"hello").unwrap();
+        assert_eq!(validate_audio_path(wav.to_str().unwrap()), Ok(wav.clone()));
+        assert!(validate_audio_path("clip.wav").is_err());
+        assert!(validate_audio_path(text.to_str().unwrap()).is_err());
+        assert!(validate_audio_path(dir.join("missing.mp3").to_str().unwrap()).is_err());
+        let folder = dir.join("folder.wav");
+        fs::create_dir_all(&folder).unwrap();
+        assert!(validate_audio_path(folder.to_str().unwrap()).is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

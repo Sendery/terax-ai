@@ -28,6 +28,15 @@ import {
   type TaskMode,
   type TaskTarget,
 } from "@/modules/tasks/lib/task";
+import {
+  isSttLanguage,
+  isSttMode,
+  MAX_TRANSCRIBE_FILE_SECONDS,
+  STT_LANGUAGE_VALUES,
+  STT_MODES,
+  type SttLanguage,
+  type SttMode,
+} from "@/modules/stt/lib/settings";
 import { DEFAULT_MAX_TOTAL } from "@/modules/tts/lib/chunk";
 import {
   isTtsEngineId,
@@ -118,6 +127,11 @@ export const COMMAND_IDS = [
   "tts.voices",
   "tts.speak",
   "tts.stopSpeaking",
+  "dictation.status",
+  "dictation.install",
+  "dictation.start",
+  "dictation.stop",
+  "dictation.transcribe",
   ...CONTROL_COMMAND_IDS,
 ] as const;
 
@@ -243,6 +257,15 @@ type BaseCommandPayloads = {
   "tts.voices": { language?: TtsLanguage } | undefined;
   "tts.speak": { text: string; voiceId?: string; language?: TtsLanguage };
   "tts.stopSpeaking": undefined;
+  "dictation.status": undefined;
+  "dictation.install": { withModel?: boolean } | undefined;
+  "dictation.start": undefined | Record<string, never>;
+  "dictation.stop": undefined | Record<string, never>;
+  "dictation.transcribe": {
+    path: string;
+    spokenLanguage?: SttLanguage;
+    writingStyle?: SttMode;
+  };
 };
 
 /** Optional configuration shared by tasks.add and tasks.update. */
@@ -1306,6 +1329,64 @@ const COMMAND_SCHEMAS: Record<CommandId, CommandSchema> = {
       "Stop the audio this window is playing and drop the rest of the queue. The engine stays loaded.",
     params: [],
   },
+  "dictation.status": {
+    id: "dictation.status",
+    description:
+      "Local dictation (speech to text): the active provider, the dictation engine and model (installed, running, the hardware plan), install jobs, the language, writing style and dictionary size, and the memory tiers (Light is installable; Medium and High are planned).",
+    params: [],
+  },
+  "dictation.install": {
+    id: "dictation.install",
+    description:
+      "Install the Light dictation engine (Rumble-2-Flash, about 1 GB, not quantized) into the private speech directory, with the Python runtime first when it is missing and the model in the same job. Returns a job id; follow it with dictation.status.",
+    params: [
+      {
+        name: "withModel",
+        type: "boolean",
+        required: false,
+        description: "Also download Rumble-2-Flash. Default true.",
+      },
+    ],
+  },
+  "dictation.start": {
+    id: "dictation.start",
+    description:
+      "Start the dictation engine on the configured device and load its model. Returns as soon as the start is requested; poll dictation.status until the engine reports running.",
+    params: [],
+  },
+  "dictation.stop": {
+    id: "dictation.stop",
+    description:
+      "Stop the dictation engine and free its memory. Returns the engines that were stopped.",
+    params: [],
+  },
+  "dictation.transcribe": {
+    id: "dictation.transcribe",
+    description: `Transcribe an audio file on this machine with the local dictation engine, then apply the user's dictionary and writing style. Accepts wav, mp3, m4a, aac, flac, ogg, opus, webm, aiff and caf up to ${MAX_TRANSCRIBE_FILE_SECONDS} s. The engine must be running (dictation.start). Returns the text, the raw transcript, the detected language and timings.`,
+    params: [
+      {
+        name: "path",
+        type: "string",
+        required: true,
+        description: "Absolute path of the audio file.",
+      },
+      {
+        name: "spokenLanguage",
+        type: "enum",
+        required: false,
+        description: "Spoken language, or auto to detect it. Default: the Dictation setting.",
+        values: STT_LANGUAGE_VALUES,
+      },
+      {
+        name: "writingStyle",
+        type: "enum",
+        required: false,
+        description:
+          "Writing style: minimal (drop fillers only), prompt, casual or formal. Default: the Dictation setting.",
+        values: STT_MODES,
+      },
+    ],
+  },
 };
 
 export function describeCommands(): CommandCatalog {
@@ -1468,6 +1549,15 @@ export type CommandHandlers = ControlHandlers & {
     payload: CommandPayloads["tts.speak"],
   ) => Promise<unknown> | unknown;
   stopTtsSpeaking: () => Promise<unknown> | unknown;
+  getDictationStatus: () => Promise<unknown> | unknown;
+  installDictation: (
+    payload: CommandPayloads["dictation.install"],
+  ) => Promise<unknown> | unknown;
+  startDictation: () => Promise<unknown> | unknown;
+  stopDictation: () => Promise<unknown> | unknown;
+  transcribeDictation: (
+    payload: CommandPayloads["dictation.transcribe"],
+  ) => Promise<unknown> | unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1608,7 +1698,8 @@ export function validateCommandRequest(
     id === "tasks.resumeAll" ||
     id === "tasks.wake" ||
     id === "tts.status" ||
-    id === "tts.stopSpeaking"
+    id === "tts.stopSpeaking" ||
+    id === "dictation.status"
   ) {
     if (payload !== undefined && payload !== null) {
       return invalidPayload(`${id} does not accept a payload`);
@@ -1622,7 +1713,10 @@ export function validateCommandRequest(
     id === "settings.open" ||
     id === "tasks.openEditor" ||
     id === "tts.stop" ||
-    id === "tts.voices";
+    id === "tts.voices" ||
+    id === "dictation.install" ||
+    id === "dictation.start" ||
+    id === "dictation.stop";
   const objectPayload =
     acceptsEmptyPayload && (payload === undefined || payload === null)
       ? ({ ok: true, value: {} } as const)
@@ -2140,6 +2234,55 @@ export function validateCommandRequest(
     return { ok: true, value: { id, payload: { model: obj.model } } };
   }
 
+  if (id === "dictation.install") {
+    if (obj.withModel !== undefined && typeof obj.withModel !== "boolean") {
+      return invalidPayload("dictation.install payload.withModel must be a boolean");
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: obj.withModel !== undefined ? { withModel: obj.withModel } : {},
+      },
+    };
+  }
+
+  if (id === "dictation.start" || id === "dictation.stop") {
+    if (Object.keys(obj).length > 0) {
+      return invalidPayload(`${id} does not accept arguments`);
+    }
+    return { ok: true, value: { id, payload: {} } as CommandRequest };
+  }
+
+  if (id === "dictation.transcribe") {
+    const path = requireString(obj, "path", id);
+    if (!path.ok) return path;
+    if (path.value.trim().length === 0) {
+      return invalidPayload("dictation.transcribe requires a non-empty payload.path");
+    }
+    if (obj.spokenLanguage !== undefined && !isSttLanguage(obj.spokenLanguage)) {
+      return invalidPayload(
+        `dictation.transcribe requires payload.spokenLanguage to be one of ${STT_LANGUAGE_VALUES.join(", ")}`,
+      );
+    }
+    if (obj.writingStyle !== undefined && !isSttMode(obj.writingStyle)) {
+      return invalidPayload(
+        `dictation.transcribe requires payload.writingStyle to be one of ${STT_MODES.join(", ")}`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        id,
+        payload: {
+          path: path.value,
+          ...(obj.spokenLanguage !== undefined ? { spokenLanguage: obj.spokenLanguage as SttLanguage } : {}),
+          ...(obj.writingStyle !== undefined ? { writingStyle: obj.writingStyle as SttMode } : {}),
+        },
+      },
+    };
+  }
+
   if (id === "tts.speak") {
     const raw = requireString(obj, "text", id);
     if (!raw.ok) return raw;
@@ -2441,6 +2584,16 @@ async function dispatchCommand(
       return handlers.speakTts(request.payload);
     case "tts.stopSpeaking":
       return handlers.stopTtsSpeaking();
+    case "dictation.status":
+      return handlers.getDictationStatus();
+    case "dictation.install":
+      return handlers.installDictation(request.payload);
+    case "dictation.start":
+      return handlers.startDictation();
+    case "dictation.stop":
+      return handlers.stopDictation();
+    case "dictation.transcribe":
+      return handlers.transcribeDictation(request.payload);
   }
 }
 

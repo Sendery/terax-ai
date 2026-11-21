@@ -2,6 +2,7 @@ import {
   isTtsDevice,
   isTtsLanguage,
   type TtsDevice,
+  TTS_LANGUAGES,
   type TtsLanguage,
 } from "@/modules/tts/lib/engines";
 
@@ -23,6 +24,12 @@ export function isSttLocalModel(value: unknown): value is SttLocalModel {
 
 /** `auto` lets the model detect the language of each segment. */
 export type SttLanguage = "auto" | TtsLanguage;
+
+/** What the language setting and `dictation.transcribe` accept. */
+export const STT_LANGUAGE_VALUES: readonly SttLanguage[] = ["auto", ...TTS_LANGUAGES];
+
+/** The bridge answers within 15 s; a clip this long transcribes well inside it. */
+export const MAX_TRANSCRIBE_FILE_SECONDS = 300;
 
 export function isSttLanguage(value: unknown): value is SttLanguage {
   return value === "auto" || isTtsLanguage(value);

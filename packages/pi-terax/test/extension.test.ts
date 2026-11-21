@@ -521,6 +521,11 @@ describe("Pi extension", () => {
       "tts.voices",
       "tts.speak",
       "tts.stopSpeaking",
+      "dictation.status",
+      "dictation.install",
+      "dictation.start",
+      "dictation.stop",
+      "dictation.transcribe",
     ]) {
       expect(isTeraxCommandId(id), id).toBe(true);
       expect(TERAX_COMMAND_IDS).toContain(id);
