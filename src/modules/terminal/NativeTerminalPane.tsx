@@ -27,6 +27,7 @@ import {
   RENDER_CAPACITY_MESSAGE,
   RenderCapacityError,
 } from "@/modules/terminal/gl/renderCapacity";
+import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
 import { TERMINAL_SELECTION_GESTURE_EVENT } from "@/modules/terminal/lib/selectionGesture";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
@@ -585,6 +586,15 @@ export const NativeTerminalPane = forwardRef<
     <TerminalContextMenu
       leafId={leafId}
       readSelection={() => selectedForMenu.current}
+      copyText={(text) => {
+        const session = engine.current;
+        return session
+          ? terminalCopyText(text, {
+              ptyId: session.id,
+              cols: session.grid.cols,
+            })
+          : text;
+      }}
       onReadAloud={props.onReadAloud}
       onStopReading={props.onStopReading}
       selectionActions={props.selectionActions}

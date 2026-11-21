@@ -31,6 +31,7 @@ import {
   readTerminalClipboard,
   writeTerminalClipboard,
 } from "./terminalClipboard";
+import { terminalCopyText } from "./agentCopy";
 import { terminalReadlineSequence } from "./keymap";
 import { createCompositionCommitFilter } from "./compositionCommit";
 import { isLinkActivation } from "./pointer";
@@ -54,6 +55,8 @@ export type SlotAdapter = {
 };
 
 export type LeafBridge = {
+  /** Id the agent detector reports for this leaf, once its PTY is open. */
+  ptyId(): number | null;
   writeToPty(data: string): void;
   resizePty(cols: number, rows: number): void;
   // Byte sequence for Shift+Enter, chosen from the keyboard-encoding mode the
@@ -381,7 +384,13 @@ function createSlot(): Slot {
     if (isTerminalCopy(event)) {
       if (event.type === "keydown" && slot.term.hasSelection()) {
         const sel = slot.term.getSelection();
-        if (sel) void writeTerminalClipboard(sel);
+        if (sel)
+          void writeTerminalClipboard(
+            terminalCopyText(sel, {
+              ptyId: bridge.ptyId(),
+              cols: slot.term.cols,
+            }),
+          );
       }
       event.preventDefault();
       return false;
