@@ -1,5 +1,12 @@
 # Changelog
 
+## Pi-Terax v0.9.0-dev.27 (2026-11-21)
+
+- Dictado local en el chat de IA: Terax instala y ejecuta Rumble-2-Flash (1 GB, sin cuantizar) y transcribe mientras hablas, sin enviar audio fuera.
+- Ajustes, Dictado como Ajustes, Voz: escalones de memoria Ligero, Medio y Alto (los dos últimos planificados), idioma, estilo de escritura y diccionario.
+- Comandos `dictation.*` para agentes, y el motor de voz ya no se queda vivo si Terax muere.
+- [Changelog detallado y limitaciones](docs/releases/v0.9.0-dev.27.md).
+
 ## Pi-Terax v0.9.0-dev.26 (2026-11-20)
 
 - Un menú «Read» en el terminal, el editor y el Markdown, un solo Stop para todo, `terax-read` bajo su terminal y la pestaña Reader con biblioteca y «Dock here».
