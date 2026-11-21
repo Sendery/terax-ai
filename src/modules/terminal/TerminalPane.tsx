@@ -23,9 +23,12 @@ import {
 } from "./TerminalContextMenu";
 import {
   focusLeafInput,
+  ptyIdForLeaf,
   submitToLeaf,
   useTerminalSession,
 } from "./lib/useTerminalSession";
+import { terminalCopyText } from "./lib/agentCopy";
+import { getSlotForLeaf } from "./lib/rendererPool";
 import { isSecondaryClick } from "./lib/pointer";
 
 export type TerminalPaneHandle = {
@@ -143,6 +146,11 @@ const LegacyTerminalPane = memo(
     const menuProps = {
       leafId,
       readSelection: () => menuSelectionRef.current,
+      copyText: (text: string) =>
+        terminalCopyText(text, {
+          ptyId: ptyIdForLeaf(leafId),
+          cols: getSlotForLeaf(leafId)?.term.cols ?? 0,
+        }),
       onReadAloud,
       onStopReading,
       selectionActions,

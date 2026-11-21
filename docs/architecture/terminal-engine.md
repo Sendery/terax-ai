@@ -637,6 +637,28 @@ native selected cells. The ordinary DOM binding uses the existing composition
 commit policy, the negotiated native encoder, real clipboard APIs, focus
 reports, wheel/page navigation and per-pane pointer coordinates.
 
+#### Copying from an agent pane
+
+Agent TUIs such as Claude Code wrap paragraphs themselves: every row ends in a
+real newline and continuation rows are indented, so the engine has no soft-wrap
+flag to undo and a plain copy has the shape of the screen. While the agent
+detector reports an agent in the pane, Copy (Cmd+C, Ctrl+Shift+C, and Copy in
+the context menu) rejoins the rows the width forced apart and keeps what the
+author wrote: blank lines, list items, tool output, tables, boxes and code.
+When that changes the text, the context menu also offers **Copy as shown**,
+which writes the selection exactly as it is on screen. Panes with no agent
+running are never touched, and neither are the other selection actions (Ask
+Terax, Add to Note, Speak).
+
+The rule lives in `src/modules/terminal/lib/agentCopy.ts` as a pure function
+of the copied text and the pane width. Two rows are joined only when the
+second continues the paragraph of the first (same text column, no marker of
+its own) and its first word would not have fit on the first row. A paragraph
+with two or more breaks the width does not explain is left alone, because an
+agent can print a code block at the text indent with no fence. Known limits:
+text that was wrapped for a narrower pane than the current one is not
+rejoined, and a short code block whose rows all reach the edge can be joined.
+
 Capture uses required per-pane crop providers, with pixels frozen before font
 and image awaits. The shared source canvas is excluded from DOM compositing so
 it cannot cover dividers and other chrome. A required provider cannot silently
