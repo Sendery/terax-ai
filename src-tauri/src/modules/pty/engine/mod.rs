@@ -24,9 +24,13 @@ mod clipboard;
 #[cfg(feature = "ghostty-engine")]
 mod cursor;
 #[cfg(feature = "ghostty-engine")]
+pub mod erase_wrap;
+#[cfg(feature = "ghostty-engine")]
 mod graphics;
 #[cfg(feature = "ghostty-engine")]
 mod graphics_placeholders;
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod fidelity_tests;
 #[cfg(all(test, feature = "ghostty-engine"))]
 mod host_tests;
 #[cfg(feature = "ghostty-engine")]
@@ -1052,6 +1056,9 @@ mod runtime {
         selection: super::selection::SelectionState,
         search: super::search::SearchState,
         keyboard_modes: super::keyboard_modes::KeyboardModes,
+        erase_wrap: super::erase_wrap::EraseWrapFix,
+        /// Reused buffer for the bytes after `erase_wrap`.
+        erase_wrap_out: Vec<u8>,
         shell: super::shell::ShellIntegration,
         blocks: Option<super::blocks::BlockStore>,
         block_frames: Option<super::blocks::BlockFrames>,
@@ -1061,7 +1068,22 @@ mod runtime {
     }
 
     impl Session<'_> {
-        fn feed(&mut self, bytes: &[u8]) {
+        fn feed(&mut self, raw: &[u8]) {
+            // Erase-line repaints must not leave stale soft wraps behind
+            // (erase_wrap.rs); everything below sees the filtered bytes.
+            let mut filtered = std::mem::take(&mut self.erase_wrap_out);
+            filtered.clear();
+            self.erase_wrap.process(raw, &mut filtered);
+            self.feed_filtered(&filtered);
+            self.stats
+                .bytes_fed
+                .fetch_add(raw.len() as u64, Ordering::Relaxed);
+            if filtered.capacity() <= 1 << 20 {
+                self.erase_wrap_out = filtered;
+            }
+        }
+
+        fn feed_filtered(&mut self, bytes: &[u8]) {
             self.keyboard_modes.ingest(bytes);
             if let Some(blocks) = &mut self.blocks {
                 if let Err(error) =
@@ -1081,9 +1103,6 @@ mod runtime {
             self.update_input_state();
             self.update_scrollback_rows();
             self.flush_replies();
-            self.stats
-                .bytes_fed
-                .fetch_add(bytes.len() as u64, Ordering::Relaxed);
             self.pump.output();
         }
 
@@ -1657,6 +1676,8 @@ mod runtime {
             selection: super::selection::SelectionState::default(),
             search: super::search::SearchState::default(),
             keyboard_modes: super::keyboard_modes::KeyboardModes::default(),
+            erase_wrap: super::erase_wrap::EraseWrapFix::default(),
+            erase_wrap_out: Vec::new(),
             shell,
             blocks: blocks_enabled.then(super::blocks::BlockStore::default),
             block_frames: blocks_enabled.then(super::blocks::BlockFrames::default),
