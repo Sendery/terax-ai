@@ -371,6 +371,17 @@ class LifecycleTests(unittest.TestCase):
         process.stdin.close()
         self.assertEqual(process.wait(timeout=15), 0)
 
+    def test_exits_when_terax_dies_with_every_pipe(self):
+        # A crashed or killed Terax closes stdout and stderr too: the goodbye
+        # line then hits a broken pipe, and the sidecar must still exit
+        # instead of lingering with the model in memory.
+        process = self.spawn()
+        self.ready_port(process)
+        process.stderr.close()
+        process.stdout.close()
+        process.stdin.close()
+        self.assertEqual(process.wait(timeout=15), 0)
+
     def test_refuses_short_token(self):
         env = dict(self.env, TERAX_TTS_TOKEN="short")
         self.assertNotEqual(self.spawn(env=env).wait(timeout=15), 0)

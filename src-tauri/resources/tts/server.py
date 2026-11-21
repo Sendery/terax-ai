@@ -184,8 +184,13 @@ class Host:
 
 
 def log(message: str) -> None:
-    sys.stderr.write("[tts] {}\n".format(message))
-    sys.stderr.flush()
+    # Terax reads stderr; once it is gone the pipe is broken, and a log line
+    # must never be the thing that stops the sidecar from shutting down.
+    try:
+        sys.stderr.write("[tts] {}\n".format(message))
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        pass
 
 
 def encode_wav(samples, sample_rate: int) -> bytes:
@@ -658,7 +663,8 @@ def watch_stdin(server: Server) -> None:
             pass
     except Exception:
         pass
-    request_shutdown(server, "stdin closed, exiting")
+    finally:
+        request_shutdown(server, "stdin closed, exiting")
 
 
 def read_token() -> str:
