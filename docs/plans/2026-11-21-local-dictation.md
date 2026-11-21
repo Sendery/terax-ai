@@ -95,6 +95,24 @@ Mónica and Samantha, 16 kHz):
   `"selfTest": {"ok": bool, "elapsedMs": int}`.
 - `GET /health` adds `"kind"`.
 
+### As implemented (backend)
+
+- NVIDIA: the plan always says `bfloat16`; the adapter falls back to
+  `float16` at load time when `torch.cuda.is_bf16_supported()` is false,
+  instead of reading the compute capability (nvidia-smi is not asked for it,
+  since older drivers reject the field). A GPU with less than 2 GB of memory
+  gets the CPU plan.
+- `/transcribe` returns `language` as the app tag when the model reports one
+  of the six app languages, otherwise the model's own English name. Clips under
+  0.1 s answer an empty text without running the model. `/models` entries also
+  carry `kind`. `fake-stt` is a dependency-free transcriber for tests.
+- `verbatim=0` collapsed repeats on an 11 s clip but not always inside a full
+  30 s window of an 88 s clip: the switch is a model hint, not a guarantee, so
+  the frontend's segmenting keeps segments short.
+- PyTorch 2.15.0 on CUDA is only on the `cu132` index: `--torch-backend auto`
+  with an older driver picks an index without it. This affects every torch
+  engine with this pin, not only Rumble.
+
 ## Frontend contract
 
 - `SttProvider` gains `local` ("Terax, on this machine"). Existing values stay.
