@@ -167,10 +167,9 @@ fn with_vault<R>(
     let mut session = state.vault.lock().map_err(|e| e.to_string())?;
     if !session.is_open() {
         let marker = profile::secrets_reset_marker(app).filter(|m| sandbox && m.exists());
-        if session.open(&KeychainItems, sandbox, marker.is_some())? {
-            if let Some(marker) = marker {
-                let _ = std::fs::remove_file(marker);
-            }
+        let settled = session.open(&KeychainItems, sandbox, marker.is_some())?;
+        if let Some(marker) = marker.filter(|_| settled) {
+            let _ = std::fs::remove_file(marker);
         }
     }
     f(&mut session, &KeychainItems, sandbox)
