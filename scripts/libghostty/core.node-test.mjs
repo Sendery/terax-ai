@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { hostTriple, parseArgs, selectedTarget, verifyChecksum, prebuiltEnv, assertVendoredPkgConfig } from "./core.mjs";
+import { hostTriple, nativeCoreHosts, parseArgs, selectedTarget, verifyChecksum, prebuiltEnv, assertVendoredPkgConfig } from "./core.mjs";
 const pin = { targets: { "x86_64-linux": { rustTarget: "x86_64-unknown-linux-gnu", sha256: "a".repeat(64) } } };
 test("host names and unsupported architectures", () => {
   assert.equal(hostTriple("darwin", "arm64"), "aarch64-macos");
@@ -21,6 +21,13 @@ test("missing pins and cross targets fail closed", () => {
   assert.throws(() => selectedTarget({ targets: { "x86_64-linux": { sha256: null } } }, "x86_64-linux"));
   assert.throws(() => selectedTarget(pin, "x86_64-linux", {}, ["--target=x86_64-unknown-linux-musl"]));
   assert.throws(() => selectedTarget(pin, "x86_64-linux", { CARGO_BUILD_TARGET: "aarch64-apple-darwin" }));
+});
+test("native core selects both macOS slices and rejects unrelated targets", () => {
+  assert.deepEqual(nativeCoreHosts("aarch64-macos", ["--target", "universal-apple-darwin"]), ["aarch64-macos", "x86_64-macos"]);
+  assert.deepEqual(nativeCoreHosts("x86_64-macos", ["--target=aarch64-apple-darwin"]), ["aarch64-macos"]);
+  assert.deepEqual(nativeCoreHosts("x86_64-windows", []), ["x86_64-windows"]);
+  assert.throws(() => nativeCoreHosts("x86_64-linux", ["--target", "x86_64-unknown-linux-musl"]), /unsupported/);
+  assert.throws(() => nativeCoreHosts("aarch64-macos", ["--target", "aarch64-apple-darwin"], { CARGO_BUILD_TARGET: "x86_64-apple-darwin" }), /conflicting/);
 });
 test("corruption is fatal", () => {
   const bytes = Buffer.from("artifact");

@@ -64,6 +64,14 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install pkg-config on macOS
+        if: runner.os == 'macOS'
+        run: command -v pkg-config || brew install pkgconf
+
+      - name: Install pkg-config on Windows
+        if: runner.os == 'Windows'
+        run: choco install pkgconfiglite -y
+
       - name: Write Apple API key to disk
         if: startsWith(matrix.platform, 'macos')
         shell: bash
@@ -88,6 +96,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         with:
+          tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
           releaseName: "Terax ${{ github.ref_name }}"
           releaseBody: "See the assets to download and install. Auto-update is built in."

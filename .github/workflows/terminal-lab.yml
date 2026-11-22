@@ -73,7 +73,7 @@ jobs:
           writeFileSync("src-tauri/tauri.lab-ci.json", JSON.stringify(config));
           JS
       - name: Build optimized Rust and production frontend without Zig
-        run: node scripts/with-zig.mjs -- pnpm exec tauri build --debug --no-bundle --features ghostty-engine --config "$PWD/src-tauri/tauri.lab-ci.json"
+        run: pnpm tauri build --debug --no-bundle --config "$PWD/src-tauri/tauri.lab-ci.json"
       - name: Run native WKWebView lab twice and measure external RSS
         run: node scripts/terminal-lab.mjs src-tauri/target/debug/terax "$RUNNER_TEMP/terminal-lab-results"
       - name: Upload measurements, captures and failures

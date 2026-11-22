@@ -28,13 +28,6 @@ const snapshots = new Map(
   VERSION_FILES.map((path) => [path, readFileSync(path, "utf8")]),
 );
 const cargoBin = join(homedir(), ".cargo", "bin");
-const tauriCli = join(
-  process.cwd(),
-  "node_modules",
-  "@tauri-apps",
-  "cli",
-  "tauri.js",
-);
 const env = {
   ...process.env,
   PATH: `${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
@@ -55,7 +48,7 @@ function run(command, runArgs) {
 
 try {
   run(process.execPath, ["scripts/set-version.mjs", version]);
-  run(process.execPath, [tauriCli, "build", ...tauriArgs]);
+  run(process.execPath, ["scripts/tauri-native.mjs", "build", ...tauriArgs]);
 } finally {
   if (!keepVersion) {
     for (const [path, content] of snapshots) writeFileSync(path, content);
