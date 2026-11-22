@@ -90,7 +90,9 @@ if [[ -z "$__TERAX_HOOKS_LOADED" ]]; then
       _terax_unmarked=1
     fi
     printf '\e]133;A%s%s\e\\' "$_terax_aid" "$_terax_redraw"
-    [[ -n "$_terax_unmarked" ]] && printf '\e]133;B%s\e\\' "$_terax_aid"
+    if [[ -n "$_terax_unmarked" ]]; then
+      printf '\e]133;B%s\e\\' "$_terax_aid"
+    fi
   }
 
   _terax_preexec() {
