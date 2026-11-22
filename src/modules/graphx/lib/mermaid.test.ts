@@ -84,7 +84,6 @@ function loadFrame(): Frame {
   };
   const context: Record<string, unknown> = {
     console: { warn() {}, error() {}, log() {}, info() {} },
-    document: documentStub,
     location: { hash: "#token" },
     parent,
     innerHeight: 600,
@@ -102,7 +101,10 @@ function loadFrame(): Frame {
   context.self = context;
   context.window = context;
   createContext(context);
+  // Without a document the engine skips its load-time stylesheet and auto-mount; the
+  // frame adapter gets its stub document afterwards.
   runInContext(engineSource, context);
+  context.document = documentStub;
   const engine = context.GraphX as Frame["engine"] & {
     mount: unknown;
     injectCSS: unknown;
