@@ -50,3 +50,14 @@ describe("TabBar new-tab menu", () => {
     expect(menu).toMatch(/>Mermaid</);
   });
 });
+
+describe("TabBar tab context menu", () => {
+  it("offers Copy path only for a tab that shows a file", () => {
+    expect(src).toMatch(/const filePath = tabFilePath\(t\);/);
+    const item = src.slice(
+      src.indexOf("{filePath ? ("),
+      src.indexOf(">Copy path<"),
+    );
+    expect(item).toMatch(/onSelect=\{\(\) => void copyFilePath\(filePath\)\}/);
+  });
+});
