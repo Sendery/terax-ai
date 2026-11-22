@@ -19,6 +19,7 @@ pub mod pty;
 pub mod reader;
 pub mod scheduler;
 pub mod secrets;
+pub mod secrets_vault;
 pub mod shell;
 pub mod slotmonit;
 pub mod tts;

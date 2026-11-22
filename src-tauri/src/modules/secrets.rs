@@ -1,7 +1,11 @@
 //! Secret storage with platform-appropriate backends.
 //!
-//! - macOS: macOS Keychain (via `keyring` crate)
-//! - Windows: Credential Manager (via `keyring` crate)
+//! - macOS: the Keychain (via `keyring` crate), every secret of the profile in
+//!   one item (see `secrets_vault`), so a new build asks for the keychain
+//!   password once rather than once per stored key
+//! - Windows: Credential Manager (via `keyring` crate), one credential per
+//!   secret. It does not ask per build, and a credential holds 2560 bytes, too
+//!   little for a shared vault
 //! - Linux: a file in the app's local data dir, mode 0600. The default
 //!   `keyring` backend on Linux is the Secret Service over D-Bus, which
 //!   silently fails on systems without gnome-keyring/kwallet (and on the
@@ -19,6 +23,8 @@
 
 #[cfg(not(target_os = "linux"))]
 use super::profile;
+#[cfg(target_os = "macos")]
+use super::secrets_vault::{self, ItemStore, Session};
 use std::sync::Mutex;
 
 use tauri::AppHandle;
@@ -36,7 +42,9 @@ use tauri::Manager;
 pub struct SecretsState {
     #[cfg(target_os = "linux")]
     cache: Mutex<Option<HashMap<String, String>>>,
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    vault: Mutex<Session>,
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     _phantom: Mutex<()>,
 }
 
@@ -114,6 +122,60 @@ fn entry(service: &str, account: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(service, account).map_err(|e| e.to_string())
 }
 
+/// The login keychain, one item per `(service, account)`.
+#[cfg(target_os = "macos")]
+struct KeychainItems;
+
+#[cfg(target_os = "macos")]
+impl ItemStore for KeychainItems {
+    fn read(&self, service: &str, account: &str) -> Result<Option<String>, String> {
+        match entry(service, account)?.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+
+    fn write(&self, service: &str, account: &str, value: &str) -> Result<(), String> {
+        entry(service, account)?
+            .set_password(value)
+            .map_err(|e| e.to_string())
+    }
+
+    fn delete(&self, service: &str, account: &str) -> Result<(), String> {
+        match entry(service, account)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Runs `f` against this profile's vault, reading it from the keychain on the
+/// first call of the process. The lock is held across the keychain prompt on
+/// purpose: concurrent callers wait for the one answer instead of each asking.
+#[cfg(target_os = "macos")]
+fn with_vault<R>(
+    app: &AppHandle,
+    state: &SecretsState,
+    service: &str,
+    f: impl FnOnce(&mut Session, &KeychainItems, bool) -> Result<R, String>,
+) -> Result<R, String> {
+    if secrets_vault::is_reserved_service(service) {
+        return Err(format!("{service} is not a secret service"));
+    }
+    let sandbox = profile::is_sandbox();
+    let mut session = state.vault.lock().map_err(|e| e.to_string())?;
+    if !session.is_open() {
+        let marker = profile::secrets_reset_marker(app).filter(|m| sandbox && m.exists());
+        if session.open(&KeychainItems, sandbox, marker.is_some())? {
+            if let Some(marker) = marker {
+                let _ = std::fs::remove_file(marker);
+            }
+        }
+    }
+    f(&mut session, &KeychainItems, sandbox)
+}
+
 /// Read one secret. Shared by the `secrets_get` command and by the modules
 /// that keep their own credentials in the same store (see `oauth`), so there is
 /// one code path per platform rather than one per caller.
@@ -128,7 +190,13 @@ pub(crate) fn get_secret(
         let key = key(service, account);
         with_store(app, state, |m| m.get(&key).cloned())
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        with_vault(app, state, service, |vault, items, sandbox| {
+            vault.get(items, sandbox, service, account)
+        })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, state);
         let read = |service: &str| -> Result<Option<String>, String> {
@@ -167,7 +235,13 @@ pub(crate) fn set_secret(
         };
         write_store(app, &snapshot)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        with_vault(app, state, service, |vault, items, sandbox| {
+            vault.set(items, sandbox, service, account, password)
+        })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, state);
         let e = entry(&profile::scoped_service(service, profile::is_sandbox()), account)?;
@@ -194,7 +268,13 @@ pub(crate) fn delete_secret(
         };
         write_store(app, &snapshot)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        with_vault(app, state, service, |vault, items, sandbox| {
+            vault.delete(items, sandbox, service, account)
+        })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, state);
         if profile::is_sandbox() {
@@ -340,7 +420,19 @@ pub async fn secrets_get_all(
                 .collect()
         })
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        // One vault read answers the whole batch. A secret that could not be
+        // read is reported as absent, as the per-item path always did.
+        with_vault(&app, &state, &service, |vault, items, sandbox| {
+            Ok(vault
+                .get_many(items, sandbox, &service, &accounts)
+                .into_iter()
+                .map(|value| value.ok().flatten())
+                .collect())
+        })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, state);
         let read = |service: &str, account: &str| {
