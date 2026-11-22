@@ -34,7 +34,7 @@ next to "Conversation compacted".
 |---|---------|-------|----------|-----|
 | F1 | 2 and the joined rows in the screenshots | Ghostty keeps a row's soft-wrap flag on EL 2 (`ESC[2K`), on purpose, to match xterm. Ink programs repaint by erasing whole lines, so a row split by the reflow stays marked as continuing into a row that now holds another line. Copy joins them without a newline; widening joins them into one row with a gap. | `pinned_ghostty_keeps_the_soft_wrap_on_erase_complete_line`: copy gives `"X         Y"`. EL 0, ECH and ED 0 do reset the flag. | Done: the engine follows every EL 2 with an EL 0 (`erase_wrap.rs`), which changes no cell. |
 | F2 | 4 | Claude Code repaints the whole screen on every SIGWINCH without clearing the history, and Terax sent one resize per animation frame during a drag or an animated panel. Each repaint whose rows overflow the screen leaves a copy behind; enough copies push the real history out of the scrollback limit. | Replay of a real capture after 80 lines of shell history: a 20-step drag leaves the Claude Code banner 20 times in the history, a single resize leaves it once. | Done: resizes are coalesced per gesture (`RESIZE_SETTLE_MS` 120). |
-| F3 | 1 (zsh) | zsh redraws its prompt on SIGWINCH by moving up the rows it believes the prompt used. After a reflow that count is wrong: narrowing leaves a second copy of the first prompt row, widening erases output lines above the prompt. Terax emits `OSC 133;A` from `precmd`, outside `PS1`, so zsh's redraw never re-marks the prompt and Ghostty's prompt clearing on resize cannot find it. | Real zsh capture with the user's two-line prompt: after resizing to 50, 120 and 80 columns, the last `cat` line is gone and the prompt row appears twice. Marking inside `PS1` alone did not fix it. | In progress (Fable). |
+| F3 | 1 (zsh, bash) | On SIGWINCH zsh moves up the rows its prompt and typed command took at the old width, erases to the end of the screen and repaints; readline does the same for the last prompt line. The terminal has already reflowed those rows, so the count is stale: narrowing leaves a second copy of the first prompt row, widening erases output above the prompt. The cure is to blank the prompt before the reflow. libghostty has that (`OSC 133;A;redraw=1`) but the C API turns it off by default, and at the pinned commit it is wrong for a prompt that wraps: `Screen.resize` blanks the cells and leaves the rows soft-wrapped, so the blank rows are rejoined or split by the reflow, and it leaves the cursor in a column that may no longer exist, which adds a row. Its prompt search also walks up through unmarked rows to an older prompt and would blank real output. | `zsh_narrowing_alone_duplicates_the_first_prompt_row_without_the_erase`, `zsh_widening_alone_erases_output_without_the_erase`, `pinned_ghostty_redraw_keeps_the_soft_wrap_of_a_wrapped_prompt`. Real zsh 5.9 and bash 5.3 captures with a two-line prompt across nine resizes: before, output lines lost and prompt rows repeated; after, the history reads the same at every width. | Done: the engine blanks the prompt itself before a change of width (`prompt_redraw.rs`): ED 0 from the prompt's first row, which also drops the soft wraps, cursor parked at the left edge. It acts only on marks signed with the session token and only between a prompt start that promises the repaint (`133;A;...;terax_redraw=1`) and the next `C` or `D`; the row comes from the last signed `133;P` mark, which zsh carries at the start of `PS1` and bash at the start of every prompt line and of `PS2`. `133;B` moved to the end of `PS1`. Never `redraw=`, so libghostty's own erase stays off. fish is unchanged (no promise, not verified). |
 | F4 | 3 | Claude Code wraps paragraphs itself: hard newlines and a two-column indent (`CSI 2 G`), and it places words with `CSI G` instead of spaces. The terminal cannot tell those newlines from real ones. Ghostty, iTerm2 and others copy the same. | Capture: `Quick[8Gsafety[15Gcheck:` and continuation lines starting at column 2. | In progress (Fable): rejoin wrapped paragraphs when copying from an agent pane, with a way to copy exactly as shown. |
 
 Verified correct, no change needed: soft-wrapped lines copy as one line;
@@ -67,10 +67,21 @@ every reflowing terminal shows that once per resize.
 | W3 | Pinned Ghostty still keeps the flag (filter still needed) | `pinned_ghostty_keeps_the_soft_wrap_on_erase_complete_line` |
 | E1 | Filter: EL 2 only, split reads, string payloads | `erase_wrap::tests` |
 | G1 | A drag sends one resize; a gesture back to the start sends none | `engineSession.test.ts`, "coalesces a resize gesture" |
+| P1 | zsh prompt of one, two and three lines with a long typed command, nine widths | `prompt_redraw_tests::zsh_*_prompt_survives_narrowing_and_widening` |
+| P2 | bash prompt of one and two lines, nine widths | `prompt_redraw_tests::bash_*_prompt_survives_narrowing_and_widening` |
+| P3 | Same streams without the erase lose output and repeat rows (the cause) | `without_the_promise_the_repaint_corrupts_the_history` and the two `zsh_*_alone_*` tests |
+| P4 | Nothing erased: running or finished command, unsigned or forged marks, no promise, alternate screen, mid-sequence, prompt start off screen, same width | `prompt_redraw_tests`, the `nothing_is_erased_*` group and its neighbours |
+| P5 | Block mode prompt keeps its reserved rows; engine session with and without blocks | `block_mode_prompt_keeps_its_reserved_rows`, `the_engine_erases_the_prompt_before_it_reflows` |
+| P6 | Pinned libghostty still keeps soft wraps in its own prompt erase | `pinned_ghostty_redraw_keeps_the_soft_wrap_of_a_wrapped_prompt` |
+| P7 | Signed `P` marks and the promise on `A` | `shell::prompt_revision_tests` |
 
 Replays (manual run of `replay_capture`, captures in the scratch area):
 Claude Code with history across five resizes; Claude Code 20-step drag vs one
 resize; zsh with the user's prompt, plain and with Terax integration.
+Shell prompts go through `prompt_redraw_tests::replay_capture_through_prompt_redraw`,
+which adds the signed marks and the prompt erase of the engine session: zsh
+with a two-line and a one-line prompt, a theme hook that rebuilds `PS1`, block
+mode, and bash 5.3 and 3.2.
 
 ## Manual QA in a sandbox build
 
@@ -98,3 +109,11 @@ resize; zsh with the user's prompt, plain and with Terax integration.
   native core (`eraseLine`, `.complete`), built on the M2 producer.
 - Report F1 upstream to Ghostty as a behaviour note: xterm compatibility
   versus copy and reflow of repainted lines.
+- Report F3 upstream: in `Screen.resize`, the `prompt_redraw` erase should
+  also clear `row.wrap` and `row.wrap_continuation` on the rows it blanks and
+  move the cursor to column 0. With that fixed in the native core Terax could
+  send `redraw=1`, but the signed anchor is still the safer way to find the
+  prompt.
+- fish: check what it repaints on a resize and whether it needs the promise.
+- bash 3.2 (no `PS0`, so no pre-exec mark) and prompts with a literal
+  newline in `PS1` make no promise and keep the old behaviour.
