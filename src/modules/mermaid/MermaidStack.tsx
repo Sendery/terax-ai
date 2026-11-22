@@ -2,24 +2,17 @@ import { RenderableLayout } from "@/modules/renderable/RenderableLayout";
 import { ViewModeToggle } from "@/modules/renderable/ViewModeToggle";
 import { resolveViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import { useEditorThemeExt } from "@/modules/editor/lib/useEditorThemeExt";
+import { MermaidPreview } from "@/modules/graphx/MermaidPreview";
 import type { MermaidTab } from "@/modules/tabs";
 import { useTheme } from "@/modules/theme";
 import CodeMirror from "@uiw/react-codemirror";
 import {
   useCallback,
   useEffect,
-  useId,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import {
-  mermaidErrorMessage as errorMessage,
-  renderMermaidSource,
-  svgToDataUrl,
-  validateMermaidSourceWithRuntime,
-} from "./lib/render";
-import { createLatestMermaidRenderer } from "./lib/renderQueue";
+import { validateMermaidSourceWithRuntime } from "./lib/render";
 import {
   canLivePreviewMermaidSource,
   MAX_MERMAID_LIVE_PREVIEW_BYTES,
@@ -51,23 +44,17 @@ function MermaidPane({
   const editorTheme = useEditorThemeExt();
   const viewMode = resolveViewMode(tab);
   const { resolvedMode } = useTheme();
-  const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [draftSource, setDraftSource] = useState(tab.source);
   const draftSourceRef = useRef(tab.source);
   const committedSourceRef = useRef(tab.source);
   const [useLightweightEditor, setUseLightweightEditor] = useState(
     () => !canLivePreviewMermaidSource(tab.source),
   );
-  const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
-  const [zoom, setZoom] = useState(1);
   const [mode, setMode] = useState<"preview" | "visual">("preview");
-  const svgUrl = useMemo(() => (svg ? svgToDataUrl(svg) : ""), [svg]);
-  const livePreviewEnabled = useMemo(
-    () => canLivePreviewMermaidSource(draftSource),
-    [draftSource],
-  );
+  const [graphSource, setGraphSource] = useState("");
+  const livePreviewEnabled = canLivePreviewMermaidSource(draftSource);
 
   useEffect(() => {
     committedSourceRef.current = tab.source;
@@ -94,63 +81,26 @@ function MermaidPane({
     [onSourceChange, tab.id],
   );
 
-  const renderer = useMemo(
-    () =>
-      createLatestMermaidRenderer({
-        render: async (source) => {
-          const imported = await import("mermaid");
-          const runtime = imported.default;
-          const renderId = `terax-mermaid-${tab.id}-${reactId}-${Date.now()}`;
-          try {
-            return await renderMermaidSource(
-              runtime,
-              source,
-              renderId,
-              resolvedMode,
-            );
-          } finally {
-            document.getElementById(`d${renderId}`)?.remove();
-          }
-        },
-        onSuccess: (nextSvg) => {
-          setSvg(nextSvg);
-          setError(null);
-          setPending(false);
-        },
-        onError: (nextError) => {
-          setError(errorMessage(nextError));
-          setPending(false);
-        },
-      }),
-    [reactId, resolvedMode, tab.id],
-  );
-
   useEffect(() => {
-    renderer.invalidate();
-    setPending(true);
     const validation = validateMermaidSource(draftSource);
     if (!validation.ok) {
       setError(validation.message);
       setPending(false);
-      return () => renderer.invalidate();
+      return;
     }
-    if (!canLivePreviewMermaidSource(validation.source)) {
-      setError(null);
+    setError(null);
+    if (!active || viewMode === "raw" || mode === "visual" ||
+        !canLivePreviewMermaidSource(validation.source)) {
       setPending(false);
-      return () => renderer.invalidate();
+      return;
     }
-    if (!active || viewMode === "raw" || mode === "visual") {
-      setPending(false);
-      return () => renderer.invalidate();
-    }
+    setPending(true);
     const timer = window.setTimeout(() => {
-      void renderer.run(validation.source);
+      setGraphSource(validation.source);
+      setPending(false);
     }, 350);
-    return () => {
-      window.clearTimeout(timer);
-      renderer.invalidate();
-    };
-  }, [active, draftSource, renderer, viewMode, mode]);
+    return () => window.clearTimeout(timer);
+  }, [active, draftSource, viewMode, mode]);
 
   const updateSource = (source: string) => {
     if (mermaidSourceByteLength(source) > MAX_MERMAID_SOURCE_BYTES) {
@@ -235,22 +185,21 @@ function MermaidPane({
         {pending
           ? "Rendering…"
           : error
-            ? svg
+            ? graphSource
               ? "Preview from last valid source"
               : "Render failed"
             : !livePreviewEnabled
-              ? svg
+              ? graphSource
                 ? `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB: showing last rendered source`
                 : `Live preview paused above ${MAX_MERMAID_LIVE_PREVIEW_BYTES / 1024} KiB`
-              : "Preview up to date"}
+              : "Preview"}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-6">
-        {svg ? (
-          <img
-            alt="Rendered Mermaid diagram"
-            className="mx-auto block h-auto max-w-none origin-top-left"
-            style={{ transform: `scale(${zoom})` }}
-            src={svgUrl}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {active && graphSource ? (
+          <MermaidPreview
+            source={graphSource}
+            title={tab.title}
+            fallback={<pre className="whitespace-pre-wrap">{graphSource}</pre>}
           />
         ) : !livePreviewEnabled && !error ? (
           <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
@@ -262,13 +211,13 @@ function MermaidPane({
             Rendering diagram…
           </div>
         ) : null}
-        {!svg && error ? (
+        {!graphSource && error ? (
           <div className="mx-auto mt-8 max-w-xl rounded-md border border-destructive/40 bg-destructive/5 p-4 font-mono text-xs text-destructive">
             {error}
           </div>
         ) : null}
       </div>
-      {error && svg ? (
+      {error && graphSource ? (
         <div className="shrink-0 border-t border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-[11px] text-destructive">
           {error}
         </div>
@@ -309,35 +258,6 @@ function MermaidPane({
           </fieldset>
         </div>
         <ViewModeToggle mode={viewMode} onChange={(next) => onSetView(tab.id, next)} />
-        <fieldset
-          className="m-0 flex items-center gap-1 border-0 p-0"
-          aria-label="Diagram zoom controls"
-        >
-          <button
-            type="button"
-            className="rounded px-2 py-1 hover:bg-accent"
-            onClick={() => setZoom((value) => Math.max(0.25, value - 0.1))}
-            aria-label="Zoom out"
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="min-w-12 rounded px-1 py-1 text-muted-foreground hover:bg-accent"
-            onClick={() => setZoom(1)}
-            aria-label="Reset zoom"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            type="button"
-            className="rounded px-2 py-1 hover:bg-accent"
-            onClick={() => setZoom((value) => Math.min(3, value + 0.1))}
-            aria-label="Zoom in"
-          >
-            +
-          </button>
-        </fieldset>
       </div>
 
       <RenderableLayout

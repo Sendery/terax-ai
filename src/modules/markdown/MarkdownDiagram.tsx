@@ -1,23 +1,13 @@
-import { MermaidGraph } from "@/modules/graphx/MermaidGraph";
+import { MermaidPreview } from "@/modules/graphx/MermaidPreview";
 import { graphxDrawsMermaid } from "@/modules/graphx/lib/mermaid";
 import { validateMermaidSource } from "@/modules/mermaid/lib/source";
-import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
-
-const MermaidImage = lazy(() =>
-  import("./MarkdownMermaid").then((m) => ({ default: m.MarkdownMermaid })),
-);
+import { type ReactNode, useEffect, useState } from "react";
 
 type Props = {
   code: string;
   /** The plain code block, shown when the source cannot be drawn at all. */
   fallback: ReactNode;
 };
-
-const pending = (
-  <div className="my-4 grid h-24 w-full place-items-center rounded-md border border-border bg-sidebar text-[12px] text-muted-foreground">
-    Rendering diagram…
-  </div>
-);
 
 /** Follows `value` after it has been stable for `ms`, so streamed fences settle first. */
 function useSettled(value: string, ms: number): string {
@@ -61,20 +51,15 @@ export function MarkdownDiagram({ code, fallback }: Props) {
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const seen = useSeen(box);
   const validation = validateMermaidSource(settled);
-  const image = (
-    <Suspense fallback={pending}>
-      <MermaidImage code={settled} fallback={fallback} />
-    </Suspense>
-  );
-  if (!validation.ok || !graphxDrawsMermaid(validation.source)) return image;
+  if (!validation.ok) return fallback;
   return (
     <div
       ref={setBox}
-      data-markdown-diagram="graphx"
+      data-markdown-diagram={graphxDrawsMermaid(validation.source) ? "graphx" : "mermaid"}
       className="my-4 flex h-[420px] min-h-[180px] w-full resize-y flex-col overflow-auto rounded-md border border-border bg-background"
     >
       {seen ? (
-        <MermaidGraph source={validation.source} fallback={() => image} />
+        <MermaidPreview source={validation.source} fallback={fallback} />
       ) : (
         <div className="grid h-full place-items-center text-[12px] text-muted-foreground">
           Diagram

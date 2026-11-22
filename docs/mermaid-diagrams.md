@@ -1,5 +1,46 @@
 # Mermaid diagrams
 
+Terax uses GraphX to preview Mermaid fences in Markdown, Mermaid source files
+(`.mmd` and `.mermaid`) and diagrams opened with `mermaid.open`. The command
+continues to accept Mermaid and returns the same tab handle. It uses the same
+preview as the other entry points, and the source remains editable Mermaid.
+Supported diagrams use the same GraphX PNG frame capture as GraphX documents
+when a user exports a workspace capture. The fallback draws a static SVG
+image and travels through the ordinary DOM capture path.
+
+## Conversion fidelity
+
+The bundled converter is exercised with these fixtures in
+`src/modules/graphx/lib/mermaid.test.ts`. These cover representative Mermaid
+syntax and the resulting GraphX structure. Advanced syntax and styling can
+differ, and GraphX reports skipped statements.
+
+| Mermaid type | Verified conversion coverage |
+| --- | --- |
+| Flowchart, graph, flowchart-elk | Nodes, shapes, subgraphs, edge labels and styles. Click links are discarded. |
+| Sequence | Participants, messages, notes, nested blocks and activations. |
+| Class | Class members, relationships and cardinalities. Member HTML is discarded. |
+| State | Start and end, composite states, choice and notes. |
+| ER | Entity fields, keys and crow's-foot connectors. |
+| Gantt | Date axis, tasks, dependencies, status and milestones. |
+| Mind map | Nested nodes. |
+| Timeline | Periods and events. |
+| User journey | Scored steps and actors. |
+| Git graph | Branch lanes, commits and merges. |
+| C4 | People, systems, boundaries and relationships. |
+| Architecture | Groups, services and connections. |
+| Block | Grid placement and edges. |
+| Requirement | Requirement status, elements and relationships. |
+| Sankey | Weighted links. |
+| Kanban | Columns and cards. |
+| Treemap | Parent groups and weighted leaves. |
+| Pie, XY, quadrant, radar, packet, Venn, ZenUML, other types | Sent directly to the Mermaid fallback. |
+
+If GraphX declines a source or cannot lay it out, the same preview falls
+back to Mermaid with an explanation. Terax keeps the lazy Mermaid runtime
+for that fallback and for validating edits from the existing flowchart and
+sequence visual editors. There is no separate viewer to choose.
+
 Terax has a first-class Mermaid tab with **Raw**, **Rendered** and **Side by side**
 views. Raw keeps the source editor; Side by side shows it beside the rendered
 surface. The `Mermaid rendered tools` control selects **Preview** or **Visual**

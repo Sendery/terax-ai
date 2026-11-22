@@ -51,13 +51,11 @@ function GraphFrameSession({
     mermaidCallbacks.current = { onMermaidError, onMermaidWarnings };
   }, [onMermaidError, onMermaidWarnings]);
   useEffect(() => {
-    const timeout = window.setTimeout(
-      () =>
-        setState(
-          "GraphX is taking longer than expected. Reopen this tab if it does not finish.",
-        ),
-      15000,
-    );
+    const timeout = window.setTimeout(() => {
+      const message = "GraphX is taking longer than expected.";
+      setState(message);
+      if (mermaid) mermaidCallbacks.current.onMermaidError?.(message);
+    }, 15000);
     const receive = (event: MessageEvent) => {
       if (
         event.source !== frame.current?.contentWindow ||
@@ -85,7 +83,7 @@ function GraphFrameSession({
       }
       if (event.data.type === "terax:graphx:error") {
         window.clearTimeout(timeout);
-        if (mermaid && event.data.reason === "mermaid") {
+        if (mermaid) {
           setState("GraphX cannot draw this Mermaid diagram.");
           const message =
             typeof event.data.message === "string"
