@@ -804,6 +804,7 @@ configureRendererPool({
     const s = sessions.get(leafId);
     if (!s) return null;
     return {
+      ptyId: () => s.pty?.id ?? null,
       writeToPty: (data) => {
         // Shell spawn failed (bad cwd, missing binary): Enter retries.
         if (s.spawnFailed) {

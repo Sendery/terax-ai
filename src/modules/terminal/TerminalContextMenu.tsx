@@ -19,9 +19,11 @@ import {
   Note01Icon,
   Refresh01Icon,
   SparklesIcon,
+  TextWrapIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ReactNode, useState } from "react";
+import { selectionCopyChoices } from "./lib/agentCopy";
 import { pasteIntoLeaf, repaintLeaf } from "./lib/rendererPool";
 import {
   readTerminalClipboard,
@@ -48,6 +50,10 @@ type Props = {
   /** Selection captured before the menu opened, since a right-click can move
    *  the xterm selection on its own. */
   readSelection: () => string | null;
+  /** What Copy writes for the selection. An agent pane rejoins the paragraphs
+   *  the program wrapped; when that changes the text, "Copy as shown" offers
+   *  the selection exactly as it is on screen. */
+  copyText?: (selection: string) => string;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
   onRestoreFocus?: () => void;
@@ -67,6 +73,7 @@ export function TerminalContextMenu({
   children,
   leafId,
   readSelection,
+  copyText,
   onReadAloud,
   onStopReading,
   onRestoreFocus,
@@ -88,6 +95,7 @@ export function TerminalContextMenu({
         <MenuBody
           leafId={leafId}
           readSelection={readSelection}
+          copyText={copyText}
           onPaste={onPaste}
           onRedraw={onRedraw}
           onReadAloud={onReadAloud}
@@ -103,6 +111,7 @@ export function TerminalContextMenu({
 function MenuBody({
   leafId,
   readSelection,
+  copyText,
   onPaste,
   onRedraw,
   onReadAloud,
@@ -112,7 +121,9 @@ function MenuBody({
 }: Omit<Props, "children" | "onRestoreFocus">) {
   // Read once at mount: the menu only mounts on open, and the selection must
   // not change under the open menu.
-  const [selection] = useState(() => readSelection()?.trim() ?? "");
+  const [{ shown: selection, copied }] = useState(() =>
+    selectionCopyChoices(readSelection(), copyText),
+  );
   const sounding = useSounding();
   const offersSpeech = Boolean(onReadAloud) && !privateTerminal;
 
@@ -120,11 +131,19 @@ function MenuBody({
     <>
       <ContextMenuItem
         disabled={selection.length === 0}
-        onSelect={() => void writeTerminalClipboard(selection)}
+        onSelect={() => void writeTerminalClipboard(copied)}
       >
         <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={1.75} />
         <span className="flex-1">Copy</span>
       </ContextMenuItem>
+      {copied !== selection ? (
+        <ContextMenuItem
+          onSelect={() => void writeTerminalClipboard(selection)}
+        >
+          <HugeiconsIcon icon={TextWrapIcon} size={14} strokeWidth={1.75} />
+          <span className="flex-1">Copy as shown</span>
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuItem
         onSelect={() => {
           if (onPaste) {

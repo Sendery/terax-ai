@@ -16,6 +16,7 @@ import {
   nativeReadlineSequence,
 } from "@/modules/terminal/gl/nativeKeyboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
 import type { TerminalSelectionGesture } from "@/modules/terminal/lib/selectionGesture";
 import {
   readTerminalClipboard,
@@ -233,7 +234,15 @@ export function bindNativeInput(
     if (nativeClipboardAction(event, IS_MAC) === "copy") {
       event.preventDefault();
       const text = session.getSelection();
-      if (text !== null) watch(writeTerminalClipboard(text));
+      if (text !== null)
+        watch(
+          writeTerminalClipboard(
+            terminalCopyText(text, {
+              ptyId: session.id,
+              cols: session.grid.cols,
+            }),
+          ),
+        );
       return;
     }
     if (nativeClipboardAction(event, IS_MAC) === "paste") {

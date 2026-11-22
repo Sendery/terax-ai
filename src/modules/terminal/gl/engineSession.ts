@@ -51,6 +51,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 
 export const ENGINE_FAILED_EXIT = -2;
 const MAX_QUEUED_INPUT_BYTES = 1024 * 1024;
+/**
+ * Every grid resize reaches the program as SIGWINCH, and TUIs that repaint on
+ * it (Claude Code, Gemini CLI, zsh's prompt) leave a copy of what was on
+ * screen in the history each time. A drag or an animated panel would send one
+ * per frame, so resizes are coalesced: a change after a quiet period applies
+ * at once, and the rest of the gesture applies once it settles.
+ */
+export const RESIZE_SETTLE_MS = 120;
+const RESIZE_QUIET_MS = 250;
 
 export type NativeKeyEvent = {
   code: string;
@@ -276,6 +285,9 @@ export class EngineSession {
   private closed = false;
   private failed = false;
   private size: { cols: number; rows: number };
+  private pendingResize: { cols: number; rows: number } | null = null;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastResizeRequestAt = Number.NEGATIVE_INFINITY;
   private pendingColors: EngineColors | null = null;
   private cursorBlinkPreference = false;
   private pendingCursorBlink: boolean | null = null;
@@ -1210,22 +1222,45 @@ export class EngineSession {
   }
 
   resize(cols: number, rows: number): void {
-    if (
-      this.isBench ||
-      this.closed ||
-      this.failed ||
-      (cols === this.size.cols && rows === this.size.rows)
-    )
-      return;
+    if (this.isBench || this.closed || this.failed) return;
     if (this.id === null) {
       this.size = { cols, rows };
       return;
     }
-    void this.resizeAndWait(cols, rows).catch(this.reportError);
+    const same = cols === this.size.cols && rows === this.size.rows;
+    // Layout passes re-report an unchanged size; those are not a gesture.
+    if (same && this.pendingResize === null) return;
+    const now = performance.now();
+    const quiet = now - this.lastResizeRequestAt >= RESIZE_QUIET_MS;
+    this.lastResizeRequestAt = now;
+    if (quiet && this.resizeTimer === null) {
+      void this.resizeAndWait(cols, rows).catch(this.reportError);
+      return;
+    }
+    // Inside a gesture: keep only the latest size until it settles. A gesture
+    // that ends where it started sends nothing.
+    this.pendingResize = { cols, rows };
+    if (this.resizeTimer !== null) clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(this.applyPendingResize, RESIZE_SETTLE_MS);
+  }
+
+  private readonly applyPendingResize = (): void => {
+    this.resizeTimer = null;
+    const pending = this.pendingResize;
+    this.pendingResize = null;
+    if (!pending || this.closed || this.failed || this.id === null) return;
+    void this.resizeAndWait(pending.cols, pending.rows).catch(this.reportError);
+  };
+
+  private cancelPendingResize(): void {
+    if (this.resizeTimer !== null) clearTimeout(this.resizeTimer);
+    this.resizeTimer = null;
+    this.pendingResize = null;
   }
 
   resizeAndWait(cols: number, rows: number): Promise<void> {
     if (this.isBench) return Promise.resolve();
+    this.cancelPendingResize();
     if (this.closed || this.failed)
       return Promise.reject(new Error("terminal engine is unavailable"));
     const id = this.id;
@@ -1630,6 +1665,7 @@ export class EngineSession {
 
   private release(): void {
     this.closed = true;
+    this.cancelPendingResize();
     this.selectionMutationVersion++;
     this.captureConsumer?.cancel(
       new Error("Terminal capture is no longer available."),
