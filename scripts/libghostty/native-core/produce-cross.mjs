@@ -84,8 +84,9 @@ for (const symbol of manifest.abi) {
   }
 }
 writeFileSync(join(output, "exports.log"), symbols + "\n");
-const archiver = run("xcrun", ["-f", "llvm-ar"], pipe);
-const members = run(archiver, ["t", lib], pipe).split("\n");
+const members = run(zig, ["ar", "t", lib], pipe)
+  .split("\n")
+  .filter((member) => member && !/^__\.SYMDEF(?: SORTED)?$/.test(member));
 if (!members.length || !members[0]) throw new Error("empty static archive");
 let deploymentObjects;
 if (macOS) {
