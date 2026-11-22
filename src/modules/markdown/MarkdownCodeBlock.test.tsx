@@ -13,8 +13,8 @@ vi.mock("@/components/ai-elements/markdown-code", async () => {
   };
 });
 
-vi.mock("./MarkdownMermaid", () => ({
-  MarkdownMermaid: ({ code }: { code: string }) => (
+vi.mock("./MarkdownDiagram", () => ({
+  MarkdownDiagram: ({ code }: { code: string }) => (
     <div data-test="mermaid" data-code={code} />
   ),
 }));
