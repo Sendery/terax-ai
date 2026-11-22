@@ -57,8 +57,8 @@ export function SandboxPanel() {
         permissions, the scheduled-task waker and the Pi bridge are this
         sandbox's own. Scheduled tasks arrive paused and live agent sessions are
         not offered for resume, so nothing here acts outside Terax on its own.
-        Saved keys are read from the installed app until you change or remove
-        them here.
+        Saved keys are copied from the installed app once and are this
+        sandbox's own from then on; a reset copies them again.
       </p>
       {step === "confirm" ? (
         <div className="flex flex-wrap items-center gap-2">
