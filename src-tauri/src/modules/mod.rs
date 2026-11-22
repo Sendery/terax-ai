@@ -12,6 +12,7 @@ pub mod net;
 pub mod oauth;
 pub mod pi;
 pub mod pisessions;
+pub mod privacy;
 pub mod proc;
 pub mod notify;
 pub mod profile;

@@ -113,6 +113,7 @@ import {
   writeTerminalClipboard,
 } from "@/modules/terminal/lib/terminalClipboard";
 import type { DocEntry } from "@/modules/reader/store/readerStore";
+import { useFullDiskAccessHint } from "@/modules/privacy";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { isMarkdownPath } from "@/lib/utils";
@@ -694,6 +695,7 @@ export default function App() {
 
   const { pendingAppClose, confirmAppClose, cancelAppClose } =
     useAppCloseGuard(tabsRef);
+  useFullDiskAccessHint(() => void openSettingsWindow("general"));
 
   useEffect(() => {
     const live = new Set<number>();

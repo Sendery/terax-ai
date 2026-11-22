@@ -62,6 +62,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { FullDiskAccessCard } from "../components/FullDiskAccessCard";
 import { LspServersGroup } from "../components/LspServersGroup";
 import { SectionHeader } from "../components/SectionHeader";
 import { SettingRow } from "../components/SettingRow";
@@ -191,6 +192,8 @@ export function GeneralSection() {
         title="General"
         description="Mode, editor, and startup."
       />
+
+      <FullDiskAccessCard show="missing" />
 
       <div className="flex flex-col gap-2">
         <Label>Appearance</Label>
@@ -536,6 +539,7 @@ export function GeneralSection() {
               onCheckedChange={(v) => void setRestoreWindowState(v)}
             />
           </SettingRow>
+          <FullDiskAccessCard show="granted" />
         </div>
       </div>
     </div>
