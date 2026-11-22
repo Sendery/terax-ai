@@ -49,7 +49,6 @@ if [ -z "$__TERAX_HOOKS_LOADED" ]; then
   _terax_ps_start='\[\e]133;P;k=i'"$_terax_aid"'\e\\\]'
   _terax_ps_line='\[\e]133;P;k=s'"$_terax_aid"'\e\\\]'
   _terax_ps_end='\[\e]133;B'"$_terax_aid"'\e\\\]'
-  _terax_ps_newline='\n'"$_terax_ps_line"
   _terax_can_redraw=''
 
   # Runs after every other PROMPT_COMMAND entry, so it marks the PS1 that is
@@ -83,7 +82,14 @@ if [ -z "$__TERAX_HOOKS_LOADED" ]; then
         esac
         ;;
     esac
-    PS1=${_terax_ps_start}${PS1//\\n/$_terax_ps_newline}${_terax_ps_end}
+    # A mark after every \n escape. Spelled as a loop: what a backslash means
+    # in the replacement of ${PS1//\\n/...} changed between bash versions.
+    local _terax_rest=$PS1 _terax_marked=''
+    while [[ "$_terax_rest" == *'\n'* ]]; do
+      _terax_marked="${_terax_marked}${_terax_rest%%'\n'*}"'\n'"${_terax_ps_line}"
+      _terax_rest=${_terax_rest#*'\n'}
+    done
+    PS1="${_terax_ps_start}${_terax_marked}${_terax_rest}${_terax_ps_end}"
     PS2=${_terax_ps_line}${PS2}
     printf '\e]133;A%s%s\e\\' "$_terax_aid" "$_terax_redraw"
   }
