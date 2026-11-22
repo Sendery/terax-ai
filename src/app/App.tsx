@@ -1105,9 +1105,8 @@ export default function App() {
     openMermaidWithSource(selection);
   }, [captureActiveSelection, openMermaidWithSource]);
 
-  // Same three actions the selection popup offers, so the terminal's right-click
-  // menu is a superset of it and the popup no longer needs to appear alongside.
-  const terminalSelectionActions = useMemo(
+  /** The selection actions every text view's right-click menu offers. */
+  const selectionMenuActions = useMemo(
     () => ({
       onAsk: askWithSelection,
       onAddToNote: addTextToNote,
@@ -2203,8 +2202,15 @@ export default function App() {
       readClipboard: readTerminalClipboard,
       onRead: speakAloud,
       onStop: stopReading,
+      selectionActions: selectionMenuActions,
     }),
-    [captureReadableSelection, activeTabNow, speakAloud, stopReading],
+    [
+      captureReadableSelection,
+      activeTabNow,
+      speakAloud,
+      stopReading,
+      selectionMenuActions,
+    ],
   );
 
   const readerPanelHost = useMemo(
@@ -3163,7 +3169,7 @@ export default function App() {
                         onOpenFileLink={handleOpenTerminalFileLink}
                         onReadAloud={speakAloud}
                         onStopReading={stopReading}
-                        selectionActions={terminalSelectionActions}
+                        selectionActions={selectionMenuActions}
                         homePath={home}
                         registerEditorHandle={registerEditorHandle}
                         onEditorDirtyChange={handleEditorDirty}
