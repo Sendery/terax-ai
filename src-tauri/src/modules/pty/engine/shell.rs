@@ -16,7 +16,14 @@ pub struct ShellState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShellEvent {
-    PromptStart,
+    /// `OSC 133;A`. `redraws` is the shell's promise (`terax_redraw=1`) that
+    /// on a window size change it repaints its prompt from the row of the
+    /// last `A` or `P` mark; see prompt_redraw.rs.
+    PromptStart {
+        redraws: bool,
+    },
+    /// `OSC 133;P`: a prompt line starts on the cursor row.
+    PromptLine,
     PromptEnd,
     CommandStart {
         command: String,
@@ -329,10 +336,17 @@ impl ShellIntegration {
                     match action {
                         "A" => {
                             if self.capture_events {
-                                self.event = Some(ShellEvent::PromptStart);
+                                self.event = Some(ShellEvent::PromptStart {
+                                    redraws: parts.any(|part| part == "terax_redraw=1"),
+                                });
                             }
                             self.allow_cwd = true;
                             self.state.command_running = false;
+                        }
+                        "P" => {
+                            if self.capture_events {
+                                self.event = Some(ShellEvent::PromptLine);
+                            }
                         }
                         "D" => {
                             if let Some(exit_code) =

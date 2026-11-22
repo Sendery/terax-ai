@@ -47,6 +47,12 @@ impl Default for EraseWrapFix {
 }
 
 impl EraseWrapFix {
+    /// True between sequences: bytes written to the terminal now cannot land
+    /// inside an escape sequence or a string that a read left unfinished.
+    pub fn at_ground(&self) -> bool {
+        self.state == State::Ground
+    }
+
     /// Appends `input` to `out`, with an EL 0 after every complete EL 2.
     pub fn process(&mut self, input: &[u8], out: &mut Vec<u8>) {
         if self.state == State::Ground && !input.contains(&ESC) {
