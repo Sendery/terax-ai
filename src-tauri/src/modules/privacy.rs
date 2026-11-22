@@ -10,6 +10,7 @@
 use serde::Serialize;
 
 /// System Settings > Privacy & Security > Full Disk Access.
+#[cfg(any(target_os = "macos", test))]
 pub const FULL_DISK_ACCESS_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
@@ -26,6 +27,7 @@ pub enum FullDiskAccess {
 
 /// Reads the outcome of opening paths only Full Disk Access unlocks. One that
 /// opens proves the grant; a refusal on one that exists proves its absence.
+#[cfg(any(target_os = "macos", test))]
 pub fn classify(probes: impl IntoIterator<Item = std::io::Result<()>>) -> FullDiskAccess {
     let mut denied = false;
     for probe in probes {

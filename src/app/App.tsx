@@ -695,7 +695,7 @@ export default function App() {
 
   const { pendingAppClose, confirmAppClose, cancelAppClose } =
     useAppCloseGuard(tabsRef);
-  useFullDiskAccessHint(() => void openSettingsWindow("general"));
+  useFullDiskAccessHint();
 
   useEffect(() => {
     const live = new Set<number>();

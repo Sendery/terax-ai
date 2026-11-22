@@ -1,9 +1,10 @@
 import { IS_MAC } from "@/lib/platform";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import {
   fullDiskAccessHintSeen,
   markFullDiskAccessHintSeen,
+  openFullDiskAccessSettings,
   readFullDiskAccess,
   shouldHintFullDiskAccess,
 } from "./fullDiskAccess";
@@ -16,10 +17,7 @@ const HINT_DELAY_MS = 6000;
  * the grant. Shown or dismissed, it does not come back: the card stays in
  * Settings.
  */
-export function useFullDiskAccessHint(openPermissions: () => void): void {
-  const open = useRef(openPermissions);
-  open.current = openPermissions;
-
+export function useFullDiskAccessHint(): void {
   useEffect(() => {
     if (!IS_MAC || fullDiskAccessHintSeen(window.localStorage)) return;
     let alive = true;
@@ -29,10 +27,17 @@ export function useFullDiskAccessHint(openPermissions: () => void): void {
         markFullDiskAccessHintSeen(window.localStorage);
         toast.message("Stop the repeated macOS permission prompts", {
           description:
-            "Give Terax Full Disk Access once and every shell and agent inside it inherits it.",
+            "Shells and agents inherit this grant. Pi-Terax Sandbox needs its own grant.",
           duration: Number.POSITIVE_INFINITY,
           closeButton: true,
-          action: { label: "Show me", onClick: () => open.current() },
+          action: {
+            label: "Open System Settings",
+            onClick: () => {
+              void openFullDiskAccessSettings().catch(() =>
+                toast.error("Could not open Full Disk Access settings."),
+              );
+            },
+          },
         });
       });
     }, HINT_DELAY_MS);

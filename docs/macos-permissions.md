@@ -21,7 +21,7 @@ macOS treats each protected place as its own permission, and it attributes what 
 
 Full Disk Access covers all the file permissions with one grant, and every process inside Terax inherits it.
 
-1. Settings > General shows a card while the grant is missing, and a one-time hint points at it. **Open Full Disk Access settings** opens System Settings > Privacy & Security > Full Disk Access.
+1. The one-time hint and the card in Settings > General both open System Settings > Privacy & Security > Full Disk Access.
 2. Turn Terax on in the list (add it with **+** if it is not there).
 3. Restart Terax. macOS applies the grant when the app next starts.
 
@@ -54,16 +54,14 @@ The sandbox (`app.crynta.terax.sandbox`, "Pi-Terax Sandbox") is a different app 
 
 - **Privacy grants are its own.** Give it Full Disk Access once; the grant then holds for every later sandbox build, as long as the build is signed with the local identity. `pnpm build:sandbox` signs with it when the keychain has it. An unsigned build has an ad hoc signature that changes every time, and is asked for everything again.
 - **Secrets are copied once.** The sandbox has a vault of its own (`terax-vault.sandbox`). On its first launch it reads the installed app's vault a single time (one prompt, since the sandbox is a stranger to that item) and copies it. After that it never touches the installed app's item, so a new sandbox build asks once, for its own vault. Reading through to the installed app on every launch, as before, cost one prompt per installed key per sandbox build. The cost of copying is that a key changed later in the installed app does not reach the sandbox until **Reset from installed Terax** in Settings > About, which copies again.
-- Until the installed app has been updated to a build with the vault, the sandbox reads the installed app's old per-key items instead, once each, and keeps what it read.
+- The sandbox can copy installed keys that are still in the old per-key items. It attempts each item once, even if access is refused. Migrate any remaining keys in the installed app before using **Reset from installed Terax**.
 - `pnpm dev:sandbox` runs an unsigned binary from your terminal. macOS attributes its file access to the terminal that started it, and its keychain prompts repeat with every rebuild.
 
 ## If the build itself asks for a password
 
-`codesign` needs the private key of the signing certificate. If macOS asks for the keychain password on every build, the key was imported without pre-authorising Apple's tools. Answer **Always Allow**, or run once, in a terminal of your own:
-
-```sh
-security set-key-partition-list -S apple-tool:,apple: -s -k "<login password>" ~/Library/Keychains/login.keychain-db
-```
+`codesign` needs the private key of the signing certificate. A dialog during
+the build authorizes use of that key and is separate from the app's access to
+its vault. You can select **Always Allow** for the signing tool.
 
 ## Removing prompts completely
 

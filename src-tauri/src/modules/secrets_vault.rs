@@ -68,6 +68,8 @@ pub struct Vault {
     /// Sandbox only: the installed app's vault has been copied in.
     #[serde(default, skip_serializing_if = "is_false")]
     seeded: bool,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    installed_legacy_attempts: BTreeSet<String>,
     /// Fields a newer build wrote survive a save by this one.
     #[serde(flatten)]
     extra: BTreeMap<String, serde_json::Value>,
@@ -87,10 +89,12 @@ fn read_vault<S: ItemStore>(store: &S, sandbox: bool) -> Result<Option<Vault>, S
 
 /// Brings the installed app's secrets into a sandbox vault. Returns whether
 /// the vault changed.
-fn seed_from_installed(
+fn seed_from_installed<S: ItemStore>(
+    store: &S,
     vault: &mut Vault,
     installed: Result<Option<Vault>, String>,
     reset: bool,
+    cleanup: &mut Vec<(String, String)>,
 ) -> bool {
     match installed {
         Ok(Some(installed)) => {
@@ -99,9 +103,31 @@ fn seed_from_installed(
                 vault.hidden.clear();
             } else {
                 for (key, value) in installed.secrets {
-                    if !vault.hidden.contains(&key) {
-                        vault.secrets.entry(key).or_insert(value);
+                    if vault.hidden.contains(&key) || vault.secrets.contains_key(&key) {
+                        continue;
                     }
+                    // A sandbox's legacy value or tombstone takes precedence
+                    // over the installed snapshot, even before its first read.
+                    if let Some((service, account)) = key.split_once("::") {
+                        let scoped = profile::scoped_service(service, true);
+                        match store.read(&scoped, account) {
+                            Ok(Some(legacy)) => {
+                                cleanup.push((scoped, account.to_string()));
+                                if legacy == profile::DELETED_SECRET {
+                                    vault.hidden.insert(key);
+                                } else {
+                                    vault.secrets.insert(key, legacy);
+                                }
+                                continue;
+                            }
+                            Ok(None) => {}
+                            Err(_) => {
+                                // A later explicit read can retry the sandbox item.
+                                continue;
+                            }
+                        }
+                    }
+                    vault.secrets.insert(key, value);
                 }
             }
             vault.seeded = true;
@@ -109,16 +135,7 @@ fn seed_from_installed(
         }
         // The installed app has not written a vault yet. Its per-secret items
         // are still read one by one, and the copy is tried again next launch.
-        Ok(None) => {
-            if !reset {
-                return false;
-            }
-            let changed = !vault.secrets.is_empty() || !vault.hidden.is_empty() || vault.seeded;
-            vault.secrets.clear();
-            vault.hidden.clear();
-            vault.seeded = false;
-            changed
-        }
+        Ok(None) => false,
         Err(err) => {
             log::warn!("the installed app's secrets were not copied into the sandbox: {err}");
             if reset {
@@ -157,10 +174,7 @@ fn probe_legacy<S: ItemStore>(
     match store.read(&profile::scoped_service(service, true), account)? {
         Some(value) if value == profile::DELETED_SECRET => Ok((Legacy::Hidden, true)),
         Some(value) => Ok((Legacy::Value(value), true)),
-        None => Ok(match store.read(service, account)? {
-            Some(value) => (Legacy::Value(value), false),
-            None => (Legacy::Absent, false),
-        }),
+        None => Ok((Legacy::Absent, false)),
     }
 }
 
@@ -192,7 +206,7 @@ impl Session {
         if let Some(state) = &self.state {
             return state.as_ref().map(|_| false).map_err(Clone::clone);
         }
-        let mut vault = match read_vault(store, sandbox) {
+        let vault = match read_vault(store, sandbox) {
             Ok(vault) => vault.unwrap_or_default(),
             Err(err) => {
                 self.state = Some(Err(err.clone()));
@@ -200,15 +214,24 @@ impl Session {
             }
         };
         let reset = sandbox && reset;
+        let mut next = vault.clone();
         let dirty = sandbox
             && (reset || !vault.seeded)
-            && seed_from_installed(&mut vault, read_vault(store, false), reset);
+            && seed_from_installed(
+                store,
+                &mut next,
+                read_vault(store, false),
+                reset,
+                &mut self.cleanup,
+            );
         self.state = Some(Ok(vault));
         if dirty {
-            if let Err(err) = self.persist(store, sandbox) {
+            if let Err(err) = self.write(store, sandbox, &next) {
+                self.cleanup.clear();
                 log::warn!("the sandbox secrets vault was not saved: {err}");
                 return Ok(false);
             }
+            self.state = Some(Ok(next));
         }
         Ok(reset)
     }
@@ -267,7 +290,17 @@ impl Session {
                 out.push(Ok(None));
                 continue;
             }
-            match probe_legacy(store, sandbox, service, account) {
+            let mut legacy = probe_legacy(store, sandbox, service, account);
+            if sandbox
+                && matches!(legacy, Ok((Legacy::Absent, _)))
+                && vault.installed_legacy_attempts.insert(key.clone())
+            {
+                dirty = true;
+                legacy = store.read(service, account).map(|value| {
+                    (value.map_or(Legacy::Absent, Legacy::Value), false)
+                });
+            }
+            match legacy {
                 Ok((found, own)) => {
                     if own {
                         self.cleanup
@@ -688,6 +721,31 @@ mod tests {
     }
 
     #[test]
+    fn an_installed_snapshot_respects_legacy_sandbox_values_and_removals() {
+        let store = Fake::with(&[
+            (SANDBOX_SVC, "openai", "sk-own"),
+            (SANDBOX_SVC, "groq", profile::DELETED_SECRET),
+        ]);
+        store.put_vault(
+            VAULT_SERVICE,
+            &[("terax-ai::openai", "sk-installed"), ("terax-ai::groq", "sk-g")],
+        );
+        let mut sandbox = open(&store, true);
+        assert_eq!(sandbox.get(&store, true, SVC, "openai").unwrap().as_deref(), Some("sk-own"));
+        assert_eq!(sandbox.get(&store, true, SVC, "groq").unwrap(), None);
+        assert!(!store.has(SANDBOX_SVC, "openai") && !store.has(SANDBOX_SVC, "groq"));
+    }
+
+    #[test]
+    fn a_refused_installed_legacy_secret_is_not_reopened_by_the_sandbox() {
+        let store = Fake::with(&[(SVC, "openai", "sk-installed")]);
+        store.deny_read.borrow_mut().insert(id(SVC, "openai"));
+        assert!(open(&store, true).get(&store, true, SVC, "openai").is_err());
+        assert_eq!(open(&store, true).get(&store, true, SVC, "openai").unwrap(), None);
+        assert_eq!(store.reads_of(SVC, "openai"), 1);
+    }
+
+    #[test]
     fn seeding_waits_for_the_installed_vault_and_respects_removals() {
         let store = Fake::default();
         let mut session = open(&store, true);
@@ -755,6 +813,7 @@ mod tests {
         let mut unsaved = Session::default();
         assert!(!unsaved.open(&store, true, true).unwrap());
         assert_eq!(store.vault(SANDBOX_VAULT).secrets["terax-ai::openai"], "sk-own");
+        assert_eq!(unsaved.get(&store, true, SVC, "openai").unwrap().as_deref(), Some("sk-own"));
     }
 
     #[test]
