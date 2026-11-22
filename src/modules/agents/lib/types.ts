@@ -5,7 +5,14 @@ export type AgentStatus = "working" | "waiting";
 export type AgentIntegration = "pi-extension" | "claude-hook" | "pty-detection";
 
 /** Explicit harness identity used for presentation, never inferred from terminal output. */
-export type AgentHarness = "pi" | "claude" | "codex" | "generic";
+export type AgentHarness =
+  | "pi"
+  | "claude"
+  | "codex"
+  | "copilot"
+  | "agy"
+  | "grok"
+  | "generic";
 
 export type AgentSource = "terminal" | "local";
 

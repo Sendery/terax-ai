@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bellBadgeCount, bellRowView } from "./bell";
+import { bellBadgeCount, bellEmptyText, bellRowView } from "./bell";
 import { TONE_MARK } from "./marks";
 import type { AgentNotification } from "./types";
 
@@ -72,5 +72,16 @@ describe("bellRowView", () => {
     expect(view.label).toBe("turn ended");
     expect(view.detail).toBe("Done");
     expect(view.where).toBeNull();
+  });
+});
+
+describe("bellEmptyText", () => {
+  it("says nothing about agents when none runs", () => {
+    expect(bellEmptyText(0).hint).not.toMatch(/running/);
+  });
+
+  it("counts running agents instead of listing them", () => {
+    expect(bellEmptyText(1).hint).toContain("1 agent is running");
+    expect(bellEmptyText(12).hint).toContain("12 agents are running");
   });
 });
