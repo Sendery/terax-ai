@@ -29,7 +29,6 @@ import {
 } from "@/modules/terminal/gl/renderCapacity";
 import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
-import { TERMINAL_SELECTION_GESTURE_EVENT } from "@/modules/terminal/lib/selectionGesture";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import {
   markSessionReady,
@@ -306,7 +305,6 @@ export const NativeTerminalPane = forwardRef<
             });
             setBlocksView({ view: blockView, session, owner });
           }
-          const selectionPrivacy = latest.current.privateTerminal === true;
           binding = bindNativeInput(session, renderer, element, {
             font: current.font,
             foreground: current.colors.engine.foreground,
@@ -314,24 +312,6 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
-            onSelectionGesture: (gesture) => {
-              const current = () =>
-                !disposed &&
-                latest.current.visible &&
-                latest.current.leafId === leafId &&
-                (latest.current.privateTerminal === true) ===
-                  selectionPrivacy &&
-                controller.current === owner &&
-                engine.current === session &&
-                gesture.current();
-              if (!current()) return;
-              element.dispatchEvent(
-                new CustomEvent(TERMINAL_SELECTION_GESTURE_EVENT, {
-                  bubbles: true,
-                  detail: { ...gesture, current },
-                }),
-              );
-            },
             allowInput: () =>
               owner.exited || (owner.blockInput?.directInput ?? true),
             focusPrompt: () => {

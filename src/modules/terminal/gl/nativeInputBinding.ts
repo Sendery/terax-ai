@@ -17,7 +17,6 @@ import {
 } from "@/modules/terminal/gl/nativeKeyboard";
 import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
 import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
-import type { TerminalSelectionGesture } from "@/modules/terminal/lib/selectionGesture";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,
@@ -34,7 +33,6 @@ type Options = Appearance & {
   focusPrompt?: () => void;
   onError: (error: unknown) => void;
   onSelection?: (text: string | null) => void;
-  onSelectionGesture?: (gesture: TerminalSelectionGesture) => void;
   onBlockClick?: (seq: number, row: number) => Promise<void>;
 };
 export type NativeInputBinding = {
@@ -624,8 +622,6 @@ export function bindNativeInput(
     const released = select({ kind: "release" });
     const generation = selectionGeneration;
     const revision = session.selectionRevision;
-    const ownerId = session.id;
-    let gestureRevision = session.selectionMutationRevision;
     const completed = released.then(async (text) => {
       const current = () =>
         !disposed &&
@@ -664,7 +660,7 @@ export function bindNativeInput(
           },
           current,
         );
-        return null;
+        return;
       }
       if (
         !disposed &&
@@ -675,31 +671,9 @@ export function bindNativeInput(
         Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 4
       ) {
         await options.onBlockClick?.(click.seq, click.row);
-        gestureRevision = session.selectionMutationRevision;
-        return session.getSelection();
       }
-      return text;
     });
     watch(completed);
-    if (event.type === "pointerup" && !alt) {
-      try {
-        options.onSelectionGesture?.({
-          x: event.clientX,
-          y: event.clientY,
-          selection: completed,
-          current: () =>
-            !disposed &&
-            options.isActive() &&
-            document.hasFocus() &&
-            session.id === ownerId &&
-            session.historyAvailable &&
-            generation === selectionGeneration &&
-            session.selectionMutationRevision === gestureRevision,
-        });
-      } catch (error) {
-        report(error);
-      }
-    }
     try {
       host.releasePointerCapture(event.pointerId);
     } catch {
