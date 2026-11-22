@@ -15,6 +15,16 @@ describe("sandbox config override", () => {
     ).toBe(false);
   });
 
+  it("signs with the local identity when there is one, so macOS grants survive builds", () => {
+    expect(sandboxConfigOverride({ identifier: "a" }).bundle.macOS).toBeUndefined();
+    expect(
+      sandboxConfigOverride({ identifier: "a" }, { signingIdentity: "Pi-Terax Local Signing" }).bundle,
+    ).toEqual({
+      createUpdaterArtifacts: false,
+      macOS: { signingIdentity: "Pi-Terax Local Signing" },
+    });
+  });
+
   it("does not stack the suffix when the base is already a sandbox", () => {
     expect(sandboxConfigOverride({ identifier: "a.sandbox" }).identifier).toBe("a.sandbox");
   });
