@@ -9,7 +9,7 @@ export function hostTriple(platform = process.platform, arch = process.arch) {
 
 export function parseArgs(args) {
   const split = args.indexOf("--");
-  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--source | --provisional <archive>] -- <command> [args...]");
+  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--native-core | --source | --provisional <archive> | --variant native-core-v1 --archive <archive>] -- <command> [args...]");
   const flags = args.slice(0, split);
   if (flags.length === 1 && flags[0] === "--native-core") {
     return { source: false, nativeCore: true, command: args.slice(split + 1) };
