@@ -6,8 +6,7 @@ export type LabMode =
   | "gate-engine-profile"
   | "gate-engine-batched"
   | "gate-engine-profile-batched"
-  | "idle-engine"
-  | "idle-xterm";
+  | "idle-engine";
 export type AutorunConfig = { mode: LabMode; count: number; holdMs: number };
 export type LabTarget = EchoTarget & { capture: () => Promise<string> };
 

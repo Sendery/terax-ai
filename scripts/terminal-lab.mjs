@@ -217,10 +217,10 @@ export async function run(binary, output, mode, repetition, timeoutMs) {
 }
 
 export function selectedModes(value) {
-  if (value === undefined) return ["bench", "idle-engine", "idle-xterm"];
+  if (value === undefined) return ["bench", "idle-engine"];
   const modes = value.split(",");
-  if (new Set(modes).size !== modes.length || modes.some((mode) => !["bench", "gate-engine", "gate-engine-profile", "gate-engine-batched", "gate-engine-profile-batched", "idle-engine", "idle-xterm"].includes(mode)))
-    throw new Error("Invalid lab modes: use bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched, idle-engine or idle-xterm without duplicates");
+  if (new Set(modes).size !== modes.length || modes.some((mode) => !["bench", "gate-engine", "gate-engine-profile", "gate-engine-batched", "gate-engine-profile-batched", "idle-engine"].includes(mode)))
+    throw new Error("Invalid lab modes: use bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched or idle-engine without duplicates");
   return modes;
 }
 
@@ -241,7 +241,7 @@ async function main() {
       if (result.failure || result.failureReason || result.cleanup.errors.length || result.cleanup.survivors.length) break repetitions;
     }
   }
-  json(join(output, "summary.json"), runs.map(({ samples, report, ...run }) => ({ ...run, errors: report?.errors ?? ["No webview report: GUI launch or rendering did not finish"], engineBenchRuns: report?.bench?.length ?? 0, xtermBenchRuns: report?.xtermBench?.length ?? 0, captures: report?.captures ?? null })));
+  json(join(output, "summary.json"), runs.map(({ samples, report, ...run }) => ({ ...run, errors: report?.errors ?? ["No webview report: GUI launch or rendering did not finish"], engineBenchRuns: report?.bench?.length ?? 0, captures: report?.captures ?? null })));
   if (runs.some((run) => !successfulRun(run))) process.exitCode = 1;
 }
 
@@ -254,7 +254,8 @@ export function successfulRun(run) {
       (!["gate-engine-profile", "gate-engine-profile-batched"].includes(run.mode) || (b.profile?.complete === true && b.profile.frames?.length === b.frames && b.profile.draws?.length > 0)) && (!["gate-engine-batched", "gate-engine-profile-batched"].includes(run.mode) || (b.creditBatch?.mode === "window-microtask" && b.creditBatch.complete === true && b.creditBatch.queued === b.frames && b.creditBatch.registered === b.frames && b.creditBatch.failed === 0 && b.creditBatch.rejected === 0 && b.creditBatch.pending === 0 && b.creditBatch.invocations > 0 && b.creditBatch.invocations <= b.frames)) && b.sessions === 12 && b.megabytesPerSession === 1024 && !b.error && !b.timedOut && b.contextLosses === 0 && b.concurrent?.evaluable === true && b.completeness?.length === 12 && b.completeness.every((c) => c.complete === true) && b.rust?.length === 12 && b.rust.every((stats) => stats !== null));
   }
   if (run.mode !== "bench") return run.idleSamples >= 10 && report.idle?.scrollbackVerified === true && report.idle.measuredScrollbackRows?.length === 12 && report.idle.measuredScrollbackRows.every((rows) => rows === 10_000);
-  return report.bench?.length === 6 && report.xtermBench?.length === 6 && report.captures?.engine === true && report.captures?.xterm === true && [report.echo?.engine, report.echo?.xterm].every((echo) => echo?.count === 50 && echo.samples?.length === 50 && echo.timeouts === 0 && !echo.error);
+  const echo = report.echo?.engine;
+  return report.bench?.length === 6 && report.captures?.engine === true && echo?.count === 50 && echo.samples?.length === 50 && echo.timeouts === 0 && !echo.error;
 }
 
 if (isMainModule(import.meta.url)) await main();

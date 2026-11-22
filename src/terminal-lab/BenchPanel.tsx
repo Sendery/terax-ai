@@ -200,7 +200,6 @@ export function BenchPanel({
           </thead>
           <tbody>
             <EchoRow name="engine" result={report?.echo.engine ?? null} />
-            <EchoRow name="xterm.js" result={report?.echo.xterm ?? null} />
           </tbody>
         </table>
         {report && report.errors.length > 0 ? (

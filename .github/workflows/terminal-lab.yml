@@ -89,6 +89,5 @@ jobs:
             ${{ runner.temp }}/terminal-lab-results/*/runner.json
             ${{ runner.temp }}/terminal-lab-results/*/baseline-processes.json
             ${{ runner.temp }}/terminal-lab-results/*/report.engine.png
-            ${{ runner.temp }}/terminal-lab-results/*/report.xterm.png
             ${{ runner.temp }}/terminal-lab-results/*/app.log
           retention-days: 14

@@ -223,7 +223,7 @@ export function labFixture(
 }
 
 export function saveLabCapture(
-  pane: "engine" | "xterm",
+  pane: "engine",
   uri: string,
 ): Promise<void> {
   const bytes = Uint8Array.from(atob(uri.slice(uri.indexOf(",") + 1)), (c) =>

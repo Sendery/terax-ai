@@ -91,8 +91,8 @@ pub struct Config {
 }
 
 pub fn config(mode: &str, count: &str, hold_seconds: &str) -> Result<Config, String> {
-    if !matches!(mode, "bench" | "gate-engine" | "gate-engine-profile" | "gate-engine-batched" | "gate-engine-profile-batched" | "idle-engine" | "idle-xterm") {
-        return Err("lab mode must be bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched, idle-engine or idle-xterm".into());
+    if !matches!(mode, "bench" | "gate-engine" | "gate-engine-profile" | "gate-engine-batched" | "gate-engine-profile-batched" | "idle-engine") {
+        return Err("lab mode must be bench, gate-engine, gate-engine-profile, gate-engine-batched, gate-engine-profile-batched or idle-engine".into());
     }
     let count: u16 = count.parse().map_err(|_| "invalid idle count")?;
     let seconds: u64 = hold_seconds.parse().map_err(|_| "invalid idle duration")?;
@@ -115,7 +115,7 @@ pub fn authorize(label: &str, sandbox: bool, path: Option<PathBuf>) -> Result<Pa
 }
 
 pub fn capture_path(report: &Path, pane: &str) -> Result<PathBuf, String> {
-    if !matches!(pane, "engine" | "xterm") {
+    if pane != "engine" {
         return Err("invalid capture pane".into());
     }
     Ok(report.with_extension(format!("{pane}.png")))
