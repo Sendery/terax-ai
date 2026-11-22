@@ -9,6 +9,7 @@
 
 use super::erase_wrap::EraseWrapFix;
 use super::prompt_redraw::PromptRedraw;
+use super::selection::{SelectionCommand, SelectionState};
 use super::shell::{ShellIntegration, ShellToken};
 use super::text::read_text;
 use super::{start_with_shell_options, Engine, EngineOptions, ShellConfig};
@@ -607,7 +608,8 @@ fn the_engine_erases_the_prompt_before_it_reflows() {
 /// same pieces as the engine session and prints every row at the end.
 /// TERAX_REPLAY=<capture.json>; TERAX_REPLAY_TOKEN is the session token the
 /// capture ran with (default `tok123`); TERAX_REPLAY_EACH=1 also prints the
-/// rows before every resize.
+/// rows before every resize; TERAX_REPLAY_MARKERS=a,b counts each marker in
+/// what Select All copies at the end.
 #[test]
 #[ignore = "investigation tool; needs a capture file"]
 fn replay_capture_through_prompt_redraw() {
@@ -648,4 +650,19 @@ fn replay_capture_through_prompt_redraw() {
         }
     }
     eprintln!("=== rows ===\n{}\n=== end ===", pane.text());
+    // Select All, as Copy would give it: soft-wrapped rows joined.
+    let mut selection = SelectionState::default();
+    let copied = selection
+        .apply(&pane.term, &SelectionCommand::All)
+        .unwrap()
+        .unwrap_or_default();
+    selection.reset(&pane.term);
+    eprintln!("=== copy ===\n{}\n=== end ===", tidy(&copied));
+    for marker in std::env::var("TERAX_REPLAY_MARKERS")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|marker| !marker.is_empty())
+    {
+        eprintln!("marker {marker:?}: {}", copied.matches(marker).count());
+    }
 }
