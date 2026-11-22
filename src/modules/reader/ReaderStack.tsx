@@ -1,6 +1,7 @@
 import type { ReaderTab, Tab } from "@/modules/tabs";
 import { LayoutBottomIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReadContextMenuBinding } from "./components/ReadContextMenu";
 import type { OriginTab } from "./components/ReaderLibrary";
 import {
   READER_ICON_BUTTON,
@@ -25,6 +26,7 @@ type Props = {
   onClose: (tabId: number) => void;
   onTitle: (tabId: number, title: string) => void;
   binding?: ReaderTabBinding;
+  readMenu: ReadContextMenuBinding;
 };
 
 /** Mounts only the Reader tab on screen; documents stay in the store. */
@@ -34,6 +36,7 @@ export function ReaderStack({
   onClose,
   onTitle,
   binding,
+  readMenu,
 }: Props) {
   const active = tabs.find(
     (t): t is ReaderTab => t.kind === "reader" && t.id === activeId,
@@ -43,6 +46,7 @@ export function ReaderStack({
     <ReaderPane
       key={active.id}
       docId={active.docId}
+      readMenu={readMenu}
       visible
       onClose={() => onClose(active.id)}
       onTitle={(title) => {

@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRef, useState } from "react";
+import type { ReadContextMenuBinding } from "./ReadContextMenu";
 import { READ_LABELS } from "./ReadMenuItems";
 import { ReaderLibrary, type OriginTab } from "./ReaderLibrary";
 import { READER_ICON_BUTTON, ReaderLibraryButton } from "./ReaderLibraryButton";
@@ -20,6 +21,7 @@ const MAX = 0.8;
 type Props = {
   /** Reading in the panel; null shows the library. */
   docId: string | null;
+  readMenu: ReadContextMenuBinding;
   /** Share of the workspace height. */
   height: number;
   onResize: (height: number) => void;
@@ -39,6 +41,7 @@ type Props = {
  */
 export function ReaderDock({
   docId,
+  readMenu,
   height,
   onResize,
   onClose,
@@ -121,6 +124,7 @@ export function ReaderDock({
         <ReaderPane
           key={docId}
           docId={docId}
+          readMenu={readMenu}
           visible
           variant="dock"
           onClose={onClose}
