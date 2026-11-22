@@ -29,6 +29,19 @@
     return { styled, nodes: host.querySelectorAll(".gx-node").length, paths: host.querySelectorAll("svg path").length,
       width: Math.round(rect.width), height: Math.round(rect.height) };
   };
+  // Mermaid source is converted here, inside the sandbox, by the bundled GraphX converter.
+  // Node links (Mermaid click/link URLs) and generated member HTML are dropped: graph
+  // content never supplies external links or markup. Class and ER members stay as rows.
+  const MAX_MERMAID_CHARS = 48 * 1024;
+  const fromMermaid = (source, title) => {
+    if (typeof source !== "string" || !source.trim() || source.length > MAX_MERMAID_CHARS) throw Error("mermaid");
+    const result = GraphX.fromMermaid(source, { lang: "en" });
+    const spec = result.spec;
+    for (const node of spec.nodes) { delete node.links; delete node.details_html; }
+    if (typeof title === "string" && title.trim() && spec.title === "Diagram") spec.title = title.slice(0, 80);
+    const warnings = (Array.isArray(result.warnings) ? result.warnings : []).slice(0, 20).map(item => String(item).slice(0, 200));
+    return { spec, warnings };
+  };
   const cancelCapture = () => { capture?.cancel(); capture = null; };
   async function snapshot(requestId) {
     if (!rendered || capture || typeof requestId !== "string" || !/^[a-zA-Z0-9-]{1,64}$/.test(requestId)) {
@@ -94,8 +107,20 @@
     if (data.type !== "terax:graphx:render" || graph || typeof data.documentId !== "string" || data.documentId.length > 64 || !Number.isSafeInteger(data.revision)) return;
     owner = { documentId: data.documentId, revision: data.revision };
     const own = ++generation;
+    const mermaid = typeof data.mermaid === "string";
+    let spec = data.spec, warnings = [];
+    if (mermaid) {
+      try {
+        ({ spec, warnings } = fromMermaid(data.mermaid, data.title));
+      } catch (error) {
+        const message = error?.name === "MermaidError" ? String(error.message).slice(0, 300) : "This Mermaid source could not be converted.";
+        status.hidden = false;
+        status.textContent = "GraphX cannot draw this Mermaid diagram.";
+        reply("terax:graphx:error", { reason: "mermaid", message });
+        return;
+      }
+    }
     try {
-      const spec = data.spec;
       if (spec.tour) spec.tour.steps = spec.tour.steps.map(step => ({ ...step, body_html: escape(step.body || "") }));
       document.documentElement.dataset.theme = data.theme === "dark" ? "dark" : "light";
       GraphX.injectCSS();
@@ -107,13 +132,13 @@
       if (generation === own) {
         const geometry = receipt();
         rendered = true;
-        reply("terax:graphx:rendered", { receipt: geometry });
+        reply("terax:graphx:rendered", mermaid ? { receipt: geometry, warnings } : { receipt: geometry });
       }
     } catch (error) {
       if (generation !== own) return;
       status.hidden = false;
       const reason = error?.message === "styles" ? "styles" : "layout";
-      status.textContent = reason === "styles" ? "Graph styles are unavailable. Reopen this tab." : "Graph layout failed. Edit the JSON and apply again.";
+      status.textContent = reason === "styles" ? "Graph styles are unavailable. Reopen this tab." : mermaid ? "Graph layout failed. Edit the Mermaid source." : "Graph layout failed. Edit the JSON and apply again.";
       reply("terax:graphx:error", { reason });
     }
   });
