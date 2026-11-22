@@ -34,7 +34,7 @@ import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard"
 import {
   markSessionReady,
   resetSessionReady,
-} from "@/modules/terminal/lib/useTerminalSession";
+} from "@/modules/terminal/lib/leafSession";
 import { TerminalContextMenu } from "@/modules/terminal/TerminalContextMenu";
 import type {
   TerminalPaneHandle,

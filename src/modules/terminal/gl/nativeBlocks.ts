@@ -1,9 +1,9 @@
-import type { BlockMeta } from "@/modules/terminal/block/lib/types";
 import type {
   BlockContext,
+  BlockMeta,
   PositionedBlock,
   VisibleBlocks,
-} from "@/modules/terminal/block/lib/blockDecorations";
+} from "@/modules/terminal/block/lib/types";
 
 export type NativeBlockSnapshot = {
   seq: number | null;

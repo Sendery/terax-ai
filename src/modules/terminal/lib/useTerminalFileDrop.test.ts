@@ -28,7 +28,7 @@ vi.mock("@tauri-apps/api/webview", () => ({
 vi.mock("@/modules/terminal/lib/dropStore", () => ({
   useTerminalDropStore: { getState: () => ({ setTarget: native.setTarget }) },
 }));
-vi.mock("@/modules/terminal/lib/rendererPool", () => ({
+vi.mock("@/modules/terminal/lib/leafSession", () => ({
   pasteIntoLeaf: native.pasteIntoLeaf,
 }));
 vi.mock("@/lib/platform", () => ({

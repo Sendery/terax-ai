@@ -24,7 +24,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ReactNode, useState } from "react";
 import { selectionCopyChoices } from "./lib/agentCopy";
-import { pasteIntoLeaf, repaintLeaf } from "./lib/rendererPool";
+import { pasteIntoLeaf, repaintLeaf } from "./lib/leafSession";
 import {
   readTerminalClipboard,
   writeTerminalClipboard,

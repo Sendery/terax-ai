@@ -11,9 +11,7 @@ export function shouldYieldTerminalShortcut(
   { target, shiftKey, getSelection }: TerminalShortcutContext,
 ): boolean {
   const inTerminal = Boolean(
-    (target as Element | null)?.closest?.(
-      ".xterm, [data-native-terminal-grid]",
-    ),
+    (target as Element | null)?.closest?.("[data-native-terminal-grid]"),
   );
   if (!inTerminal) return false;
   return id === "sidebar.toggle" ? !shiftKey : !getSelection()?.trim();

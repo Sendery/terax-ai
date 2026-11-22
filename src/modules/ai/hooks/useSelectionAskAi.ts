@@ -40,7 +40,7 @@ export function useSelectionAskAi({
     const onUp = (event: MouseEvent) => {
       if (event.button !== 0 || isInsideAi(event.target)) return;
       const element = event.target as HTMLElement | null;
-      if (!element?.closest?.(".xterm, .cm-editor")) return;
+      if (!element?.closest?.(".cm-editor")) return;
       controller.legacy({ x: event.clientX, y: event.clientY });
     };
     const onNativeSelection = (event: Event) => {

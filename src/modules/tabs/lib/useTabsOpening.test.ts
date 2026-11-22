@@ -35,7 +35,7 @@ vi.mock("react", () => ({
   useEffect: () => {},
   startTransition: (work: () => void) => work(),
 }));
-vi.mock("@/modules/terminal/lib/useTerminalSession", () => ({
+vi.mock("@/modules/terminal/lib/leafSession", () => ({
   disposeSession: vi.fn(),
 }));
 import { useTabs } from "@/modules/tabs/lib/useTabs";

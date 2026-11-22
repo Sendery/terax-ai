@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { IS_MAC } from "@/lib/platform";
 import { useTerminalDropStore } from "@/modules/terminal/lib/dropStore";
 import { formatDroppedPaths } from "@/modules/terminal/lib/quoteShellPath";
-import { pasteIntoLeaf } from "@/modules/terminal/lib/rendererPool";
+import { pasteIntoLeaf } from "@/modules/terminal/lib/leafSession";
 
 // Pinned Wry sends AppKit points on macOS despite Tauri's PhysicalPosition label.
 function leafIdAt(x: number, y: number): number | null {

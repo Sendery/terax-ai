@@ -102,7 +102,7 @@ it("retains the deferred editor and legacy popup path", () => {
     clientY: 19,
     target: {
       closest: (selector: string) =>
-        selector === ".xterm, .cm-editor" ? {} : null,
+        selector === ".cm-editor" ? {} : null,
     },
   });
   expect(hooks.show).not.toHaveBeenCalled();

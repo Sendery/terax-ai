@@ -13,18 +13,18 @@ export {
   leafIdForPty,
   navigateFocusedBlocks,
   ptyIdForLeaf,
+  repaintLeaf,
   respawnSession,
   submitToLeaf,
   whenSessionReady,
   writeToSession,
-} from "./lib/useTerminalSession";
+} from "./lib/leafSession";
 export {
   aggregateAgentPhases,
   type AgentTabStatus,
   type AttentionCause,
   useAgentActivityStore,
 } from "./lib/agentActivity";
-export { repaintLeaf } from "./lib/rendererPool";
 export { useTerminalFileDrop } from "./lib/useTerminalFileDrop";
 export {
   findLeafCwd,

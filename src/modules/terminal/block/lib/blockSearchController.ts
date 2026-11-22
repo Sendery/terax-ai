@@ -1,4 +1,4 @@
-import type { BlockMatch } from "./blockDecorations";
+import type { BlockMatch } from "./types";
 export type BlockUiMatch = BlockMatch & {
   native?: { version: number; index: number };
 };

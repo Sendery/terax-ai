@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const harness = vi.hoisted(() => ({
   effects: [] as (() => unknown)[],
-  pty: {
-    id: 9,
-    write: vi.fn(async (_text: string) => {}),
-    close: vi.fn(),
-    resize: vi.fn(),
-  },
 }));
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
@@ -19,57 +13,12 @@ vi.mock("react", async (original) => ({
   useMemo: (read: () => unknown) => read(),
   useState: (value: unknown) => [value, vi.fn()],
 }));
-vi.mock("@/modules/terminal/lib/useTerminalFont", () => ({
-  useTerminalFont: () => ({
-    fontFamily: "monospace",
-    fontWeight: 400,
-    fontSize: 14,
-  }),
-}));
 vi.mock("@/modules/settings/preferences", () => ({
   usePreferencesStore: (select: (value: unknown) => unknown) =>
     select({ shortcuts: {} }),
 }));
-vi.mock("@/modules/terminal/lib/rendererPool", () => {
-  const names = [
-    "acquireSlot",
-    "applyBackgroundActive",
-    "applyCursorBlink",
-    "applyLetterSpacing",
-    "applyTerminalFont",
-    "applyTheme",
-    "applyScrollback",
-    "applyWebglPreference",
-    "configureRendererPool",
-    "discardRetainedSlot",
-    "disposeLeafSlot",
-    "focusSlot",
-    "getLiveSlotForLeaf",
-    "getSlotForLeaf",
-    "isLeafAltScreen",
-    "parkLeafSlot",
-    "poolAtlasBytes",
-    "poolSize",
-    "poolSlotStats",
-    "refreshLeafSlot",
-    "releaseSlot",
-    "setSlotFocused",
-  ];
-  return Object.fromEntries(names.map((name) => [name, vi.fn(() => null)]));
-});
-vi.mock("@/modules/terminal/lib/pty-bridge", () => ({
-  openPty: async () => harness.pty,
-}));
-vi.mock("@/modules/workspace", () => ({
-  currentWorkspaceEnv: () => ({ kind: "local" }),
-}));
-vi.mock("@/modules/terminal/lib/agentActivity", () => ({
-  ensureAgentActivityListener: () => {},
-  isAgentActivePty: () => false,
-}));
 import { MOD_PROP } from "@/lib/platform";
 import { useGlobalShortcuts } from "@/modules/shortcuts/lib/useGlobalShortcuts";
-import { getSlotForLeaf } from "@/modules/terminal/lib/rendererPool";
 import {
   captureLeafInput,
   canClearActiveLeaf,
@@ -80,9 +29,7 @@ import {
   disposeSession,
   markSessionReady,
   resetSessionReady,
-  respawnSession,
-  useTerminalSession,
-} from "@/modules/terminal/lib/useTerminalSession";
+} from "@/modules/terminal/lib/leafSession";
 import {
   registerNativeLeaf,
   takeNativeLeaf,
@@ -90,9 +37,6 @@ import {
 } from "@/modules/terminal/gl/nativeLeafRegistry";
 
 const leafId = 853;
-function LegacyHarness() {
-  useTerminalSession({ leafId, container: { current: null }, visible: false });
-}
 function nativeLeaf() {
   return {
     submissionIdentity: {},
@@ -116,11 +60,6 @@ function nativeLeaf() {
 }
 beforeEach(() => {
   harness.effects = [];
-  vi.mocked(getSlotForLeaf).mockReturnValue(null);
-  harness.pty.id = 9;
-  harness.pty.write.mockClear();
-  harness.pty.close.mockClear();
-  harness.pty.resize.mockClear();
   vi.stubGlobal("document", { fonts: { ready: Promise.resolve() } });
 });
 afterEach(() => {
@@ -169,22 +108,6 @@ it("does not turn a native readiness timeout into a submission", async () => {
   await vi.advanceTimersByTimeAsync(5);
   expect(await result).toBe(false);
   expect(native.submit).not.toHaveBeenCalled();
-});
-it("invalidates legacy captures before respawn while retaining the same leaf and Session object", async () => {
-  LegacyHarness();
-  harness.effects[0]();
-  await respawnSession(leafId, "/repo");
-  const old = captureLeafSubmission(leafId);
-  const result = old?.submitWhenReady("old resume", 15000);
-  await respawnSession(leafId, "/next");
-  markSessionReady(leafId);
-  expect(await result).toBe(false);
-  expect(harness.pty.write).not.toHaveBeenCalled();
-  const current = captureLeafSubmission(leafId);
-  expect(await current?.submitWhenReady("first\nsecond", 15000)).toBe(true);
-  expect(harness.pty.write).toHaveBeenCalledExactlyOnceWith(
-    "\x1b[200~first\nsecond\x1b[201~\r",
-  );
 });
 
 it("guards owned native input while its raw write is pending", async () => {
@@ -252,25 +175,6 @@ it("rejects native key encoding from an owner replaced under the same leaf id", 
   finish("\x1b[13;2u");
   await rejected;
 });
-it("marks a legacy command write at its final PTY call", async () => {
-  LegacyHarness();
-  harness.effects[0]();
-  await respawnSession(leafId, "/repo");
-  markSessionReady(leafId);
-  const attempted = vi.fn(() => {
-    expect(harness.pty.write).not.toHaveBeenCalled();
-  });
-  const result = await captureLeafSubmission(leafId)?.submitWhenReady(
-    "pi",
-    100,
-    () => true,
-    attempted,
-  );
-  expect(result).toBe(true);
-  expect(attempted).toHaveBeenCalledOnce();
-  expect(harness.pty.write).toHaveBeenCalledExactlyOnceWith("pi\r");
-});
-
 function clearTarget(id = leafId, grid = true) {
   const root = {
     getAttribute: () => String(id),
@@ -406,48 +310,6 @@ it("surfaces a genuine clearActive write rejection without retrying", async () =
   expect(native.writeOwned).toHaveBeenCalledOnce();
 });
 
-it("preserves clearActive's formfeed for the focused legacy slot", async () => {
-  useTerminalSession({
-    leafId,
-    container: { current: null },
-    visible: true,
-    focused: true,
-  });
-  for (const effect of harness.effects) effect();
-  await respawnSession(leafId, "/repo");
-  const target = {
-    closest: (selector: string) => (selector === ".xterm" ? root : null),
-  } as unknown as Element;
-  const root = { contains: (value: Element) => value === target };
-  vi.mocked(getSlotForLeaf).mockReturnValue({
-    term: { element: root },
-  } as unknown as NonNullable<ReturnType<typeof getSlotForLeaf>>);
-  Object.assign(document, { activeElement: target });
-  expect(canClearActiveLeaf(leafId, target)).toBe(true);
-  expect(await clearActiveLeaf(leafId)).toBe(true);
-  expect(harness.pty.write).toHaveBeenCalledExactlyOnceWith("\x0c");
-  Object.assign(document, { activeElement: { closest: () => null } });
-  expect(await clearActiveLeaf(leafId)).toBe(false);
-  expect(harness.pty.write).toHaveBeenCalledOnce();
-});
-it("does not send clearActive to a legacy slot owned by another pane", async () => {
-  useTerminalSession({
-    leafId,
-    container: { current: null },
-    visible: true,
-    focused: true,
-  });
-  for (const effect of harness.effects) effect();
-  await respawnSession(leafId, "/repo");
-  const target = { closest: () => ({}) } as unknown as Element;
-  vi.mocked(getSlotForLeaf).mockReturnValue({
-    term: { element: { contains: () => false } },
-  } as unknown as NonNullable<ReturnType<typeof getSlotForLeaf>>);
-  Object.assign(document, { activeElement: target });
-  expect(canClearActiveLeaf(leafId, target)).toBe(false);
-  expect(await clearActiveLeaf(leafId)).toBe(false);
-  expect(harness.pty.write).not.toHaveBeenCalled();
-});
 it.each(["native", "other pane", "editor"] as const)(
   "global clearActive shortcut claims only its focused owner (%s)",
   async (kind) => {
@@ -520,7 +382,6 @@ it("host clear uses only the focused native owner, allows a manual private gestu
   expect(await clearFocusedTerminal(leafId)).toBe(true);
   expect(native.clear).toHaveBeenCalledOnce();
   expect(native.writeOwned).not.toHaveBeenCalled();
-  expect(harness.pty.write).not.toHaveBeenCalled();
 });
 it.each(["editor", "other pane", "not active"] as const)(
   "host clear does not claim %s focus",
@@ -582,29 +443,4 @@ it("host clear returns only actual changed and surfaces genuine failure without 
     "host clear failed",
   );
   expect(native.writeOwned).not.toHaveBeenCalled();
-});
-it("legacy host clear still calls xterm.clear only for its actual focused slot", async () => {
-  useTerminalSession({
-    leafId,
-    container: { current: null },
-    visible: true,
-    focused: true,
-  });
-  for (const effect of harness.effects) effect();
-  await respawnSession(leafId, "/repo");
-  const clear = vi.fn();
-  const target = {
-    closest: (selector: string) => (selector === ".xterm" ? root : null),
-  } as unknown as Element;
-  const root = { contains: (value: Element) => value === target };
-  vi.mocked(getSlotForLeaf).mockReturnValue({
-    term: { element: root, clear },
-  } as unknown as NonNullable<ReturnType<typeof getSlotForLeaf>>);
-  Object.assign(document, { activeElement: target });
-  expect(await clearFocusedTerminal(leafId)).toBe(true);
-  expect(clear).toHaveBeenCalledOnce();
-  expect(harness.pty.write).not.toHaveBeenCalled();
-  Object.assign(document, { activeElement: {} });
-  expect(await clearFocusedTerminal(leafId)).toBe(false);
-  expect(clear).toHaveBeenCalledOnce();
 });

@@ -1,15 +1,6 @@
 import { expect, it } from "vitest";
-import {
-  nativePaneLayout,
-  terminalEngineChoice,
-  initialLeafEngine,
-} from "@/modules/terminal/gl/nativeSurface";
+import { nativePaneLayout } from "@/modules/terminal/gl/nativeSurface";
 
-it("selects native rendering only for the explicit build flag", () => {
-  expect(terminalEngineChoice("ghostty")).toBe("ghostty");
-  for (const value of [undefined, null, "", "xterm", "true", "Ghostty"])
-    expect(terminalEngineChoice(value)).toBe("xterm");
-});
 it("uses shared-canvas coordinates for a nested pane", () => {
   const layout = nativePaneLayout(
     { left: 300, top: 140, width: 412, height: 252 },
@@ -34,13 +25,4 @@ it("keeps grids valid while a pane is initially collapsed or very large", () => 
       { width: 4, height: 8 },
     ).grid,
   ).toEqual({ cols: 1000, rows: 500 });
-});
-
-it("retains the registered engine after blocks change and the view remounts", () => {
-  expect(initialLeafEngine(true, true, "ghostty")).toBe("ghostty");
-  expect(initialLeafEngine(true, false, "xterm")).toBe("xterm");
-  expect(initialLeafEngine(true, false)).toBe("ghostty");
-  expect(initialLeafEngine(true, true)).toBe("ghostty");
-  expect(initialLeafEngine(false, true)).toBe("xterm");
-  expect(initialLeafEngine(false, false)).toBe("xterm");
 });
