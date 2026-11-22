@@ -100,6 +100,7 @@ function loadFrame(): Frame {
   };
   context.globalThis = context;
   context.self = context;
+  context.window = context;
   createContext(context);
   runInContext(engineSource, context);
   const engine = context.GraphX as Frame["engine"] & {
