@@ -35,7 +35,7 @@ export function bellRowView(n: AgentNotification): BellRowView {
   return {
     mark: TONE_MARK[n.tone],
     name: n.sessionName ?? displayAgent(n.agent),
-    label: notificationLabel(n.kind, n.reason),
+    label: n.terminalTitle ?? notificationLabel(n.kind, n.reason),
     detail: n.body || n.text || null,
     where: where || null,
   };

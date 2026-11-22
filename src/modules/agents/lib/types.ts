@@ -51,6 +51,7 @@ export type AgentSignal = {
   /** Only on `bound`: the transcript this pane is writing. */
   sessionId?: string | null;
   title?: string | null;
+  exitCode?: number | null;
   progress?: { state: number; percent: number | null } | null;
 };
 
@@ -109,6 +110,7 @@ export type AgentNotification = {
   tone: NotificationTone;
   /** The native notification's body: the question, the agent's words or its summary. */
   body?: string;
+  terminalTitle?: string;
   /** The native notification's subtitle: tab, running tasks and PR. */
   subtitle?: string;
   /** Title of the tab it happened in, so a row names where to go. */
