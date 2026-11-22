@@ -65,7 +65,7 @@ Native blocks retain complete original authenticated command metadata up to 1 Mi
 
 Native macOS keyboard paste leaves Cmd+V to WebKit and consumes plaintext only from the existing textarea `paste` event. Do not replace that gesture with `navigator.clipboard.readText()`: WebKit can open a modal paste-permission menu. Non-Mac Ctrl+Shift+V/Shift+Insert retain the existing clipboard helper, cancelling keydown default to avoid duplicate delivery. Clipboard delivery checks the focused visible input owner and rejects retired/exited sessions; delayed helper reads also retain the session id. Native newline normalization remains in the Rust input encoder. See `docs/plans/2026-11-16-native-paste-gesture.md`.
 
-Native primary selections feed the shared selection-action popup through their actual asynchronous completion. Pending popup work and all three actions validate the original session, selection text, history revision, visibility and privacy scope. Later pointer interaction or retirement cannot revive stale selection UI. See docs/plans/2026-11-16-native-selection-popup.md for the focused correction and pending combined-candidate visual acceptance.
+Selecting text raises no popup. Every text view (terminal, editor, raw and rendered Markdown) offers its selection actions on right-click: Copy, Ask Terax, Add to Note, Open Mermaid and the reading actions, from the shared `SelectionActionItems` and `ReadMenuItems`. Each menu acts on the selection captured when it opened. The earlier native selection popup is recorded in docs/plans/2026-11-16-native-selection-popup.md.
 
 ### PTY shell integration
 

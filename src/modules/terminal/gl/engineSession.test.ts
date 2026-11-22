@@ -1,4 +1,3 @@
-import { createSelectionPopup } from "@/modules/ai/hooks/selectionPopup";
 import type { ApplyResult } from "@/modules/terminal/gl/cellBuffer";
 import {
   type DecodedFrame,
@@ -2265,40 +2264,6 @@ it("can revert a rejected command to the confirmed applied rows without a phanto
 });
 
 describe("semantic selection popup ownership", () => {
-  it("keeps a popup actionable across actual EngineSession read refreshes while query revisions advance", async () => {
-    const session = await openSession(new FakeRenderer());
-    await session.select({ kind: "all" });
-    const released = session.select({ kind: "release" });
-    const mutation = session.selectionMutationRevision;
-    expect(mutation).toBeTypeOf("number");
-    const query = session.selectionRevision;
-    const show = vi.fn();
-    const action = vi.fn();
-    const popup = createSelectionPopup({
-      readSelection: () => session.getSelection(),
-      show,
-      defer: (run) => run(),
-    });
-    popup.native({
-      x: 20,
-      y: 30,
-      selection: released,
-      current: () =>
-        session.id !== null &&
-        session.historyAvailable &&
-        session.selectionMutationRevision === mutation,
-    });
-    await released;
-    for (let frame = 0; frame < 3; frame++)
-      await session.select({ kind: "read" });
-    expect(session.selectionRevision).toBeGreaterThan(query);
-    expect(session.selectionMutationRevision).toBe(mutation);
-    expect(show).toHaveBeenLastCalledWith({ x: 20, y: 30 });
-    popup.act(action);
-    expect(action).toHaveBeenCalledTimes(1);
-    popup.dispose();
-    await session.close();
-  });
   it("retires popup ownership for mutating selection commands even when their text is identical", async () => {
     const session = await openSession(new FakeRenderer());
     await session.select({ kind: "all" });
