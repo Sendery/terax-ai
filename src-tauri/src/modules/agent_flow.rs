@@ -26,6 +26,7 @@ pub enum Provider {
     Pi,
     Codex,
     Copilot,
+    Agy,
 }
 
 #[derive(Serialize)]
@@ -180,6 +181,15 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
                 _ => {}
             }
         }
+        Provider::Agy => match kind {
+            "USER_INPUT" => emit(Kind::User, text(&row["content"]), None),
+            "PLANNER_RESPONSE" => emit(Kind::Reply, text(&row["content"]), None),
+            "ERROR_MESSAGE" => emit(Kind::Error, text(&row["content"]), None),
+            "RUN_COMMAND" | "VIEW_FILE" | "LIST_DIRECTORY" | "GREP_SEARCH" | "CODE_ACTION" => {
+                emit(Kind::Tool, kind.replace('_', " ").to_ascii_lowercase(), None);
+            }
+            _ => {}
+        },
     }
 }
 
@@ -274,7 +284,53 @@ fn resolve(provider: Provider, id: &str) -> Option<PathBuf> {
             };
             hint && metadata(path, provider).is_some_and(|meta| meta.id == id)
         }),
+        Provider::Agy => agy_transcript(&agy_root()?, id),
     }
+}
+
+fn agy_root() -> Option<PathBuf> {
+    Some(dirs::home_dir()?.join(".gemini/antigravity-cli"))
+}
+
+fn agy_transcript(root: &Path, id: &str) -> Option<PathBuf> {
+    let brain = root.join("brain").canonicalize().ok()?;
+    let path = brain.join(id).join("transcript.jsonl").canonicalize().ok()?;
+    (path.starts_with(brain) && path.is_file()).then_some(path)
+}
+
+fn agy_history(cwds: &HashSet<String>) -> Vec<HistorySession> {
+    let Some(root) = agy_root() else { return Vec::new() };
+    let Some(cache) = File::open(root.join("cache/conversation_metadata.json")).ok()
+        .and_then(|file| serde_json::from_reader::<_, Value>(file.take(1024 * 1024)).ok())
+    else { return Vec::new() };
+    cache.as_object().into_iter().flat_map(|sections| sections.values())
+        .filter_map(Value::as_object).flat_map(|entries| entries.iter())
+        .filter_map(|(id, record)| {
+            let summary = &record["summary"];
+            if !is_safe_session_id(id) || record["is_internal"] == true
+                || summary["Internal"] == true || summary["Cloud"] == true || summary["ID"] != *id
+            {
+                return None;
+            }
+            let cwd = summary["WorkspaceURIs"].as_array()?.iter().find_map(|uri| {
+                let path = tauri::Url::parse(uri.as_str()?).ok()?.to_file_path().ok()?;
+                let path = path.to_str()?;
+                cwds.contains(path).then(|| path.to_string())
+            })?;
+            let path = agy_transcript(&root, id)?;
+            let created_at = read_first(&path).and_then(|row| row["created_at"].as_str().and_then(parse_rfc3339_ms));
+            let modified_at = record["last_modified_time"].as_str().and_then(parse_rfc3339_ms)?;
+            let name = text(&summary["Title"]);
+            Some(HistorySession {
+                id: id.clone(),
+                provider: Provider::Agy,
+                cwd,
+                modified_at,
+                created_at,
+                parent_id: None,
+                name: (!name.is_empty()).then_some(name),
+            })
+        }).take(120).collect()
 }
 
 type CachedPaths = VecDeque<(Provider, String, PathBuf)>;
@@ -328,7 +384,8 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
         if !label.is_empty() {
             name = Some(label);
         }
-        let Some(at) = row["timestamp"].as_str().and_then(parse_rfc3339_ms) else { continue };
+        let timestamp = if provider == Provider::Agy { &row["created_at"] } else { &row["timestamp"] };
+        let Some(at) = timestamp.as_str().and_then(parse_rfc3339_ms) else { continue };
         let mut index = 0;
         project(provider, &row, &mut |kind, text, task_id| {
             if events.len() == MAX_EVENTS {
@@ -356,6 +413,7 @@ pub async fn agent_flow_history(cwds: Vec<String>) -> Result<Vec<HistorySession>
             found.extend(files.into_iter().filter_map(|path| metadata(&path, provider))
                 .filter(|session| cwds.contains(&session.cwd)).take(120));
         }
+        found.extend(agy_history(&cwds));
         found.sort_by_key(|session| std::cmp::Reverse(session.modified_at));
         found
     }).await.map_err(|error| error.to_string())

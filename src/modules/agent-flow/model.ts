@@ -19,7 +19,7 @@ export const FLOW_LABELS = {
 } as const;
 
 export type FlowKind = keyof typeof FLOW_LABELS;
-export type TraceProvider = "claude" | "pi" | "codex" | "copilot";
+export type TraceProvider = "claude" | "pi" | "codex" | "copilot" | "agy";
 export type TraceEvent = {
   id: string;
   at: number;
@@ -64,7 +64,7 @@ export type FlowRun = {
 };
 
 export function isTraceProvider(harness: AgentHarness): harness is TraceProvider {
-  return harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot";
+  return harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot" || harness === "agy";
 }
 
 export function beforeTime<T extends { at: number }>(events: readonly T[], time: number | null): T[] {
@@ -166,7 +166,8 @@ export function placeLane(tasks: readonly FlowTask[], direction: FlowDirection) 
   for (const task of tasks) {
     const layer = (task.parentId ? columns.get(task.parentId) ?? 0 : 0) + 1;
     columns.set(task.id, layer);
-    (layers[layer] ??= []).push(task);
+    if (!layers[layer]) layers[layer] = [];
+    layers[layer].push(task);
   }
   const depth = layers.length;
   const cross = Math.max(1, ...layers.map((layer) => layer.length));

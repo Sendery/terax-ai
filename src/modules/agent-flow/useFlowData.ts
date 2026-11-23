@@ -24,7 +24,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
   const journal = useFlowJournal((state) => open ? state.runs : null);
   const [history, setHistory] = useState<History>({ key: "", sourceKey: "", runs: [], failed: false });
   const activeKey = Object.values(sessions ?? {}).filter(
-    (session) => session.harness === "codex" || session.harness === "copilot",
+    (session) => session.harness === "codex" || session.harness === "copilot" || session.harness === "agy",
   ).map((session) => flowRunKey(session)).join(",");
   const sourceKey = useMemo(() => {
     if (!open) return "";
@@ -135,7 +135,8 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       return tab?.kind !== "terminal" || !tab.private;
     });
     const attributed = allowed.map((run) => {
-      if (run.sessionId || !run.cwd || (run.harness !== "codex" && run.harness !== "copilot")) return run;
+      if (run.sessionId || !run.cwd ||
+        (run.harness !== "codex" && run.harness !== "copilot" && run.harness !== "agy")) return run;
       const closeToStart = (at: number, other: FlowRun) => Math.abs(other.startedAt - at) <= 15_000;
       const matching = candidates.filter((entry) =>
         !entry.parentId && entry.harness === run.harness && entry.cwd === run.cwd && entry.createdAt !== undefined &&
@@ -146,7 +147,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       if (matching.length !== 1) return run;
       const sessionId = matching[0].sessionId;
       const digest = run.leafId === undefined ? undefined : digests?.[run.leafId];
-      return { ...run, sessionId, name: digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name };
+      return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
     });
     return mergeRuns(attributed, candidates);
   }, [sessions, digests, journal, tabs, history, sourceKey]);

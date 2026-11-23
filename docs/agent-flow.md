@@ -13,12 +13,12 @@ timestamp to review a point in time. Go live returns to incoming activity.
 | Codex | Process status and terminal alerts | Messages, tools, turns and child rollout links, with child activity when available |
 | Pi | Pi extension markers, process status and terminal alerts | Messages, tools and explicit subagent calls from the session transcript |
 | Copilot CLI | Process status and terminal alerts | Messages, tools, turns and structured subagent events |
-| Antigravity | Process status and terminal alerts | Terminal activity is retained from this version |
+| Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace |
 | Grok | Process status and terminal alerts | Terminal activity is retained from this version |
 
 Project history is discovered for open public terminal directories. Previous
-transcripts without a recorded tab association appear under the project. Codex
-and Copilot transcripts join a terminal run when a unique start-time match is
+transcripts without a recorded tab association appear under the project. Codex,
+Copilot and Antigravity transcripts join a terminal run when a unique start-time match is
 available in its directory. Resumed or concurrent runs with ambiguous matches
 remain separate. The terminal journal keeps at most 160 recent public runs and
 96 terminal events per run. It stores lifecycle and source metadata. Transcript

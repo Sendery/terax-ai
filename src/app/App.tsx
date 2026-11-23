@@ -1754,7 +1754,7 @@ export default function App() {
       if (spaces.activeId !== tab.spaceId) spaces.setActive(tab.spaceId);
       onActivateAgent(tabId, leafId);
     },
-    [onActivateAgent, tabsRef],
+    [onActivateAgent],
   );
 
   const onActivateLocalAgent = useCallback(() => {
