@@ -257,6 +257,61 @@
   border-style: dashed;
 }
 
+.flow-coordinator {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, var(--flow-branch) 35%, var(--flow-line));
+  border-radius: 15px;
+  background: radial-gradient(ellipse at 50% 105%, color-mix(in oklab, var(--flow-branch) 21%, transparent), transparent 64%),
+    color-mix(in oklab, var(--flow-panel) 63%, transparent);
+}
+
+.flow-coordinator::after {
+  position: absolute;
+  bottom: -3px;
+  left: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--flow-branch);
+  content: "";
+  pointer-events: none;
+}
+
+.flow-coordinator > button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 140px;
+  padding: 6px 13px;
+  border: 1px solid color-mix(in oklab, var(--flow-branch) 62%, var(--flow-line));
+  border-radius: 10px;
+  background: var(--flow-panel);
+  color: var(--flow-branch);
+  text-align: start;
+}
+
+.flow-coordinator > button strong,
+.flow-coordinator > button small {
+  display: block;
+}
+
+.flow-coordinator > button strong {
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+.flow-coordinator > button small {
+  font: 10px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-coordinator > button:hover,
+.flow-coordinator > button[aria-pressed="true"],
+.flow-coordinator[data-linked="true"] > button {
+  border-color: var(--flow-branch);
+}
+
 .flow-cluster[data-operating="true"] {
   --flow-live-outline: color-mix(in oklab, var(--flow-accent) 78%, var(--foreground));
   border-color: var(--flow-live-outline);
@@ -290,6 +345,11 @@
 .flow-relation-line[data-kind="file"],
 .flow-relation-label[data-kind="file"] {
   --flow-link: var(--flow-warn);
+}
+
+.flow-relation-line[data-coordinator="true"],
+.flow-relation-label[data-coordinator="true"] {
+  --flow-link: var(--flow-branch);
 }
 
 .flow-relation-line {
@@ -345,7 +405,8 @@
   box-shadow: 0 0 12px color-mix(in oklab, var(--flow-link) 30%, transparent);
 }
 
-.flow-world[data-detail="compact"] .flow-relation-label span {
+.flow-world[data-detail="compact"] .flow-relation-label span,
+.flow-relation-label[data-row-port="true"] span {
   display: none;
 }
 

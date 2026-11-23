@@ -12,6 +12,8 @@ const NODE_GEOMETRY = {
   compact: { width: 156, height: 132, centerX: 78, centerY: 42 },
 };
 const GUTTER = 46;
+const COORDINATOR_HEIGHT = 74;
+const COORDINATOR_ROW_GUTTER = 68;
 const CLUSTER_PAD = 18;
 const CLUSTER_HEADER = 31;
 export const COMPACT_SCALE = 0.48;
@@ -218,6 +220,8 @@ type Cluster = {
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
+type Layout = { clusters: Cluster[]; width: number; height: number };
+
 export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number, compact = false) {
   const { width, centerX, centerY } = nodeGeometry(direction, compact);
   const a = { x: from.x + centerX, y: from.y + centerY };
@@ -254,10 +258,11 @@ export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, r
 }
 
 export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit", compact = false) {
-  const { width: nodeWidth, height: nodeHeight } = nodeGeometry(direction, compact);
+  const { width: nodeWidth, height: nodeHeight, centerX, centerY } = nodeGeometry(direction, compact);
+  const coordinator = branches.find(({ run }) => run.marker === "terax");
   const slotX = nodeWidth + 26;
   const slotY = nodeHeight + 38;
-  const placed = branches.map((branch) => {
+  const placed = branches.filter(({ run }) => run.marker !== "terax").map((branch) => {
     const header = CLUSTER_HEADER + (!compact && direction === "right" ? 16 : 0);
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
@@ -294,22 +299,39 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     return { branch, width, height, nodes };
   });
 
+  function addCoordinator(layout: Layout): Layout {
+    if (!coordinator) return layout;
+    const width = Math.max(layout.width, 2 * GUTTER + 192);
+    const box = { x: GUTTER, y: GUTTER, width: width - 2 * GUTTER, height: COORDINATOR_HEIGHT };
+    const at = { x: box.width / 2 - centerX, y: box.height / 2 - centerY };
+    const offset = COORDINATOR_HEIGHT + GUTTER;
+    return {
+      width,
+      height: layout.height + offset,
+      clusters: [
+        { branch: coordinator, box, nodes: [{ at }] },
+        ...layout.clusters.map((cluster) => ({ ...cluster, box: { ...cluster.box, y: cluster.box.y + offset } })),
+      ],
+    };
+  }
+
   if (arrangement === "lanes") {
     const across = direction === "down";
+    const side = coordinator && !across ? COORDINATOR_ROW_GUTTER : 0;
     const crossSize = placed.reduce((max, group) => Math.max(max, across ? group.height : group.width), 0);
     let nextLane = GUTTER;
     const clusters = placed.map((group): Cluster => {
       const box = across
         ? { x: nextLane, y: GUTTER, width: group.width, height: compact ? group.height : crossSize }
-        : { x: GUTTER, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
+        : { x: GUTTER + side, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
       nextLane += (across ? group.width : group.height) + GUTTER;
       return { branch: group.branch, box, nodes: group.nodes };
     });
-    return {
+    return addCoordinator({
       clusters,
-      width: across ? nextLane : crossSize + 2 * GUTTER,
+      width: across ? nextLane : crossSize + 2 * GUTTER + side,
       height: across ? crossSize + 2 * GUTTER : nextLane,
-    };
+    });
   }
 
   const ordered = [...placed].sort((a, b) => b.height - a.height || b.width - a.width);
@@ -318,7 +340,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
   const ratio = 1.7;
   const nominal = Math.sqrt(area * ratio);
   const widths = placed.length > 140 ? [nominal] : [nominal, nominal * 1.2, nominal * 1.44, nominal * 1.68, nominal * 0.83];
-  let best: { clusters: Cluster[]; width: number; height: number } | undefined;
+  let best: Layout | undefined;
   for (const candidate of widths) {
     const rowWidth = Math.max(widest, candidate);
     let x = GUTTER;
@@ -342,7 +364,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       best = layout;
     }
   }
-  return best ?? { clusters: [], width: GUTTER, height: GUTTER };
+  return addCoordinator(best ?? { clusters: [], width: GUTTER, height: GUTTER });
 }
 
 export type FlowScene = ReturnType<typeof makeScene>;

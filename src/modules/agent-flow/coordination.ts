@@ -95,6 +95,8 @@ export type FlowRelation =
   | { key: string; from: string; to: string; kind: "relay"; deliveries: ResolvedDelivery[] }
   | { key: string; from: string; to: string; kind: "file"; file: FileCrossing };
 
+export const TERAX_SOURCE_TITLE = "Terax AI";
+
 export function relayGraph(
   deliveries: readonly ResolvedDelivery[],
   runs: readonly FlowRun[],
@@ -125,7 +127,7 @@ export function relayGraph(
     const to = endpointRun(delivery.to, delivery.at);
     if (!to) continue;
     const from = delivery.from ? endpointRun(delivery.from, delivery.at) : {
-      key: "flow:terax", group: "flow:terax", marker: "terax" as const, tabTitle: "Terax", name: "Command source",
+      key: "flow:terax", group: "flow:terax", marker: "terax" as const, tabTitle: TERAX_SOURCE_TITLE, name: "Command source",
       agent: "terax", harness: "generic" as const, startedAt: delivery.at, events: [],
     };
     if (!from || from.key === to.key) continue;
@@ -158,7 +160,7 @@ export function relationLabel(relation: FlowRelation) {
 export function relationDescription(relation: FlowRelation) {
   if (relation.kind === "file") return `Shared file ${relation.file.path}`;
   const latest = relation.deliveries[0];
-  return `${relationLabel(relation)}: ${latest.from?.title ?? "Terax"} to ${latest.to.title}`;
+  return `${relationLabel(relation)}: ${latest.from?.title ?? TERAX_SOURCE_TITLE} to ${latest.to.title}`;
 }
 
 const WRITE_TOOLS = new Set(["edit", "write", "edit_file", "write_file", "replace"]);

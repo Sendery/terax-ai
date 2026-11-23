@@ -96,6 +96,23 @@ describe("Agent Flow", () => {
     expect(long.nodes[2].parent).toEqual(long.nodes[1].at);
   });
 
+  it.each(["down", "right"] as const)("places one coordinator above all %s terminal lanes", (direction) => {
+    const other = { ...root, key: "short", sessionId: "short" };
+    const tabs = [branchFor(root, [child, grandchild], null, new Map()), branchFor(other, [], null, new Map())];
+    const coordinator = branchFor({ ...root, key: "flow:terax", marker: "terax" }, [], null, new Map());
+    for (const compact of [false, true]) {
+      const scene = makeScene([...tabs, coordinator], direction, "lanes", compact);
+      const [rail, first, second] = scene.clusters;
+      expect(rail.branch.run.key).toBe("flow:terax");
+      expect(rail.box.y + rail.box.height).toBeLessThan(Math.min(first.box.y, second.box.y));
+      expect(rail.box.x).toBeLessThanOrEqual(Math.min(first.box.x, second.box.x));
+      expect(rail.box.x + rail.box.width).toBeGreaterThanOrEqual(Math.max(first.box.x + first.box.width, second.box.x + second.box.width));
+      const leadingAxis = direction === "down" ? "y" : "x";
+      expect(first.box[leadingAxis]).toBe(second.box[leadingAxis]);
+      expect(overlaps(first.box, second.box)).toBe(false);
+    }
+  });
+
   it("fits the compact layout without crossing the detail threshold and anchors zoom to the same node", () => {
     const direction = "right";
     const branches = [branchFor(root, [child, grandchild], null, new Map())];

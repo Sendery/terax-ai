@@ -3,7 +3,7 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { native } from "@/modules/ai/lib/native";
 import { callAppCommand } from "@/modules/commands/lib/inApp";
-import { normalizedFile, relationLabel, type FileCrossing, type FlowRelation, type ResolvedEndpoint } from "@/modules/agent-flow/coordination";
+import { normalizedFile, relationLabel, TERAX_SOURCE_TITLE, type FileCrossing, type FlowRelation, type ResolvedEndpoint } from "@/modules/agent-flow/coordination";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
 
 type Inspect = (key: string, event?: string, at?: number, task?: string) => void;
@@ -86,7 +86,7 @@ export function FlowRelationDetails({ relation, close, activate, inspect, seek }
     <div className="flow-inspector-scroll">
       {relation.kind === "file" ? <FileEvidence file={relation.file} inspect={inspect} /> : <>
         {newest ? <div className="flow-inspector-actions flow-relay-endpoints">
-          {newest.from ? <Endpoint endpoint={newest.from} activate={activate} inspect={inspect} /> : <span>Terax</span>}
+          {newest.from ? <Endpoint endpoint={newest.from} activate={activate} inspect={inspect} /> : <span>{TERAX_SOURCE_TITLE}</span>}
           <span aria-hidden="true">→</span>
           <Endpoint endpoint={newest.to} activate={activate} inspect={inspect} />
         </div> : null}

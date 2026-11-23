@@ -32,35 +32,51 @@ function recent(event: number | undefined, time: number | null, clock: number) {
   return event !== undefined && (time === null ? Math.abs(clock - event) < 6000 : event === time);
 }
 
-function RelationLine({ from, to, relation, selected, offset, onSelect }: {
+function fromCoordinator(relation: FlowRelation) {
+  return relation.kind === "relay" && !relation.deliveries[0]?.from;
+}
+
+function RelationLine({ from, to, relation, selected, offset, rowPort, onSelect }: {
   from: Box; to: Box; relation: FlowRelation; selected: boolean; offset: number; onSelect: (key: string) => void;
+  rowPort: boolean;
 }) {
-  const across = from.x + from.width <= to.x || to.x + to.width <= from.x;
+  const coordinator = fromCoordinator(relation);
+  const across = !coordinator && (from.x + from.width <= to.x || to.x + to.width <= from.x);
   const sign = (across ? to.x - from.x : to.y - from.y) < 0 ? -1 : 1;
   const start = across
     ? { x: from.x + (sign > 0 ? from.width : 0), y: from.y + from.height / 2 }
     : { x: from.x + from.width / 2, y: from.y + (sign > 0 ? from.height : 0) };
-  const end = across
+  const end = rowPort
+    ? { x: to.x, y: to.y + Math.min(54, to.height / 2) }
+    : across
     ? { x: to.x + (sign < 0 ? to.width : 0), y: to.y + to.height / 2 }
     : { x: to.x + to.width / 2, y: to.y + (sign < 0 ? to.height : 0) };
   const mid = across ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
   const controls = across ? `${mid} ${start.y + offset}, ${mid} ${end.y + offset}`
     : `${start.x + offset} ${mid}, ${end.x + offset} ${mid}`;
   const tip = `${end.x} ${end.y}`;
-  const arrow = across
+  const arrow = across || rowPort
     ? `M ${end.x - sign * 8} ${end.y - 5} L ${tip} L ${end.x - sign * 8} ${end.y + 5}`
     : `M ${end.x - 5} ${end.y - sign * 8} L ${tip} L ${end.x + 5} ${end.y - sign * 8}`;
   const label = relationLabel(relation);
   const description = relationDescription(relation);
+  const bus = to.x - 48;
+  const turn = start.y + 22;
+  const d = rowPort
+    ? `M ${start.x} ${start.y} V ${turn - 9} Q ${start.x} ${turn} ${start.x - 9} ${turn} H ${bus + 9} Q ${bus} ${turn} ${bus} ${turn + 9} V ${end.y - 9} Q ${bus} ${end.y} ${bus + 9} ${end.y} H ${end.x}`
+    : `M ${start.x} ${start.y} C ${controls}, ${tip}`;
   return <>
-    <svg className="flow-relation-line" data-kind={relation.kind} data-selected={selected} width="100%" height="100%" aria-hidden="true">
-      <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
+    <svg className="flow-relation-line" data-kind={relation.kind} data-coordinator={coordinator} data-selected={selected} width="100%" height="100%" aria-hidden="true">
+      <path d={d} />
       {relation.kind === "relay" ? <path d={arrow} /> : null}
     </svg>
     <button type="button" className="flow-relation-label" data-kind={relation.kind} aria-pressed={selected}
+      data-coordinator={coordinator} data-row-port={rowPort}
       title={description} aria-label={description}
-      style={{ left: (start.x + end.x) / 2 + (across ? 0 : offset * 0.75),
-        top: (start.y + end.y) / 2 + (across ? offset * 0.75 : 0) }}
+      style={{
+        left: coordinator ? end.x - (rowPort ? 22 : 0) : (start.x + end.x) / 2 + (across ? 0 : offset * 0.75),
+        top: coordinator ? end.y - (rowPort ? 0 : 15) : (start.y + end.y) / 2 + (across ? offset * 0.75 : 0),
+      }}
       onClick={() => onSelect(relation.key)}>
       <HugeiconsIcon icon={relation.kind === "file" ? File01Icon : Message01Icon} size={14} />
       <span>{label}</span>
@@ -97,7 +113,7 @@ const ActorNode = memo(function ActorNode({
   const latestProcessActivity = process ? actor.signals.filter(({ kind }) => kind === "task-activity") : [];
   const activityAt = latestProcessActivity[latestProcessActivity.length - 1]?.at;
   const processIcon = process?.kind === "monitor" ? Radar01Icon : process?.kind === "loop" ? RepeatIcon : TerminalIcon;
-  const markerLabel = run.marker === "shell" ? "Shell" : run.marker === "terax" ? "Command source" : "Terax tasks";
+  const markerLabel = run.marker === "shell" ? "Shell" : "Terax tasks";
   const stateLabel = pending ?? (nodeStatus?.working ? "Working" : isMarker ? markerLabel : actor.label);
   const status = pending ?? (actor.activity && !actor.speech ? eventLabel(actor.activity) : stateLabel);
   const flash = notice && recent(notice.at, time, clock);
@@ -396,8 +412,12 @@ export function FlowCanvas({
   const detailed = camera.scale >= 0.72;
   const visibleBoxes = new Map(visible.filter(({ branch }) => time === null || branch.start <= time)
     .map(({ branch, box }) => [branch.run.key, box]));
-  const shown = relations.filter(({ from, to }) => visibleBoxes.has(from) && visibleBoxes.has(to));
-  const visibleRelations = [...shown.filter(({ kind }) => kind === "relay").slice(0, 8),
+  const coordinatorBox = scene.clusters.find(({ branch }) => branch.run.marker === "terax"
+    && (time === null || branch.start <= time))?.box;
+  const sourceBox = (relation: FlowRelation) => fromCoordinator(relation) ? coordinatorBox : visibleBoxes.get(relation.from);
+  const shown = relations.filter((relation) => sourceBox(relation) && visibleBoxes.has(relation.to));
+  const visibleRelations = [...shown.filter(fromCoordinator),
+    ...shown.filter((relation) => relation.kind === "relay" && !fromCoordinator(relation)).slice(0, 8),
     ...shown.filter(({ kind }) => kind === "file").slice(0, 8)];
   if (activeRelation && !visibleRelations.some(({ key }) => key === activeRelation.key)) visibleRelations.push(activeRelation);
   const pairOffsets = new Map<string, number>();
@@ -419,7 +439,7 @@ export function FlowCanvas({
             "--flow-node-width": `${nodeWidth}px`,
             "--flow-node-height": `${nodeHeight}px` } as CSSProperties}>
           {visibleRelations.map((relation) => {
-            const from = visibleBoxes.get(relation.from);
+            const from = sourceBox(relation);
             const to = visibleBoxes.get(relation.to);
             if (!from || !to) return null;
             const pair = JSON.stringify([relation.from, relation.to].sort());
@@ -427,10 +447,21 @@ export function FlowCanvas({
             pairOffsets.set(pair, count + 1);
             const offset = (count % 2 ? 1 : -1) * Math.ceil(count / 2) * 30;
             return <RelationLine key={relation.key} from={from} to={to} relation={relation}
+              rowPort={fromCoordinator(relation) && arrangement === "lanes" && direction === "right"}
               selected={relation.key === activeRelation?.key} offset={offset} onSelect={onRelation} />;
           })}
           {visible.map(({ branch, box, nodes }) => {
             if (time !== null && branch.start > time) return null;
+            const linked = activeRelation?.from === branch.run.key || activeRelation?.to === branch.run.key;
+            if (branch.run.marker === "terax") return (
+              <section key={branch.run.key} className="flow-coordinator" data-marker="terax" data-linked={linked}
+                style={{ left: box.x, top: box.y, width: box.width, height: box.height }} aria-label={branch.run.tabTitle}>
+                <button type="button" aria-pressed={target?.run === branch.run.key} onClick={() => onSelect({ run: branch.run.key })}>
+                  <HugeiconsIcon icon={Flowchart01Icon} size={21} />
+                  <span><strong>{branch.run.tabTitle}</strong><small>Coordinator</small></span>
+                </button>
+              </section>
+            );
             const show = nodes.filter(({ task }) => !task || time === null || task.at <= time);
             const status = time === null ? nodeStatus.get(branch.run.key) : undefined;
             const processCount = show.filter(({ task }) => task?.process).length;
@@ -444,7 +475,7 @@ export function FlowCanvas({
                 data-operating={operating} data-pulse={pulse}
                 data-selected={target?.run === branch.run.key}
                 data-pinned={pinnedRun === branch.run.key}
-                data-linked={activeRelation?.from === branch.run.key || activeRelation?.to === branch.run.key}
+                data-linked={linked}
                 data-marker={branch.run.marker}
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
