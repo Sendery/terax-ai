@@ -52,13 +52,10 @@ validated by the real Mermaid parser, and only then committed to the tab.
 
 ## Opening a diagram
 
-- **From nothing:** choose **Mermaid** in the new-tab (`+`) menu, or run
-  **New Mermaid diagram** from the command palette. The tab opens on a small
-  starter flowchart, because an empty source is not valid Mermaid and would
-  otherwise greet you with a parse error. The starter sits inside the Visual
-  mode subset, so both editing modes work on it right away.
+- **From nothing:** choose **New GraphX diagram** in the new-tab (`+`) menu
+  or in the command palette. To author Mermaid, create a `.mmd` file.
 - **From the terminal or an editor:** select a Mermaid snippet, then choose
-  **Open Mermaid** in the selection popup. Fenced ` ```mermaid ` blocks are
+  **Open Mermaid** in the selection context menu. Fenced ` ```mermaid ` blocks are
   unwrapped automatically.
 - **From Pi:** the `@crynta/pi-terax` extension exposes `mermaid.open` and
   `mermaid.update`. See [Pi Terax bridge](pi-terax.md) for payloads and limits.
@@ -67,12 +64,10 @@ validated by the real Mermaid parser, and only then committed to the tab.
 
 ## Rendered markdown
 
-A ` ```mermaid ` fence in rendered markdown — a `.md` preview tab or an AI chat
-message — is drawn as a diagram rather than shown as a code block. It goes
-through the same engine, the same hardened configuration and the same render
-queue as a Mermaid tab, and the SVG is displayed as an inert image. A source
-that does not parse falls back to the plain code block with the parser's
-message above it.
+A ` ```mermaid ` fence in rendered Markdown uses the GraphX preview in a
+`.md` file or an AI chat message. The preview starts when the block comes
+near the viewport. If neither engine accepts the source, the block shows the
+original code.
 
 Rendered fences are read-only. To edit one, switch the markdown tab to its raw
 view, select the snippet and choose **Open Mermaid**.

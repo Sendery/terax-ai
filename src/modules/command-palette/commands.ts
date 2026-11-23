@@ -56,7 +56,6 @@ export type CommandPaletteActionContext = {
   openNewEditor: () => void;
   openNewPreview: () => void;
   openNewGraph: () => void;
-  openNewMermaid: () => void;
   openGitGraph: () => void;
   toggleSourceControl: () => void;
   closeActiveTabOrPane: () => void;
@@ -230,14 +229,6 @@ export function createCommandItems(
       keywords: ["graphx", "interactive", "diagram", "pi-terax", "graph"],
       icon: Flowchart01Icon,
       run: ctx.openNewGraph,
-    },
-    {
-      id: "tab.newMermaid",
-      title: "New Mermaid diagram",
-      group: "Tabs",
-      keywords: ["mermaid", "diagram", "flowchart", "sequence", "graph"],
-      icon: Flowchart01Icon,
-      run: ctx.openNewMermaid,
     },
     {
       id: "tab.close",

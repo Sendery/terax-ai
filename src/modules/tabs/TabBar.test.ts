@@ -44,9 +44,10 @@ describe("TabBar color submenu accessibility", () => {
 });
 
 describe("TabBar new-tab menu", () => {
-  it("offers a Mermaid entry, so a diagram tab is reachable without a selection", () => {
+  it("offers GraphX as the new diagram entry", () => {
     const menu = src.slice(src.indexOf("DropdownMenuContent"));
-    expect(menu).toMatch(/onSelect=\{\(\) => onNewMermaid\(\)\}/);
-    expect(menu).toMatch(/>Mermaid</);
+    expect(menu).toMatch(/onSelect=\{\(\) => onNewGraph\(\)\}/);
+    expect(menu).toContain("New GraphX diagram");
+    expect(menu).not.toContain("onNewMermaid");
   });
 });
