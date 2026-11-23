@@ -41,7 +41,7 @@ function RelationLine({ from, to, relation, selected, offset, rowPort, onSelect 
   rowPort: boolean;
 }) {
   const coordinator = fromCoordinator(relation);
-  const across = !coordinator && (from.x + from.width <= to.x || to.x + to.width <= from.x);
+  const across = rowPort || (!coordinator && (from.x + from.width <= to.x || to.x + to.width <= from.x));
   const sign = (across ? to.x - from.x : to.y - from.y) < 0 ? -1 : 1;
   const start = across
     ? { x: from.x + (sign > 0 ? from.width : 0), y: from.y + from.height / 2 }
@@ -55,19 +55,14 @@ function RelationLine({ from, to, relation, selected, offset, rowPort, onSelect 
   const controls = across ? `${mid} ${start.y + offset}, ${mid} ${end.y + offset}`
     : `${start.x + offset} ${mid}, ${end.x + offset} ${mid}`;
   const tip = `${end.x} ${end.y}`;
-  const arrow = across || rowPort
+  const arrow = across
     ? `M ${end.x - sign * 8} ${end.y - 5} L ${tip} L ${end.x - sign * 8} ${end.y + 5}`
     : `M ${end.x - 5} ${end.y - sign * 8} L ${tip} L ${end.x + 5} ${end.y - sign * 8}`;
   const label = relationLabel(relation);
   const description = relationDescription(relation);
-  const bus = to.x - 48;
-  const turn = start.y + 22;
-  const d = rowPort
-    ? `M ${start.x} ${start.y} V ${turn - 9} Q ${start.x} ${turn} ${start.x - 9} ${turn} H ${bus + 9} Q ${bus} ${turn} ${bus} ${turn + 9} V ${end.y - 9} Q ${bus} ${end.y} ${bus + 9} ${end.y} H ${end.x}`
-    : `M ${start.x} ${start.y} C ${controls}, ${tip}`;
   return <>
     <svg className="flow-relation-line" data-kind={relation.kind} data-coordinator={coordinator} data-selected={selected} width="100%" height="100%" aria-hidden="true">
-      <path d={d} />
+      <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
       {relation.kind === "relay" ? <path d={arrow} /> : null}
     </svg>
     <button type="button" className="flow-relation-label" data-kind={relation.kind} aria-pressed={selected}
@@ -447,7 +442,7 @@ export function FlowCanvas({
             pairOffsets.set(pair, count + 1);
             const offset = (count % 2 ? 1 : -1) * Math.ceil(count / 2) * 30;
             return <RelationLine key={relation.key} from={from} to={to} relation={relation}
-              rowPort={fromCoordinator(relation) && arrangement === "lanes" && direction === "right"}
+              rowPort={fromCoordinator(relation) && direction === "right"}
               selected={relation.key === activeRelation?.key} offset={offset} onSelect={onRelation} />;
           })}
           {visible.map(({ branch, box, nodes }) => {

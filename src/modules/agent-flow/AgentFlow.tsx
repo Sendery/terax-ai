@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowDown01Icon, ArrowRight01Icon, Cancel01Icon, Flowchart01Icon,
   TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
@@ -14,7 +15,7 @@ import { FlowRelationDetails } from "@/modules/agent-flow/FlowRelationDetails";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, eventLabel, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
+import { branchFor, describeActor, eventLabel, liveBranches, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData } from "@/modules/agent-flow/useFlowData";
@@ -33,7 +34,7 @@ export default function AgentFlow({
 }) {
   const [direction, setDirection] = useState<FlowDirection>("down");
   const [arrangement, setArrangement] = useState<FlowArrangement>("fit");
-  const [group, setGroup] = useState("");
+  const [groupsFilter, setGroupsFilter] = useState<readonly string[]>([]);
   const [scope, setScope] = useState<"active" | "all" | null>(null);
   const [time, setTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -46,6 +47,7 @@ export default function AgentFlow({
   const [relationKey, setRelationKey] = useState<string | null>(null);
   const [pinnedRun, setPinnedRun] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
+  const [retirementTick, setRetirementTick] = useState(0);
   const { runs, children, digests, panes, hidden, deliveries, notifications, loading, failed } = useFlowData(tabs, open, refresh);
   const watches = useWatchStore((state) => open ? state.watches : null);
   const runningWatches = useWatchStore((state) => open ? state.running : null);
@@ -56,14 +58,22 @@ export default function AgentFlow({
 
   const groups = useMemo(() => {
     const choices = new Map<string, string>();
+    for (const pane of panes) choices.set(pane.shellKey.slice(0, pane.shellKey.lastIndexOf(":")), pane.title);
     for (const run of runs) choices.set(run.group, run.projectHistory ? `Project: ${run.tabTitle}` : run.tabTitle);
     if (background) choices.set(background.run.group, background.run.tabTitle);
     return [...choices].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [runs, background]);
-  const groupKey = groups.some(([key]) => key === group) ? group : "";
+  }, [panes, runs, background]);
+  const enabledGroups = useMemo(() => {
+    const known = new Set(groups.map(([key]) => key));
+    return new Set(groupsFilter.filter((key) => known.has(key)));
+  }, [groups, groupsFilter]);
+  const groupKey = JSON.stringify([...enabledGroups].sort());
+  const filterLabel = enabledGroups.size === 0 ? "All tabs"
+    : enabledGroups.size === 1 ? groups.find(([key]) => enabledGroups.has(key))?.[1]
+      : `${enabledGroups.size} tabs`;
   const inScope = useMemo(() => runs.filter((run) =>
-    (!groupKey || run.group === groupKey) && (actualScope === "all" || run.active),
-  ).sort((a, b) => Number(!!b.active) - Number(!!a.active) || b.startedAt - a.startedAt), [runs, groupKey, actualScope]);
+    (!enabledGroups.size || enabledGroups.has(run.group)) && (actualScope === "all" || run.active),
+  ).sort((a, b) => Number(!!b.active) - Number(!!a.active) || b.startedAt - a.startedAt), [runs, enabledGroups, actualScope]);
   const selectionRun = selection?.run;
   const selectionTask = selection?.task;
   const live = time === null;
@@ -100,11 +110,19 @@ export default function AgentFlow({
   const branches = useMemo(() => inScope.map((run) => branchFor(run, children, digests, traces)), [inScope, children, digests, traces]);
   const visibleDeliveries = useMemo(() => resolveDeliveries(deliveries ?? [], panes, runs, hidden, null),
     [deliveries, panes, runs, hidden]);
-  const relay = useMemo(() => relayGraph(visibleDeliveries, inScope, groupKey), [visibleDeliveries, inScope, groupKey]);
-  const showBackground = background && (!groupKey || background.run.group === groupKey) ? background : undefined;
+  const relay = useMemo(() => relayGraph(visibleDeliveries, inScope, enabledGroups), [visibleDeliveries, inScope, enabledGroups]);
+  const showBackground = background && (!enabledGroups.size || enabledGroups.has(background.run.group)) ? background : undefined;
   const graphBranches = useMemo(() => [...branches, ...(showBackground ? [showBackground] : []), ...relay.markers.map((run) => ({
     run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
   }))], [branches, showBackground, relay.markers]);
+  const { branches: canvasBranches, nextExpiry } = useMemo(() => live && actualScope === "active"
+    ? liveBranches(graphBranches, traces, Math.max(Date.now(), retirementTick), selection)
+    : { branches: graphBranches, nextExpiry: Infinity }, [live, actualScope, graphBranches, retirementTick, selection, traces]);
+  useEffect(() => {
+    if (!open || !Number.isFinite(nextExpiry)) return;
+    const timer = setTimeout(() => setRetirementTick(Date.now()), Math.max(1, nextExpiry - Date.now()));
+    return () => clearTimeout(timer);
+  }, [open, nextExpiry, retirementTick]);
   const relations = useMemo(() => [
     ...relay.links.flatMap((link) => {
       if (time === null) return [link];
@@ -162,8 +180,8 @@ export default function AgentFlow({
   if (!open) return null;
 
   const visibleBranches = time === null ? branches : branches.filter((item) => item.start <= time);
-  const totalAgents = visibleBranches.reduce((sum, item) => sum + 1 + beforeTime(item.tasks, time).filter((task) => !task.process).length, 0);
-  const totalTasks = graphBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => task.process).length, 0);
+  const totalAgents = visibleBranches.length + canvasBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => !task.process).length, 0);
+  const totalTasks = canvasBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => task.process).length, 0);
 
   function select(next: FlowSelection) {
     setSelection(next);
@@ -203,6 +221,12 @@ export default function AgentFlow({
     setTime(null);
   }
 
+  function changeGroups(next: readonly string[]) {
+    setGroupsFilter(next);
+    setSelection(null);
+    setRelationKey(null);
+  }
+
   return (
     <section className="agent-flow" aria-label="Agent Flow">
       <header className="flow-topbar">
@@ -211,16 +235,28 @@ export default function AgentFlow({
           <div><h1>Agent Flow</h1><p>{totalAgents} {totalAgents === 1 ? "agent" : "agents"} · {visibleBranches.length} {visibleBranches.length === 1 ? "session" : "sessions"}{totalTasks ? ` · ${totalTasks} ${totalTasks === 1 ? "task" : "tasks"}` : ""}</p></div>
         </div>
         <div className="flow-controls">
-          <select aria-label="Filter source tab" value={groupKey} onChange={(event) => {
-            setGroup(event.target.value);
-            setSelection(null);
-            setRelationKey(null);
-            setPlaying(false);
-            setTime(null);
-          }}>
-            <option value="">All tabs</option>
-            {groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className="flow-tab-filter-trigger" aria-label={`Filter source tabs: ${filterLabel}`}>
+                <span>{filterLabel}</span><HugeiconsIcon icon={ArrowDown01Icon} size={13} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="flow-tab-filter" aria-label="Source tabs" align="start">
+              <button type="button" aria-pressed={enabledGroups.size === 0} onClick={() => changeGroups([])}>All tabs</button>
+              <fieldset>
+                <legend className="sr-only">Filter source tabs</legend>
+                {groups.map(([key, label]) => (
+                  <label key={key}>
+                    <input type="checkbox" checked={enabledGroups.has(key)} onChange={(event) => {
+                      const next = [...enabledGroups];
+                      changeGroups(event.target.checked ? [...next, key] : next.filter((entry) => entry !== key));
+                    }} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </PopoverContent>
+          </Popover>
           <select aria-label="Session scope" value={actualScope} onChange={(event) => changeScope(event.target.value === "active" ? "active" : "all")}>
             <option value="active">Active sessions</option>
             <option value="all">All sessions</option>
@@ -246,7 +282,7 @@ export default function AgentFlow({
       </header>
 
       <div className="flow-stage">
-        <FlowCanvas branches={graphBranches} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
+        <FlowCanvas branches={canvasBranches} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
           focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
           pinnedRun={pinnedRun} relations={relations} activeRelation={relation} nodeStatus={nodeStatus}
           onRelation={selectRelation}

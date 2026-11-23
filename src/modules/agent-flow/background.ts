@@ -5,7 +5,12 @@ import type { FlowBranch } from "@/modules/agent-flow/scene";
 import { native } from "@/modules/ai/lib/native";
 import type { Watch } from "@/modules/watchers/lib/watch";
 
-type NativeJob = Pick<Awaited<ReturnType<typeof native.shellBgList>>[number], "handle" | "started_at_ms">;
+type NativeJob = {
+  handle: number;
+  started_at_ms: number;
+  endedAt?: number;
+  failed?: boolean;
+};
 const NO_JOBS: NativeJob[] = [];
 const JOB_REFRESH_MS = 5000;
 export const BACKGROUND_GROUP = "terax:background";
@@ -21,12 +26,17 @@ export function useFlowShellJobs(open: boolean) {
       busy = true;
       try {
         const rows = await native.shellBgList();
-        const next = rows.filter((row) => !row.exited).map(({ handle, started_at_ms }) => ({ handle, started_at_ms }));
+        const next = rows.filter((row) => !row.exited || row.exited_at_ms != null)
+          .map(({ handle, started_at_ms, exited_at_ms, exited, exit_code }) => ({
+            handle, started_at_ms, endedAt: exited_at_ms ?? undefined,
+            failed: exited && exit_code !== 0,
+          }));
         if (!stopped) setJobs((previous) => previous.length === next.length && previous.every(
-          (job, index) => job.handle === next[index].handle && job.started_at_ms === next[index].started_at_ms,
+          (job, index) => job.handle === next[index].handle && job.started_at_ms === next[index].started_at_ms
+            && job.endedAt === next[index].endedAt && job.failed === next[index].failed,
         ) ? previous : next);
       } catch {
-        if (!stopped) setJobs(NO_JOBS);
+        // A failed snapshot does not tell us which jobs exited.
       } finally {
         busy = false;
       }
@@ -58,9 +68,10 @@ export function backgroundBranch(watches: readonly Watch[], running: readonly st
       },
     };
   });
-  for (const { handle, started_at_ms } of jobs) {
+  for (const { handle, started_at_ms, endedAt, failed } of jobs) {
     tasks.push({ id: `job:${handle}:${started_at_ms}`, label: `Process ${handle}`, at: started_at_ms,
-      process: { kind: "background", state: "running" } });
+      returnedAt: endedAt, failed,
+      process: { kind: "background", state: endedAt === undefined ? "running" : undefined } });
   }
   if (!tasks.length) return undefined;
   const start = Math.min(...tasks.map((task) => task.at));

@@ -13,10 +13,12 @@ const NODE_GEOMETRY = {
 };
 const GUTTER = 46;
 const COORDINATOR_HEIGHT = 74;
-const COORDINATOR_ROW_GUTTER = 68;
+const COORDINATOR_WIDTH = 200;
 const CLUSTER_PAD = 18;
 const CLUSTER_HEADER = 31;
 export const COMPACT_SCALE = 0.48;
+const FINISHED_LINGER_MS = 30_000;
+const UNCONFIRMED_IDLE_MS = 300_000;
 
 export function nodeGeometry(direction: FlowDirection, compact = false) {
   return NODE_GEOMETRY[compact ? "compact" : direction];
@@ -111,6 +113,49 @@ export function branchFor(
     else tasks.push({ id: task.id ?? `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt, process });
   });
   return { run, trace, events, digest, tasks, start: run.createdAt ?? events[0]?.at ?? run.startedAt };
+}
+
+function retirementAt(task: FlowTask, traces: ReadonlyMap<string, FlowTrace>): number {
+  if (task.returnedAt !== undefined) return task.returnedAt + FINISHED_LINGER_MS;
+  if (task.process?.state === "paused") return 0;
+  if (task.running || task.process?.state) return Infinity;
+  const events = traces.get(traceKey(task.run) ?? "")?.events ?? [];
+  let lastActivity = Math.max(task.at, task.run?.startedAt ?? 0, task.process?.lastActivityAt ?? 0);
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.kind === "usage" || event.taskId) continue;
+    lastActivity = Math.max(lastActivity, event.at);
+    if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error") {
+      return event.at + FINISHED_LINGER_MS;
+    }
+    if (event.kind === "attention") return Infinity;
+    break;
+  }
+  return lastActivity + UNCONFIRMED_IDLE_MS;
+}
+
+export function liveBranches(branches: readonly FlowBranch[], traces: ReadonlyMap<string, FlowTrace>, now: number, selection: FlowSelection | null) {
+  let nextExpiry = Infinity;
+  const visible = branches.flatMap((branch) => {
+    if (!branch.tasks.length) return [branch];
+    const kept = new Set<string>();
+    const byId = new Map(branch.tasks.map((task) => [task.id, task]));
+    for (const task of branch.tasks) {
+      const inspecting = selection?.run === branch.run.key && selection.task === task.id;
+      const expiry = inspecting ? Infinity : retirementAt(task, traces);
+      if (expiry <= now) continue;
+      nextExpiry = Math.min(nextExpiry, expiry);
+      let ancestor: FlowTask | undefined = task;
+      while (ancestor && !kept.has(ancestor.id)) {
+        kept.add(ancestor.id);
+        ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
+      }
+    }
+    if (kept.size === branch.tasks.length) return [branch];
+    if (!kept.size && branch.run.marker === "background") return [];
+    return [{ ...branch, tasks: branch.tasks.filter((task) => kept.has(task.id)) }];
+  });
+  return { branches: visible, nextExpiry };
 }
 
 function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
@@ -301,35 +346,38 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
 
   function addCoordinator(layout: Layout): Layout {
     if (!coordinator) return layout;
+    const horizontal = direction === "right";
     const width = Math.max(layout.width, 2 * GUTTER + 192);
-    const box = { x: GUTTER, y: GUTTER, width: width - 2 * GUTTER, height: COORDINATOR_HEIGHT };
+    const height = Math.max(layout.height, 2 * GUTTER + COORDINATOR_HEIGHT);
+    const box = { x: GUTTER, y: GUTTER, width: horizontal ? COORDINATOR_WIDTH : width - 2 * GUTTER,
+      height: horizontal ? height - 2 * GUTTER : COORDINATOR_HEIGHT };
     const at = { x: box.width / 2 - centerX, y: box.height / 2 - centerY };
-    const offset = COORDINATOR_HEIGHT + GUTTER;
+    const dx = horizontal ? box.width + GUTTER : 0;
+    const dy = horizontal ? 0 : box.height + GUTTER;
     return {
-      width,
-      height: layout.height + offset,
+      width: width + dx,
+      height: height + dy,
       clusters: [
         { branch: coordinator, box, nodes: [{ at }] },
-        ...layout.clusters.map((cluster) => ({ ...cluster, box: { ...cluster.box, y: cluster.box.y + offset } })),
+        ...layout.clusters.map((cluster) => ({ ...cluster, box: { ...cluster.box, x: cluster.box.x + dx, y: cluster.box.y + dy } })),
       ],
     };
   }
 
   if (arrangement === "lanes") {
     const across = direction === "down";
-    const side = coordinator && !across ? COORDINATOR_ROW_GUTTER : 0;
     const crossSize = placed.reduce((max, group) => Math.max(max, across ? group.height : group.width), 0);
     let nextLane = GUTTER;
     const clusters = placed.map((group): Cluster => {
       const box = across
         ? { x: nextLane, y: GUTTER, width: group.width, height: compact ? group.height : crossSize }
-        : { x: GUTTER + side, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
+        : { x: GUTTER, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
       nextLane += (across ? group.width : group.height) + GUTTER;
       return { branch: group.branch, box, nodes: group.nodes };
     });
     return addCoordinator({
       clusters,
-      width: across ? nextLane : crossSize + 2 * GUTTER + side,
+      width: across ? nextLane : crossSize + 2 * GUTTER,
       height: across ? crossSize + 2 * GUTTER : nextLane,
     });
   }

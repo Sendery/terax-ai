@@ -7,7 +7,7 @@ import {
 } from "@/modules/agent-flow/model";
 import {
   branchFor, COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, fitCamera, fitFlowCamera,
-  laneCamera, makeScene, nodeGeometry, overlaps, signalTone, zoomCamera, zoomFlowCamera,
+  laneCamera, liveBranches, makeScene, nodeGeometry, overlaps, signalTone, zoomCamera, zoomFlowCamera,
 } from "@/modules/agent-flow/scene";
 import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
 import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
@@ -96,7 +96,7 @@ describe("Agent Flow", () => {
     expect(long.nodes[2].parent).toEqual(long.nodes[1].at);
   });
 
-  it.each(["down", "right"] as const)("places one coordinator above all %s terminal lanes", (direction) => {
+  it.each(["down", "right"] as const)("places the coordinator before all %s terminal lanes", (direction) => {
     const other = { ...root, key: "short", sessionId: "short" };
     const tabs = [branchFor(root, [child, grandchild], null, new Map()), branchFor(other, [], null, new Map())];
     const coordinator = branchFor({ ...root, key: "flow:terax", marker: "terax" }, [], null, new Map());
@@ -104,10 +104,13 @@ describe("Agent Flow", () => {
       const scene = makeScene([...tabs, coordinator], direction, "lanes", compact);
       const [rail, first, second] = scene.clusters;
       expect(rail.branch.run.key).toBe("flow:terax");
-      expect(rail.box.y + rail.box.height).toBeLessThan(Math.min(first.box.y, second.box.y));
-      expect(rail.box.x).toBeLessThanOrEqual(Math.min(first.box.x, second.box.x));
-      expect(rail.box.x + rail.box.width).toBeGreaterThanOrEqual(Math.max(first.box.x + first.box.width, second.box.x + second.box.width));
       const leadingAxis = direction === "down" ? "y" : "x";
+      const depth = direction === "down" ? "height" : "width";
+      const across = direction === "down" ? "x" : "y";
+      const extent = direction === "down" ? "width" : "height";
+      expect(rail.box[leadingAxis] + rail.box[depth]).toBeLessThan(Math.min(first.box[leadingAxis], second.box[leadingAxis]));
+      expect(rail.box[across]).toBeLessThanOrEqual(Math.min(first.box[across], second.box[across]));
+      expect(rail.box[across] + rail.box[extent]).toBeGreaterThanOrEqual(Math.max(first.box[across] + first.box[extent], second.box[across] + second.box[extent]));
       expect(first.box[leadingAxis]).toBe(second.box[leadingAxis]);
       expect(overlaps(first.box, second.box)).toBe(false);
     }
@@ -229,14 +232,15 @@ describe("Agent Flow", () => {
     const pane: FlowTerminal = { tabId: 15, leafId: 1, shellKey: "launch:15:1", title: "Shell", slot: 1, split: false };
     const delivery = { id: "relay", at: 18, submitted: true, target: { shellKey: pane.shellKey } };
     const resolved = resolveDeliveries([delivery], [pane], [], new Set(), null);
-    const graph = relayGraph(resolved, [], "");
+    const graph = relayGraph(resolved, [], new Set());
     expect(graph.links).toMatchObject([{ from: "flow:terax", to: `shell:${pane.shellKey}`, kind: "relay" }]);
     expect(graph.markers.map(({ marker }) => marker)).toEqual(["terax", "shell"]);
     const traces = new Map();
     const timeline = buildTimeline(graph.markers.map((run) => branchFor(run, [], null, traces)), traces, resolved);
     expect(timeline.lanes.map(({ key }) => key)).toEqual([pane.shellKey]);
     expect(timeline.marks).toEqual([{ at: 18, kind: "delivery" }]);
-    expect(relayGraph(resolved, [], "launch:other").links).toEqual([]);
+    expect(relayGraph(resolved, [], new Set(["launch:other"])).links).toEqual([]);
+    expect(relayGraph(resolved, [], new Set(["launch:15", "launch:other"])).links).toHaveLength(1);
   });
 
   it("links explicit writes and reads across sessions and excludes read-only pairs and sibling checkouts", () => {
@@ -323,6 +327,25 @@ describe("Agent Flow", () => {
     expect(buildTimeline([branch], new Map()).lanes[0]).toMatchObject({ title: "Terax tasks", active: true, marks: [
       { at: 100, kind: "monitor-started" }, { at: 120, kind: "background-started" }, { at: 160, kind: "task-activity" },
     ] });
+  });
+
+  it("retires finished and stale tasks from live layout while keeping history and active ancestry", () => {
+    const branch = branchFor(root, [], null, new Map());
+    branch.tasks = [
+      { id: "done", at: 10, label: "Returned", returnedAt: 1000 },
+      { id: "old", at: 10, label: "Stale" },
+      { id: "parent", at: 10, label: "Parent", returnedAt: 20 },
+      { id: "child", at: 10, label: "Busy", parentId: "parent", running: true },
+      { id: "watch", at: 10, label: "Listening", process: { kind: "monitor", state: "listening" } },
+      { id: "paused", at: 10, label: "Paused", process: { kind: "monitor", state: "paused" } },
+    ];
+    const early = liveBranches([branch], new Map(), 2000, null);
+    expect(early.nextExpiry).toBe(30_020);
+    const next = liveBranches([branch], new Map(), 400_000, null);
+    expect(next.branches[0].tasks.map(({ id }) => id)).toEqual(["parent", "child", "watch"]);
+    const selected = liveBranches([branch], new Map(), 400_000, { run: root.key, task: "done" });
+    expect(selected.branches[0].tasks.some(({ id }) => id === "done")).toBe(true);
+    expect(buildTimeline([branch], new Map()).marks).toContainEqual({ at: 1000, kind: "returned" });
   });
 
   it("rewinds a delegation independently of its result", () => {

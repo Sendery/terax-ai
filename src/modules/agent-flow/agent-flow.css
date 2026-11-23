@@ -149,6 +149,54 @@
   max-width: min(196px, 46vw);
 }
 
+.flow-tab-filter-trigger {
+  max-width: min(196px, 46vw);
+}
+
+.flow-tab-filter-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-tab-filter-trigger svg {
+  flex: none;
+}
+
+.flow-tab-filter {
+  width: min(248px, calc(100vw - 24px));
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.flow-tab-filter fieldset {
+  min-width: 0;
+  max-height: min(320px, 52vh);
+  overflow-y: auto;
+}
+
+.flow-tab-filter button,
+.flow-tab-filter label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  min-height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.flow-tab-filter :is(button, label):hover,
+.flow-tab-filter button[aria-pressed="true"] {
+  background: var(--accent);
+}
+
+.flow-tab-filter label span {
+  overflow-wrap: anywhere;
+}
+
 .flow-controls button:hover:not(:disabled),
 .flow-camera button:hover:not(:disabled),
 .flow-transport button:hover:not(:disabled),
@@ -281,6 +329,11 @@
   background: var(--flow-branch);
   content: "";
   pointer-events: none;
+}
+
+.flow-world[data-direction="right"] .flow-coordinator::after {
+  inset: 50% 0 auto auto;
+  transform: translate(50%, -50%);
 }
 
 .flow-coordinator > button {

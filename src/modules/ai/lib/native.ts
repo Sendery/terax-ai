@@ -399,6 +399,7 @@ export const native = {
         cwd: string | null;
         started_at_ms: number;
         exited: boolean;
+        exited_at_ms: number | null;
         exit_code: number | null;
       }[]
     >("shell_bg_list"),

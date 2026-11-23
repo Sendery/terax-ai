@@ -100,7 +100,7 @@ export const TERAX_SOURCE_TITLE = "Terax AI";
 export function relayGraph(
   deliveries: readonly ResolvedDelivery[],
   runs: readonly FlowRun[],
-  group: string,
+  groups: ReadonlySet<string>,
 ) {
   const inScope = new Set(runs.map((run) => run.key));
   const markers = new Map<string, FlowRun>();
@@ -110,7 +110,7 @@ export function relayGraph(
     const pane = endpoint.pane;
     if (!pane) return undefined;
     const paneGroup = pane.shellKey.slice(0, pane.shellKey.lastIndexOf(":"));
-    if (group && paneGroup !== group) return undefined;
+    if (groups.size && !groups.has(paneGroup)) return undefined;
     return {
       key: `shell:${pane.shellKey}`, group: paneGroup, shellKey: pane.shellKey, marker: "shell",
       tabTitle: pane.title, paneLabel: pane.split ? `Shell ${pane.slot}` : undefined,
