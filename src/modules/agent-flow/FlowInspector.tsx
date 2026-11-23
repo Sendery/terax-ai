@@ -81,10 +81,11 @@ export function FlowInspector({
           ) : null}
         </div>
       </div>
-      <div className="flow-inspector-tabs" role="group" aria-label="Detail views">
+      <fieldset className="flow-inspector-tabs">
+        <legend className="sr-only">Detail views</legend>
         {GROUPS.map((entry) => <button type="button" key={entry} aria-pressed={mode === entry}
           onClick={() => { setMode(entry); setLimit(PAGE); setStat(null); }}>{entry}</button>)}
-      </div>
+      </fieldset>
       <div className="flow-inspector-scroll">
         {focused ? <div className="flow-inspector-focus" key={focused.id}>
           <small>{FLOW_LABELS[focused.kind]} · {flowTime.format(focused.at)}</small>

@@ -578,6 +578,7 @@
   align-items: center;
   gap: 5px;
   padding: 5px;
+  min-inline-size: 0;
 }
 
 .flow-camera span {
@@ -769,6 +770,7 @@
 .flow-inspector-tabs {
   padding-block: 5px;
   gap: 3px;
+  min-inline-size: 0;
 }
 
 .flow-inspector-tabs button {

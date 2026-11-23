@@ -327,14 +327,14 @@ export function FlowCanvas({
           </div>
         ) : null}
       </section>
-      <div className="flow-camera" role="group" aria-label="Map navigation. Arrow keys pan, plus and minus zoom, 0 fits the map."
-        onKeyDown={navigate}>
+      <fieldset className="flow-camera" onKeyDown={navigate}>
+        <legend className="sr-only">Map navigation. Arrow keys pan, plus and minus zoom, 0 fits the map.</legend>
         <button type="button" aria-label="Zoom out" disabled={camera.scale <= 0.07} onClick={() => zoom(0.8)}>−</button>
         <span>{Math.round(camera.scale * 100)}%</span>
         <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
         <button type="button" onClick={fitAll}>Fit all</button>
         <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={13} />
-      </div>
+      </fieldset>
       {scene.clusters.length ? (
         <button type="button" className="flow-minimap" aria-label="Minimap. Click to center, or press Enter to fit all."
           onClick={(event) => {
