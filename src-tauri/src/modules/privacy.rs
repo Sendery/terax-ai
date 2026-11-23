@@ -17,9 +17,12 @@ pub const FULL_DISK_ACCESS_SETTINGS_URL: &str =
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum FullDiskAccess {
+    #[cfg(any(target_os = "macos", test))]
     Granted,
+    #[cfg(any(target_os = "macos", test))]
     Denied,
     /// No probe could tell either way (none of the probed paths exist).
+    #[cfg(any(target_os = "macos", test))]
     Unknown,
     /// Not macOS.
     NotApplicable,
