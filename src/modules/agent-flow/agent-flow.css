@@ -382,10 +382,31 @@
   background: var(--flow-accent);
 }
 
+.flow-cluster-tag strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: inherit;
+}
+
 .flow-cluster-tag small {
   margin-inline-start: auto;
   color: var(--flow-dim);
   font: 11px/1.4 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-cluster-tag :is(small, .flow-cluster-live) {
+  flex: none;
+  white-space: nowrap;
+}
+
+.flow-world[data-detail="compact"] .flow-cluster-tag {
+  inset-inline: 12px;
+}
+
+.flow-world[data-detail="compact"] .flow-cluster-tag small {
+  display: none;
 }
 
 .flow-cluster-live {
@@ -452,6 +473,7 @@
 
 .flow-actor {
   position: absolute;
+  width: var(--flow-node-width);
   height: var(--flow-node-height);
   --flow-status: var(--flow-dim);
 }
@@ -749,20 +771,14 @@
 }
 
 .flow-actor[data-compact="true"] .flow-node {
-  left: 0;
-  width: min(100%, 175px);
-  align-items: flex-start;
-  padding-inline-start: 13px;
-  text-align: start;
+  width: 100%;
 }
 
 .flow-actor[data-compact="true"] .flow-node-state {
   font-size: 15px;
-  padding-inline-start: 6px;
 }
 
 .flow-actor[data-compact="true"] .flow-node-caption {
-  padding-inline-start: 6px;
   font-size: 19px;
 }
 

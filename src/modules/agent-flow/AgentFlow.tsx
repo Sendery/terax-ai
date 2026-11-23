@@ -14,7 +14,7 @@ import { FlowRelationDetails } from "@/modules/agent-flow/FlowRelationDetails";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, eventLabel, makeScene, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
+import { branchFor, describeActor, eventLabel, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData } from "@/modules/agent-flow/useFlowData";
@@ -105,7 +105,6 @@ export default function AgentFlow({
   const graphBranches = useMemo(() => [...branches, ...(showBackground ? [showBackground] : []), ...relay.markers.map((run) => ({
     run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
   }))], [branches, showBackground, relay.markers]);
-  const scene = useMemo(() => makeScene(graphBranches, direction, arrangement), [graphBranches, direction, arrangement]);
   const relations = useMemo(() => [
     ...relay.links.flatMap((link) => {
       if (time === null) return [link];
@@ -247,7 +246,7 @@ export default function AgentFlow({
       </header>
 
       <div className="flow-stage">
-        <FlowCanvas scene={scene} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
+        <FlowCanvas branches={graphBranches} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
           focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
           pinnedRun={pinnedRun} relations={relations} activeRelation={relation} nodeStatus={nodeStatus}
           onRelation={selectRelation}

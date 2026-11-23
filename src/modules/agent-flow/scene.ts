@@ -6,16 +6,19 @@ import {
 } from "@/modules/agent-flow/model";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
-export const NODE_WIDTH = 326;
-export const NODE_GEOMETRY = {
-  down: { height: 156, centerY: 55 },
-  right: { height: 174, centerY: 73 },
+const NODE_GEOMETRY = {
+  down: { width: 326, height: 156, centerX: 47, centerY: 55 },
+  right: { width: 326, height: 174, centerX: 47, centerY: 73 },
+  compact: { width: 156, height: 132, centerX: 78, centerY: 42 },
 };
-const NODE_CENTER_X = 47;
-const SLOT_X = NODE_WIDTH + 26;
 const GUTTER = 46;
 const CLUSTER_PAD = 18;
 const CLUSTER_HEADER = 31;
+export const COMPACT_SCALE = 0.48;
+
+export function nodeGeometry(direction: FlowDirection, compact = false) {
+  return NODE_GEOMETRY[compact ? "compact" : direction];
+}
 
 export type Point = { x: number; y: number };
 export type Box = Point & { width: number; height: number };
@@ -215,17 +218,17 @@ type Cluster = {
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
-export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number) {
-  const { centerY } = NODE_GEOMETRY[direction];
-  const a = { x: from.x + NODE_CENTER_X, y: from.y + centerY };
-  const b = { x: to.x + NODE_CENTER_X, y: to.y + centerY };
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number, compact = false) {
+  const { width, centerX, centerY } = nodeGeometry(direction, compact);
+  const a = { x: from.x + centerX, y: from.y + centerY };
+  const b = { x: to.x + centerX, y: to.y + centerY };
   if (direction === "right") {
     const start = { x: a.x + 29, y: a.y };
     const end = { x: b.x - 29, y: b.y };
     let track = start.y;
     let d = `M ${start.x} ${start.y}`;
-    if (clusterHeight !== undefined && to.x - from.x > SLOT_X) {
-      const exit = from.x + NODE_WIDTH + 13;
+    if (clusterHeight !== undefined && to.x - from.x > width + 26) {
+      const exit = from.x + width + 13;
       const bottom = clusterHeight - 8;
       d += ` H ${exit - 8} Q ${exit} ${track} ${exit} ${track + 8} V ${bottom - 8} Q ${exit} ${bottom} ${exit + 8} ${bottom}`;
       track = bottom;
@@ -250,11 +253,12 @@ export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, r
   return { d, arrow: `M ${tip.x - 4} ${back} L ${tip.x} ${tip.y} L ${tip.x + 4} ${back}` };
 }
 
-export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit") {
-  const nodeHeight = NODE_GEOMETRY[direction].height;
+export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit", compact = false) {
+  const { width: nodeWidth, height: nodeHeight } = nodeGeometry(direction, compact);
+  const slotX = nodeWidth + 26;
   const slotY = nodeHeight + 38;
   const placed = branches.map((branch) => {
-    const header = CLUSTER_HEADER + (direction === "right" ? 16 : 0);
+    const header = CLUSTER_HEADER + (!compact && direction === "right" ? 16 : 0);
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
     for (const task of branch.tasks) {
@@ -266,7 +270,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     }
     const breadth = Math.min(4, Math.max(...layers.map((layer) => layer.length)));
     const depth = layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
-    const width = (direction === "down" ? breadth : depth) * SLOT_X + CLUSTER_PAD * 2 - (SLOT_X - NODE_WIDTH);
+    const width = ((direction === "down" ? breadth : depth) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
     const rows = direction === "down" ? depth : breadth;
     const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2;
     const positions = new Map<string, Point>();
@@ -279,8 +283,8 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         const count = Math.min(breadth, layer.length - row * breadth);
         const cross = (index % breadth) + (breadth - count) / 2;
         const at = direction === "down"
-          ? { x: CLUSTER_PAD + cross * SLOT_X, y: header + CLUSTER_PAD + (rank + row) * slotY }
-          : { x: CLUSTER_PAD + (rank + row) * SLOT_X, y: header + CLUSTER_PAD + cross * slotY };
+          ? { x: CLUSTER_PAD + cross * slotX, y: header + CLUSTER_PAD + (rank + row) * slotY }
+          : { x: CLUSTER_PAD + (rank + row) * slotX, y: header + CLUSTER_PAD + cross * slotY };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);
@@ -296,8 +300,8 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     let nextLane = GUTTER;
     const clusters = placed.map((group): Cluster => {
       const box = across
-        ? { x: nextLane, y: GUTTER, width: group.width, height: crossSize }
-        : { x: GUTTER, y: nextLane, width: crossSize, height: group.height };
+        ? { x: nextLane, y: GUTTER, width: group.width, height: compact ? group.height : crossSize }
+        : { x: GUTTER, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
       nextLane += (across ? group.width : group.height) + GUTTER;
       return { branch: group.branch, box, nodes: group.nodes };
     });
@@ -343,13 +347,19 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
 
 export type FlowScene = ReturnType<typeof makeScene>;
 export type Camera = Point & { scale: number };
+export type FlowLayouts = { expanded: FlowScene; compact: FlowScene };
 
-export function fitCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }): Camera {
-  const scale = Math.min(1.15, Math.max(0.07, Math.min(
+export function fitCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }, maxScale = 1.15): Camera {
+  const scale = Math.min(maxScale, Math.max(0.07, Math.min(
     (viewport.width - 26) / Math.max(scene.width, 1),
     (viewport.height - 36) / Math.max(scene.height, 1),
   )));
   return { scale, x: (viewport.width - scene.width * scale) / 2, y: (viewport.height - scene.height * scale) / 2 };
+}
+
+export function fitFlowCamera(layouts: FlowLayouts, viewport: { width: number; height: number }): Camera {
+  const expanded = fitCamera(layouts.expanded, viewport);
+  return expanded.scale >= COMPACT_SCALE ? expanded : fitCamera(layouts.compact, viewport, COMPACT_SCALE - 0.01);
 }
 
 export function laneCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }): Camera {
@@ -363,6 +373,51 @@ export function zoomCamera(camera: Camera, point: Point, factor: number): Camera
   const scale = Math.max(0.07, Math.min(2.2, camera.scale * factor));
   const ratio = scale / camera.scale;
   return { scale, x: point.x - (point.x - camera.x) * ratio, y: point.y - (point.y - camera.y) * ratio };
+}
+
+export function zoomFlowCamera(camera: Camera, point: Point, factor: number, layouts: FlowLayouts, direction: FlowDirection, time: number | null): Camera {
+  const next = zoomCamera(camera, point, factor);
+  const wasCompact = camera.scale < COMPACT_SCALE;
+  const isCompact = next.scale < COMPACT_SCALE;
+  if (wasCompact === isCompact) return next;
+
+  const from = layouts[wasCompact ? "compact" : "expanded"];
+  const to = layouts[isCompact ? "compact" : "expanded"];
+  const oldNode = nodeGeometry(direction, wasCompact);
+  const newNode = nodeGeometry(direction, isCompact);
+  const world = { x: (point.x - camera.x) / camera.scale, y: (point.y - camera.y) / camera.scale };
+  let closest: Cluster | undefined;
+  let distance = Infinity;
+  for (const cluster of from.clusters) {
+    if (time !== null && cluster.branch.start > time) continue;
+    const { x, y, width, height } = cluster.box;
+    const gap = Math.max(0, x - world.x, world.x - x - width) ** 2
+      + Math.max(0, y - world.y, world.y - y - height) ** 2;
+    if (gap >= distance) continue;
+    closest = cluster;
+    distance = gap;
+  }
+  if (!closest) return next;
+  const key = closest.branch.run.key;
+  const destination = to.clusters.find(({ branch }) => branch.run.key === key);
+  if (!destination) return next;
+  const { box, nodes } = closest;
+  let index = 0;
+  distance = Infinity;
+  nodes.forEach(({ at, task }, i) => {
+    if (task && time !== null && task.at > time) return;
+    const gap = (box.x + at.x + oldNode.centerX - world.x) ** 2 + (box.y + at.y + oldNode.centerY - world.y) ** 2;
+    if (gap >= distance) return;
+    index = i;
+    distance = gap;
+  });
+  const start = nodes[index].at;
+  const end = destination.nodes[index].at;
+  return {
+    ...next,
+    x: next.x - (destination.box.x + end.x + newNode.centerX - box.x - start.x - oldNode.centerX) * next.scale,
+    y: next.y - (destination.box.y + end.y + newNode.centerY - box.y - start.y - oldNode.centerY) * next.scale,
+  };
 }
 
 export function overlaps(a: Box, b: Box): boolean {

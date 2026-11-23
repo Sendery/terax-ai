@@ -11,8 +11,8 @@ import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import { PROCESS_LABELS, type FlowDirection, type FlowRun, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
 import {
-  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, laneCamera, NODE_GEOMETRY, NODE_WIDTH, overlaps, zoomCamera,
-  type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowScene, type FlowSelection, type Point,
+  COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, eventLabel, fitFlowCamera, laneCamera, makeScene, nodeGeometry, overlaps, zoomFlowCamera,
+  type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
@@ -106,7 +106,7 @@ const ActorNode = memo(function ActorNode({
   return (
     <div className="flow-actor" data-tone={pending ? "waiting" : nodeStatus?.working ? "active" : actor.tone} data-compact={compact}
       data-kind={process ? "process" : isMarker ? run.marker : task ? "subagent" : "agent"} data-notice={notice?.tone}
-      style={{ left: area.x, top: area.y, width: NODE_WIDTH,
+      style={{ left: area.x, top: area.y,
         "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
       <button type="button" className="flow-node" aria-label={`${name}, ${stateLabel}, ${run.tabTitle}${notice && !notice.read ? `, ${notice.label}` : ""}`}
         aria-pressed={current} onClick={() => str()}>
@@ -176,7 +176,7 @@ const ActorNode = memo(function ActorNode({
 });
 
 type CanvasProps = {
-  scene: FlowScene;
+  branches: readonly FlowBranch[];
   traces: ReadonlyMap<string, FlowTrace>;
   direction: FlowDirection;
   arrangement: FlowArrangement;
@@ -195,13 +195,19 @@ type CanvasProps = {
 };
 
 export function FlowCanvas({
-  scene, traces, direction, arrangement, time, target, pinnedRun, relations, activeRelation, nodeStatus,
+  branches, traces, direction, arrangement, time, target, pinnedRun, relations, activeRelation, nodeStatus,
   focusRequest, fitRequest, loading, onSelect, onVisible, onRelation,
 }: CanvasProps) {
-  const { height: nodeHeight, centerY: nodeCenterY } = NODE_GEOMETRY[direction];
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState(initialCamera);
+  const compact = camera.scale < COMPACT_SCALE;
+  const layouts = useMemo(() => ({
+    expanded: makeScene(branches, direction, arrangement),
+    compact: makeScene(branches, direction, arrangement, true),
+  }), [branches, direction, arrangement]);
+  const scene = layouts[compact ? "compact" : "expanded"];
+  const { width: nodeWidth, height: nodeHeight, centerY: nodeCenterY } = nodeGeometry(direction, compact);
   const [minimapOpen, setMinimapOpen] = useState(false);
   const minimapId = useId();
   const cameraRef = useRef(initialCamera);
@@ -240,7 +246,8 @@ export function FlowCanvas({
 
   useEffect(() => {
     if (!size.width || !size.height) return;
-    if (!scene.clusters.length) {
+    const { expanded, compact } = layouts;
+    if (!expanded.clusters.length) {
       fitted.current = "";
       return;
     }
@@ -250,13 +257,13 @@ export function FlowCanvas({
       fitAllRequested.current = false;
       fittedBounds.current = "";
     }
-    const bounds = `${scene.width}:${scene.height}:${size.width}:${size.height}`;
+    const bounds = `${expanded.width}:${expanded.height}:${compact.width}:${compact.height}:${size.width}:${size.height}`;
     if (manualCamera.current || bounds === fittedBounds.current || (pinnedRun && lastAnchor.current && fittedBounds.current)) return;
     fittedBounds.current = bounds;
     const next = arrangement === "lanes" && !fitAllRequested.current
-      ? laneCamera(scene, size) : fitCamera(scene, size);
+      ? laneCamera(expanded, size) : fitFlowCamera(layouts, size);
     commit(next, true);
-  }, [size, scene, fitRequest, commit, arrangement, pinnedRun]);
+  }, [size, layouts, fitRequest, commit, arrangement, pinnedRun]);
 
   useLayoutEffect(() => {
     const pinned = pinnedRun && scene.clusters.find(({ branch }) => branch.run.key === pinnedRun);
@@ -265,7 +272,7 @@ export function FlowCanvas({
       lastAnchor.current = null;
       return;
     }
-    const key = `${fitRequest}:${pinnedRun}`;
+    const key = `${fitRequest}:${pinnedRun}:${compact}`;
     const at = pinned.nodes[0].at;
     const position = { x: pinned.box.x + at.x, y: pinned.box.y + at.y };
     lastAnchor.current = { key, position };
@@ -276,23 +283,29 @@ export function FlowCanvas({
       x: current.x + (previous.position.x - position.x) * current.scale,
       y: current.y + (previous.position.y - position.y) * current.scale,
     }, true);
-  }, [scene, pinnedRun, fitRequest, commit]);
+  }, [scene, pinnedRun, fitRequest, commit, compact]);
 
   useEffect(() => {
     if (!focusRequest || focused.current === focusRequest.tick || !size.width) return;
-    const cluster = scene.clusters.find(({ branch }) => branch.run.key === focusRequest.key);
+    const cluster = layouts.expanded.clusters.find(({ branch }) => branch.run.key === focusRequest.key);
     if (!cluster) return;
     focused.current = focusRequest.tick;
     manualCamera.current = true;
     const scale = Math.max(0.7, Math.min(1.1, cameraRef.current.scale));
     const { box, nodes } = cluster;
     const root = nodes[0].at;
+    const { width, height } = nodeGeometry(direction);
     commit({
       scale,
-      x: size.width / 2 - (box.x + root.x + NODE_WIDTH / 2) * scale,
-      y: size.height / 2 - (box.y + root.y + nodeHeight / 2) * scale,
+      x: size.width / 2 - (box.x + root.x + width / 2) * scale,
+      y: size.height / 2 - (box.y + root.y + height / 2) * scale,
     }, true);
-  }, [focusRequest, scene, size, commit, nodeHeight]);
+  }, [focusRequest, layouts, size, commit, direction]);
+
+  const zoomAt = useCallback((point: Point, factor: number, immediate = false) => {
+    manualCamera.current = true;
+    commit(zoomFlowCamera(cameraRef.current, point, factor, layouts, direction, time), immediate);
+  }, [commit, direction, layouts, time]);
 
   useEffect(() => {
     const element = viewport.current;
@@ -303,18 +316,19 @@ export function FlowCanvas({
       const current = cameraRef.current;
       if (event.ctrlKey || event.metaKey) {
         const rect = element.getBoundingClientRect();
-        commit(zoomCamera(current, { x: event.clientX - rect.left, y: event.clientY - rect.top }, Math.exp(-event.deltaY * 0.008)));
+        zoomAt({ x: event.clientX - rect.left, y: event.clientY - rect.top }, Math.exp(-event.deltaY * 0.008));
       } else {
         const unit = event.deltaMode === 1 ? 18 : event.deltaMode === 2 ? element.clientHeight : 1;
         commit({ ...current, x: current.x - event.deltaX * unit, y: current.y - event.deltaY * unit });
       }
     };
     element.addEventListener("wheel", wheel, { passive: false });
-    return () => {
-      element.removeEventListener("wheel", wheel);
-      if (frame.current !== null) cancelAnimationFrame(frame.current);
-    };
-  }, [commit]);
+    return () => element.removeEventListener("wheel", wheel);
+  }, [commit, zoomAt]);
+
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+  }, []);
 
   const margin = 150 / camera.scale;
   const view: Box = {
@@ -328,8 +342,7 @@ export function FlowCanvas({
   }, [near, onVisible]);
 
   function zoom(factor: number) {
-    manualCamera.current = true;
-    commit(zoomCamera(cameraRef.current, { x: size.width / 2, y: size.height / 2 }, factor), true);
+    zoomAt({ x: size.width / 2, y: size.height / 2 }, factor, true);
   }
 
   function panStart(event: PointerEvent<HTMLElement>) {
@@ -377,10 +390,9 @@ export function FlowCanvas({
   function fitAll() {
     manualCamera.current = false;
     fitAllRequested.current = true;
-    commit(fitCamera(scene, size), true);
+    commit(fitFlowCamera(layouts, size), true);
   }
 
-  const compact = camera.scale < 0.48;
   const detailed = camera.scale >= 0.72;
   const visibleBoxes = new Map(visible.filter(({ branch }) => time === null || branch.start <= time)
     .map(({ branch, box }) => [branch.run.key, box]));
@@ -404,6 +416,7 @@ export function FlowCanvas({
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
             "--flow-live-stroke": `${1.5 / camera.scale}px`,
             "--flow-node-center-y": `${nodeCenterY}px`,
+            "--flow-node-width": `${nodeWidth}px`,
             "--flow-node-height": `${nodeHeight}px` } as CSSProperties}>
           {visibleRelations.map((relation) => {
             const from = visibleBoxes.get(relation.from);
@@ -435,7 +448,7 @@ export function FlowCanvas({
                 data-marker={branch.run.marker}
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
-                <div className="flow-cluster-tag"><span />{branch.run.tabTitle}{branch.run.paneLabel ? ` · ${branch.run.paneLabel}` : ""}
+                <div className="flow-cluster-tag"><span /><strong>{branch.run.tabTitle}{branch.run.paneLabel ? ` · ${branch.run.paneLabel}` : ""}</strong>
                   {operating ? <b className="flow-cluster-live">Working</b> : null}
                   {(!branch.run.marker || processCount > 0) ? <small>
                     {[pinnedRun === branch.run.key ? "Pinned" : "", agentCount ? `${agentCount} ${agentCount === 1 ? "agent" : "agents"}` : "",
@@ -446,7 +459,7 @@ export function FlowCanvas({
                     {show.map(({ task, parent, at }) => {
                       if (!parent || !task) return null;
                       const returned = task.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, box.height);
+                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, box.height, compact);
                       const transit = recent(returned ? task.returnedAt : task.at, time, clock);
                       return (
                         <g key={task.id}>
@@ -459,7 +472,7 @@ export function FlowCanvas({
                   </svg>
                 ) : null}
                 {show.map(({ task, at }) => {
-                  if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: NODE_WIDTH, height: nodeHeight })) return null;
+                  if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: nodeWidth, height: nodeHeight })) return null;
                   const trace = task ? traces.get(traceKey(task.run) ?? "") : branch.trace;
                   const ambient = ambientSlots > 0;
                   if (ambient) ambientSlots--;

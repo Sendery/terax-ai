@@ -5,7 +5,10 @@ import { backgroundBranch } from "@/modules/agent-flow/background";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
-import { branchFor, contextPercent, describeActor, edgeGeometry, fitCamera, laneCamera, makeScene, overlaps, signalTone, zoomCamera } from "@/modules/agent-flow/scene";
+import {
+  branchFor, COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, fitCamera, fitFlowCamera,
+  laneCamera, makeScene, nodeGeometry, overlaps, signalTone, zoomCamera, zoomFlowCamera,
+} from "@/modules/agent-flow/scene";
 import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
 import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
 import { createWatch } from "@/modules/watchers/lib/watch";
@@ -78,6 +81,47 @@ describe("Agent Flow", () => {
     expect(firstColumn.box.x + firstColumn.box.width).toBeLessThan(secondColumn.box.x);
     expect(firstColumn.nodes[0].at.y).toBe(secondColumn.nodes[0].at.y);
     expect(laneCamera(columns, { width: 200, height: 800 }).x).toBe(0);
+  });
+
+  it.each(["down", "right"] as const)("fits compact %s lanes to their own content", (direction) => {
+    const other = { ...root, key: "short", sessionId: "short" };
+    const branches = [branchFor(root, [child, grandchild], null, new Map()), branchFor(other, [], null, new Map())];
+    const expanded = makeScene(branches, direction, "lanes");
+    const compact = makeScene(branches, direction, "lanes", true);
+    const [long, short] = compact.clusters;
+    const depth = direction === "down" ? "height" : "width";
+    expect(short.box[depth]).toBeLessThan(long.box[depth]);
+    expect(short.box.width).toBeLessThan(expanded.clusters[1].box.width);
+    expect(overlaps(long.box, short.box)).toBe(false);
+    expect(long.nodes[2].parent).toEqual(long.nodes[1].at);
+  });
+
+  it("fits the compact layout without crossing the detail threshold and anchors zoom to the same node", () => {
+    const direction = "right";
+    const branches = [branchFor(root, [child, grandchild], null, new Map())];
+    const expanded = makeScene(branches, direction);
+    const compact = makeScene(branches, direction, "fit", true);
+    const layouts = { expanded, compact };
+    const fit = fitFlowCamera(layouts, { width: 540, height: 460 });
+    expect(fit.scale).toBeLessThan(COMPACT_SCALE);
+    expect(compact.width * fit.scale).toBeLessThan(540);
+    const anchor = (scene: typeof expanded, overview: boolean) => {
+      const { box, nodes } = scene.clusters[0];
+      const { centerX, centerY } = nodeGeometry(direction, overview);
+      return { x: box.x + nodes[1].at.x + centerX, y: box.y + nodes[1].at.y + centerY };
+    };
+    const camera = { x: 15, y: 30, scale: 0.55 };
+    const start = anchor(expanded, false);
+    const point = { x: start.x * camera.scale + camera.x, y: start.y * camera.scale + camera.y };
+    const zoom = zoomFlowCamera(camera, point, 0.8, layouts, direction, null);
+    const target = anchor(compact, true);
+    expect(target.x * zoom.scale + zoom.x).toBeCloseTo(point.x);
+    expect(target.y * zoom.scale + zoom.y).toBeCloseTo(point.y);
+    const restored = zoomFlowCamera(zoom, point, 1.25, layouts, direction, null);
+    expect(restored.x).toBeCloseTo(camera.x);
+    expect(restored.y).toBeCloseTo(camera.y);
+    expect(edgeGeometry(compact.clusters[0].nodes[0].at, compact.clusters[0].nodes[1].at, direction, false, undefined, true).d)
+      .toBe("M 125 91 H 249");
   });
 
   it("keeps same-row connections straight with delegation and return arrows at node height", () => {
