@@ -35,8 +35,28 @@ export function bellRowView(n: AgentNotification): BellRowView {
   return {
     mark: TONE_MARK[n.tone],
     name: n.sessionName ?? displayAgent(n.agent),
-    label: notificationLabel(n.kind, n.reason),
+    label: n.terminalTitle ?? notificationLabel(n.kind, n.reason),
     detail: n.body || n.text || null,
     where: where || null,
+  };
+}
+
+export type BellEmptyText = { title: string; hint: string };
+
+/**
+ * What an empty bell says. The bell lists notifications only, so agents that
+ * are running but have asked for nothing are named here instead of each
+ * getting a row of their own.
+ */
+export function bellEmptyText(running: number): BellEmptyText {
+  if (running <= 0) {
+    return {
+      title: "No notifications.",
+      hint: "An agent that needs you, ends a turn or fails shows up here.",
+    };
+  }
+  return {
+    title: "No notifications.",
+    hint: `${running} ${running === 1 ? "agent is" : "agents are"} running and none has asked for you.`,
   };
 }

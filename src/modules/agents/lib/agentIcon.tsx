@@ -1,7 +1,10 @@
 import {
   ChatGptIcon,
   ClaudeIcon,
+  CopilotIcon,
   GoogleGeminiIcon,
+  GravityIcon,
+  Grok02Icon,
   PiIcon,
   RoboticIcon,
 } from "@hugeicons/core-free-icons";
@@ -16,6 +19,12 @@ export function iconForHarness(harness: AgentHarness): IconSvgElement {
       return ClaudeIcon;
     case "codex":
       return ChatGptIcon;
+    case "copilot":
+      return CopilotIcon;
+    case "agy":
+      return GravityIcon;
+    case "grok":
+      return Grok02Icon;
     case "generic":
       return RoboticIcon;
   }
@@ -32,6 +41,10 @@ export function iconFor(agent: string, harness?: AgentHarness): IconSvgElement {
   if (a.includes("claude")) return ClaudeIcon;
   if (a.includes("codex") || a.includes("gpt") || a.includes("openai"))
     return ChatGptIcon;
+  // The same marks the model picker uses for these providers.
+  if (a.includes("copilot")) return CopilotIcon;
+  if (a === "agy" || a.includes("antigravity")) return GravityIcon;
+  if (a.includes("grok")) return Grok02Icon;
   if (a.includes("gemini")) return GoogleGeminiIcon;
   return RoboticIcon;
 }

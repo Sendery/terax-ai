@@ -46,7 +46,7 @@ async function notify(
   const before = getCtx();
   // The process is already gone on exit, and its digest was read while it ran.
   const digest =
-    kind === "exited"
+    kind === "exited" || kind === "error"
       ? useAgentStore.getState().digests[session.leafId]
       : await digestForNotification(
           session.leafId,
@@ -127,8 +127,8 @@ function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
         agent: store.sessions[leafId]?.agent ?? "terminal",
         kind: "attention",
         title: sig.title,
+        terminalTitle: sig.title,
         body: sig.text ?? undefined,
-        text: [sig.title, sig.text].filter(Boolean).join(": "),
         tone: "attention",
         focused: ctx.focused,
         visible: ctx.activeId === info.tabId,
@@ -192,7 +192,13 @@ function handleSignal(sig: AgentSignal, getCtx: () => Ctx): void {
       // The agent process ending is the only event that means the work is
       // over, so it is reported separately from a turn handing back.
       const session = store.sessions[leafId];
-      if (session) void notify(session, "exited", getCtx);
+      if (session) {
+        if (sig.exitCode) {
+          void notify(session, "error", getCtx, `Exit code ${sig.exitCode}`);
+        } else {
+          void notify(session, "exited", getCtx);
+        }
+      }
       store.finish(leafId);
       useManagedAgentsStore.getState().remove(leafId);
       return;

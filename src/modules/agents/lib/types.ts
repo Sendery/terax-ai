@@ -5,7 +5,14 @@ export type AgentStatus = "working" | "waiting";
 export type AgentIntegration = "pi-extension" | "claude-hook" | "pty-detection";
 
 /** Explicit harness identity used for presentation, never inferred from terminal output. */
-export type AgentHarness = "pi" | "claude" | "codex" | "generic";
+export type AgentHarness =
+  | "pi"
+  | "claude"
+  | "codex"
+  | "copilot"
+  | "agy"
+  | "grok"
+  | "generic";
 
 export type AgentSource = "terminal" | "local";
 
@@ -44,6 +51,7 @@ export type AgentSignal = {
   /** Only on `bound`: the transcript this pane is writing. */
   sessionId?: string | null;
   title?: string | null;
+  exitCode?: number | null;
   progress?: { state: number; percent: number | null } | null;
 };
 
@@ -102,6 +110,7 @@ export type AgentNotification = {
   tone: NotificationTone;
   /** The native notification's body: the question, the agent's words or its summary. */
   body?: string;
+  terminalTitle?: string;
   /** The native notification's subtitle: tab, running tasks and PR. */
   subtitle?: string;
   /** Title of the tab it happened in, so a row names where to go. */

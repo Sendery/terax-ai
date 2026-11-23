@@ -16,12 +16,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { invoke } from "@tauri-apps/api/core";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { TAB_COLOR_CSS, tabColorStyle } from "@/modules/tabs";
 import { AgentIcon } from "../lib/agentIcon";
-import { bellBadgeCount, bellRowView } from "../lib/bell";
+import { bellBadgeCount, bellEmptyText, bellRowView } from "../lib/bell";
 import { claudeHooksFooter } from "../lib/hooksFooter";
-import type { AgentNotification, AgentStatus } from "../lib/types";
+import type { AgentNotification } from "../lib/types";
 import { useAgentStore } from "../store/agentStore";
 
 type Props = {
@@ -37,41 +37,6 @@ function relativeTime(ts: number): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-
-function StatusRow({
-  agent,
-  status,
-  onClick,
-}: {
-  agent: string;
-  status: AgentStatus;
-  onClick: () => void;
-}) {
-  const waiting = status === "waiting";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent"
-    >
-      <AgentIcon
-        agent={agent}
-        size={16}
-        className="shrink-0 text-muted-foreground"
-      />
-      <span className="flex-1 truncate text-sm text-foreground">{agent}</span>
-      <span
-        className={cn(
-          "flex items-center gap-1.5 text-xs",
-          waiting ? "font-medium text-primary" : "text-muted-foreground",
-        )}
-      >
-        {waiting ? <span className="size-1.5 rounded-full bg-primary" /> : null}
-        {waiting ? "waiting" : "working"}
-      </span>
-    </button>
-  );
 }
 
 export function NotificationRow({
@@ -173,17 +138,19 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
   const [hooksReady, setHooksReady] = useState<boolean | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installFailed, setInstallFailed] = useState(false);
-  const sessions = useAgentStore((s) => s.sessions);
-  const localAgent = useAgentStore((s) => s.localAgent);
+  // Sessions are not listed here, only counted for the empty state: a row per
+  // running agent said nothing the monitor and the tab badges do not.
+  const running = useAgentStore(
+    (s) => Object.keys(s.sessions).length + (s.localAgent ? 1 : 0),
+  );
   const notifications = useAgentStore((s) => s.notifications);
   const markRead = useAgentStore((s) => s.markRead);
   const markAllRead = useAgentStore((s) => s.markAllRead);
   const dismissNotification = useAgentStore((s) => s.dismissNotification);
   const clearNotifications = useAgentStore((s) => s.clearNotifications);
 
-  const active = useMemo(() => Object.values(sessions), [sessions]);
-  const activeCount = active.length + (localAgent ? 1 : 0);
-  const badge = bellBadgeCount(notifications);
+  // The header and the bell's badge are one number: what is listed and unread.
+  const unread = bellBadgeCount(notifications);
 
   const refreshHooks = () => {
     invoke<boolean>("agent_claude_hooks_status")
@@ -232,7 +199,8 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
     else activate(n.tabId, n.leafId);
   };
 
-  const empty = activeCount === 0 && notifications.length === 0;
+  const empty = notifications.length === 0;
+  const emptyText = bellEmptyText(running);
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -248,9 +216,9 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
             size={16}
             strokeWidth={1.75}
           />
-          {badge > 0 ? (
+          {unread > 0 ? (
             <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold leading-none text-primary-foreground">
-              {badge > 9 ? "9+" : badge}
+              {unread > 9 ? "9+" : unread}
             </span>
           ) : null}
         </Button>
@@ -264,9 +232,9 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
           <span className="flex gap-1 text-[13px] text-foreground">
             Notifications
           </span>
-          {activeCount > 0 ? (
+          {unread > 0 ? (
             <span className="ml-2 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-              {activeCount} active
+              {unread} unread
             </span>
           ) : null}
           {notifications.length > 0 ? (
@@ -274,7 +242,7 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
               <button
                 type="button"
                 onClick={markAllRead}
-                disabled={badge === 0}
+                disabled={unread === 0}
                 title="Mark all as read"
                 aria-label="Mark all as read"
                 className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
@@ -300,30 +268,12 @@ export function NotificationBell({ onActivate, onActivateLocal }: Props) {
 
         {empty ? (
           <div className="border-t border-border/60 px-3 py-5 text-center text-xs leading-relaxed text-muted-foreground">
-            No agent activity yet.
+            {emptyText.title}
             <br />
-            Run the Terax agent or Claude Code to track it here.
+            {emptyText.hint}
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto border-t border-border/60 p-1">
-            {localAgent ? (
-              <StatusRow
-                agent={localAgent.agent}
-                status={localAgent.status}
-                onClick={activateLocal}
-              />
-            ) : null}
-            {active.map((s) => (
-              <StatusRow
-                key={s.leafId}
-                agent={s.agent}
-                status={s.status}
-                onClick={() => activate(s.tabId, s.leafId)}
-              />
-            ))}
-            {activeCount > 0 && notifications.length > 0 ? (
-              <div className="mx-2 my-1 h-px bg-border/50" />
-            ) : null}
             {notifications.map((n) => (
               <NotificationRow
                 key={n.id}

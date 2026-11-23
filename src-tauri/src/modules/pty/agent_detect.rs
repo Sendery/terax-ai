@@ -6,7 +6,7 @@ const ST_FINAL: u8 = b'\\';
 
 const OSC_MAX: usize = 8192;
 
-const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "pi"];
+const DEFAULT_AGENTS: &[&str] = &["claude", "codex", "pi", "copilot", "agy", "grok"];
 
 // OSC 777 marker our Claude Code hooks emit via `terminalSequence`.
 const TERAX_MARKER: &[u8] = b"notify;Terax;";
@@ -69,6 +69,7 @@ pub enum Transition {
         progress: Progress,
     },
     Exited,
+    Failed(i32),
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -86,6 +87,7 @@ pub struct AgentSignal {
     pub session_id: Option<String>,
     pub title: Option<String>,
     pub progress: Option<Progress>,
+    pub exit_code: Option<i32>,
 }
 
 impl Transition {
@@ -99,6 +101,7 @@ impl Transition {
             session_id: None,
             title: None,
             progress: None,
+            exit_code: None,
         };
         match self {
             Transition::Started { agent } => AgentSignal {
@@ -133,6 +136,10 @@ impl Transition {
                 ..signal("progress")
             },
             Transition::Exited => signal("exited"),
+            Transition::Failed(code) => AgentSignal {
+                exit_code: Some(code),
+                ..signal("exited")
+            },
         }
     }
 }
@@ -428,7 +435,19 @@ impl AgentDetector {
             }
             return;
         }
-        self.generic_attention(emit);
+        if self.armed {
+            if let Some((title, body)) = pt.strip_prefix(b"notify;").and_then(|payload| {
+                let separator = payload.iter().position(|&byte| byte == b';')?;
+                Some((
+                    clean_text(&payload[..separator])?,
+                    clean_text(&payload[separator + 1..]).unwrap_or_default(),
+                ))
+            }) {
+                emit(Transition::Notification { title, body });
+            } else {
+                self.generic_attention(emit);
+            }
+        }
     }
 
     fn handle_osc133<F: FnMut(Transition)>(&mut self, pt: &[u8], emit: &mut F) {
@@ -475,7 +494,15 @@ impl AgentDetector {
             }
             Some(b'D') if self.armed => {
                 self.disarm();
-                emit(Transition::Exited);
+                let code = pt
+                    .split(|&byte| byte == b';')
+                    .nth(1)
+                    .and_then(|raw| std::str::from_utf8(raw).ok())
+                    .and_then(|code| code.parse::<i32>().ok());
+                emit(match code {
+                    Some(code) if code != 0 => Transition::Failed(code),
+                    _ => Transition::Exited,
+                });
             }
             _ => {}
         }
@@ -546,6 +573,29 @@ mod tests {
     fn started(agent: &str) -> Transition {
         Transition::Started {
             agent: agent.into(),
+        }
+    }
+
+    #[test]
+    fn provider_notifications_and_nonzero_exits_keep_the_same_session() {
+        for agent in DEFAULT_AGENTS {
+            let mut detector = AgentDetector::with_shell_token(SHELL_TOKEN.into());
+            assert_eq!(
+                run(&mut detector, &osc(&format!("133;C;aid={SHELL_TOKEN};cmdline_url={agent}"))),
+                vec![started(agent)]
+            );
+            assert_eq!(
+                run(&mut detector, &osc("777;notify;Approval;Review; the changes")),
+                vec![Transition::Notification {
+                    title: "Approval".into(),
+                    body: "Review; the changes".into(),
+                }]
+            );
+            let events = run(&mut detector, &osc(&format!("133;D;2;aid={SHELL_TOKEN}")));
+            assert_eq!(events, vec![Transition::Failed(2)]);
+            let signal = serde_json::to_value(Transition::Failed(2).into_signal(3)).unwrap();
+            assert_eq!(signal["kind"], "exited");
+            assert_eq!(signal["exitCode"], 2);
         }
     }
 
@@ -951,9 +1001,9 @@ mod tests {
         run(&mut d, &osc("133;C;codex"));
         assert_eq!(
             run(&mut d, &osc("777;notify;Codex;ready")),
-            vec![Transition::Attention {
-                text: None,
-                reason: None
+            vec![Transition::Notification {
+                title: "Codex".into(),
+                body: "ready".into(),
             }]
         );
         assert_eq!(

@@ -19,6 +19,7 @@ type RouteArgs = {
   kind: NotificationKind;
   reason?: AttentionReason | null;
   title: string;
+  terminalTitle?: string;
   subtitle?: string;
   body?: string;
   tone: NotificationTone;
@@ -68,6 +69,7 @@ export function routeAgentNotification({
   kind,
   reason,
   title,
+  terminalTitle,
   subtitle,
   body,
   tone,
@@ -83,7 +85,13 @@ export function routeAgentNotification({
   if (!current()) return;
   if (!usePreferencesStore.getState().agentNotifications) return;
   if (focused && visible) return;
-  if (isDuplicate(`${source}:${leafId}:${kind}:${reason ?? ""}`, Date.now()))
+  const eventKey = terminalTitle ? `:${terminalTitle}:${body ?? ""}` : "";
+  if (
+    isDuplicate(
+      `${source}:${leafId}:${kind}:${reason ?? ""}${eventKey}`,
+      Date.now(),
+    )
+  )
     return;
 
   useAgentStore.getState().pushNotification({
@@ -97,6 +105,7 @@ export function routeAgentNotification({
     tone,
     ...(text ? { text } : {}),
     ...(body ? { body } : {}),
+    ...(terminalTitle ? { terminalTitle } : {}),
     ...(subtitle ? { subtitle } : {}),
     ...(reason ? { reason } : {}),
     ...(sessionName ? { sessionName } : {}),
