@@ -3,19 +3,26 @@ import { Cancel01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { displayAgent } from "@/modules/agents/lib/format";
 import { accent, runName } from "@/modules/agent-flow/FlowCanvas";
+import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, FLOW_LABELS, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
-import { describeActor, eventLabel, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
+import { contextPercent, describeActor, eventLabel, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
 import type { FlowTrace } from "@/modules/agent-flow/traceReader";
 
 const GROUPS = ["Activity", "Messages", "Tools", "Files"] as const;
 const PAGE = 32;
 
 export function UsageMetrics({ usage }: { usage: NonNullable<Actor["usage"]> }) {
+  const context = usage.context;
   return (
     <dl className="flow-usage">
       <div><dt>Reported tokens</dt><dd>{usage.tokens.toLocaleString()}</dd></div>
       {usage.cost !== undefined ? <div><dt>Reported cost</dt><dd>${usage.cost.toFixed(usage.cost < 1 ? 3 : 2)}</dd></div> : null}
+      {context ? <div className="flow-context-meter">
+        <dt>Input tokens at last request</dt>
+        <dd>{context.input.toLocaleString()} / {context.window.toLocaleString()}</dd>
+        <meter min={0} max={100} value={contextPercent(context)} aria-label="Context window occupancy" />
+      </div> : null}
     </dl>
   );
 }
@@ -87,6 +94,12 @@ export function FlowInspector({
           onClick={() => { setMode(entry); setLimit(PAGE); setStat(null); }}>{entry}</button>)}
       </fieldset>
       <div className="flow-inspector-scroll">
+        {actor.signals.length && mode === "Activity" ? (
+          <div className="flow-inspector-signals">
+            <span>Recent signals</span>
+            <SignalStrip events={actor.signals} onSelect={(event) => onJump(event.at)} />
+          </div>
+        ) : null}
         {focused ? <div className="flow-inspector-focus" key={focused.id}>
           <small>{FLOW_LABELS[focused.kind]} · {flowTime.format(focused.at)}</small>
           <strong>{focused.text || eventLabel(focused)}</strong>

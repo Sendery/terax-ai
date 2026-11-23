@@ -6,6 +6,10 @@ Choose a source tab or project, or switch between active and all sessions.
 Agents and subagents share the source tab accent. Replies and prompts appear
 in speech bubbles, tool calls appear beside the agent that made them, and
 delegation and return events travel in opposite directions along their links.
+During live viewing, the halo and its markers move even while an agent is
+idle. The colored ring segments show the latest recorded signal types.
+The latest-signal card opens the corresponding agent and event. The Motion
+button can stop the effects, and replay leaves the ambient movement still.
 
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
 and use Fit all or the minimap to reorient the canvas. The Agents list can find
@@ -16,7 +20,8 @@ lists explicit paths reported by supported file tools.
 
 Use the timeline to scrub, step or replay at 1×, 2× or 4×. Go live returns to
 incoming activity. Usage displays available token records for Claude Code,
-Codex and Pi and reported cost for Pi. The amounts cover the loaded traces.
+Codex and Pi and reported cost for Pi. Codex also displays the last recorded
+input token count against its context window. The amounts cover the loaded traces.
 
 | CLI | Recorded terminal activity | Transcript activity |
 | --- | --- | --- |

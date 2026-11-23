@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, fitCamera, makeScene, overlaps, zoomCamera } from "@/modules/agent-flow/scene";
+import { branchFor, contextPercent, describeActor, fitCamera, makeScene, overlaps, signalTone, zoomCamera } from "@/modules/agent-flow/scene";
 import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
@@ -58,13 +58,31 @@ describe("Agent Flow", () => {
 
   it("keeps incremental traces stable and uses deduplicated usage at the playhead", () => {
     const first = { id: "u1", at: 10, kind: "usage" as const, usage: { key: "a", tokens: 58, cumulative: false } };
-    const last = { id: "u2", at: 20, kind: "usage" as const, usage: { key: "a", tokens: 73, cumulative: false } };
+    const last = { id: "u2", at: 20, kind: "usage" as const, usage: { key: "a", tokens: 73, cumulative: false, context: { input: 64, window: 100 } } };
     const empty = { events: [], name: null, nextOffset: 10, reset: false, limited: false };
     const trace = mergeTrace(undefined, { ...empty, events: [first, last] });
     expect(mergeTrace(trace, empty)).toBe(trace);
     const branch = branchFor(root, [], null, new Map([[traceKey(root) ?? "", trace]]));
     expect(describeActor(branch, undefined, trace, 15).usage?.tokens).toBe(58);
-    expect(describeActor(branch, undefined, trace, null).usage?.tokens).toBe(73);
+    const usage = describeActor(branch, undefined, trace, null).usage;
+    expect(usage?.tokens).toBe(73);
+    expect(usage?.context && contextPercent(usage.context)).toBe(64);
+    expect(contextPercent({ input: 120, window: 100 })).toBe(100);
+  });
+
+  it("marks recorded delegation and return signals on a subagent without a transcript", () => {
+    const events = [
+      { id: "1", at: 10, kind: "delegated" as const, taskId: "child" },
+      { id: "2", at: 12, kind: "reply" as const, text: "Parent reply" },
+      { id: "3", at: 14, kind: "returned" as const, taskId: "child" },
+    ];
+    const trace = { events, name: null, limited: false, failed: false };
+    const run = historyRun({ id: "solo", provider: "claude", cwd: "/project", modifiedAt: 40 }, "Project");
+    const branch = branchFor(run, [], null, new Map([[traceKey(run) ?? "", trace]]));
+    const actor = describeActor(branch, branch.tasks[0], undefined, null);
+    expect(actor.signals.map((event) => signalTone(event.kind))).toEqual(["branch", "return"]);
+    expect(actor.speech).toBeUndefined();
+    expect(describeActor(branch, branch.tasks[0], undefined, 12).signals.map(({ id }) => id)).toEqual(["1"]);
   });
 
   it("rewinds a delegation independently of its result", () => {

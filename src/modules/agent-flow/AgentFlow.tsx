@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowDown01Icon, ArrowLeft01Icon, Cancel01Icon, Flowchart01Icon,
-  TerminalIcon,
+  SparklesIcon, TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
@@ -9,9 +9,10 @@ import { displayAgent } from "@/modules/agents/lib/format";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
 import { FlowCanvas, accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { FlowInspector, UsageMetrics } from "@/modules/agent-flow/FlowInspector";
-import { FlowTimeline, type TimeMark } from "@/modules/agent-flow/FlowTimeline";
-import { beforeTime, sessionFamily, type FlowDirection } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, makeScene, type FlowSelection } from "@/modules/agent-flow/scene";
+import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
+import { FlowTimeline, flowTime, type TimeMark } from "@/modules/agent-flow/FlowTimeline";
+import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
+import { branchFor, describeActor, eventLabel, makeScene, signalEvents, signalTone, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { useFlowData } from "@/modules/agent-flow/useFlowData";
 import "./agent-flow.css";
@@ -36,6 +37,7 @@ export default function AgentFlow({
   const [navigator, setNavigator] = useState(false);
   const [search, setSearch] = useState("");
   const [usage, setUsage] = useState(false);
+  const [motion, setMotion] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
   const { runs, children, digests, loading, failed } = useFlowData(tabs, open, refresh);
   const active = runs.filter((run) => run.active).length;
@@ -110,12 +112,32 @@ export default function AgentFlow({
     }
     return [...at.values()].sort((a, b) => a.at - b.at);
   }, [branches, traces]);
+  const signalFeed = useMemo(() => {
+    const signals: { key: string; run: FlowRun; agent: string; event: TraceEvent; task?: string }[] = [];
+    for (const entry of branches) {
+      const add = (events: readonly TraceEvent[], agent: string, task?: string) => {
+        for (const event of signalEvents(beforeTime(events, time), 8)) {
+          if (event.kind === "returned" && !task && !entry.tasks.some((item) => item.id === event.taskId)) continue;
+          const key = `${entry.run.key}:${task ?? "root"}:${event.id}`;
+          signals.push({ key, run: entry.run, agent, event, task });
+        }
+      };
+      add(entry.events, runName(entry.run, entry.trace?.name));
+      for (const item of entry.tasks) {
+        const trace = traces.get(traceKey(item.run) ?? "");
+        if (trace) add(trace.events, item.label, item.id);
+      }
+    }
+    return signals.sort((a, b) => a.event.at - b.event.at).slice(-12);
+  }, [branches, traces, time]);
+  const latest = signalFeed[signalFeed.length - 1];
   const measurements = useMemo(() => usage ? branches.flatMap((item) => {
     const entries = [
-      { id: item.run.key, name: runName(item.run, item.trace?.name), value: describeActor(item, undefined, item.trace, time).usage },
+      { id: item.run.key, name: runName(item.run, item.trace?.name), color: accent(item.run), value: describeActor(item, undefined, item.trace, time).usage },
       ...item.tasks.flatMap((subagent) => {
         const trace = traces.get(traceKey(subagent.run) ?? "");
-        return trace ? [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label, value: describeActor(item, subagent, trace, time).usage }] : [];
+        return trace ? [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label,
+          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage }] : [];
       }),
     ];
     return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value }] : []);
@@ -124,6 +146,7 @@ export default function AgentFlow({
     tokens: total.tokens + item.value.tokens,
     cost: item.value.cost === undefined ? total.cost : (total.cost ?? 0) + item.value.cost,
   }), { tokens: 0, cost: undefined });
+  const peakUsage = Math.max(1, ...measurements.map((item) => item.value.tokens));
 
   if (!open) return null;
 
@@ -154,7 +177,7 @@ export default function AgentFlow({
   }
 
   return (
-    <section className="agent-flow" aria-label="Agent Flow">
+    <section className="agent-flow" aria-label="Agent Flow" data-motion={motion}>
       <header className="flow-topbar">
         <div className="flow-heading">
           <span className="flow-brand"><HugeiconsIcon icon={Flowchart01Icon} size={18} /></span>
@@ -181,6 +204,10 @@ export default function AgentFlow({
             <span>{direction === "down" ? "Top to bottom" : "Right to left"}</span>
           </button>
           <button type="button" aria-pressed={usage} onClick={() => { setUsage((current) => !current); setSelection(null); }}>Usage</button>
+          <button type="button" className="flow-motion" aria-label="Motion effects" aria-pressed={motion}
+            onClick={() => setMotion((current) => !current)}>
+            <HugeiconsIcon icon={SparklesIcon} size={14} /> <span>Motion</span>
+          </button>
           <button type="button" onClick={() => setRefresh((value) => value + 1)} disabled={loading}>Refresh</button>
         </div>
       </header>
@@ -188,7 +215,7 @@ export default function AgentFlow({
       <div className="flow-stage">
         <FlowCanvas scene={scene} traces={traces} direction={direction} time={time} target={selection}
           focusRequest={focusRequest} fitRequest={`${direction}:${groupKey}:${actualScope}`}
-          loading={loading} onSelect={select} onVisible={setNear} />
+          loading={loading} motion={motion} onSelect={select} onVisible={setNear} />
 
         <div className="flow-navigation">
           <button type="button" className="flow-nav-toggle" aria-expanded={navigator}
@@ -215,6 +242,22 @@ export default function AgentFlow({
           {failed ? <small className="flow-history-error" role="status">Some history could not load.</small> : null}
         </div>
 
+        {latest ? (
+          <button type="button" className="flow-activity-hud"
+            aria-label={`Inspect latest signal from ${latest.agent}: ${eventLabel(latest.event)}`}
+            style={accent(latest.run)} onClick={() => select({ run: latest.run.key, task: latest.task, event: latest.event.id })}>
+            <span className="flow-hud-light" data-signal={signalTone(latest.event.kind)} aria-hidden="true" />
+            <span className="flow-hud-detail" key={latest.key}>
+              <strong>{latest.agent}</strong>
+              <small>{eventLabel(latest.event)} {latest.event.file ? `· ${latest.event.file.split(/[\\/]/).pop()}` : ""}</small>
+            </span>
+            <span className="flow-hud-time">
+              <time dateTime={new Date(latest.event.at).toISOString()}>{flowTime.format(latest.event.at)}</time>
+              <SignalStrip events={signalFeed.map(({ event, key }) => ({ ...event, id: key }))} />
+            </span>
+          </button>
+        ) : null}
+
         {branch && !usage ? (
           <FlowInspector key={`${branch.run.key}:${task?.id ?? "root"}`}
             branch={branch} task={task} trace={detailTrace} eventId={selection?.event} time={time}
@@ -233,7 +276,10 @@ export default function AgentFlow({
               {measurements.length ? <>
                 <UsageMetrics usage={aggregate} />
                 <ul className="flow-usage-list">
-                  {measurements.map(({ id, name, value }) => <li key={id}><span>{name}</span><b>{value.tokens.toLocaleString()}</b></li>)}
+                  {measurements.map(({ id, name, color, value }) => <li key={id}
+                    style={{ ...color, "--flow-usage-fill": `${(value.tokens / peakUsage) * 100}%` } as CSSProperties}>
+                    <span>{name}</span><b>{value.tokens.toLocaleString()}</b>
+                  </li>)}
                 </ul>
               </> : <p className="flow-inspector-note">No token or cost records are available in this view.</p>}
               {measurements.length ? <p className="flow-inspector-note">Totals cover usage reported in the loaded transcripts.</p> : null}

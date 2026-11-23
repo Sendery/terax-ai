@@ -1,16 +1,17 @@
 import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
-  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
 import { ArrowDown01Icon, ArrowLeft01Icon, Flowchart01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
 import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
-import type { FlowDirection, FlowRun, TraceEvent } from "@/modules/agent-flow/model";
+import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
+import type { FlowDirection, FlowRun, FlowTask, TraceEvent } from "@/modules/agent-flow/model";
 import {
-  describeActor, eventLabel, fitCamera, NODE_ANCHOR, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
-  type Actor, type Box, type Camera, type FlowScene, type FlowSelection, type Point,
+  contextPercent, describeActor, eventLabel, fitCamera, NODE_ANCHOR, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
+  type Box, type Camera, type FlowBranch, type FlowScene, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
@@ -39,38 +40,57 @@ function recent(event: number | undefined, time: number | null, clock: number) {
   return event !== undefined && (time === null ? Math.abs(clock - event) < 6000 : event === time);
 }
 
-function ActorNode({
-  area, actor, run, name, task, selection, compact, clock, time, onSelect,
+const ActorNode = memo(function ActorNode({
+  area, branch, entry, trace, name, selection, compact, ambient, clock, time, onSelect,
 }: {
   area: Point;
-  actor: Actor;
-  run: FlowRun;
+  branch: FlowBranch;
+  entry?: FlowTask;
+  trace?: FlowTrace;
   name: string;
-  task?: string;
   selection: FlowSelection | null;
   compact: boolean;
+  ambient: boolean;
   clock: number;
   time: number | null;
   onSelect: (selection: FlowSelection) => void;
 }) {
+  const run = branch.run;
+  const task = entry?.id;
+  const actor = useMemo(() => describeActor(branch, entry, trace, time), [branch, entry, trace, time]);
   const current = selection?.run === run.key && selection.task === task;
   const str = (event?: TraceEvent) => onSelect({ run: run.key, ...(task ? { task } : {}), ...(event ? { event: event.id } : {}) });
   const status = actor.activity && !actor.speech ? eventLabel(actor.activity) : actor.label;
   const animate = recent(actor.activity?.at, time, clock);
+  const context = actor.usage?.context;
   return (
     <div className="flow-actor" data-tone={actor.tone} data-compact={compact} data-kind={task ? "subagent" : "agent"}
-      style={{ left: area.x, top: area.y, width: NODE_WIDTH, height: NODE_HEIGHT }}>
+      style={{ left: area.x, top: area.y, width: NODE_WIDTH, height: NODE_HEIGHT,
+        "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
       <button type="button" className="flow-node" aria-label={`${name}, ${actor.label}, ${run.tabTitle}`}
         aria-pressed={current} onClick={() => str()}>
         <span className="flow-beacon">
+          {ambient ? (
+            <>
+              <i className="flow-beacon-aura" aria-hidden="true" />
+              <i className="flow-node-orbit" data-idle={actor.tone !== "active"} aria-hidden="true" />
+              <i className="flow-node-satellite" aria-hidden="true" />
+            </>
+          ) : null}
+          {!compact ? <BeaconSignals actor={actor} /> : null}
           {animate ? <i key={actor.activity?.id} className="flow-beacon-wave" aria-hidden="true" /> : null}
-          {!compact && time === null && actor.tone === "active" ? <i className="flow-node-orbit" aria-hidden="true" /> : null}
           <span className="flow-glyph"><AgentIcon agent={run.agent} harness={run.harness} size={23} /></span>
           <span className="flow-node-status" aria-hidden="true" />
         </span>
         <span className="flow-node-caption" title={name}>{name}</span>
         <span className="flow-node-state">{actor.label}</span>
         {actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} tokens</span> : null}
+        {context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
+          {contextPercent(context)}% context
+        </span> : null}
+        {actor.usage?.cost !== undefined && !compact ? (
+          <span className="flow-node-cost" title="Cost reported by this session">${actor.usage.cost.toFixed(actor.usage.cost < 1 ? 3 : 2)}</span>
+        ) : null}
       </button>
       {!compact ? (
         <div className="flow-node-events">
@@ -89,8 +109,9 @@ function ActorNode({
                 <button type="button" key={event.id} data-new={recent(event.at, time, clock)}
                   data-current={current && selection?.event === event.id}
                   title={event.file ?? eventLabel(event)} onClick={() => str(event)}>
-                  <b aria-hidden="true">›</b> {eventLabel(event)}
-                  {event.file ? <span>{event.file.split(/[\\/]/).pop()}</span> : null}
+                  <ToolMark name={eventLabel(event)} />
+                  <b>{eventLabel(event)}</b>
+                  {event.file ? <span className="flow-tool-path">{event.file.split(/[\\/]/).pop()}</span> : null}
                 </button>
               ))}
             </div>
@@ -99,7 +120,7 @@ function ActorNode({
       ) : null}
     </div>
   );
-}
+});
 
 type CanvasProps = {
   scene: FlowScene;
@@ -110,12 +131,13 @@ type CanvasProps = {
   focusRequest: { key: string; tick: number } | null;
   fitRequest: string;
   loading: boolean;
+  motion: boolean;
   onSelect: (selection: FlowSelection) => void;
   onVisible: (runs: string[]) => void;
 };
 
 export function FlowCanvas({
-  scene, traces, direction, time, target, focusRequest, fitRequest, loading, onSelect, onVisible,
+  scene, traces, direction, time, target, focusRequest, fitRequest, loading, motion, onSelect, onVisible,
 }: CanvasProps) {
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -271,15 +293,18 @@ export function FlowCanvas({
   }
 
   const compact = camera.scale < 0.48;
-  const clock = Date.now();
+  const clock = useMemo(() => scene.clusters.length ? Date.now() : 0, [scene]);
   const mapScale = Math.min(152 / scene.width, 94 / scene.height);
   const mapWidth = scene.width * mapScale;
   const mapHeight = scene.height * mapScale;
+  let ambientSlots = !motion || time !== null || compact ? 0 : 16;
   return (
-    <div className="flow-canvas">
+    <div className="flow-canvas" data-ambient={motion && time === null}>
       <section className="flow-viewport" ref={viewport} aria-label="Agent map"
         onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd}
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
+        <div className="flow-atmosphere" aria-hidden="true"
+          style={{ transform: `translate(${camera.x * 0.085}px, ${camera.y * 0.085}px)` }}><i /><i /></div>
         <div className="flow-world" data-detail={compact ? "compact" : "full"}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
           {visible.map(({ branch, box, nodes }) => {
@@ -287,6 +312,7 @@ export function FlowCanvas({
             const show = nodes.filter(({ task }) => !task || time === null || task.at <= time);
             return (
               <section key={branch.run.key} className="flow-cluster" data-active={!!branch.run.active && time === null}
+                data-selected={target?.run === branch.run.key}
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
                 <div className="flow-cluster-tag"><span />{branch.run.tabTitle}<small>{show.length} {show.length === 1 ? "agent" : "agents"}</small></div>
@@ -309,10 +335,12 @@ export function FlowCanvas({
                 {show.map(({ task, at }) => {
                   if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: NODE_WIDTH, height: NODE_HEIGHT })) return null;
                   const trace = task ? traces.get(traceKey(task.run) ?? "") : branch.trace;
+                  const ambient = ambientSlots > 0;
+                  if (ambient) ambientSlots--;
                   return (
-                    <ActorNode key={task?.id ?? "root"} area={at} run={branch.run} name={task?.label ?? runName(branch.run, branch.trace?.name)}
-                      actor={describeActor(branch, task, trace, time)} task={task?.id} selection={target}
-                      compact={compact} clock={clock} time={time} onSelect={onSelect} />
+                    <ActorNode key={task?.id ?? "root"} area={at} branch={branch} name={task?.label ?? runName(branch.run, branch.trace?.name)}
+                      entry={task} trace={trace} selection={target}
+                      compact={compact} ambient={ambient} clock={clock} time={time} onSelect={onSelect} />
                   );
                 })}
               </section>

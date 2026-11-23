@@ -28,7 +28,13 @@ export type TraceEvent = {
   text?: string;
   taskId?: string | null;
   file?: string | null;
-  usage?: { tokens: number; cumulative: boolean; key?: string | null; cost?: number | null } | null;
+  usage?: {
+    tokens: number;
+    cumulative: boolean;
+    key?: string | null;
+    cost?: number | null;
+    context?: { input: number; window: number };
+  } | null;
 };
 export type Trace = {
   events: TraceEvent[];

@@ -63,6 +63,14 @@ struct Usage {
     cumulative: bool,
     key: Option<String>,
     cost: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context: Option<ContextUsage>,
+}
+
+#[derive(Debug, Serialize)]
+struct ContextUsage {
+    input: u64,
+    window: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -133,7 +141,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 .filter_map(|key| usage.get(key)?.as_u64())
                 .fold(0u64, u64::saturating_add);
             let key = safe_key(&message["id"]).or_else(|| safe_key(&row["uuid"]))?;
-            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None })
+            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None, context: None })
         }
         Provider::Pi if message["role"] == "assistant" => {
             let usage = &message["usage"];
@@ -142,16 +150,22 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 cumulative: false,
                 key: safe_key(&row["id"]),
                 cost: usage["cost"]["total"].as_f64().filter(|cost| cost.is_finite() && *cost >= 0.0),
+                context: None,
             })
         }
         Provider::Codex
             if row["type"] == "event_msg" && row["payload"]["type"] == "token_count" =>
         {
+            let info = &row["payload"]["info"];
+            let context = info["last_token_usage"]["input_tokens"].as_u64()
+                .zip(info["model_context_window"].as_u64().filter(|size| *size > 0))
+                .map(|(input, window)| ContextUsage { input, window });
             Some(Usage {
-                tokens: row["payload"]["info"]["total_token_usage"]["total_tokens"].as_u64()?,
+                tokens: info["total_token_usage"]["total_tokens"].as_u64()?,
                 cumulative: true,
                 key: None,
                 cost: None,
+                context,
             })
         }
         _ => None,
@@ -718,10 +732,16 @@ mod tests {
         assert_eq!(trace.events[2].file, None);
         assert_eq!(trace.events[3].usage.as_ref().unwrap().tokens, 27);
         let rollup = usage_for(Provider::Codex, &serde_json::json!({
-            "type":"event_msg", "payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}
+            "type":"event_msg", "payload":{"type":"token_count","info":{
+                "total_token_usage":{"total_tokens":123},
+                "last_token_usage":{"input_tokens":80},
+                "model_context_window":256
+            }}
         })).unwrap();
         assert!(rollup.cumulative);
         assert_eq!(rollup.tokens, 123);
+        let context = rollup.context.unwrap();
+        assert_eq!((context.input, context.window), (80, 256));
     }
 
     #[test]

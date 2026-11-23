@@ -1,7 +1,7 @@
 import type { SessionDigest } from "@/modules/agents/lib/types";
 import {
   beforeTime, FLOW_LABELS, flowTasks, sessionFamily,
-  type FlowDirection, type FlowRun, type FlowTask, type TraceEvent,
+  type FlowDirection, type FlowKind, type FlowRun, type FlowTask, type TraceEvent,
 } from "@/modules/agent-flow/model";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
@@ -34,8 +34,33 @@ export type Actor = {
   speech: TraceEvent | undefined;
   activity: TraceEvent | undefined;
   tools: TraceEvent[];
-  usage: { tokens: number; cost: number | undefined } | undefined;
+  signals: TraceEvent[];
+  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number } } | undefined;
 };
+
+export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" | "state";
+
+export function signalTone(kind: FlowKind): SignalTone {
+  if (kind === "reply" || kind === "user") return "message";
+  if (kind === "tool") return "tool";
+  if (kind === "delegated" || kind === "subagent") return "branch";
+  if (kind === "returned" || kind === "finished" || kind === "turn-ended") return "return";
+  if (kind === "attention" || kind === "notification" || kind === "error") return "attention";
+  return "state";
+}
+
+export function signalEvents(events: readonly TraceEvent[], limit = 12): TraceEvent[] {
+  const result: TraceEvent[] = [];
+  for (let index = events.length - 1; index >= 0 && result.length < limit; index--) {
+    const event = events[index];
+    if (event.kind !== "usage" && event.kind !== "working") result.push(event);
+  }
+  return result.reverse();
+}
+
+export function contextPercent(context: NonNullable<NonNullable<Actor["usage"]>["context"]>): number {
+  return Math.round(Math.max(0, Math.min(1, context.input / context.window)) * 100);
+}
 
 export function eventStream(run: FlowRun, trace: FlowTrace | undefined): TraceEvent[] {
   return [...run.events, ...trace?.events ?? []].sort((a, b) => a.at - b.at);
@@ -64,12 +89,14 @@ export function branchFor(
 function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
   let tokens = 0;
   let cost: number | undefined;
+  let context: NonNullable<Actor["usage"]>["context"];
   let found = false;
   const records = new Map<string, NonNullable<TraceEvent["usage"]>>();
   for (const event of events) {
     const usage = event.usage;
     if (!usage) continue;
     found = true;
+    if (usage.context && usage.context.window > 0) context = usage.context;
     if (usage.cumulative) {
       tokens = usage.tokens;
       if (usage.cost !== undefined && usage.cost !== null) cost = usage.cost;
@@ -81,7 +108,7 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
     tokens += usage.tokens;
     if (usage.cost !== undefined && usage.cost !== null) cost = (cost ?? 0) + usage.cost;
   }
-  return found ? { tokens, cost } : undefined;
+  return found ? { tokens, cost, context } : undefined;
 }
 
 export function describeActor(
@@ -122,10 +149,16 @@ export function describeActor(
   const digest = time === null && !task ? branch.digest : undefined;
   const summary = digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap;
   const recentTurn = relevant.find((event) => event.kind === "user");
+  const recordedSignals = task && !trace
+    ? branch.events.filter((event) => (time === null || event.at <= time)
+      && (event.taskId === task.id || event.id === task.id))
+    : events;
+  const signals = signalEvents(recordedSignals);
   return {
-    label, tone, activity,
+    label, tone, activity: activity ?? signals[signals.length - 1],
     speech: speech ?? (summary ? { id: `summary:${summary}`, kind: "reply", at: digest?.lastReplyAt ?? branch.start, text: summary } : undefined),
     tools: relevant.filter((event) => event.kind === "tool" && (!recentTurn || event.at >= recentTurn.at)).slice(0, 2),
+    signals,
     usage: combinedUsage(events),
   };
 }
