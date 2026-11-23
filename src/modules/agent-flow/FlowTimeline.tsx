@@ -77,7 +77,7 @@ function ShellTrack({
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
           const candidate = event.key === "ArrowRight" ? lane.marks.find(({ at }) => at > cursor)
-            : lane.marks.findLast(({ at }) => at < cursor);
+            : [...lane.marks].reverse().find(({ at }) => at < cursor);
           if (candidate) jump(candidate.at);
         }}>
         <TimeMarkers bins={bins} />

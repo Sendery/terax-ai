@@ -138,6 +138,7 @@ export function FlowCanvas({
   const gesture = useRef<{ pointer: number; start: Point; camera: Camera } | null>(null);
   const fitted = useRef("");
   const manualCamera = useRef(false);
+  const fitAllRequested = useRef(false);
   const fittedBounds = useRef("");
   const focused = useRef<number | null>(null);
 
@@ -174,12 +175,15 @@ export function FlowCanvas({
     if (fitted.current !== fitRequest) {
       fitted.current = fitRequest;
       manualCamera.current = false;
+      fitAllRequested.current = false;
       fittedBounds.current = "";
     }
     const bounds = `${scene.width}:${scene.height}:${size.width}:${size.height}`;
     if (manualCamera.current || bounds === fittedBounds.current) return;
     fittedBounds.current = bounds;
-    commit(arrangement === "lanes" ? laneCamera(scene, size, direction) : fitCamera(scene, size), true);
+    const next = arrangement === "lanes" && !fitAllRequested.current
+      ? laneCamera(scene, size, direction) : fitCamera(scene, size);
+    commit(next, true);
   }, [size, scene, fitRequest, commit, arrangement, direction]);
 
   useEffect(() => {
@@ -280,6 +284,7 @@ export function FlowCanvas({
 
   function fitAll() {
     manualCamera.current = false;
+    fitAllRequested.current = true;
     commit(fitCamera(scene, size), true);
   }
 

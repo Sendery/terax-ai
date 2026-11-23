@@ -301,9 +301,7 @@ export function fitCamera(scene: { width: number; height: number }, viewport: { 
 
 export function laneCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }, direction: FlowDirection): Camera {
   const down = direction === "down";
-  const laneLength = down ? scene.height : scene.width;
-  const available = down ? viewport.height - 26 : viewport.width - 26;
-  const scale = Math.max(0.56, Math.min(1, available / Math.max(laneLength, 1)));
+  const scale = Math.max(0.56, Math.min(1, fitCamera(scene, viewport).scale));
   const freeX = viewport.width - scene.width * scale;
   const freeY = viewport.height - scene.height * scale;
   return { scale, x: freeX >= 0 ? freeX / 2 : down ? 0 : freeX, y: Math.max(0, freeY / 2) };
