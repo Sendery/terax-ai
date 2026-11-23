@@ -107,7 +107,7 @@ fn mark(body: &str) -> String {
 /// Rows a logical line takes at `cols`. The scenarios avoid lines that end
 /// exactly at the right edge, where the shells add their own wrap handling.
 fn height(len: usize, cols: u16) -> usize {
-    assert!(len % usize::from(cols) != 0, "{len} fills {cols} columns");
+    assert!(!len.is_multiple_of(usize::from(cols)), "{len} fills {cols} columns");
     len / usize::from(cols) + 1
 }
 
