@@ -51,7 +51,7 @@ export function collectAttention(panes: readonly FlowTerminal[], runs: readonly 
         const previous = errors.get(pane.shellKey);
         if (!previous || previous.at < event.at) {
           errors.set(pane.shellKey, { id: `${run.key}:${event.id}`, pane: { ...pane, runKey: run.key },
-            at: event.at, event: event.id, label: "Recent error", error: true });
+            at: event.at, event: event.id, label: "Last error", error: true });
         }
         break;
       }
@@ -74,7 +74,8 @@ export function resolveDeliveries(
   const runByKey = new Map(runs.map((run) => [run.key, run]));
   function resolve(endpoint: FlowEndpoint): ResolvedEndpoint | undefined {
     if (hidden.has(endpoint.shellKey)) return undefined;
-    const pane = paneByShell.get(endpoint.shellKey);
+    const candidate = paneByShell.get(endpoint.shellKey);
+    const pane = candidate?.runKey === endpoint.runKey ? candidate : undefined;
     const run = endpoint.runKey && runByKey.get(endpoint.runKey);
     if (run) return { title: pane ? terminalTitle(pane) : run.tabTitle, pane, run };
     if (!endpoint.runKey && pane) return { title: terminalTitle(pane), pane };

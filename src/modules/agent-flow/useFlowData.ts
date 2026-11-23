@@ -170,6 +170,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     }
     const candidates = history.sourceKey === sourceKey ? history.runs : [];
     const allowed = [...byKey.values()].flatMap((run) => {
+      if (run.shellKey && hidden.has(run.shellKey)) return [];
       const tab = run.tabId === undefined ? undefined : currentTabs.get(run.tabId);
       if (tab?.kind !== "terminal") return [run];
       return tab.private ? [] : [{ ...run, tabTitle: labelFor(tab), color: tab.color }];
@@ -203,7 +204,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
     });
     return mergeRuns(attributed, candidates);
-  }, [sessions, digests, journal, tabs, panes, history, sourceKey]);
+  }, [sessions, digests, journal, tabs, panes, hidden, history, sourceKey]);
 
   const children = useMemo(() => history.sourceKey === sourceKey
     ? history.runs.filter((run) => !!run.parentId)

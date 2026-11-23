@@ -147,7 +147,7 @@ function FileEvidence({ item, openTouch }: { item: FileCrossing; openTouch: (tou
       const repo = await native.gitResolveRepo(cwd);
       const absolute = normalizedFile(repo?.repoRoot, item.path);
       const root = repo?.repoRoot.replace(/\\/g, "/").replace(/\/$/, "");
-      if (!root || !absolute || !absolute.startsWith(`${root}/`)) {
+      if (!root || !absolute?.startsWith(`${root}/`)) {
         setMessage("The file is outside a resolved Git checkout.");
         return;
       }
@@ -173,7 +173,7 @@ function FileEvidence({ item, openTouch }: { item: FileCrossing; openTouch: (tou
 
 export function FlowOperations({
   mode, panes, attention, deliveries, files, connection, close,
-  activate, inspect, selectConnection, openTouch, dismiss,
+  activate, inspect, selectConnection, openTouch, dismiss, seek,
 }: {
   mode: Operation;
   panes: readonly FlowTerminal[];
@@ -187,6 +187,7 @@ export function FlowOperations({
   selectConnection: (item: FlowConnection) => void;
   openTouch: (touch: FileTouch) => void;
   dismiss: (id: string) => void;
+  seek: (at: number) => void;
 }) {
   const [paneKey, selectPane] = useState("");
   const pane = panes.find(({ shellKey }) => shellKey === paneKey);
@@ -242,6 +243,9 @@ export function FlowOperations({
         {selectedDelivery ? <div className="flow-ops-evidence">
           {selectedDelivery.from ? <ConnectionEndpoint endpoint={selectedDelivery.from} inspect={inspect} activate={activate} /> : null}
           <ConnectionEndpoint endpoint={selectedDelivery.to} inspect={inspect} activate={activate} />
+          {selectedDelivery.from?.run || selectedDelivery.to.run ? (
+            <button type="button" onClick={() => seek(selectedDelivery.at)}>Jump to relay</button>
+          ) : null}
         </div> : null}
         <h3>Shared file activity</h3>
         {files.length ? <ul className="flow-ops-list">

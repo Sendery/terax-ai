@@ -319,6 +319,7 @@ export default function AgentFlow({
             files={files} connection={connection} close={() => { setOperations(null); setConnection(null); }}
             activate={onActivate} inspect={inspectOperation} selectConnection={showConnection}
             openTouch={({ run, event, task }) => inspectOperation(run.key, event.id, event.at, task)}
+            seek={jump}
             dismiss={(id) => setDismissed((current) => [...current.slice(-79), id])} />
         ) : null}
 
