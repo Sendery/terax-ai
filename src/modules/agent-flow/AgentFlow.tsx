@@ -10,10 +10,11 @@ import type { Tab } from "@/modules/tabs/lib/useTabs";
 import { FlowCanvas, accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { FlowInspector, UsageMetrics } from "@/modules/agent-flow/FlowInspector";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
-import { FlowTimeline, flowTime, type TimeMark } from "@/modules/agent-flow/FlowTimeline";
+import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, eventLabel, makeScene, signalEvents, signalTone, type FlowSelection } from "@/modules/agent-flow/scene";
+import { branchFor, describeActor, eventLabel, makeScene, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
+import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData } from "@/modules/agent-flow/useFlowData";
 import "./agent-flow.css";
 
@@ -27,6 +28,7 @@ export default function AgentFlow({
   onActivate: (tabId: number, leafId: number) => void;
 }) {
   const [direction, setDirection] = useState<FlowDirection>("down");
+  const [arrangement, setArrangement] = useState<FlowArrangement>("fit");
   const [group, setGroup] = useState("");
   const [scope, setScope] = useState<"active" | "all" | null>(null);
   const [time, setTime] = useState<number | null>(null);
@@ -86,7 +88,7 @@ export default function AgentFlow({
   const traces = useFlowTraces(targets, open, refresh);
 
   const branches = useMemo(() => inScope.map((run) => branchFor(run, children, digests, traces)), [inScope, children, digests, traces]);
-  const scene = useMemo(() => makeScene(branches, direction), [branches, direction]);
+  const scene = useMemo(() => makeScene(branches, direction, arrangement), [branches, direction, arrangement]);
   const branch = branches.find((item) => item.run.key === selection?.run);
   const task = branch?.tasks.find((entry) => entry.id === selection?.task && (time === null || entry.at <= time));
   const detailTrace = task ? traces.get(traceKey(task.run) ?? "") : branch?.trace;
@@ -94,24 +96,7 @@ export default function AgentFlow({
   const matches = navigator ? branches.filter((item) => !searchable ||
     `${item.run.tabTitle} ${runName(item.run, item.trace?.name)} ${displayAgent(item.run.agent)}`.toLowerCase().includes(searchable),
   ) : [];
-  const marks = useMemo(() => {
-    const at = new Map<number, TimeMark>();
-    const add = (mark: TimeMark) => {
-      if (mark.at > 0 && mark.kind !== "usage") at.set(mark.at, { at: mark.at, kind: mark.kind });
-    };
-    for (const item of branches) {
-      add({ at: item.start, kind: "started" });
-      for (const event of item.events) add(event);
-      for (const entry of item.tasks) {
-        add({ at: entry.at, kind: "delegated" });
-        if (entry.returnedAt !== undefined) add({ at: entry.returnedAt, kind: entry.failed ? "error" : "returned" });
-        if (entry.run) {
-          for (const event of traces.get(traceKey(entry.run) ?? "")?.events ?? []) add(event);
-        }
-      }
-    }
-    return [...at.values()].sort((a, b) => a.at - b.at);
-  }, [branches, traces]);
+  const timeline = useMemo(() => buildTimeline(branches, traces), [branches, traces]);
   const signalFeed = useMemo(() => {
     const signals: { key: string; run: FlowRun; agent: string; event: TraceEvent; task?: string }[] = [];
     for (const entry of branches) {
@@ -203,6 +188,11 @@ export default function AgentFlow({
             <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={15} />
             <span>{direction === "down" ? "Top to bottom" : "Right to left"}</span>
           </button>
+          <button type="button" className="flow-arrangement" aria-label="Session lanes"
+            aria-pressed={arrangement === "lanes"} title="Switch between fitting the map and one lane per session"
+            onClick={() => setArrangement((current) => current === "fit" ? "lanes" : "fit")}>
+            {arrangement === "fit" ? "Fit to screen" : direction === "left" ? "Session rows" : "Session columns"}
+          </button>
           <button type="button" aria-pressed={usage} onClick={() => { setUsage((current) => !current); setSelection(null); }}>Usage</button>
           <button type="button" className="flow-motion" aria-label="Motion effects" aria-pressed={motion}
             onClick={() => setMotion((current) => !current)}>
@@ -213,8 +203,8 @@ export default function AgentFlow({
       </header>
 
       <div className="flow-stage">
-        <FlowCanvas scene={scene} traces={traces} direction={direction} time={time} target={selection}
-          focusRequest={focusRequest} fitRequest={`${direction}:${groupKey}:${actualScope}`}
+        <FlowCanvas scene={scene} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
+          focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
           loading={loading} motion={motion} onSelect={select} onVisible={setNear} />
 
         <div className="flow-navigation">
@@ -288,7 +278,8 @@ export default function AgentFlow({
         ) : null}
       </div>
 
-      <FlowTimeline marks={marks} time={time} setTime={setTime} playing={playing} setPlaying={setPlaying} />
+      <FlowTimeline marks={timeline.marks} lanes={timeline.lanes} time={time} setTime={setTime}
+        playing={playing} setPlaying={setPlaying} />
     </section>
   );
 }

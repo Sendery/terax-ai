@@ -10,8 +10,8 @@ import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import type { FlowDirection, FlowRun, FlowTask, TraceEvent } from "@/modules/agent-flow/model";
 import {
-  contextPercent, describeActor, eventLabel, fitCamera, NODE_ANCHOR, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
-  type Box, type Camera, type FlowBranch, type FlowScene, type FlowSelection, type Point,
+  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, laneCamera, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
+  type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowScene, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
@@ -24,16 +24,6 @@ export function accent(run: FlowRun): CSSProperties {
 
 export function runName(run: FlowRun, resolvedName?: string | null): string {
   return resolvedName || run.name || (run.sessionId ? `Session ${run.sessionId.slice(0, 8)}` : displayAgent(run.agent));
-}
-
-function pathBetween(from: Point, to: Point, direction: FlowDirection) {
-  const a = { x: from.x + NODE_ANCHOR.x, y: from.y + NODE_ANCHOR.y };
-  const b = { x: to.x + NODE_ANCHOR.x, y: to.y + NODE_ANCHOR.y };
-  const x = (a.x + b.x) / 2;
-  const y = (a.y + b.y) / 2;
-  return direction === "down"
-    ? `M ${a.x} ${a.y + 29} C ${a.x} ${y}, ${b.x} ${y}, ${b.x} ${b.y - 29}`
-    : `M ${a.x - 29} ${a.y} C ${x} ${a.y}, ${x} ${b.y}, ${b.x + 29} ${b.y}`;
 }
 
 function recent(event: number | undefined, time: number | null, clock: number) {
@@ -126,6 +116,7 @@ type CanvasProps = {
   scene: FlowScene;
   traces: ReadonlyMap<string, FlowTrace>;
   direction: FlowDirection;
+  arrangement: FlowArrangement;
   time: number | null;
   target: FlowSelection | null;
   focusRequest: { key: string; tick: number } | null;
@@ -137,7 +128,7 @@ type CanvasProps = {
 };
 
 export function FlowCanvas({
-  scene, traces, direction, time, target, focusRequest, fitRequest, loading, motion, onSelect, onVisible,
+  scene, traces, direction, arrangement, time, target, focusRequest, fitRequest, loading, motion, onSelect, onVisible,
 }: CanvasProps) {
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -188,8 +179,8 @@ export function FlowCanvas({
     const bounds = `${scene.width}:${scene.height}:${size.width}:${size.height}`;
     if (manualCamera.current || bounds === fittedBounds.current) return;
     fittedBounds.current = bounds;
-    commit(fitCamera(scene, size), true);
-  }, [size, scene, fitRequest, commit]);
+    commit(arrangement === "lanes" ? laneCamera(scene, size, direction) : fitCamera(scene, size), true);
+  }, [size, scene, fitRequest, commit, arrangement, direction]);
 
   useEffect(() => {
     if (!focusRequest || focused.current === focusRequest.tick || !size.width) return;
@@ -305,7 +296,8 @@ export function FlowCanvas({
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
         <div className="flow-atmosphere" aria-hidden="true"
           style={{ transform: `translate(${camera.x * 0.085}px, ${camera.y * 0.085}px)` }}><i /><i /></div>
-        <div className="flow-world" data-detail={compact ? "compact" : "full"}
+        <div className="flow-world" data-detail={compact ? "compact" : "full"} data-direction={direction}
+          data-layout={arrangement}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
           {visible.map(({ branch, box, nodes }) => {
             if (time !== null && branch.start > time) return null;
@@ -320,12 +312,13 @@ export function FlowCanvas({
                   <svg className="flow-connections" width={box.width} height={box.height} aria-hidden="true">
                     {show.map(({ task, parent, at }) => {
                       if (!parent || !task) return null;
-                      const d = pathBetween(parent, at, direction);
                       const returned = task.returnedAt !== undefined && (time === null || task.returnedAt <= time);
+                      const { d, arrow } = edgeGeometry(parent, at, direction, returned);
                       const transit = recent(returned ? task.returnedAt : task.at, time, clock);
                       return (
                         <g key={task.id}>
                           <path d={d} className="flow-edge" data-returned={returned} />
+                          <path d={arrow} className="flow-edge-arrow" data-returned={returned} />
                           {transit && !compact ? <path key={`${task.id}:${returned}`} d={d} pathLength="1" className="flow-transit" data-returned={returned} /> : null}
                         </g>
                       );

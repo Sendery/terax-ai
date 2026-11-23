@@ -127,6 +127,7 @@
 .flow-nav-toggle,
 .flow-transport button,
 .flow-timeline select,
+.flow-shell-toggle,
 .flow-live,
 .flow-inspector-actions button,
 .flow-inspector-scroll > button,
@@ -151,6 +152,7 @@
 .flow-controls button:hover:not(:disabled),
 .flow-camera button:hover:not(:disabled),
 .flow-transport button:hover:not(:disabled),
+.flow-shell-toggle:hover:not(:disabled),
 .flow-nav-toggle:hover,
 .flow-inspector-actions button:hover,
 .flow-live:hover,
@@ -241,6 +243,24 @@
   box-shadow: 0 0 28px color-mix(in oklab, var(--flow-accent) 13%, transparent);
 }
 
+.flow-world[data-layout="lanes"] .flow-cluster {
+  border-radius: 15px;
+}
+
+.flow-world[data-layout="lanes"] .flow-cluster-tag {
+  padding-bottom: 7px;
+  border-bottom: 1px solid color-mix(in oklab, var(--flow-accent) 21%, transparent);
+}
+
+.flow-world[data-direction="left"] .flow-cluster-tag {
+  flex-direction: row-reverse;
+}
+
+.flow-world[data-direction="left"] .flow-cluster-tag small {
+  margin-inline-start: 0;
+  margin-inline-end: auto;
+}
+
 .flow-cluster-tag {
   position: absolute;
   top: 12px;
@@ -279,9 +299,21 @@
 }
 
 .flow-edge,
-.flow-transit {
+.flow-transit,
+.flow-edge-arrow {
   fill: none;
   stroke: var(--flow-accent);
+}
+
+.flow-edge-arrow {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+
+.flow-edge-arrow[data-returned="true"] {
+  opacity: 0.55;
 }
 
 .flow-edge {
@@ -577,6 +609,28 @@
   gap: 7px;
 }
 
+.flow-world[data-direction="left"] .flow-node {
+  left: auto;
+  right: 0;
+}
+
+.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node {
+  width: 94px;
+  padding-inline-start: 0;
+  align-items: center;
+  text-align: center;
+}
+
+.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node-caption,
+.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node-state {
+  padding-inline-start: 0;
+}
+
+.flow-world[data-direction="left"] .flow-node-events {
+  left: 0;
+  right: 107px;
+}
+
 .flow-speech,
 .flow-activity-label {
   position: relative;
@@ -602,6 +656,15 @@
   border-left: inherit;
   border-bottom: inherit;
   background: inherit;
+}
+
+.flow-world[data-direction="left"] .flow-speech::before {
+  left: auto;
+  right: -6px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top: inherit;
+  border-right: inherit;
 }
 
 .flow-speech:hover,
@@ -639,6 +702,16 @@
   padding-inline-start: 8px;
   border-inline-start: 1px solid color-mix(in oklab, var(--flow-accent) 56%, transparent);
   margin-inline-start: 7px;
+}
+
+.flow-world[data-direction="left"] .flow-tool-links {
+  margin-inline-start: 0;
+  margin-inline-end: 7px;
+  padding-inline-start: 0;
+  padding-inline-end: 8px;
+  border-inline-start: 0;
+  border-inline-end: 1px solid color-mix(in oklab, var(--flow-accent) 56%, transparent);
+  justify-items: end;
 }
 
 .flow-tool-links button {
@@ -1199,7 +1272,35 @@
 }
 
 .flow-timeline {
+  --flow-timeline-lead: 151px;
+  --flow-timeline-end: 115px;
+  display: block;
   border-top: 1px solid var(--flow-line);
+}
+
+.flow-timeline-main,
+.flow-time-lane {
+  display: grid;
+  grid-template-columns: var(--flow-timeline-lead) minmax(0, 1fr) var(--flow-timeline-end);
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-timeline-controls,
+.flow-timeline-options {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.flow-timeline-options {
+  justify-content: flex-end;
+}
+
+.flow-shell-toggle[aria-expanded="true"] {
+  color: color-mix(in oklab, var(--flow-accent) 75%, var(--foreground));
+  border-color: color-mix(in oklab, var(--flow-accent) 65%, var(--flow-line));
+  background: color-mix(in oklab, var(--flow-accent) 13%, var(--flow-panel));
 }
 
 .flow-live[aria-pressed="true"] {
@@ -1225,8 +1326,7 @@
 }
 
 .flow-time-track {
-  flex: 1;
-  min-width: 64px;
+  min-width: 0;
 }
 
 .flow-time-label {
@@ -1237,6 +1337,16 @@
   font: 10px/1.2 "JetBrains Mono", ui-monospace, monospace;
 }
 
+.flow-time-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-time-label span:last-child {
+  flex: none;
+}
+
 .flow-track-area {
   position: relative;
   display: grid;
@@ -1245,18 +1355,16 @@
 }
 
 .flow-time-marks {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1px;
   position: absolute;
   inset: 0 5px;
   pointer-events: none;
 }
 
 .flow-time-marks i {
-  flex: 1;
-  max-width: 5px;
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  transform: translate(-50%, -50%);
   border-radius: 99px;
   background: var(--flow-dim);
   opacity: 0.86;
@@ -1299,11 +1407,102 @@
 
 .flow-track-area::before {
   position: absolute;
-  inset: 9px 1px auto;
+  inset: 9px 5px auto;
   height: 2px;
   border-radius: 2px;
   content: "";
   background: linear-gradient(90deg, color-mix(in oklab, var(--flow-accent) 42%, var(--flow-line)) var(--flow-progress), var(--flow-line) 0);
+}
+
+.flow-shell-lanes {
+  max-height: min(28vh, 230px);
+  margin: 7px 0 0;
+  padding: 5px 0 0;
+  overflow: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--flow-line);
+  list-style: none;
+}
+
+.flow-time-lane {
+  min-height: 28px;
+}
+
+.flow-time-lane-name {
+  display: grid;
+  grid-template-columns: 7px minmax(0, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10px;
+}
+
+.flow-time-lane-name strong,
+.flow-time-lane-name small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-time-lane-name small {
+  color: var(--flow-dim);
+  font-size: 9px;
+}
+
+.flow-time-lane-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--flow-lane-color);
+}
+
+.flow-time-lane-dot[data-active="true"] {
+  box-shadow: 0 0 8px var(--flow-lane-color);
+}
+
+.flow-shell-track {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--flow-lane-color) 5%, var(--flow-panel));
+  cursor: pointer;
+}
+
+.flow-shell-track:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--flow-lane-color) 13%, var(--flow-panel));
+}
+
+.flow-shell-track::before,
+.flow-shell-playhead {
+  position: absolute;
+  inset: 0 5px;
+  pointer-events: none;
+}
+
+.flow-shell-track::before {
+  inset-block: 10px auto;
+  height: 2px;
+  border-radius: 2px;
+  content: "";
+  background: color-mix(in oklab, var(--flow-lane-color) 38%, var(--flow-line));
+}
+
+.flow-shell-track .flow-time-marks i[data-tone="state"] {
+  background: var(--flow-lane-color);
+}
+
+.flow-shell-playhead::after {
+  position: absolute;
+  inset-block: 2px;
+  left: var(--flow-progress);
+  width: 1px;
+  content: "";
+  background: var(--flow-accent);
+  box-shadow: 0 0 5px var(--flow-accent);
 }
 
 @container (max-width: 650px) {
@@ -1337,6 +1536,12 @@
     transform: scale(0.75);
     transform-origin: bottom right;
   }
+}
+
+@container (max-width: 450px) {
+  .flow-timeline { --flow-timeline-end: 76px; }
+  .flow-shell-toggle span { display: none; }
+  .flow-time-label span:last-child { display: none; }
 }
 
 .agent-flow[data-motion="false"] *,

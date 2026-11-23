@@ -10,12 +10,13 @@ const MAX_RUNS = 160;
 const MAX_EVENTS = 96;
 const store = new LazyStore("terax-agent-flow.json", { defaults: {}, autoSave: false });
 const launch = Date.now().toString(36);
-const archived = (run: FlowRun): FlowRun => ({
-  ...run,
-  active: undefined,
-  tabId: undefined,
-  leafId: undefined,
-});
+
+function archived(run: FlowRun): FlowRun {
+  const [instance, leaf, startedAt] = run.key.split(":");
+  const shellKey = instance === run.group.split(":")[0] && Number(startedAt) === run.startedAt && /^\d+$/.test(leaf)
+    ? `${run.group}:${leaf}` : undefined;
+  return { ...run, shellKey: run.shellKey ?? shellKey, active: undefined, tabId: undefined, leafId: undefined };
+}
 
 export const useFlowJournal = create<{ runs: FlowRun[] }>(() => ({ runs: [] }));
 
@@ -86,6 +87,7 @@ export function recordFlowSignal(
   const run: FlowRun = {
     key,
     group: `${launch}:${session.tabId}`,
+    shellKey: `${launch}:${session.tabId}:${session.leafId}`,
     tabTitle: tab ? labelFor(tab).slice(0, 160) : old?.tabTitle ?? "Terminal",
     color: tab ? tab.color : old?.color,
     cwd: tab ? findLeafCwd(tab.paneTree, session.leafId) ?? tab.cwd : old?.cwd,

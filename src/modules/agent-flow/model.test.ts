@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
-import { branchFor, contextPercent, describeActor, fitCamera, makeScene, overlaps, signalTone, zoomCamera } from "@/modules/agent-flow/scene";
+import { branchFor, contextPercent, describeActor, edgeGeometry, fitCamera, laneCamera, makeScene, overlaps, signalTone, zoomCamera } from "@/modules/agent-flow/scene";
+import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
 import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
@@ -54,6 +55,59 @@ describe("Agent Flow", () => {
     const zoom = zoomCamera(fit, { x: 320, y: 220 }, 1.25);
     expect((320 - zoom.x) / zoom.scale).toBeCloseTo((320 - fit.x) / fit.scale);
     expect((220 - zoom.y) / zoom.scale).toBeCloseTo((220 - fit.y) / fit.scale);
+  });
+
+  it("aligns session origins on the right in rows and at the top in columns", () => {
+    const other = historyRun({ id: "another", provider: "pi", cwd: "/project", modifiedAt: 40 }, "Another tab");
+    const branches = [branchFor(root, [child, grandchild], null, new Map()), branchFor(other, [], null, new Map())];
+    const rows = makeScene(branches, "left", "lanes");
+    const [firstRow, secondRow] = rows.clusters;
+    expect(firstRow.box.x + firstRow.box.width).toBe(secondRow.box.x + secondRow.box.width);
+    expect(firstRow.box.y + firstRow.box.height).toBeLessThan(secondRow.box.y);
+    expect(firstRow.nodes[0].at.x).toBe(secondRow.nodes[0].at.x);
+    expect(firstRow.nodes[1].at.x).toBeLessThan(firstRow.nodes[0].at.x);
+    expect(laneCamera(rows, { width: 1000, height: 200 }, "left").y).toBe(0);
+
+    const columns = makeScene(branches, "down", "lanes");
+    const [firstColumn, secondColumn] = columns.clusters;
+    expect(firstColumn.box.y).toBe(secondColumn.box.y);
+    expect(firstColumn.box.x + firstColumn.box.width).toBeLessThan(secondColumn.box.x);
+    expect(firstColumn.nodes[0].at.y).toBe(secondColumn.nodes[0].at.y);
+    expect(laneCamera(columns, { width: 200, height: 800 }, "down").x).toBe(0);
+  });
+
+  it("points the horizontal connection left for delegation and right for its return", () => {
+    const from = { x: 352, y: 0 };
+    const to = { x: 0, y: 0 };
+    const delegation = edgeGeometry(from, to, "left", false);
+    const result = edgeGeometry(from, to, "left", true);
+    const [start, end] = [delegation.d.split(" ")[1], delegation.d.split(" ").at(-2)].map(Number);
+    expect(start).toBeGreaterThan(end);
+    expect(delegation.arrow).toContain(`M ${end + 7} 51 L ${end} 55`);
+    expect(result.arrow).toContain(`M ${start - 7} 51 L ${start} 55`);
+  });
+
+  it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {
+    const first = { ...root, group: "one-tab", leafId: 1, active: true, createdAt: 10, shellKey: "one-tab:1" };
+    const archived = { ...root, key: "prior-run", createdAt: 5, shellKey: "one-tab:1" };
+    const split = {
+      ...root, key: "split", group: "one-tab", leafId: 2, createdAt: 20,
+      events: [{ id: "tool", at: 40, kind: "tool" as const }],
+    };
+    const traces = new Map();
+    const timeline = buildTimeline([
+      branchFor(first, [child], null, traces),
+      branchFor(archived, [], null, traces),
+      branchFor(split, [], null, traces),
+    ], traces);
+    expect(timeline.lanes.map(({ key, marks }) => [key, marks.map(({ at }) => at)])).toEqual([
+      ["one-tab:1", [5, 10, 12]],
+      ["one-tab:2", [20, 40]],
+    ]);
+    expect(timeline.marks.map(({ at }) => at)).toEqual([5, 10, 12, 20, 40]);
+    expect(timeFraction(12, 5, 40)).toBe(0.2);
+    expect(nearTick(timeline.lanes[1].marks, 17)?.at).toBe(20);
+    expect(nearTick([], 17)).toBeUndefined();
   });
 
   it("keeps incremental traces stable and uses deduplicated usage at the playhead", () => {

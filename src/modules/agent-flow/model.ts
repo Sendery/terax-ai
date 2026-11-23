@@ -55,6 +55,7 @@ export type HistorySession = {
 export type FlowRun = {
   key: string;
   group: string;
+  shellKey?: string;
   tabTitle: string;
   color?: TabColor;
   startedAt: number;

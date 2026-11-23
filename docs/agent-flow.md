@@ -14,12 +14,20 @@ button can stop the effects, and replay leaves the ambient movement still.
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
 and use Fit all or the minimap to reorient the canvas. The Agents list can find
 and center a session. The direction button switches between top to bottom and
-right to left. Select an agent, bubble or tool to open its details. Activity,
+right to left. In the right-to-left view, each session starts on the right and
+delegates toward the left. Switch from Fit to screen to session lanes to give
+each session its own column in the vertical view or row in the horizontal view.
+Pan across the lanes to explore, or fit the whole map using the canvas controls.
+Select an agent, bubble or tool to open its details. Activity,
 Messages, Tools and Files views work at the current replay position. Files
 lists explicit paths reported by supported file tools.
 
-Use the timeline to scrub, step or replay at 1×, 2× or 4×. Go live returns to
-incoming activity. Usage displays available token records for Claude Code,
+Use the timeline to scrub, step or replay at 1×, 2× or 4×. It opens as a single
+activity overview. Expand Shells to show one track per terminal pane, including
+separate panes in the same tab. All tracks share the same time scale and
+playhead. Click a track or use its arrow keys to seek to one of its events.
+Archived sessions without recorded pane attribution get individual tracks.
+Go live returns to incoming activity. Usage displays available token records for Claude Code,
 Codex and Pi and reported cost for Pi. Codex also displays the last recorded
 input token count against its context window. The amounts cover the loaded traces.
 

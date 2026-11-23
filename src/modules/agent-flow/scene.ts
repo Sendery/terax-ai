@@ -7,7 +7,7 @@ import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
 export const NODE_WIDTH = 326;
 export const NODE_HEIGHT = 156;
-export const NODE_ANCHOR = { x: 47, y: 55 };
+const NODE_ANCHOR = { x: 47, y: 55 };
 const SLOT_X = NODE_WIDTH + 26;
 const SLOT_Y = NODE_HEIGHT + 38;
 const GUTTER = 46;
@@ -16,6 +16,7 @@ const CLUSTER_HEADER = 31;
 
 export type Point = { x: number; y: number };
 export type Box = Point & { width: number; height: number };
+export type FlowArrangement = "fit" | "lanes";
 
 export type FlowSelection = { run: string; task?: string; event?: string };
 
@@ -169,7 +170,29 @@ type Cluster = {
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
-export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection) {
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean) {
+  const xOffset = direction === "left" ? NODE_WIDTH - NODE_ANCHOR.x : NODE_ANCHOR.x;
+  const a = { x: from.x + xOffset, y: from.y + NODE_ANCHOR.y };
+  const b = { x: to.x + xOffset, y: to.y + NODE_ANCHOR.y };
+  if (direction === "left") {
+    const start = { x: a.x - 29, y: a.y };
+    const end = { x: b.x + 29, y: b.y };
+    const rail = Math.min(from.y, to.y);
+    const d = `M ${start.x} ${start.y} C ${start.x - 24} ${start.y}, ${start.x - 16} ${rail}, ${start.x - 53} ${rail} H ${end.x + 53} C ${end.x + 14} ${rail}, ${end.x + 22} ${end.y}, ${end.x} ${end.y}`;
+    const tip = returned ? start : end;
+    const back = tip.x + (returned ? -7 : 7);
+    return { d, arrow: `M ${back} ${tip.y - 4} L ${tip.x} ${tip.y} L ${back} ${tip.y + 4}` };
+  }
+  const start = { x: a.x, y: a.y + 29 };
+  const end = { x: b.x, y: b.y - 29 };
+  const mid = (start.y + end.y) / 2;
+  const d = `M ${start.x} ${start.y} C ${start.x} ${mid}, ${end.x} ${mid}, ${end.x} ${end.y}`;
+  const tip = returned ? start : end;
+  const back = tip.y + (returned ? 7 : -7);
+  return { d, arrow: `M ${tip.x - 4} ${back} L ${tip.x} ${tip.y} L ${tip.x + 4} ${back}` };
+}
+
+export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit") {
   const placed = branches.map((branch) => {
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
@@ -204,6 +227,30 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     }
     return { branch, width, height, nodes };
   });
+
+  if (arrangement === "lanes") {
+    const across = direction === "down";
+    const crossSize = placed.reduce((max, group) => Math.max(max, across ? group.height : group.width), 0);
+    let nextLane = GUTTER;
+    const clusters = placed.map((group): Cluster => {
+      const offset = across ? 0 : crossSize - group.width;
+      const box = across
+        ? { x: nextLane, y: GUTTER, width: group.width, height: crossSize }
+        : { x: GUTTER, y: nextLane, width: crossSize, height: group.height };
+      nextLane += (across ? group.width : group.height) + GUTTER;
+      const shift = (point: Point) => ({ x: point.x + offset, y: point.y });
+      const nodes = offset ? group.nodes.map(({ task, at, parent }) => ({
+        task, at: shift(at), parent: parent && shift(parent),
+      })) : group.nodes;
+      return { branch: group.branch, box, nodes };
+    });
+    return {
+      clusters,
+      width: across ? nextLane : crossSize + 2 * GUTTER,
+      height: across ? crossSize + 2 * GUTTER : nextLane,
+    };
+  }
+
   const ordered = [...placed].sort((a, b) => b.height - a.height || b.width - a.width);
   const widest = Math.max(0, ...ordered.map(({ width }) => width));
   const area = placed.reduce((sum, { width, height }) => sum + (width + GUTTER) * (height + GUTTER), 0);
@@ -234,7 +281,11 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       best = layout;
     }
   }
-  return best ?? { clusters: [], width: GUTTER, height: GUTTER };
+  const layout = best ?? { clusters: [], width: GUTTER, height: GUTTER };
+  if (direction === "left") {
+    for (const { box } of layout.clusters) box.x = layout.width - box.x - box.width;
+  }
+  return layout;
 }
 
 export type FlowScene = ReturnType<typeof makeScene>;
@@ -246,6 +297,16 @@ export function fitCamera(scene: { width: number; height: number }, viewport: { 
     (viewport.height - 36) / Math.max(scene.height, 1),
   )));
   return { scale, x: (viewport.width - scene.width * scale) / 2, y: (viewport.height - scene.height * scale) / 2 };
+}
+
+export function laneCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }, direction: FlowDirection): Camera {
+  const down = direction === "down";
+  const laneLength = down ? scene.height : scene.width;
+  const available = down ? viewport.height - 26 : viewport.width - 26;
+  const scale = Math.max(0.56, Math.min(1, available / Math.max(laneLength, 1)));
+  const freeX = viewport.width - scene.width * scale;
+  const freeY = viewport.height - scene.height * scale;
+  return { scale, x: freeX >= 0 ? freeX / 2 : down ? 0 : freeX, y: Math.max(0, freeY / 2) };
 }
 
 export function zoomCamera(camera: Camera, point: Point, factor: number): Camera {
