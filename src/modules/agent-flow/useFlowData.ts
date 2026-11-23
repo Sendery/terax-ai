@@ -38,7 +38,8 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
           hidden.add(shellKey);
           return;
         }
-        const session = sessions?.[leafId];
+        const active = sessions?.[leafId];
+        const session = active?.tabId === tab.id ? active : undefined;
         panes.push({ leafId, tabId: tab.id, shellKey, title, color: tab.color,
           slot: index + 1, split: leaves.length > 1, cold: !!tab.cold, session,
           runKey: session ? flowRunKey(session) : undefined });

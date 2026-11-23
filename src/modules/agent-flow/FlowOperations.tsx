@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { displayAgent } from "@/modules/agents/lib/format";
@@ -22,6 +22,13 @@ const TITLES: Record<Operation, string> = {
   terminals: "Terminals",
   connections: "Connections",
 };
+const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: "auto", style: "short" });
+
+function AttentionAge({ at, now }: { at: number; now: number }) {
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+  const age = minutes < 60 ? relativeTime.format(-minutes, "minute") : relativeTime.format(-Math.floor(minutes / 60), "hour");
+  return <time dateTime={new Date(at).toISOString()} title={flowTime.format(at)}>{age}</time>;
+}
 
 function FocusTerminal({ pane, onActivate }: { pane: FlowTerminal; onActivate: Activate }) {
   return <button type="button" onClick={() => onActivate(pane.tabId, pane.leafId)}>Focus terminal</button>;
@@ -190,7 +197,17 @@ export function FlowOperations({
   seek: (at: number) => void;
 }) {
   const [paneKey, selectPane] = useState("");
+  const [filter, setFilter] = useState("");
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (mode !== "attention" || !attention.length) return;
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [mode, attention.length]);
   const pane = panes.find(({ shellKey }) => shellKey === paneKey);
+  const query = filter.trim().toLowerCase();
+  const shownPanes = mode === "terminals" && query ? panes.filter((item) =>
+    `${terminalTitle(item)} ${item.leafId} ${item.session?.agent ?? ""}`.toLowerCase().includes(query)) : panes;
   const selectedDelivery = connection?.kind === "delivery"
     ? deliveries.find(({ id }) => id === connection.key) : undefined;
   const selectedFile = connection?.kind === "file" ? files.find(({ path }) => path === connection.key) : undefined;
@@ -206,7 +223,7 @@ export function FlowOperations({
     <div className="flow-inspector-scroll flow-ops-content">
       {mode === "attention" ? attention.length ? <ul className="flow-ops-list">
         {attention.map((item) => <li key={item.id} data-kind={item.error ? "error" : "waiting"}>
-          <div><b>{item.label}</b><small>{terminalTitle(item.pane)} · {flowTime.format(item.at)}</small></div>
+          <div><b>{item.label}</b><small>{terminalTitle(item.pane)} · <AttentionAge at={item.at} now={now} /></small></div>
           <div className="flow-ops-row-buttons">
             {item.pane.runKey ? <button type="button" onClick={() => {
               if (item.pane.runKey) inspect(item.pane.runKey, item.event, item.error ? item.at : undefined);
@@ -218,8 +235,9 @@ export function FlowOperations({
       </ul> : <p>No terminals require attention.</p> : null}
       {mode === "terminals" ? <>
         <p className="flow-ops-note">Public shells · {panes.length}</p>
-        <ul className="flow-ops-list">
-          {panes.map((item) => <li key={item.shellKey}>
+        <input type="search" aria-label="Find a shell" placeholder="Find a shell…" value={filter} onChange={(event) => setFilter(event.target.value)} />
+        <ul className="flow-ops-list flow-ops-directory">
+          {shownPanes.map((item) => <li key={item.shellKey}>
             <button type="button" className="flow-ops-choice" aria-pressed={item.shellKey === paneKey}
               onClick={() => selectPane(item.shellKey)}>
               <i style={{ background: item.color ? TAB_COLOR_CSS[item.color] : undefined }} />
@@ -227,6 +245,7 @@ export function FlowOperations({
             </button>
           </li>)}
         </ul>
+        {!shownPanes.length ? <p>No matching shells.</p> : null}
         {pane ? <TerminalActions key={pane.shellKey} pane={pane} panes={panes} activate={activate} /> : <p>Choose a shell to coordinate.</p>}
       </> : null}
       {mode === "connections" ? <>

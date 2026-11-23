@@ -1114,6 +1114,12 @@
   min-width: 0;
 }
 
+.flow-ops-directory {
+  max-height: min(30vh, 226px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .flow-ops-list li[data-kind] {
   display: grid;
   gap: 5px;

@@ -75,7 +75,7 @@ export function resolveDeliveries(
   function resolve(endpoint: FlowEndpoint): ResolvedEndpoint | undefined {
     if (hidden.has(endpoint.shellKey)) return undefined;
     const candidate = paneByShell.get(endpoint.shellKey);
-    const pane = candidate?.runKey === endpoint.runKey ? candidate : undefined;
+    const pane = !endpoint.runKey || candidate?.runKey === endpoint.runKey ? candidate : undefined;
     const run = endpoint.runKey && runByKey.get(endpoint.runKey);
     if (run) return { title: pane ? terminalTitle(pane) : run.tabTitle, pane, run };
     if (!endpoint.runKey && pane) return { title: terminalTitle(pane), pane };

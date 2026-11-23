@@ -31,12 +31,23 @@ function recent(event: number | undefined, time: number | null, clock: number) {
 }
 
 function RelayLine({ from, to }: { from: Box; to: Box }) {
-  const start = { x: from.x + from.width / 2, y: from.y };
-  const end = { x: to.x + to.width / 2, y: to.y };
-  const turn = Math.min(start.y, end.y) - 34;
+  const across = from.x + from.width <= to.x || to.x + to.width <= from.x;
+  const sign = (across ? to.x - from.x : to.y - from.y) < 0 ? -1 : 1;
+  const start = across
+    ? { x: from.x + (sign > 0 ? from.width : 0), y: from.y + from.height / 2 }
+    : { x: from.x + from.width / 2, y: from.y + (sign > 0 ? from.height : 0) };
+  const end = across
+    ? { x: to.x + (sign < 0 ? to.width : 0), y: to.y + to.height / 2 }
+    : { x: to.x + to.width / 2, y: to.y + (sign < 0 ? to.height : 0) };
+  const mid = across ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
+  const controls = across ? `${mid} ${start.y}, ${mid} ${end.y}` : `${start.x} ${mid}, ${end.x} ${mid}`;
+  const tip = `${end.x} ${end.y}`;
+  const arrow = across
+    ? `M ${end.x - sign * 8} ${end.y - 5} L ${tip} L ${end.x - sign * 8} ${end.y + 5}`
+    : `M ${end.x - 5} ${end.y - sign * 8} L ${tip} L ${end.x + 5} ${end.y - sign * 8}`;
   return <svg className="flow-relay-line" width="100%" height="100%" aria-hidden="true">
-    <path d={`M ${start.x} ${start.y} C ${start.x} ${turn}, ${end.x} ${turn}, ${end.x} ${end.y}`} />
-    <path d={`M ${end.x - 5} ${end.y - 8} L ${end.x} ${end.y} L ${end.x + 5} ${end.y - 8}`} />
+    <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
+    <path d={arrow} />
   </svg>;
 }
 
