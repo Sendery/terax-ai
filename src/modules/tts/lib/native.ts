@@ -47,6 +47,9 @@ export type TtsEnginePlan = {
   steps: number | null;
   torchBackend: string | null;
   notes: string[];
+  /** Performance costs on this machine. Informative only: an engine is
+   *  refused solely for an incompatible architecture. Absent before dev.28. */
+  warnings?: string[];
 };
 
 export type TtsEngineStatus = {

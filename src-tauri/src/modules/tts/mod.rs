@@ -98,6 +98,9 @@ pub struct TtsStatus {
     /// stays a list of voices.
     pub transcribers: Vec<EngineStatus>,
     pub transcriber_models: Vec<ModelStatus>,
+    /// The audio cleanup engines and their models, which serve the other two.
+    pub cleaners: Vec<EngineStatus>,
+    pub cleaner_models: Vec<ModelStatus>,
     pub jobs: Vec<JobInfo>,
     pub disk_usage_bytes: u64,
 }
@@ -292,6 +295,8 @@ impl TtsState {
             .collect();
         let models = models_of(EngineKind::Speech);
         let transcriber_models = models_of(EngineKind::Transcription);
+        let cleaners = Engine::CLEANUP.into_iter().map(engine_status).collect();
+        let cleaner_models = models_of(EngineKind::Cleanup);
 
         TtsStatus {
             runtime,
@@ -301,6 +306,8 @@ impl TtsState {
             models,
             transcribers,
             transcriber_models,
+            cleaners,
+            cleaner_models,
             jobs: self.jobs.list(),
             disk_usage_bytes: sizes.disk_usage,
         }
@@ -328,8 +335,9 @@ mod tests {
         assert_eq!(status.runtime.uv_version, None);
         assert_eq!(status.engines.len(), Engine::SPEECH.len());
         assert_eq!(status.transcribers.len(), Engine::TRANSCRIPTION.len());
+        assert_eq!(status.cleaners.len(), Engine::CLEANUP.len());
         assert_eq!(
-            status.models.len() + status.transcriber_models.len(),
+            status.models.len() + status.transcriber_models.len() + status.cleaner_models.len(),
             Model::ALL.len()
         );
         assert!(status
@@ -345,6 +353,10 @@ mod tests {
         let json = serde_json::to_value(&status).unwrap();
         assert!(json.get("transcribers").is_some());
         assert!(json.get("transcriberModels").is_some());
+        assert_eq!(status.cleaners[0].id, Engine::Isolator);
+        assert_eq!(status.cleaner_models[0].id, Model::VoiceIsolatorV1);
+        assert!(json.get("cleaners").is_some());
+        assert!(json.get("cleanerModels").is_some());
         assert_eq!(status.disk_usage_bytes, 0);
         assert!(status.jobs.is_empty());
         for engine in status.engines {

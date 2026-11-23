@@ -57,7 +57,15 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
-import { Card, ErrorLine, JobLog, Row, type Runtime, StateBadge } from "../voice/ui";
+import {
+  Card,
+  ErrorLine,
+  JobLog,
+  PlanWarnings,
+  Row,
+  type Runtime,
+  StateBadge,
+} from "../voice/ui";
 
 const PROVIDER_ORDER: SttProvider[] = ["local", "openai", "groq", "whispercpp"];
 
@@ -324,6 +332,7 @@ function AvailableTier({
       {unsupported ? (
         <p className="text-[10.5px] text-muted-foreground">{plan?.unsupportedReason}</p>
       ) : null}
+      {plan?.supported ? <PlanWarnings warnings={plan.warnings} /> : null}
       {plan?.supported && plan.notes.length > 0 ? (
         <div className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5">
           <span className="text-[10.5px] font-medium text-foreground">

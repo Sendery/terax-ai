@@ -28,11 +28,15 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { cleanClip, reportOnce } from "@/modules/isolator/lib/cleanup";
+import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
+  setCleanVoiceSamples,
   setTtsDevice,
   setTtsIdleStopMinutes,
   ttsDeviceFor,
@@ -102,6 +106,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeader } from "../components/SectionHeader";
+import { CleanupCard } from "./voice/CleanupCard";
 import { LanguagesCard } from "./voice/LanguagesCard";
 import { RecordSample } from "./voice/RecordSample";
 import {
@@ -109,6 +114,7 @@ import {
   ErrorLine,
   FieldLabel,
   JobLog,
+  PlanWarnings,
   Row,
   type Runtime,
   StateBadge,
@@ -160,6 +166,7 @@ export function VoiceSection() {
       {tab === "advanced" ? (
         <section className="flex flex-col gap-3">
           <RuntimeCard runtime={runtime} />
+          <CleanupCard runtime={runtime} />
           <IdleStopCard />
           <StorageCard runtime={runtime} />
           <OtherWeightsCard runtime={runtime} />
@@ -443,6 +450,7 @@ function ProviderCard({
       {unsupported ? (
         <p className="text-[10.5px] text-muted-foreground">{plan?.unsupportedReason}</p>
       ) : null}
+      {plan?.supported ? <PlanWarnings warnings={plan.warnings} /> : null}
       {plan?.supported && plan.notes.length > 0 ? (
         <div className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5">
           <span className="text-[10.5px] font-medium text-foreground">
@@ -720,6 +728,8 @@ function VoiceEditor({
   const [presets, setPresets] = useState<TtsPresetVoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [cleaningSample, setCleaningSample] = useState(false);
+  const cleanSamples = usePreferencesStore((s) => s.cleanVoiceSamples);
   const [previewing, setPreviewing] = useState(false);
   const [sentence, setSentence] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -789,13 +799,23 @@ function VoiceEditor({
     setImporting(true);
     setError(null);
     try {
-      const wav = await toMono24kWav(file);
+      const converted = await toMono24kWav(file);
+      const prefs = usePreferencesStore.getState();
+      setCleaningSample(prefs.cleanVoiceSamples);
+      const { bytes: wav } = await cleanClip(
+        prefs.cleanVoiceSamples,
+        converted,
+        prefs.isolatorDevice,
+        (reason) => reportOnce(reason, (m) => toast.warning(m)),
+      );
+      setCleaningSample(false);
       const imported = await ttsNative.sampleImport(name, wav);
       patch({ sampleId: imported.sampleId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setImporting(false);
+      setCleaningSample(false);
     }
   };
 
@@ -999,7 +1019,11 @@ function VoiceEditor({
                   onClick={() => fileRef.current?.click()}
                 >
                   {importing ? <Spinner className="size-3" /> : null}
-                  {draft.sampleId ? "Replace" : "Import"}
+                  {cleaningSample
+                    ? "Cleaning"
+                    : draft.sampleId
+                      ? "Replace"
+                      : "Import"}
                 </Button>
               </div>
               <input
@@ -1030,6 +1054,22 @@ function VoiceEditor({
                 {LANGUAGE_LABELS[draft.language]}. Converted to 24 kHz mono
                 before it is stored.
               </span>
+              <label className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="flex flex-col">
+                  <span>Remove background noise first</span>
+                  <span className="text-[10.5px] text-muted-foreground">
+                    The Voice Isolator cleans the sample before it is stored,
+                    so the clone does not copy the room. Takes a minute or two
+                    on a CPU.
+                  </span>
+                </span>
+                <Switch
+                  checked={cleanSamples}
+                  disabled={importing}
+                  onCheckedChange={(checked) => void setCleanVoiceSamples(checked)}
+                  aria-label="Remove background noise from voice samples"
+                />
+              </label>
             </div>
               )}
             </div>

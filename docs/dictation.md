@@ -39,6 +39,16 @@ The engine starts with the first dictation and runs a self-test (one second of
 silence must stay silent). It stops after the idle minutes set in Settings,
 Voice, Advanced, and the next dictation starts it again.
 
+## Cleaning the microphone
+
+**Clean the microphone** (Settings, Dictation, Style) runs each segment through
+the Voice Isolator before it is transcribed, removing noise and background.
+Install the isolator in Settings, Voice, Advanced first; its card shows how
+long cleaning takes on this machine. On a GPU it adds about a third of the
+segment's length; on a CPU it is far slower than real time, which the card
+warns about but does not prevent. Until the isolator is installed, segments
+are transcribed as recorded. See [tts.md](tts.md#audio-cleanup).
+
 ## Live segments
 
 With live segments on (the default), Terax transcribes while you speak: a

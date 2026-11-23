@@ -26,6 +26,8 @@ from engines import create_engine  # noqa: E402
 from engines.base import (  # noqa: E402
     LANGUAGES,
     PARAM_RANGES,
+    ISOLATE_MAX_RATE,
+    ISOLATE_MIN_RATE,
     TRANSCRIPTION_SAMPLE_RATE,
     is_downloaded,
     collapse_whitespace,
@@ -44,6 +46,9 @@ MIN_TRANSCRIBE_FRAMES = TRANSCRIPTION_SAMPLE_RATE // 10
 TRANSCRIBE_PARAMS = ("model", "language", "filler", "verbatim", "digits")
 TRANSCRIBE_DEFAULTS = {"filler": False, "verbatim": True, "digits": True}
 SELF_TEST_SECONDS = 1
+ISOLATE_PARAMS = ("model",)
+# Under 20 ms there is nothing to clean; the clip is returned as sent.
+MIN_ISOLATE_MS = 20
 MAX_TEXT_CHARS = 8192
 MIN_TOKEN_CHARS = 16
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -158,6 +163,18 @@ class Host:
                 log("transcription failed: {}".format(exc))
                 raise HttpError(500, "transcription_failed", "transcription failed")
 
+    def isolate(self, model: str, pcm, sample_rate: int):
+        self._guard_loading()
+        with self._work:
+            self._ensure_loaded(model)
+            try:
+                return self.engine.isolate(model, pcm, sample_rate)
+            except HttpError:
+                raise
+            except (Exception, SystemExit) as exc:
+                log("isolation failed: {}".format(exc))
+                raise HttpError(500, "isolation_failed", "isolation failed")
+
     def self_test(self, model: str) -> dict:
         """One second of silence must come back empty: the model loads, runs,
         and does not invent words."""
@@ -191,6 +208,15 @@ def log(message: str) -> None:
         sys.stderr.flush()
     except (OSError, ValueError):
         pass
+
+
+def _empty_wav(sample_rate: int) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+    return buffer.getvalue()
 
 
 def encode_wav(samples, sample_rate: int) -> bytes:
@@ -373,6 +399,57 @@ def decode_pcm_wav(body: bytes) -> array:
     if sys.byteorder == "big":
         pcm.byteswap()
     return pcm
+
+
+def decode_mono_pcm_wav(body: bytes) -> tuple:
+    """The int16 frames and rate of a mono 16-bit PCM WAV between
+    ISOLATE_MIN_RATE and ISOLATE_MAX_RATE, else a 400."""
+    try:
+        with wave.open(io.BytesIO(body), "rb") as reader:
+            channels = reader.getnchannels()
+            width = reader.getsampwidth()
+            rate = reader.getframerate()
+            frames = reader.readframes(reader.getnframes())
+    except (wave.Error, EOFError):
+        raise HttpError(400, "bad_audio", "body must be a PCM WAV file")
+    if channels != 1 or width != 2 or not ISOLATE_MIN_RATE <= rate <= ISOLATE_MAX_RATE:
+        raise HttpError(
+            400,
+            "bad_audio",
+            "audio must be mono 16-bit PCM between {} and {} Hz".format(
+                ISOLATE_MIN_RATE, ISOLATE_MAX_RATE
+            ),
+        )
+    pcm = array("h")
+    pcm.frombytes(frames[: len(frames) - (len(frames) % 2)])
+    if sys.byteorder == "big":
+        pcm.byteswap()
+    return pcm, rate
+
+
+def validate_isolate(host: Host, query: str):
+    params = parse_qs(query, keep_blank_values=True)
+    unknown = sorted(set(params) - set(ISOLATE_PARAMS))
+    if unknown:
+        raise HttpError(400, "bad_request", "unknown parameter: {}".format(unknown[0]))
+    values = params.get("model", [])
+    if len(values) > 1:
+        raise HttpError(400, "bad_request", "model given more than once")
+    return validate_model(host, values[0] if values else None)
+
+
+def fit_frames(samples, frames: int) -> list:
+    """`samples` trimmed or zero-padded to exactly `frames` values, so the
+    cleaned clip lines up with the one that was sent."""
+    if hasattr(samples, "astype"):
+        import numpy as np
+
+        flat = np.asarray(samples, dtype=np.float32).reshape(-1)[:frames]
+        return np.pad(flat, (0, frames - flat.shape[0]))
+    out = [float(v) for v in samples[:frames]]
+    if len(out) < frames:
+        out.extend([0.0] * (frames - len(out)))
+    return out
 
 
 def validate_transcribe(host: Host, query: str, context_header) -> dict:
@@ -632,6 +709,18 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if url.path == "/isolate":
+            require_kind(self.host, "cleanup")
+            info = validate_isolate(self.host, url.query)
+            pcm, rate = decode_mono_pcm_wav(self._read_audio())
+            ensure_downloaded(info)
+            if len(pcm) * 1000 < MIN_ISOLATE_MS * rate:
+                cleaned = [v / 32768.0 for v in pcm]
+            else:
+                cleaned = fit_frames(self.host.isolate(info.id, pcm, rate), len(pcm))
+            body = encode_wav(cleaned, rate) if len(cleaned) else _empty_wav(rate)
+            self._send(200, body, "audio/wav")
+            return
         if url.path == "/shutdown":
             self._read_body()
             self._send_json(200, {"ok": True})
@@ -684,7 +773,7 @@ def build_server(engine: str, device: str, samples_dir: str, token: str, host: s
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Terax local TTS sidecar")
-    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "pocket", "omnivoice", "zonos3", "rumble", "fake", "fake-stt"])
+    parser.add_argument("--engine", required=True, choices=["kokoro", "chatterbox", "pocket", "omnivoice", "zonos3", "rumble", "isolator", "fake", "fake-stt", "fake-isolator"])
     parser.add_argument("--device", required=True, choices=["auto", "cpu", "mps", "cuda", "mlx"])
     parser.add_argument("--samples-dir", required=True)
     parser.add_argument("--host", default="127.0.0.1")

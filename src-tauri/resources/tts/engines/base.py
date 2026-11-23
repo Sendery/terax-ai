@@ -63,6 +63,21 @@ TRANSCRIPTION_LANGUAGES = {
     "pt-BR": "Portuguese",
 }
 TRANSCRIPTION_LANGUAGE_TAGS = {name: tag for tag, name in TRANSCRIPTION_LANGUAGES.items()}
+# Inworld Voice Isolator: the offline checkpoint, pinned to the commit and the
+# checksum `inworld.voice_isolation.registry` ships, so the engine can verify
+# the file it loads without a network round trip.
+ISOLATOR_MODEL_ID = "voice-isolator-v1"
+ISOLATOR_REPO = "inworld/voice-isolator"
+ISOLATOR_REVISION = "9b0285b3fe8403aa8e2f1dbb2165a80a4294c970"
+ISOLATOR_WEIGHTS = "denoiser.safetensors"
+ISOLATOR_SHA256 = "647335a6aeb4dc706b895532c209d51e0e84a4849d17b339f00d4392a050ae53"
+# The model runs at 48 kHz and resamples on the way in and out, so a clip
+# comes back at the rate and length it was sent.
+ISOLATOR_SAMPLE_RATE = 48000
+# Dictation sends 16 kHz, reading engines 24 or 44.1 kHz, imported samples 24.
+ISOLATE_MIN_RATE = 8000
+ISOLATE_MAX_RATE = 48000
+
 RUMBLE_REQUIRED_FILES = (
     "model.safetensors",
     "config.json",
@@ -242,6 +257,23 @@ MODELS = (
         voice_source="none",
         sample_rate=TRANSCRIPTION_SAMPLE_RATE,
         required_files=RUMBLE_REQUIRED_FILES,
+    ),
+    ModelInfo(
+        id=ISOLATOR_MODEL_ID,
+        engine="isolator",
+        repo=ISOLATOR_REPO,
+        languages=LANGUAGES,
+        voice_source="none",
+        sample_rate=ISOLATOR_SAMPLE_RATE,
+        required_files=(ISOLATOR_WEIGHTS,),
+    ),
+    ModelInfo(
+        id="fake-isolator-model",
+        engine="fake-isolator",
+        repo="",
+        languages=LANGUAGES,
+        voice_source="none",
+        sample_rate=ISOLATOR_SAMPLE_RATE,
     ),
     ModelInfo(
         id="fake-stt-model",
@@ -551,6 +583,14 @@ def is_downloaded(info: ModelInfo) -> bool:
     )
 
 
+def isolator_weights_path() -> str:
+    """Where `huggingface_hub` keeps the pinned isolator checkpoint."""
+    folder = "models--" + ISOLATOR_REPO.replace("/", "--")
+    return os.path.join(
+        hf_hub_cache(), folder, "snapshots", ISOLATOR_REVISION, ISOLATOR_WEIGHTS
+    )
+
+
 def to_pcm16_bytes(samples: Any) -> bytes:
     """Float32 mono to little-endian int16 PCM, clipping out-of-range values."""
     if hasattr(samples, "astype"):
@@ -568,7 +608,8 @@ class Engine(abc.ABC):
     """One resident model per process; load() replaces whatever was loaded."""
 
     id = ""
-    #: "speech" reads text aloud; "transcription" turns speech into text.
+    #: "speech" reads text aloud; "transcription" turns speech into text;
+    #: "cleanup" removes what is around a voice.
     kind = "speech"
 
     @abc.abstractmethod
@@ -614,6 +655,11 @@ class Engine(abc.ABC):
         {"text": str, "language": app tag, model language name or None}.
         """
         raise NotImplementedError("{} does not transcribe".format(self.id))
+
+    def isolate(self, model: str, pcm, sample_rate: int):
+        """The voice in mono int16 `pcm`, as floats in -1..1 at `sample_rate`
+        and with the same number of frames."""
+        raise NotImplementedError("{} does not isolate".format(self.id))
 
     def effective_device(self) -> Optional[str]:
         return None

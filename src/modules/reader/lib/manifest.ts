@@ -88,19 +88,24 @@ export function defaultReaderState(
   };
 }
 
-export function voiceKeyOf(voice: VoiceProfile): string {
+/**
+ * The cache folder of a voice's clips. `isolated` clips (voice isolation on)
+ * get their own folder; the flag is only added when set, so every reading
+ * cached before cleanup existed keeps its key.
+ */
+export function voiceKeyOf(voice: VoiceProfile, isolated = false): string {
   const params = Object.entries(voice.params ?? {})
     .filter(([, v]) => typeof v === "number")
     .sort(([a], [b]) => a.localeCompare(b));
-  return hashKey(
-    JSON.stringify([
-      voice.model,
-      voice.language,
-      voice.voice,
-      voice.sampleId,
-      params,
-    ]),
-  );
+  const parts: unknown[] = [
+    voice.model,
+    voice.language,
+    voice.voice,
+    voice.sampleId,
+    params,
+  ];
+  if (isolated) parts.push("isolated");
+  return hashKey(JSON.stringify(parts));
 }
 
 let cutSeq = 0;

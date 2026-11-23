@@ -14,7 +14,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from engines.base import MODELS, POCKET_LANGUAGES, POCKET_PREFETCHED, POCKET_VOICES, model_info  # noqa: E402
+from engines.base import (  # noqa: E402
+    ISOLATOR_REVISION,
+    ISOLATOR_WEIGHTS,
+    MODELS,
+    POCKET_LANGUAGES,
+    POCKET_PREFETCHED,
+    POCKET_VOICES,
+    model_info,
+)
 
 # File names verified against the HF repos; anything not listed is skipped.
 ALLOW_PATTERNS = {
@@ -53,7 +61,11 @@ ALLOW_PATTERNS = {
     # Rumble-2-Flash: the bf16 weights, the processor and tokenizer files and
     # the chat template that carries the digits/filler/verbatim switches.
     "rumble-2-flash": ("*.json", "*.jinja", "*.txt", "model.safetensors"),
+    # The offline checkpoint only; the realtime one is a separate 230 MB.
+    "voice-isolator-v1": (ISOLATOR_WEIGHTS, "LICENSE", "NOTICE"),
 }
+# Models fetched at one commit, so the engine finds them without the network.
+REVISIONS = {"voice-isolator-v1": ISOLATOR_REVISION}
 IGNORE_PATTERNS = ("*.md", ".gitattributes")
 
 
@@ -108,6 +120,7 @@ def download(info) -> str:
     allow = ALLOW_PATTERNS.get(info.id)
     return snapshot_download(
         repo_id=info.repo,
+        revision=REVISIONS.get(info.id),
         allow_patterns=list(allow) if allow else None,
         ignore_patterns=None if allow else list(IGNORE_PATTERNS),
     )

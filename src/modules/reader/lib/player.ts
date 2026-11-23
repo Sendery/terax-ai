@@ -1,4 +1,6 @@
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { cleanClip, reportOnce } from "@/modules/isolator/lib/cleanup";
+import { toast } from "sonner";
 import {
   synthesize,
   TtsClientError,
@@ -101,6 +103,8 @@ type VoiceContext = {
   voiceKey: string;
   endpoint: TtsEndpoint | null;
   samplePath: string | null;
+  /** Clips go through the voice isolator before they are cached and played. */
+  isolated: boolean;
 };
 
 let audio: HTMLAudioElement | null = null;
@@ -395,7 +399,8 @@ async function bindVoice(docId: string): Promise<VoiceContext> {
   const entry = entryOf(docId);
   if (!entry) throw new Error("This document is no longer open.");
   const voice = await voiceFor(entry);
-  const voiceKey = voiceKeyOf(voice);
+  const isolated = usePreferencesStore.getState().cleanReadingAudio;
+  const voiceKey = voiceKeyOf(voice, isolated);
   if (
     voiceContext &&
     voiceContext.docId === docId &&
@@ -426,11 +431,39 @@ async function bindVoice(docId: string): Promise<VoiceContext> {
     endpoint:
       voiceContext?.voice.model === voice.model ? voiceContext.endpoint : null,
     samplePath: null,
+    isolated,
   };
   return voiceContext;
 }
 
+type SynthesizedClip = {
+  bytes: ArrayBuffer;
+  /** False when isolation was asked for but skipped: not to be cached. */
+  cacheable: boolean;
+};
+
 async function synthesizeClip(
+  ctx: VoiceContext,
+  text: string,
+): Promise<SynthesizedClip> {
+  const raw = await synthesizeRaw(ctx, text);
+  if (!ctx.isolated) return { bytes: raw, cacheable: true };
+  const clip = await cleanClip(
+    true,
+    new Uint8Array(raw),
+    usePreferencesStore.getState().isolatorDevice,
+    (reason) => reportOnce(reason, (m) => toast.warning(m)),
+  );
+  return {
+    bytes: clip.bytes.buffer.slice(
+      clip.bytes.byteOffset,
+      clip.bytes.byteOffset + clip.bytes.byteLength,
+    ) as ArrayBuffer,
+    cacheable: clip.cleaned,
+  };
+}
+
+async function synthesizeRaw(
   ctx: VoiceContext,
   text: string,
 ): Promise<ArrayBuffer> {
@@ -486,7 +519,8 @@ function clipBytes(
         // A clip deleted behind our back is made again.
       }
     }
-    const bytes = await synthesizeClip(ctx, segment.text);
+    const { bytes, cacheable } = await synthesizeClip(ctx, segment.text);
+    if (!cacheable) return bytes;
     try {
       await readerNative.chunkPut(
         ctx.docId,

@@ -172,3 +172,32 @@ export function ErrorLine({ message }: { message: string }) {
     </p>
   );
 }
+
+/**
+ * The plan's performance warnings. They inform, never block: an engine is
+ * only refused on an incompatible architecture, and that is `unsupportedReason`.
+ */
+export function PlanWarnings({ warnings }: { warnings: readonly string[] | undefined }) {
+  if (!warnings || warnings.length === 0) return null;
+  return (
+    <div
+      role="note"
+      className="flex flex-col gap-0.5 rounded-md bg-amber-500/10 px-2 py-1.5"
+    >
+      {warnings.map((warning) => (
+        <span
+          key={warning}
+          className="flex min-w-0 items-start gap-1.5 text-[10.5px] text-amber-700 dark:text-amber-400"
+        >
+          <HugeiconsIcon
+            icon={AlertCircleIcon}
+            size={11}
+            strokeWidth={2}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="min-w-0 break-words">{warning}</span>
+        </span>
+      ))}
+    </div>
+  );
+}

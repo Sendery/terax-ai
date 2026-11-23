@@ -1,5 +1,7 @@
 import { ttsDeviceFor } from "@/modules/settings/store";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { cleanClip, reportOnce } from "@/modules/isolator/lib/cleanup";
+import { toast } from "sonner";
 import {
   synthesize,
   TtsClientError,
@@ -234,7 +236,20 @@ async function synthesizeChunk(active: Session, index: number): Promise<void> {
       { signal: controller.signal },
     );
     if (session !== active) return;
-    const url = URL.createObjectURL(blob);
+    const prefs = usePreferencesStore.getState();
+    const clip = await cleanClip(
+      prefs.cleanReadingAudio,
+      new Uint8Array(await blob.arrayBuffer()),
+      prefs.isolatorDevice,
+      (reason) => reportOnce(reason, (m) => toast.warning(m)),
+      controller.signal,
+    );
+    if (session !== active) return;
+    const url = URL.createObjectURL(
+      clip.cleaned
+        ? new Blob([clip.bytes as Uint8Array<ArrayBuffer>], { type: "audio/wav" })
+        : blob,
+    );
     active.urls.set(index, url);
     dispatch(active, { type: "synthesized", index, url });
   } catch (err) {

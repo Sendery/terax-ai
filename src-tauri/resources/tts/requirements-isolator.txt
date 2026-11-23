@@ -1,0 +1,12 @@
+# Inworld Voice Isolator (Apache-2.0), the audio cleanup engine. Inference only:
+# the optional `fast` extra (mamba-ssm, causal-conv1d) builds CUDA kernels and
+# needs a compiler toolchain, so the scan runs in plain PyTorch. Verified with
+# these pins on Linux, CPU and CUDA (RTX 3060). torch 2.6 is the first release
+# the package runs on Apple's MPS backend.
+inworld-voice-isolation==1.0.0
+torch==2.6.0
+torchaudio==2.6.0
+numpy==2.4.6
+soundfile==0.14.0
+safetensors==0.8.0
+huggingface_hub==2.4.0

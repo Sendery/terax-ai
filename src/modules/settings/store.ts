@@ -195,6 +195,16 @@ export type Preferences = {
   sttLiveSegments: boolean;
   /** Compute device the local dictation engine starts with. */
   sttDevice: TtsDevice;
+  /** Run each dictation segment through the voice isolator before it is
+   *  transcribed. */
+  cleanDictationAudio: boolean;
+  /** Run each synthesized chunk through the voice isolator before it plays,
+   *  for Speak and the Reader. */
+  cleanReadingAudio: boolean;
+  /** Clean an imported voice sample before it is stored for cloning. */
+  cleanVoiceSamples: boolean;
+  /** Compute device the voice isolator starts with. */
+  isolatorDevice: TtsDevice;
   /** Language "read aloud" speaks in when the caller names none. */
   ttsDefaultLanguage: TtsLanguage;
   /** Compute device each speech engine is started with; an engine absent
@@ -292,6 +302,10 @@ const KEY_STT_MODE = "sttMode";
 const KEY_STT_DICTIONARY = "sttDictionary";
 const KEY_STT_LIVE_SEGMENTS = "sttLiveSegments";
 const KEY_STT_DEVICE = "sttDevice";
+const KEY_CLEAN_DICTATION_AUDIO = "cleanDictationAudio";
+const KEY_CLEAN_READING_AUDIO = "cleanReadingAudio";
+const KEY_CLEAN_VOICE_SAMPLES = "cleanVoiceSamples";
+const KEY_ISOLATOR_DEVICE = "isolatorDevice";
 const KEY_TTS_DEFAULT_LANGUAGE = "ttsDefaultLanguage";
 /** Pre-dev.26 single device for every engine; read once to seed ttsDevices. */
 const LEGACY_KEY_TTS_DEVICE = "ttsDevice";
@@ -449,6 +463,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sttDictionary: [],
   sttLiveSegments: true,
   sttDevice: "auto",
+  cleanDictationAudio: false,
+  cleanReadingAudio: false,
+  cleanVoiceSamples: false,
+  isolatorDevice: "auto",
   ttsDefaultLanguage: "es-ES",
   ttsDevices: {},
   ttsLanguages: [...DEFAULT_ENABLED_LANGUAGES],
@@ -602,6 +620,10 @@ export async function loadPreferences(): Promise<Preferences> {
     sttLiveSegments:
       get<boolean>(KEY_STT_LIVE_SEGMENTS) ?? DEFAULT_PREFERENCES.sttLiveSegments,
     sttDevice: coerceSttDevice(get<unknown>(KEY_STT_DEVICE)),
+    cleanDictationAudio: get<unknown>(KEY_CLEAN_DICTATION_AUDIO) === true,
+    cleanReadingAudio: get<unknown>(KEY_CLEAN_READING_AUDIO) === true,
+    cleanVoiceSamples: get<unknown>(KEY_CLEAN_VOICE_SAMPLES) === true,
+    isolatorDevice: coerceSttDevice(get<unknown>(KEY_ISOLATOR_DEVICE)),
     ttsDefaultLanguage: ((): TtsLanguage => {
       const stored = get<unknown>(KEY_TTS_DEFAULT_LANGUAGE);
       return isTtsLanguage(stored)
@@ -897,6 +919,22 @@ export async function setSttDevice(value: TtsDevice): Promise<void> {
   await writePref(KEY_STT_DEVICE, coerceSttDevice(value));
 }
 
+export async function setCleanDictationAudio(value: boolean): Promise<void> {
+  await writePref(KEY_CLEAN_DICTATION_AUDIO, value === true);
+}
+
+export async function setCleanReadingAudio(value: boolean): Promise<void> {
+  await writePref(KEY_CLEAN_READING_AUDIO, value === true);
+}
+
+export async function setCleanVoiceSamples(value: boolean): Promise<void> {
+  await writePref(KEY_CLEAN_VOICE_SAMPLES, value === true);
+}
+
+export async function setIsolatorDevice(value: TtsDevice): Promise<void> {
+  await writePref(KEY_ISOLATOR_DEVICE, coerceSttDevice(value));
+}
+
 export async function setTtsDefaultLanguage(value: TtsLanguage): Promise<void> {
   await writePref(KEY_TTS_DEFAULT_LANGUAGE, value);
   // The default language is always one of the enabled ones.
@@ -1093,6 +1131,10 @@ export async function onPreferencesChange(
     [KEY_STT_DICTIONARY]: "sttDictionary",
     [KEY_STT_LIVE_SEGMENTS]: "sttLiveSegments",
     [KEY_STT_DEVICE]: "sttDevice",
+    [KEY_CLEAN_DICTATION_AUDIO]: "cleanDictationAudio",
+    [KEY_CLEAN_READING_AUDIO]: "cleanReadingAudio",
+    [KEY_CLEAN_VOICE_SAMPLES]: "cleanVoiceSamples",
+    [KEY_ISOLATOR_DEVICE]: "isolatorDevice",
     [KEY_TTS_DEFAULT_LANGUAGE]: "ttsDefaultLanguage",
     [KEY_TTS_DEVICES]: "ttsDevices",
     [KEY_TTS_LANGUAGES]: "ttsLanguages",

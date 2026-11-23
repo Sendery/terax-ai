@@ -1,3 +1,4 @@
+import { cleanOrKeep, isolatePcm } from "@/modules/isolator/lib/cleanup";
 import type { TtsEndpoint } from "@/modules/tts/lib/client";
 import type { TtsDevice } from "@/modules/tts/lib/engines";
 import {
@@ -26,6 +27,14 @@ export type LocalDictationSettings = {
   live: boolean;
   /** Minutes without dictation before the engine is stopped; 0 never. */
   idleStopMinutes?: number;
+  /** Isolate the voice in each segment before it is transcribed. */
+  cleanup?: DictationCleanup;
+};
+
+export type DictationCleanup = {
+  device: TtsDevice;
+  /** Told why a segment went through uncleaned. */
+  onSkip: (reason: string) => void;
 };
 
 export type SegmentTranscriber = (
@@ -136,8 +145,16 @@ export async function startLocalDictation(
   const queue = new SegmentQueue(
     {
       resolve: (signal) => resolveTranscriber(settings.model, settings.device, signal),
-      transcribe: async (endpoint, pcm, signal) =>
-        (
+      transcribe: async (endpoint, raw, signal) => {
+        const cleanup = settings.cleanup;
+        const pcm = await cleanOrKeep(
+          !!cleanup,
+          raw,
+          () => isolatePcm(raw, STT_SAMPLE_RATE, cleanup!.device, signal),
+          (reason) => cleanup?.onSkip(reason),
+          signal,
+        );
+        return (
           await transcribePcm(endpoint, pcm, {
             model: settings.model,
             language: settings.language,
@@ -145,7 +162,8 @@ export async function startLocalDictation(
             context,
             signal,
           })
-        ).text,
+        ).text;
+      },
     },
     settings.live,
   );
