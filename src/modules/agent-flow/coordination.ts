@@ -87,7 +87,7 @@ export function resolveDeliveries(
   }).reverse();
 }
 
-export type FileTouch = { run: FlowRun; task?: string; event: TraceEvent };
+export type FileTouch = { run: FlowRun; task?: string; event: TraceEvent; operation: "read" | "write" };
 export type FileCrossing = { path: string; touches: FileTouch[] };
 
 export type FlowRelation =
@@ -140,8 +140,9 @@ export function relayGraph(
 
 export function fileRelations(files: readonly FileCrossing[]): FlowRelation[] {
   return files.flatMap((file) => {
-    const [first, ...others] = file.touches.map(({ run }) => run.key).sort();
-    return others.map((to) => ({
+    const first = file.touches.filter(({ operation }) => operation === "write").map(({ run }) => run.key).sort()[0];
+    if (!first) return [];
+    return file.touches.filter(({ run }) => run.key !== first).map(({ run: { key: to } }) => ({
       key: JSON.stringify(["file", file.path, first, to]), from: first, to, kind: "file", file,
     }));
   });
@@ -160,6 +161,7 @@ export function relationDescription(relation: FlowRelation) {
 }
 
 const WRITE_TOOLS = new Set(["edit", "write", "edit_file", "write_file", "replace"]);
+const READ_TOOLS = new Set(["read", "view", "read_file", "view_file"]);
 
 export function normalizedFile(cwd: string | undefined, file: string) {
   if (!cwd || /[\x00-\x1f\x7f]/.test(file) || file.includes("://")) return undefined;
@@ -192,20 +194,27 @@ export function fileCrossings(
   for (const { run, events, tasks } of branches) {
     const add = (stream: readonly TraceEvent[], task?: string) => {
       for (const event of stream) {
-        if (event.kind !== "tool" || !event.file || !WRITE_TOOLS.has(event.text?.toLowerCase() ?? "") ||
-          (time !== null && event.at > time)) continue;
+        if (event.kind !== "tool" || !event.file || (time !== null && event.at > time)) continue;
+        const name = event.text?.toLowerCase() ?? "";
+        const operation = WRITE_TOOLS.has(name) ? "write" : READ_TOOLS.has(name) ? "read" : undefined;
+        if (!operation) continue;
         const path = normalizedFile(run.cwd, event.file);
         if (!path) continue;
         const touches = files.get(path) ?? new Map<string, FileTouch>();
         const previous = touches.get(run.key);
-        if (!previous || previous.event.at < event.at) touches.set(run.key, { run, task, event });
+        if (!previous || (previous.operation === "read" && operation === "write") ||
+          (previous.operation === operation && previous.event.at < event.at)) {
+          touches.set(run.key, { run, task, event, operation });
+        }
         files.set(path, touches);
       }
     };
     add(events);
     for (const task of tasks) add(traces.get(traceKey(task.run) ?? "")?.events ?? [], task.id);
   }
-  return [...files.entries()].flatMap(([path, touches]) => touches.size < 2 ? [] : [{
-    path, touches: [...touches.values()].sort((a, b) => b.event.at - a.event.at),
-  }]).sort((a, b) => b.touches[0].event.at - a.touches[0].event.at).slice(0, 24);
+  return [...files.entries()].flatMap(([path, touches]) => {
+    if (touches.size < 2) return [];
+    const evidence = [...touches.values()].sort((a, b) => b.event.at - a.event.at);
+    return evidence.some(({ operation }) => operation === "write") ? [{ path, touches: evidence }] : [];
+  }).sort((a, b) => b.touches[0].event.at - a.touches[0].event.at).slice(0, 24);
 }

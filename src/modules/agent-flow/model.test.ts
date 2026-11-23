@@ -169,19 +169,25 @@ describe("Agent Flow", () => {
     expect(relayGraph(resolved, [], "launch:other").links).toEqual([]);
   });
 
-  it("links explicit write attempts to the same path across sessions and excludes reads and sibling checkouts", () => {
+  it("links explicit writes and reads across sessions and excludes read-only pairs and sibling checkouts", () => {
     const write = { id: "tool", at: 12, kind: "tool" as const, text: "Write", file: "./src/../main.ts" };
     const runs = [
       { ...root, key: "one", events: [write] },
       { ...root, key: "two", events: [{ ...write, at: 15, file: "/project/main.ts", text: "edit_file" }] },
-      { ...root, key: "reader", events: [{ ...write, text: "Read" }] },
+      { ...root, key: "reader", events: [{ ...write, at: 16, text: "Read" }] },
       { ...root, key: "other-checkout", cwd: "/project-2", events: [write] },
+      { ...root, key: "reader-a", events: [{ ...write, file: "read-only.ts", text: "Read" }] },
+      { ...root, key: "reader-b", events: [{ ...write, file: "read-only.ts", text: "Read" }] },
     ];
     const branches = runs.map((run) => branchFor(run, [], null, new Map()));
     expect(fileCrossings(branches, new Map(), 14)).toEqual([]);
     expect(fileCrossings(branches, new Map(), null).map(({ path, touches }) =>
-      [path, touches.map(({ run }) => run.key)])).toEqual([["/project/main.ts", ["two", "one"]]]);
-    expect(fileRelations(fileCrossings(branches, new Map(), null))).toMatchObject([{ from: "one", to: "two", kind: "file" }]);
+      [path, touches.map(({ run, operation }) => [run.key, operation])])).toEqual([
+      ["/project/main.ts", [["reader", "read"], ["two", "write"], ["one", "write"]]],
+    ]);
+    expect(fileRelations(fileCrossings(branches, new Map(), null))).toMatchObject([
+      { from: "one", to: "reader", kind: "file" }, { from: "one", to: "two", kind: "file" },
+    ]);
     expect(normalizedFile("/project", "../outside.ts")).toBeUndefined();
     expect(normalizedFile("C:\\work", "src\\main.ts")).toBe("C:/work/src/main.ts");
   });

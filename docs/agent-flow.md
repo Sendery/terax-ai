@@ -46,8 +46,9 @@ journal. A successful write to the terminal establishes delivery to the pane.
 The connection uses the source pane declared by the caller. Conversation
 between tools outside this route depends on the links recorded by the CLI.
 
-Shared file activity draws a dotted, undirected link for explicit write
-attempts by distinct sessions on the same normalized path. Select a relay or
+Shared file activity draws a dotted, undirected link when one session attempts
+to write a file and another reads or attempts to write the same normalized path.
+Select a relay or
 file label on the map to inspect its evidence, open the Git diff or jump to
 the recorded event. Links follow the current time and session filters and
 cover the transcripts loaded in this view.

@@ -27,7 +27,7 @@ function FileEvidence({ file, inspect }: { file: FileCrossing; inspect: Inspect 
   const [message, setMessage] = useState("");
   const [opening, setOpening] = useState(false);
   async function openDiff() {
-    const cwd = file.touches[0]?.run.cwd;
+    const cwd = file.touches.find(({ operation }) => operation === "write")?.run.cwd;
     if (!cwd) return;
     setOpening(true);
     setMessage("");
@@ -53,10 +53,10 @@ function FileEvidence({ file, inspect }: { file: FileCrossing; inspect: Inspect 
   return <>
     <p className="flow-inspector-note" title={file.path}>{file.path}</p>
     <ol className="flow-event-list">
-      {file.touches.map(({ run, task, event }) => <li key={run.key}>
+      {file.touches.map(({ run, task, event, operation }) => <li key={run.key}>
         <button type="button" onClick={() => inspect(run.key, event.id, event.at, task)}>
           <span><b>{run.tabTitle}{run.paneLabel ? ` · ${run.paneLabel}` : ""}</b><time>{flowTime.format(event.at)}</time></span>
-          <small>{event.text || "Write attempt"}</small>
+          <small>{operation === "write" ? "Write attempt" : "Read"}{event.text ? ` · ${event.text}` : ""}</small>
         </button>
       </li>)}
     </ol>
