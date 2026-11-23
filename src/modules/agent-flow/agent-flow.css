@@ -797,11 +797,11 @@
   position: absolute;
   z-index: 1;
   top: 11px;
-  left: 111px;
+  left: 127px;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(332px, calc(100% - 130px));
+  max-width: min(332px, calc(100% - 146px));
   padding: 4px 8px;
   border-radius: 7px;
   border: 1px solid color-mix(in oklab, var(--flow-accent) 52%, var(--flow-line));
