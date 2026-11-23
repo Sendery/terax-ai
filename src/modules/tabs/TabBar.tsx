@@ -70,7 +70,6 @@ type Props = {
   onNewPreview: () => void;
   onNewEditor: () => void;
   onNewGraph: () => void;
-  onNewMermaid: () => void;
   onNewGitGraph: () => void;
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
@@ -94,7 +93,6 @@ export function TabBar({
   onNewPreview,
   onNewEditor,
   onNewGraph,
-  onNewMermaid,
   onNewGitGraph,
   onClose,
   onPin,
@@ -593,14 +591,6 @@ export function TabBar({
             <DropdownMenuItem onSelect={() => onNewGraph()}>
               <HugeiconsIcon icon={Flowchart01Icon} size={14} />
               New GraphX diagram
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onNewMermaid()}>
-              <HugeiconsIcon
-                icon={Flowchart01Icon}
-                size={14}
-                strokeWidth={1.75}
-              />
-              <span className="flex-1">Mermaid</span>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onNewGitGraph()}>
               <HugeiconsIcon

@@ -9,7 +9,6 @@ export {
 export {
   MAX_MERMAID_SOURCE_BYTES,
   type MermaidSourceValidation,
-  NEW_MERMAID_SOURCE,
   normalizeMermaidSource,
   validateMermaidDraftSource,
   validateMermaidSource,

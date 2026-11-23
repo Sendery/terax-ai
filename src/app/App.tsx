@@ -67,10 +67,7 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
-import {
-  NEW_MERMAID_SOURCE,
-  validateMermaidSource,
-} from "@/modules/mermaid";
+import { validateMermaidSource } from "@/modules/mermaid";
 import { type PreviewPaneHandle, samePreviewUrl } from "@/modules/preview";
 import {
   closeReaderDoc,
@@ -1080,11 +1077,6 @@ export default function App() {
       return graph;
     },
     [setGraphPlacement, warmTab, setActiveId],
-  );
-
-  const openNewMermaidTab = useCallback(
-    () => newMermaidTab(NEW_MERMAID_SOURCE, "Untitled diagram"),
-    [newMermaidTab],
   );
 
   /** The selection actions every text view's right-click menu offers. */
@@ -2312,7 +2304,6 @@ export default function App() {
             openNewEditor: () => setNewEditorOpen(true),
             openNewPreview: () => openPreviewTab(""),
             openNewGraph: openNewGraphTab,
-            openNewMermaid: openNewMermaidTab,
             openGitGraph: openGitGraphFromContext,
             toggleSourceControl,
             closeActiveTabOrPane: handleCloseTabOrPane,
@@ -2386,7 +2377,6 @@ export default function App() {
       openNewPrivateTab,
       openPreviewTab,
       openNewGraphTab,
-      openNewMermaidTab,
       openGitGraphFromContext,
       toggleSourceControl,
       handleCloseTabOrPane,
@@ -3029,7 +3019,6 @@ export default function App() {
               onNewPreview={() => openPreviewTab("")}
               onNewEditor={() => setNewEditorOpen(true)}
               onNewGraph={openNewGraphTab}
-              onNewMermaid={openNewMermaidTab}
               onNewGitGraph={openGitGraphFromContext}
               onClose={handleClose}
               onPin={pinTab}

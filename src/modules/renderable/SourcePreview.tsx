@@ -11,8 +11,8 @@ const Markdown = lazy(() =>
   })),
 );
 const Mermaid = lazy(() =>
-  import("@/modules/markdown/MarkdownMermaid").then((m) => ({
-    default: m.MarkdownMermaid,
+  import("@/modules/graphx/MermaidPreview").then((m) => ({
+    default: m.MermaidPreview,
   })),
 );
 const Graph = lazy(() =>
@@ -55,7 +55,7 @@ export function SourcePreview({
       ) : kind === "mermaid" ? (
         <div className="h-full overflow-auto p-3">
           <Mermaid
-            code={settled}
+            source={settled}
             fallback={<pre className="whitespace-pre-wrap">{settled}</pre>}
           />
         </div>

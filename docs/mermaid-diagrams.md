@@ -1,5 +1,46 @@
 # Mermaid diagrams
 
+Terax uses GraphX to preview Mermaid fences in Markdown, Mermaid source files
+(`.mmd` and `.mermaid`) and diagrams opened with `mermaid.open`. The command
+continues to accept Mermaid and returns the same tab handle. It uses the same
+preview as the other entry points, and the source remains editable Mermaid.
+Supported diagrams use the same GraphX PNG frame capture as GraphX documents
+when a user exports a workspace capture. The fallback draws a static SVG
+image and travels through the ordinary DOM capture path.
+
+## Conversion fidelity
+
+The bundled converter is exercised with these fixtures in
+`src/modules/graphx/lib/mermaid.test.ts`. These cover representative Mermaid
+syntax and the resulting GraphX structure. Advanced syntax and styling can
+differ, and GraphX reports skipped statements.
+
+| Mermaid type | Verified conversion coverage |
+| --- | --- |
+| Flowchart, graph, flowchart-elk | Nodes, shapes, subgraphs, edge labels and styles. Click links are discarded. |
+| Sequence | Participants, messages, notes, nested blocks and activations. |
+| Class | Class members, relationships and cardinalities. Member HTML is discarded. |
+| State | Start and end, composite states, choice and notes. |
+| ER | Entity fields, keys and crow's-foot connectors. |
+| Gantt | Date axis, tasks, dependencies, status and milestones. |
+| Mind map | Nested nodes. |
+| Timeline | Periods and events. |
+| User journey | Scored steps and actors. |
+| Git graph | Branch lanes, commits and merges. |
+| C4 | People, systems, boundaries and relationships. |
+| Architecture | Groups, services and connections. |
+| Block | Grid placement and edges. |
+| Requirement | Requirement status, elements and relationships. |
+| Sankey | Weighted links. |
+| Kanban | Columns and cards. |
+| Treemap | Parent groups and weighted leaves. |
+| Pie, XY, quadrant, radar, packet, Venn, ZenUML, other types | Sent directly to the Mermaid fallback. |
+
+If GraphX declines a source or cannot lay it out, the same preview falls
+back to Mermaid with an explanation. Terax keeps the lazy Mermaid runtime
+for that fallback and for validating edits from the existing flowchart and
+sequence visual editors. There is no separate viewer to choose.
+
 Terax has a first-class Mermaid tab with **Raw**, **Rendered** and **Side by side**
 views. Raw keeps the source editor; Side by side shows it beside the rendered
 surface. The `Mermaid rendered tools` control selects **Preview** or **Visual**
@@ -11,13 +52,10 @@ validated by the real Mermaid parser, and only then committed to the tab.
 
 ## Opening a diagram
 
-- **From nothing:** choose **Mermaid** in the new-tab (`+`) menu, or run
-  **New Mermaid diagram** from the command palette. The tab opens on a small
-  starter flowchart, because an empty source is not valid Mermaid and would
-  otherwise greet you with a parse error. The starter sits inside the Visual
-  mode subset, so both editing modes work on it right away.
-- **From the terminal or an editor:** select a Mermaid snippet, right-click it
-  and choose **Open Mermaid**. Fenced ` ```mermaid ` blocks are unwrapped
+- **From nothing:** choose **New GraphX diagram** in the new-tab (`+`) menu
+  or in the command palette. To author Mermaid, create a `.mmd` file.
+- **From the terminal, editor or Reader:** select a Mermaid snippet, right-click
+  it and choose **Open Mermaid**. Fenced ` ```mermaid ` blocks are unwrapped
   automatically.
 - **From Pi:** the `@crynta/pi-terax` extension exposes `mermaid.open` and
   `mermaid.update`. See [Pi Terax bridge](pi-terax.md) for payloads and limits.
@@ -26,12 +64,10 @@ validated by the real Mermaid parser, and only then committed to the tab.
 
 ## Rendered markdown
 
-A ` ```mermaid ` fence in rendered markdown — a `.md` preview tab or an AI chat
-message — is drawn as a diagram rather than shown as a code block. It goes
-through the same engine, the same hardened configuration and the same render
-queue as a Mermaid tab, and the SVG is displayed as an inert image. A source
-that does not parse falls back to the plain code block with the parser's
-message above it.
+A ` ```mermaid ` fence in rendered Markdown uses the GraphX preview in a
+`.md` file or an AI chat message. The preview starts when the block comes
+near the viewport. If neither engine accepts the source, the block shows the
+original code.
 
 Rendered fences are read-only. To edit one, switch the markdown tab to its raw
 view, select the snippet and choose **Open Mermaid**.

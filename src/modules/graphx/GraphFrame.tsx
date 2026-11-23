@@ -7,40 +7,55 @@ import { parseGraphSource } from "@/modules/graphx/lib/document";
 import type { GraphTab } from "@/modules/tabs";
 import { useTheme } from "@/modules/theme";
 import { useEffect, useRef, useState } from "react";
-export function GraphFrame({
-  tab,
-}: {
+type GraphFrameProps = {
   tab: Pick<GraphTab, "documentId" | "revision" | "source" | "title">;
-}) {
+  /** `source` is Mermaid, converted inside the frame, instead of GraphX JSON. */
+  mermaid?: boolean;
+  /** The frame's converter refused the Mermaid source; the message says why. */
+  onMermaidError?: (message: string) => void;
+  /** Mermaid statements the converter read but could not draw. */
+  onMermaidWarnings?: (warnings: string[]) => void;
+};
+export function GraphFrame(props: GraphFrameProps) {
   const { resolvedMode } = useTheme();
+  const { tab } = props;
   return (
     <GraphFrameSession
       key={`${tab.documentId}:${tab.revision}:${resolvedMode}`}
-      tab={tab}
+      {...props}
       theme={resolvedMode}
     />
   );
 }
+function boundedStrings(value: unknown, max: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, max)
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.slice(0, 300));
+}
 function GraphFrameSession({
   tab,
   theme,
-}: {
-  tab: Pick<GraphTab, "documentId" | "revision" | "source" | "title">;
-  theme: string;
-}) {
+  mermaid = false,
+  onMermaidError,
+  onMermaidWarnings,
+}: GraphFrameProps & { theme: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const token = useRef(crypto.randomUUID()).current;
   const [ready, setReady] = useState(false);
   const [state, setState] = useState("Loading GraphX...");
   const [receipt, setReceipt] = useState("");
+  const mermaidCallbacks = useRef({ onMermaidError, onMermaidWarnings });
   useEffect(() => {
-    const timeout = window.setTimeout(
-      () =>
-        setState(
-          "GraphX is taking longer than expected. Reopen this tab if it does not finish.",
-        ),
-      15000,
-    );
+    mermaidCallbacks.current = { onMermaidError, onMermaidWarnings };
+  }, [onMermaidError, onMermaidWarnings]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const message = "GraphX is taking longer than expected.";
+      setState(message);
+      if (mermaid) mermaidCallbacks.current.onMermaidError?.(message);
+    }, 15000);
     const receive = (event: MessageEvent) => {
       if (
         event.source !== frame.current?.contentWindow ||
@@ -61,13 +76,28 @@ function GraphFrameSession({
         setReceipt(
           `GraphX rendered revision ${tab.revision}: ${geometry.nodes} nodes, ${geometry.paths} paths, ${geometry.width} by ${geometry.height} pixels.`,
         );
+        if (mermaid)
+          mermaidCallbacks.current.onMermaidWarnings?.(
+            boundedStrings(event.data.warnings, 20),
+          );
       }
       if (event.data.type === "terax:graphx:error") {
         window.clearTimeout(timeout);
+        if (mermaid) {
+          setState("GraphX cannot draw this Mermaid diagram.");
+          const message =
+            typeof event.data.message === "string"
+              ? event.data.message.slice(0, 300)
+              : "This Mermaid source could not be converted.";
+          mermaidCallbacks.current.onMermaidError?.(message);
+          return;
+        }
         setState(
           event.data.reason === "styles"
             ? "GraphX styles are unavailable. Reopen this tab."
-            : "Layout failed. Edit the JSON and apply again.",
+            : mermaid
+              ? "Layout failed. Edit the Mermaid source."
+              : "Layout failed. Edit the JSON and apply again.",
         );
       }
     };
@@ -80,7 +110,7 @@ function GraphFrameSession({
       window.clearTimeout(timeout);
       window.removeEventListener("message", receive);
     };
-  }, [token, tab.revision, tab.documentId]);
+  }, [token, tab.revision, tab.documentId, mermaid]);
   useEffect(() => {
     const current = frame.current;
     if (!current) return;
@@ -99,14 +129,25 @@ function GraphFrameSession({
       {
         type: "terax:graphx:render",
         token,
-        spec: parseGraphSource(tab.source),
+        ...(mermaid
+          ? { mermaid: tab.source, title: tab.title }
+          : { spec: parseGraphSource(tab.source) }),
         revision: tab.revision,
         documentId: tab.documentId,
         theme,
       },
       "*",
     );
-  }, [ready, tab.source, tab.revision, tab.documentId, token, theme]);
+  }, [
+    ready,
+    tab.source,
+    tab.title,
+    tab.revision,
+    tab.documentId,
+    token,
+    theme,
+    mermaid,
+  ]);
   return (
     <div className="relative min-h-0 flex-1">
       <iframe
