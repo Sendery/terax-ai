@@ -266,18 +266,20 @@
 .flow-cluster[data-pulse="true"]::before {
   content: "";
   position: absolute;
-  inset: calc(-1.5 * var(--flow-live-stroke));
+  inset: calc(-2.2 * var(--flow-live-stroke));
   border-radius: inherit;
-  box-shadow: 0 0 0 var(--flow-live-stroke) var(--flow-live-outline),
-    0 0 calc(4 * var(--flow-live-stroke)) var(--flow-accent);
+  box-shadow: 0 0 0 calc(1.4 * var(--flow-live-stroke))
+      color-mix(in oklab, var(--flow-accent) 60%, var(--foreground)),
+    0 0 calc(8 * var(--flow-live-stroke)) calc(1.2 * var(--flow-live-stroke))
+      color-mix(in oklab, var(--flow-accent) 72%, transparent);
   opacity: 0;
   pointer-events: none;
-  animation: flow-live-pulse 2.4s ease-in-out infinite;
+  animation: flow-live-pulse 2.2s ease-in-out infinite;
 }
 
 @keyframes flow-live-pulse {
-  0%, 100% { opacity: 0.12; }
-  46% { opacity: 0.86; }
+  0%, 100% { opacity: 0.06; }
+  36% { opacity: 1; }
 }
 
 .flow-relation-line,
