@@ -1,10 +1,15 @@
 import type { Tab } from "./useTabs";
 
-const ABSOLUTE = /^(?:[\\/]|[A-Za-z]:[\\/])/;
+const WINDOWS_ROOT = /^(?:[A-Za-z]:[\\/]|\\\\)/;
+const WINDOWS_ABSOLUTE = /^(?:[\\/]|[A-Za-z]:[\\/])/;
 
 /** A repository-relative path made absolute, in the root's separator style. */
 export function joinRepoPath(repoRoot: string, path: string): string {
-  if (ABSOLUTE.test(path)) return path;
+  if (!WINDOWS_ROOT.test(repoRoot)) {
+    if (path.startsWith("/")) return path;
+    return `${repoRoot.replace(/\/+$/, "")}/${path}`;
+  }
+  if (WINDOWS_ABSOLUTE.test(path)) return path;
   const sep = repoRoot.includes("\\") && !repoRoot.includes("/") ? "\\" : "/";
   const root = repoRoot.replace(/[\\/]+$/, "");
   return `${root}${sep}${path.replace(/[\\/]/g, sep)}`;

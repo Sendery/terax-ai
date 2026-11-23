@@ -93,4 +93,9 @@ describe("joinRepoPath", () => {
   it("joins under the filesystem root", () => {
     expect(joinRepoPath("/", "a.ts")).toBe("/a.ts");
   });
+
+  it("keeps literal backslashes in POSIX filenames", () => {
+    expect(joinRepoPath("/repo", "a\\b.ts")).toBe("/repo/a\\b.ts");
+    expect(joinRepoPath("/repo", "\\a.ts")).toBe("/repo/\\a.ts");
+  });
 });
