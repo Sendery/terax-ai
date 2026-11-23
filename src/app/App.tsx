@@ -310,6 +310,7 @@ export default function App() {
     openCommitFileDiffTab,
     openPrReviewTab,
     openReaderTab,
+    openAgentFlowTab,
     setPrReviewBase,
     moveTab,
     setTabPinned,
@@ -3158,6 +3159,7 @@ export default function App() {
                         onSetRenderableView={setRenderableView}
                         onMermaidSourceChange={updateMermaidSource}
                         onMermaidVisualLayoutChange={updateMermaidVisualLayout}
+                        onActivateAgent={onActivateAgent}
                       />
                     </div>
 
@@ -3238,6 +3240,7 @@ export default function App() {
                     <AgentMonitorPanel
                       onActivate={onActivateAgent}
                       onHide={hideAgentMonitor}
+                      onOpenFlow={openAgentFlowTab}
                       tabs={tabs}
                     />
                   </ResizablePanel>

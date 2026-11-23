@@ -1,7 +1,7 @@
 pub mod modules;
 
 use modules::{
-    agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, mcp, net, notify,
+    agent, agent_cli, agent_flow, agentdigest, agentsessions, capture, fs, git, history, lsp, mcp, net, notify,
     oauth, pi,
     pisessions, privacy, profile,
     pty, reader, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
@@ -418,6 +418,8 @@ pub fn run() {
             pisessions::pi_session_usage,
             pisessions::pi_sessions_list,
             agentdigest::agent_session_digest,
+            agent_flow::agent_flow_history,
+            agent_flow::agent_flow_trace,
             notify::agent_notify,
             profile::app_profile,
             profile::sandbox_reset_from_installed,

@@ -14,7 +14,9 @@ import {
 } from "@/modules/reader/components/ReadContextMenu";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
-import type { ComponentProps } from "react";
+import { lazy, Suspense, type ComponentProps } from "react";
+
+const AgentFlow = lazy(() => import("@/modules/agent-flow/AgentFlow"));
 
 type TerminalStackProps = ComponentProps<typeof TerminalStack>;
 type EditorStackProps = ComponentProps<typeof EditorStack>;
@@ -75,6 +77,7 @@ type Props = {
   onSetRenderableView: EditorStackProps["onSetRenderableView"];
   onMermaidSourceChange: MermaidStackProps["onSourceChange"];
   onMermaidVisualLayoutChange: MermaidStackProps["onVisualLayoutChange"];
+  onActivateAgent: (tabId: number, leafId: number) => void;
 };
 
 /**
@@ -116,6 +119,7 @@ export function WorkspaceSurface({
   onSetRenderableView,
   onMermaidSourceChange,
   onMermaidVisualLayoutChange,
+  onActivateAgent,
 }: Props) {
   const kind = activeTab?.kind;
   const isTerminalTab = kind === "terminal";
@@ -286,6 +290,13 @@ export function WorkspaceSurface({
               }}
             />
           </div>
+          {tabs.some((tab) => tab.kind === "agent-flow") ? (
+            <div className={cn("absolute inset-0", kind !== "agent-flow" && "hidden")}>
+              <Suspense fallback={<p className="p-4 text-xs text-muted-foreground">Loading Agent Flow…</p>}>
+                <AgentFlow tabs={tabs} open={kind === "agent-flow"} onActivate={onActivateAgent} />
+              </Suspense>
+            </div>
+          ) : null}
         </div>
         {dock ? (
           <ReaderDock

@@ -636,7 +636,7 @@ export function TabIcon({ tab }: { tab: Tab }) {
       />
     );
   }
-  if (tab.kind === "mermaid" || tab.kind === "graphx") {
+  if (tab.kind === "mermaid" || tab.kind === "graphx" || tab.kind === "agent-flow") {
     return (
       <HugeiconsIcon
         icon={Flowchart01Icon}

@@ -3,6 +3,7 @@ import { useTerminalProgress } from "@/modules/terminal/lib/terminalProgress";
 import type { Tab } from "@/modules/tabs";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
+import { recordFlowSignal } from "@/modules/agent-flow/journal";
 import { describeAgentEvent } from "../lib/describeEvent";
 import { digestForNotification, refreshDigest } from "../lib/digests";
 import { displayAgent } from "../lib/format";
@@ -246,9 +247,22 @@ export function AgentNotificationsBridge({
   const ctxRef = useRef<Ctx>({ tabs, activeId, focused, onActivate });
   ctxRef.current = { tabs, activeId, focused, onActivate };
 
-  useListen<AgentSignal>("terax:agent-signal", (signal) =>
-    handleSignal(signal, () => ctxRef.current),
-  );
+  useListen<AgentSignal>("terax:agent-signal", (signal) => {
+    const before = useAgentStore.getState();
+    const leafId = leafIdForPty(signal.id) ?? leafOwningPty(before.sessions, signal.id);
+    handleSignal(signal, () => ctxRef.current);
+    if (leafId === null) return;
+    const after = useAgentStore.getState();
+    const session = after.sessions[leafId] ?? before.sessions[leafId];
+    if (!session) return;
+    const tab = ctxRef.current.tabs.find((entry) => entry.id === session.tabId);
+    recordFlowSignal(
+      session,
+      signal,
+      tab?.kind === "terminal" ? tab : undefined,
+      after.digests[leafId] ?? before.digests[leafId],
+    );
+  });
   // Clicking a native notification lands on the pane it was about, which is
   // what the in-app toast used to do before notifications moved to the OS.
   useListen<{ leafId?: number | null; tabId?: number | null }>(

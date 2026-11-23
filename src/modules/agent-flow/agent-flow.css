@@ -1,0 +1,501 @@
+.agent-flow {
+  --flow-stroke: color-mix(in oklab, var(--border) 78%, var(--foreground) 8%);
+  --flow-surface: color-mix(in oklab, var(--card) 86%, var(--background));
+  --flow-accent: var(--muted-foreground);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  isolation: isolate;
+  container-type: inline-size;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.agent-flow button,
+.agent-flow select {
+  border-radius: 7px;
+}
+
+.agent-flow button:not(.flow-node):not(.flow-activity li button),
+.agent-flow select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--flow-stroke);
+  background: var(--card);
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.agent-flow button:focus-visible,
+.agent-flow select:focus-visible,
+.flow-viewport:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.agent-flow button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.agent-flow button:not(:disabled):hover {
+  border-color: var(--flow-accent);
+}
+
+.flow-header,
+.flow-timeline,
+.flow-canvas-bar,
+.flow-pagination {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  flex: none;
+  background: var(--flow-surface);
+  border-bottom: 1px solid var(--flow-stroke);
+}
+
+.flow-header,
+.flow-canvas-bar,
+.flow-pagination {
+  justify-content: space-between;
+}
+
+.flow-header {
+  flex-wrap: wrap;
+}
+
+.flow-heading,
+.flow-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.flow-heading {
+  gap: 10px;
+}
+
+.flow-heading h1 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.1;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+}
+
+.flow-heading div > span,
+.flow-canvas-bar,
+.flow-pagination,
+.flow-scrubber div > span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-brand,
+.flow-provider {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--foreground);
+  border: 1px solid var(--flow-stroke);
+  background: color-mix(in oklab, var(--flow-accent) 12%, var(--card));
+}
+
+.flow-brand {
+  width: 34px;
+  height: 34px;
+}
+
+.flow-controls {
+  flex-wrap: wrap;
+}
+
+.flow-controls select {
+  max-width: min(225px, 58vw);
+}
+
+.flow-live[aria-pressed="true"] {
+  --flow-accent: #34b981;
+  border-color: color-mix(in oklab, var(--flow-accent) 60%, var(--flow-stroke)) !important;
+}
+
+.flow-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.flow-canvas {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.flow-canvas-bar,
+.flow-pagination {
+  padding-block: 6px;
+}
+
+.flow-canvas-bar .flow-controls {
+  gap: 5px;
+}
+
+.flow-zoom {
+  min-width: 36px;
+  text-align: center;
+}
+
+.flow-pagination {
+  border-block: 1px solid var(--flow-stroke) 0;
+}
+
+.flow-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: radial-gradient(circle, color-mix(in oklab, var(--muted-foreground) 22%, transparent) 1px, transparent 1.3px) 12px 12px / 21px 21px,
+    linear-gradient(165deg, color-mix(in oklab, var(--card) 32%, var(--background)), var(--background) 65%);
+}
+
+.flow-lanes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+}
+
+.flow-lane {
+  flex: none;
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 32%, var(--flow-stroke));
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--flow-accent) 5%, var(--background) 89%, transparent);
+}
+
+.flow-lane-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--flow-accent) 20%, var(--flow-stroke));
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.flow-tab-dot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--flow-accent);
+}
+
+.flow-lane-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.flow-lane-world {
+  position: relative;
+  transform-origin: top left;
+}
+
+.flow-edges {
+  position: absolute;
+  inset: 0;
+  color: var(--flow-accent);
+  pointer-events: none;
+}
+
+.flow-edges path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  opacity: 0.55;
+}
+
+.flow-edges path[data-selected="true"] {
+  opacity: 1;
+  stroke-width: 2.25;
+}
+
+.agent-flow .flow-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  text-align: left;
+  overflow: hidden;
+  border: 1px solid var(--flow-stroke);
+  border-inline-start: 3px solid var(--flow-accent);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 5px 14px #0001;
+}
+
+.flow-node[data-selected="true"] {
+  border-color: var(--flow-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--flow-accent) 12%, transparent);
+}
+
+.flow-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-provider {
+  width: 30px;
+  height: 30px;
+}
+
+.flow-node-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.flow-node-identity strong,
+.flow-node-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node-identity small,
+.flow-node-footer {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.flow-status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+
+.flow-status-dot[data-tone="live"],
+.flow-status-dot[data-tone="done"] {
+  background: #29b57c;
+}
+
+.flow-status-dot[data-tone="attention"] {
+  background: #df9d2f;
+}
+
+.flow-status-dot[data-tone="error"] {
+  background: #e35b63;
+}
+
+.flow-bubble {
+  display: -webkit-box;
+  position: relative;
+  align-content: center;
+  padding: 7px 8px;
+  min-height: 34px;
+  border-radius: 3px 8px 8px 8px;
+  background: color-mix(in oklab, var(--flow-accent) 11%, var(--card));
+  font-size: 11px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.flow-node-footer {
+  margin-top: auto;
+}
+
+.flow-empty {
+  min-height: 180px;
+  height: 100%;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.flow-empty strong {
+  color: var(--foreground);
+}
+
+.flow-inspector {
+  flex: 0 0 clamp(230px, 31%, 320px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--flow-surface);
+  border-inline-start: 1px solid var(--flow-stroke);
+}
+
+.flow-inspector header,
+.flow-delegations {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--flow-stroke);
+}
+
+.flow-inspector-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.flow-inspector-intro,
+.flow-activity {
+  padding: 12px;
+}
+
+.flow-inspector-intro {
+  border-bottom: 1px solid var(--flow-stroke);
+}
+
+.flow-inspector-intro h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.flow-inspector-intro p,
+.flow-activity p {
+  color: var(--muted-foreground);
+  margin-block: 4px 8px;
+  font-size: 11px;
+}
+
+.flow-inspector-intro button + button {
+  margin-inline-start: 5px;
+}
+
+.flow-activity {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.flow-activity h3 {
+  margin: 0 0 7px;
+  font-weight: 630;
+}
+
+.flow-activity ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.flow-activity li button {
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  padding: 6px;
+  text-align: start;
+}
+
+.flow-activity li button:hover {
+  background: var(--card);
+}
+
+.flow-activity li button > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.flow-activity li strong {
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.flow-activity li time,
+.flow-activity li small {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.flow-activity li time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-timeline {
+  border-top: 1px solid var(--flow-stroke);
+  border-bottom: 0;
+}
+
+.flow-scrubber {
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-scrubber div {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.flow-scrubber input {
+  display: block;
+  width: 100%;
+  height: 16px;
+  accent-color: var(--foreground);
+}
+
+@container (max-width: 610px) {
+  .flow-workspace {
+    flex-direction: column;
+  }
+
+  .flow-inspector {
+    flex-basis: 43%;
+    border-inline-start: 0;
+    border-top: 1px solid var(--flow-stroke);
+  }
+
+  .flow-header,
+  .flow-timeline {
+    padding: 7px;
+    gap: 7px;
+  }
+
+  .flow-lanes {
+    padding: 8px;
+  }
+}
