@@ -12,7 +12,8 @@ The latest-signal card opens the corresponding agent and event. Replay pauses
 ambient movement.
 
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
-and use Fit all or the minimap to reorient the canvas. The Agents list can find
+and use Fit all to reorient the canvas. The minimap starts folded in the
+bottom-left corner and opens above the zoom controls. The Agents list can find
 and center a session. The direction button switches between top to bottom and
 left to right. In the horizontal view, each session starts on the left and
 delegates toward the right. Switch from Fit to screen to session lanes to give

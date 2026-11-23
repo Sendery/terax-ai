@@ -1,8 +1,8 @@
 import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
-  memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
-import { ArrowDown01Icon, ArrowRight01Icon, File01Icon, Flowchart01Icon, Message01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, ArrowUp01Icon, File01Icon, Flowchart01Icon, MapsIcon, Message01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
@@ -186,6 +186,8 @@ export function FlowCanvas({
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState(initialCamera);
+  const [minimapOpen, setMinimapOpen] = useState(false);
+  const minimapId = useId();
   const cameraRef = useRef(initialCamera);
   const frame = useRef<number | null>(null);
   const gesture = useRef<{ pointer: number; start: Point; camera: Camera } | null>(null);
@@ -372,9 +374,6 @@ export function FlowCanvas({
   if (activeRelation && !visibleRelations.some(({ key }) => key === activeRelation.key)) visibleRelations.push(activeRelation);
   const pairOffsets = new Map<string, number>();
   const clock = Date.now();
-  const mapScale = Math.min(152 / scene.width, 94 / scene.height);
-  const mapWidth = scene.width * mapScale;
-  const mapHeight = scene.height * mapScale;
   let ambientSlots = time === null && !compact ? 16 : 0;
   return (
     <div className="flow-canvas" data-ambient={time === null}>
@@ -452,40 +451,55 @@ export function FlowCanvas({
           </div>
         ) : null}
       </section>
-      <fieldset className="flow-camera" onKeyDown={navigate}>
-        <legend className="sr-only">Map navigation. Arrow keys pan, plus and minus zoom, 0 fits the map.</legend>
-        <button type="button" aria-label="Zoom out" disabled={camera.scale <= 0.07} onClick={() => zoom(0.8)}>−</button>
-        <span>{Math.round(camera.scale * 100)}%</span>
-        <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
-        <button type="button" onClick={fitAll}>Fit all</button>
-        <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowRight01Icon} size={13} />
-      </fieldset>
-      {scene.clusters.length ? (
-        <button type="button" className="flow-minimap" aria-label="Minimap. Click to center, or press Enter to fit all."
-          onClick={(event) => {
-            if (!event.detail) {
-              fitAll();
-              return;
-            }
-            const rect = event.currentTarget.querySelector("svg")?.getBoundingClientRect();
-            if (!rect) return;
-            manualCamera.current = true;
-            commit({
-              scale: camera.scale,
-              x: size.width / 2 - (event.clientX - rect.left) / mapScale * camera.scale,
-              y: size.height / 2 - (event.clientY - rect.top) / mapScale * camera.scale,
-            }, true);
-          }}>
-          <svg width={mapWidth} height={mapHeight} viewBox={`0 0 ${scene.width} ${scene.height}`} aria-hidden="true">
-            {scene.clusters.map(({ box, branch }) => (
-              <rect key={branch.run.key} x={box.x} y={box.y} width={box.width} height={box.height} rx={12}
-                style={accent(branch.run)} data-active={!!branch.run.active} />
-            ))}
-            <rect className="flow-map-window" x={-camera.x / camera.scale} y={-camera.y / camera.scale}
-              width={size.width / camera.scale} height={size.height / camera.scale} rx={9} />
-          </svg>
-        </button>
-      ) : null}
+      <div className="flow-map-dock">
+        {scene.clusters.length ? (
+          <div id={minimapId} hidden={!minimapOpen}>
+            {minimapOpen ? (
+              <button type="button" className="flow-minimap" aria-label="Minimap. Click to center, or press Enter to fit all."
+                onClick={(event) => {
+                  if (!event.detail) {
+                    fitAll();
+                    return;
+                  }
+                  const rect = event.currentTarget.querySelector("svg")?.getBoundingClientRect();
+                  if (!rect) return;
+                  const scale = Math.min(rect.width / scene.width, rect.height / scene.height);
+                  if (scale <= 0) return;
+                  const x = scene.width / 2 + (event.clientX - rect.left - rect.width / 2) / scale;
+                  const y = scene.height / 2 + (event.clientY - rect.top - rect.height / 2) / scale;
+                  manualCamera.current = true;
+                  commit({ scale: camera.scale, x: size.width / 2 - x * camera.scale, y: size.height / 2 - y * camera.scale }, true);
+                }}>
+                <svg viewBox={`0 0 ${scene.width} ${scene.height}`} aria-hidden="true">
+                  {scene.clusters.map(({ box, branch }) => (
+                    <rect key={branch.run.key} x={box.x} y={box.y} width={box.width} height={box.height} rx={12}
+                      style={accent(branch.run)} data-active={!!branch.run.active} />
+                  ))}
+                  <rect className="flow-map-window" x={-camera.x / camera.scale} y={-camera.y / camera.scale}
+                    width={size.width / camera.scale} height={size.height / camera.scale} rx={9} />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <fieldset className="flow-camera" onKeyDown={navigate}>
+          <legend className="sr-only">Map navigation. Arrow keys pan, plus and minus zoom, 0 fits the map.</legend>
+          {scene.clusters.length ? (
+            <button type="button" className="flow-minimap-toggle" aria-controls={minimapId} aria-expanded={minimapOpen}
+              aria-label={minimapOpen ? "Hide minimap" : "Show minimap"}
+              title={minimapOpen ? "Hide minimap" : "Show minimap"}
+              onClick={() => setMinimapOpen((open) => !open)}>
+              <HugeiconsIcon icon={MapsIcon} size={14} />
+              <HugeiconsIcon icon={minimapOpen ? ArrowDown01Icon : ArrowUp01Icon} size={11} />
+            </button>
+          ) : null}
+          <button type="button" aria-label="Zoom out" disabled={camera.scale <= 0.07} onClick={() => zoom(0.8)}>−</button>
+          <span>{Math.round(camera.scale * 100)}%</span>
+          <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
+          <button type="button" onClick={fitAll}>Fit all</button>
+          <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowRight01Icon} size={13} />
+        </fieldset>
+      </div>
     </div>
   );
 }
