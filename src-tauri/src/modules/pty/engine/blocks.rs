@@ -197,16 +197,32 @@ impl BlockStore {
         bytes: &[u8],
         now: u64,
     ) -> Result<(), String> {
+        self.feed_observed(term, shell, bytes, now, |_, _| {})
+    }
+    /// `feed`, showing every shell event to `observe` right after the bytes
+    /// up to its mark reached the terminal.
+    pub fn feed_observed(
+        &mut self,
+        term: &mut Terminal<'_, '_>,
+        shell: &mut ShellIntegration,
+        bytes: &[u8],
+        now: u64,
+        mut observe: impl FnMut(&Terminal<'_, '_>, &ShellEvent),
+    ) -> Result<(), String> {
         let mut failure = None;
         shell.ingest_segments(bytes, |segment, event| {
             super::graphics::write(term, segment).map_err(|error| error.to_string())?;
+            if let Some(event) = &event {
+                observe(term, event);
+            }
             if failure.is_none() {
                 if let Some(event) = event {
                     let result = match event {
-                        ShellEvent::PromptStart => {
+                        ShellEvent::PromptStart { .. } => {
                             self.prompt_header = None;
                             Ok(())
                         }
+                        ShellEvent::PromptLine => Ok(()),
                         ShellEvent::PromptEnd => self.prompt_end(term),
                         ShellEvent::CommandStart { command, cwd } => {
                             self.start(term, command, cwd.unwrap_or_default(), now)
