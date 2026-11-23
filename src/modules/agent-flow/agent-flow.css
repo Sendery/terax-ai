@@ -258,6 +258,7 @@
 }
 
 .flow-coordinator {
+  --flow-coordinator-port: max(6px, calc(2 * var(--flow-live-stroke)));
   position: absolute;
   display: grid;
   place-items: center;
@@ -265,14 +266,17 @@
   border-radius: 15px;
   background: radial-gradient(ellipse at 50% 105%, color-mix(in oklab, var(--flow-branch) 21%, transparent), transparent 64%),
     color-mix(in oklab, var(--flow-panel) 63%, transparent);
+  box-shadow: inset 0 0 0 max(1px, calc(0.5 * var(--flow-live-stroke)))
+    color-mix(in oklab, var(--flow-branch) 34%, transparent);
 }
 
 .flow-coordinator::after {
   position: absolute;
-  bottom: -3px;
-  left: calc(50% - 3px);
-  width: 6px;
-  height: 6px;
+  bottom: 0;
+  left: 50%;
+  width: var(--flow-coordinator-port);
+  height: var(--flow-coordinator-port);
+  transform: translate(-50%, 50%);
   border-radius: 50%;
   background: var(--flow-branch);
   content: "";
@@ -304,6 +308,16 @@
 
 .flow-coordinator > button small {
   font: 10px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-world[data-detail="compact"] .flow-coordinator > button strong {
+  font-size: clamp(15px, calc(6.5 * var(--flow-live-stroke)), 44px);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.flow-world[data-detail="compact"] .flow-coordinator > button small {
+  display: none;
 }
 
 .flow-coordinator > button:hover,
@@ -372,6 +386,14 @@
 .flow-relation-line[data-selected="true"] {
   opacity: 1;
   stroke-width: 2.5;
+}
+
+.flow-relation-line[data-coordinator="true"] {
+  stroke-width: max(2.5px, calc(0.75 * var(--flow-live-stroke)));
+}
+
+.flow-relation-line[data-coordinator="true"][data-selected="false"] {
+  opacity: 0.74;
 }
 
 .flow-relation-label {
