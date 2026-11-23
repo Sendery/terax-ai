@@ -11,7 +11,7 @@ import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import { PROCESS_LABELS, type FlowDirection, type FlowRun, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
 import {
-  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, HORIZONTAL_EDGE_Y, laneCamera, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
+  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, laneCamera, NODE_GEOMETRY, NODE_WIDTH, overlaps, zoomCamera,
   type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowScene, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
@@ -106,7 +106,7 @@ const ActorNode = memo(function ActorNode({
   return (
     <div className="flow-actor" data-tone={pending ? "waiting" : nodeStatus?.working ? "active" : actor.tone} data-compact={compact}
       data-kind={process ? "process" : isMarker ? run.marker : task ? "subagent" : "agent"} data-notice={notice?.tone}
-      style={{ left: area.x, top: area.y, width: NODE_WIDTH, height: NODE_HEIGHT,
+      style={{ left: area.x, top: area.y, width: NODE_WIDTH,
         "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
       <button type="button" className="flow-node" aria-label={`${name}, ${stateLabel}, ${run.tabTitle}${notice && !notice.read ? `, ${notice.label}` : ""}`}
         aria-pressed={current} onClick={() => str()}>
@@ -198,6 +198,7 @@ export function FlowCanvas({
   scene, traces, direction, arrangement, time, target, pinnedRun, relations, activeRelation, nodeStatus,
   focusRequest, fitRequest, loading, onSelect, onVisible, onRelation,
 }: CanvasProps) {
+  const { height: nodeHeight, centerY: nodeCenterY } = NODE_GEOMETRY[direction];
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState(initialCamera);
@@ -289,9 +290,9 @@ export function FlowCanvas({
     commit({
       scale,
       x: size.width / 2 - (box.x + root.x + NODE_WIDTH / 2) * scale,
-      y: size.height / 2 - (box.y + root.y + NODE_HEIGHT / 2) * scale,
+      y: size.height / 2 - (box.y + root.y + nodeHeight / 2) * scale,
     }, true);
-  }, [focusRequest, scene, size, commit]);
+  }, [focusRequest, scene, size, commit, nodeHeight]);
 
   useEffect(() => {
     const element = viewport.current;
@@ -402,7 +403,8 @@ export function FlowCanvas({
           data-layout={arrangement}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
             "--flow-live-stroke": `${1.5 / camera.scale}px`,
-            "--flow-horizontal-edge": `${HORIZONTAL_EDGE_Y}px` } as CSSProperties}>
+            "--flow-node-center-y": `${nodeCenterY}px`,
+            "--flow-node-height": `${nodeHeight}px` } as CSSProperties}>
           {visibleRelations.map((relation) => {
             const from = visibleBoxes.get(relation.from);
             const to = visibleBoxes.get(relation.to);
@@ -457,7 +459,7 @@ export function FlowCanvas({
                   </svg>
                 ) : null}
                 {show.map(({ task, at }) => {
-                  if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: NODE_WIDTH, height: NODE_HEIGHT })) return null;
+                  if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: NODE_WIDTH, height: nodeHeight })) return null;
                   const trace = task ? traces.get(traceKey(task.run) ?? "") : branch.trace;
                   const ambient = ambientSlots > 0;
                   if (ambient) ambientSlots--;

@@ -80,18 +80,21 @@ describe("Agent Flow", () => {
     expect(laneCamera(columns, { width: 200, height: 800 }).x).toBe(0);
   });
 
-  it("points the horizontal connection right for delegation and left for its return", () => {
+  it("keeps same-row connections straight with delegation and return arrows at node height", () => {
     const from = { x: 0, y: 0 };
     const to = { x: 352, y: 0 };
     const delegation = edgeGeometry(from, to, "right", false);
     const result = edgeGeometry(from, to, "right", true);
-    const path = delegation.d.split(" ");
-    const start = Number(path[1]);
-    const end = Number(path[path.length - 1]);
-    expect(start).toBeLessThan(end);
-    expect(delegation.d).toContain("107 77 H ");
-    expect(delegation.arrow).toContain(`M ${end - 7} 51 L ${end} 55`);
-    expect(result.arrow).toContain(`M ${start + 7} 51 L ${start} 55`);
+    expect(delegation.d).toBe("M 76 73 H 370");
+    expect(result.d).toBe(delegation.d);
+    expect(delegation.arrow).toBe("M 363 69 L 370 73 L 363 77");
+    expect(result.arrow).toBe("M 83 69 L 76 73 L 83 77");
+  });
+
+  it("branches between rows near the destination and routes past occupied columns through the gutter", () => {
+    const from = { x: 0, y: 0 };
+    const branch = edgeGeometry(from, { x: 352, y: 150 }, "right", false);
+    expect(branch.d).toBe("M 76 73 H 334 Q 346 73 346 85 V 211 Q 346 223 358 223 H 370");
     const bypass = edgeGeometry(from, { x: 704, y: 150 }, "right", false, 324);
     expect(bypass.d).toContain("347 316 H");
   });

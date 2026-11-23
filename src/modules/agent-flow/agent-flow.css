@@ -450,6 +450,7 @@
 
 .flow-actor {
   position: absolute;
+  height: var(--flow-node-height);
   --flow-status: var(--flow-dim);
 }
 
@@ -467,7 +468,7 @@
 
 .flow-node {
   position: absolute;
-  top: 21px;
+  top: calc(var(--flow-node-center-y) - 34px);
   left: 0;
   display: flex;
   flex-direction: column;
@@ -824,7 +825,7 @@
 
 .flow-world[data-direction="right"] .flow-node-events > :is(.flow-speech, .flow-activity-label) {
   position: absolute;
-  bottom: calc(100% - var(--flow-horizontal-edge) + 14px);
+  bottom: calc(100% - var(--flow-node-center-y) + 16px);
 }
 
 .flow-world[data-direction="right"] .flow-speech::before {
@@ -835,7 +836,7 @@
 .flow-world[data-direction="right"] .flow-tool-links {
   position: absolute;
   inset-inline: 0;
-  top: calc(var(--flow-horizontal-edge) + 16px);
+  top: calc(var(--flow-node-center-y) + 20px);
 }
 
 .flow-speech:hover,
