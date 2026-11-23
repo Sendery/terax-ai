@@ -87,7 +87,7 @@ export default function AgentFlow({
   const scene = useMemo(() => makeScene(branches, direction), [branches, direction]);
   const branch = branches.find((item) => item.run.key === selection?.run);
   const task = branch?.tasks.find((entry) => entry.id === selection?.task && (time === null || entry.at <= time));
-  const detailTrace = task?.run ? traces.get(traceKey(task.run) ?? "") : branch?.trace;
+  const detailTrace = task ? traces.get(traceKey(task.run) ?? "") : branch?.trace;
   const searchable = search.trim().toLowerCase();
   const matches = navigator ? branches.filter((item) => !searchable ||
     `${item.run.tabTitle} ${runName(item.run, item.trace?.name)} ${displayAgent(item.run.agent)}`.toLowerCase().includes(searchable),

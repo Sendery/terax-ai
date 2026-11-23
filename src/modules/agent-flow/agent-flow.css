@@ -24,7 +24,7 @@
 
 .dark .agent-flow {
   --flow-default: #86c4eb;
-  --flow-bg: color-mix(in oklab, var(--background) 76%, #080e27);
+  --flow-bg: color-mix(in oklab, var(--background) 43%, #080e24);
   --flow-panel: color-mix(in oklab, var(--card) 86%, #152137);
   --flow-line: color-mix(in oklab, var(--foreground) 14%, #263c52);
   --flow-good: #66e1bc;

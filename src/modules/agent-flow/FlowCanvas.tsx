@@ -308,7 +308,7 @@ export function FlowCanvas({
                 ) : null}
                 {show.map(({ task, at }) => {
                   if (!overlaps(view, { x: box.x + at.x, y: box.y + at.y, width: NODE_WIDTH, height: NODE_HEIGHT })) return null;
-                  const trace = task?.run ? traces.get(traceKey(task.run) ?? "") : branch.trace;
+                  const trace = task ? traces.get(traceKey(task.run) ?? "") : branch.trace;
                   return (
                     <ActorNode key={task?.id ?? "root"} area={at} run={branch.run} name={task?.label ?? runName(branch.run, branch.trace?.name)}
                       actor={describeActor(branch, task, trace, time)} task={task?.id} selection={target}

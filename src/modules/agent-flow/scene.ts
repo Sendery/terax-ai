@@ -70,8 +70,12 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
     const usage = event.usage;
     if (!usage) continue;
     found = true;
-    if (usage.cumulative) tokens = usage.tokens;
-    else records.set(usage.key ?? event.id, usage);
+    if (usage.cumulative) {
+      tokens = usage.tokens;
+      if (usage.cost !== undefined && usage.cost !== null) cost = usage.cost;
+    } else {
+      records.set(usage.key ?? event.id, usage);
+    }
   }
   for (const usage of records.values()) {
     tokens += usage.tokens;
@@ -167,26 +171,37 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     }
     return { branch, width, height, nodes };
   });
-  const widest = Math.max(0, ...placed.map(({ width }) => width));
+  const ordered = [...placed].sort((a, b) => b.height - a.height || b.width - a.width);
+  const widest = Math.max(0, ...ordered.map(({ width }) => width));
   const area = placed.reduce((sum, { width, height }) => sum + (width + GUTTER) * (height + GUTTER), 0);
-  const rowWidth = Math.max(widest, Math.sqrt(area * 1.55));
-  let x = GUTTER;
-  let y = GUTTER;
-  let tallest = 0;
-  let right = 0;
-  const clusters: Cluster[] = [];
-  for (const group of placed) {
-    if (x > GUTTER && x + group.width > rowWidth + GUTTER) {
-      x = GUTTER;
-      y += tallest + GUTTER;
-      tallest = 0;
+  const ratio = 1.7;
+  const nominal = Math.sqrt(area * ratio);
+  const widths = placed.length > 140 ? [nominal] : [nominal, nominal * 1.2, nominal * 1.44, nominal * 1.68, nominal * 0.83];
+  let best: { clusters: Cluster[]; width: number; height: number } | undefined;
+  for (const candidate of widths) {
+    const rowWidth = Math.max(widest, candidate);
+    let x = GUTTER;
+    let y = GUTTER;
+    let tallest = 0;
+    let right = 0;
+    const clusters: Cluster[] = [];
+    for (const group of ordered) {
+      if (x > GUTTER && x + group.width > rowWidth + GUTTER) {
+        x = GUTTER;
+        y += tallest + GUTTER;
+        tallest = 0;
+      }
+      clusters.push({ branch: group.branch, box: { x, y, width: group.width, height: group.height }, nodes: group.nodes });
+      tallest = Math.max(tallest, group.height);
+      right = Math.max(right, x + group.width);
+      x += group.width + GUTTER;
     }
-    clusters.push({ branch: group.branch, box: { x, y, width: group.width, height: group.height }, nodes: group.nodes });
-    tallest = Math.max(tallest, group.height);
-    right = Math.max(right, x + group.width);
-    x += group.width + GUTTER;
+    const layout = { clusters, width: right + GUTTER, height: y + tallest + GUTTER };
+    if (!best || Math.max(layout.width / ratio, layout.height) < Math.max(best.width / ratio, best.height)) {
+      best = layout;
+    }
   }
-  return { clusters, width: right + GUTTER, height: y + tallest + GUTTER };
+  return best ?? { clusters: [], width: GUTTER, height: GUTTER };
 }
 
 export type FlowScene = ReturnType<typeof makeScene>;
