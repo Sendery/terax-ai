@@ -22,7 +22,7 @@ export function terminalTitle(pane: FlowTerminal) {
 }
 
 export type FlowNotice = Pick<AgentNotification, "id" | "at" | "tone" | "read"> & { label: string };
-export type FlowNodeStatus = { pending?: string; notice?: FlowNotice };
+export type FlowNodeStatus = { pending?: string; notice?: FlowNotice; working?: true };
 
 export function collectNodeStatus(
   panes: readonly FlowTerminal[], runs: readonly FlowRun[], notifications: readonly AgentNotification[],
@@ -44,6 +44,7 @@ export function collectNodeStatus(
     const run = byShell.get(pane.shellKey);
     if (!run || (pane.runKey && pane.runKey !== run.key)) continue;
     const session = pane.session;
+    const working = run.active && pane.runKey === run.key && session?.status === "working";
     const pending = session?.status === "waiting" && session.attentionSince != null
       ? session.lastReason === "permission" ? "Permission required"
         : session.lastReason === "question" ? "Question waiting" : "Waiting for input"
@@ -54,7 +55,7 @@ export function collectNodeStatus(
       const { id, at, tone, read, kind, reason } = recent;
       notice = { id, at, tone, read, label: notificationLabel(kind, reason) };
     }
-    if (pending || notice) statuses.set(run.key, { pending, notice });
+    if (pending || notice || working) statuses.set(run.key, { pending, notice, ...(working && { working: true }) });
   }
   return statuses;
 }

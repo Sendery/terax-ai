@@ -69,7 +69,14 @@ export type SessionDigest = {
   pendingQuestion: string | null;
   prs: { number: number; url: string; repo: string }[];
   artifacts: { url: string; title: string }[];
-  tasks: { kind: DigestTaskKind; label: string; startedAt: number }[];
+  tasks: {
+    id?: string;
+    kind: DigestTaskKind;
+    label: string;
+    startedAt: number;
+    lastActivityAt?: number;
+    cron?: string;
+  }[];
 };
 
 export type AgentSession = {

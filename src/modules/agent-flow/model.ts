@@ -1,4 +1,4 @@
-import type { AgentHarness } from "@/modules/agents/lib/types";
+import type { AgentHarness, DigestTaskKind } from "@/modules/agents/lib/types";
 import type { TabColor } from "@/modules/tabs/lib/tabColors";
 
 export const FLOW_LABELS = {
@@ -14,6 +14,10 @@ export const FLOW_LABELS = {
   reply: "Agent reply",
   tool: "Tool call",
   delegated: "Delegated",
+  "monitor-started": "Monitor started",
+  "background-started": "Background job started",
+  "loop-started": "Loop scheduled",
+  "task-activity": "Task activity",
   returned: "Returned",
   delivery: "Terminal input",
   "turn-ended": "Turn complete",
@@ -21,6 +25,9 @@ export const FLOW_LABELS = {
 } as const;
 
 export type FlowKind = keyof typeof FLOW_LABELS;
+export const PROCESS_LABELS = { monitor: "Monitor", background: "Background job", loop: "Loop" } as const;
+export type ProcessKind = Exclude<DigestTaskKind, "subagent">;
+const PROCESS_START = { monitor: "monitor-started", background: "background-started", loop: "loop-started" } as const;
 export type TraceProvider = "claude" | "pi" | "codex" | "copilot" | "agy";
 export type TraceEvent = {
   id: string;
@@ -59,7 +66,7 @@ export type FlowRun = {
   shellKey?: string;
   tabTitle: string;
   paneLabel?: string;
-  marker?: "shell" | "terax";
+  marker?: "shell" | "terax" | "background";
   color?: TabColor;
   startedAt: number;
   createdAt?: number;
@@ -102,14 +109,30 @@ export type FlowTask = {
   failed?: boolean;
   parentId?: string;
   run?: FlowRun;
+  running?: boolean;
+  process?: {
+    kind: ProcessKind;
+    state?: "running" | "listening" | "scheduled" | "paused";
+    lastActivityAt?: number;
+    cadence?: string;
+  };
 };
+
+export function taskStartKind(task: FlowTask): FlowKind {
+  return task.process ? PROCESS_START[task.process.kind] : "delegated";
+}
 
 export function flowTasks(events: readonly TraceEvent[]): FlowTask[] {
   const tasks = new Map<string, FlowTask>();
   for (const event of events) {
-    if (event.kind === "delegated") {
+    if (event.kind === "delegated" || event.kind === "monitor-started" || event.kind === "background-started") {
       const id = event.taskId ?? event.id;
-      tasks.set(id, { id, label: event.text || "Subagent", at: event.at });
+      const kind = event.kind === "monitor-started" ? "monitor" : event.kind === "background-started" ? "background" : undefined;
+      tasks.set(id, { id, label: event.text || (kind ? PROCESS_LABELS[kind] : "Subagent"), at: event.at,
+        ...(kind && { process: { kind } }) });
+    } else if (event.kind === "task-activity" && event.taskId) {
+      const process = tasks.get(event.taskId)?.process;
+      if (process) process.lastActivityAt = event.at;
     } else if ((event.kind === "returned" || event.kind === "error") && event.taskId) {
       const task = tasks.get(event.taskId);
       if (task) {

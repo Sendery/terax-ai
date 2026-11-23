@@ -1,12 +1,14 @@
+import { liveTasks } from "@/modules/agents/lib/describeEvent";
 import type { SessionDigest } from "@/modules/agents/lib/types";
 import {
-  beforeTime, FLOW_LABELS, flowTasks, sessionFamily,
+  beforeTime, FLOW_LABELS, flowTasks, sessionFamily, taskStartKind,
   type FlowDirection, type FlowKind, type FlowRun, type FlowTask, type TraceEvent,
 } from "@/modules/agent-flow/model";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
 export const NODE_WIDTH = 326;
 export const NODE_HEIGHT = 156;
+export const HORIZONTAL_EDGE_Y = 77;
 const NODE_ANCHOR = { x: 47, y: 55 };
 const SLOT_X = NODE_WIDTH + 26;
 const SLOT_Y = NODE_HEIGHT + 38;
@@ -43,8 +45,9 @@ export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" 
 
 export function signalTone(kind: FlowKind): SignalTone {
   if (kind === "reply" || kind === "user") return "message";
-  if (kind === "tool") return "tool";
+  if (kind === "tool" || kind === "task-activity") return "tool";
   if (kind === "delegated" || kind === "subagent" || kind === "delivery") return "branch";
+  if (kind === "monitor-started" || kind === "background-started" || kind === "loop-started") return "branch";
   if (kind === "returned" || kind === "finished" || kind === "turn-ended") return "return";
   if (kind === "attention" || kind === "notification" || kind === "error") return "attention";
   return "state";
@@ -79,11 +82,27 @@ export function branchFor(
   const digest = run.sessionId && latestDigest?.sessionId === run.sessionId ? latestDigest : undefined;
   const recorded = flowTasks(events);
   const family = sessionFamily(run, children);
-  const running = (digest?.tasks ?? []).filter((task) => task.kind === "subagent" &&
-    !recorded.some((entry) => entry.label === task.label && Math.abs(entry.at - task.startedAt) < 2000));
-  const tasks = family.length ? family : [...recorded, ...running.map((task, index) => ({
-    id: `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt,
-  }))];
+  const tasks = family.length ? [...family, ...recorded.filter((task) => task.process)] : recorded;
+  liveTasks(digest?.tasks ?? [], run.startedAt).forEach((task, index) => {
+    const known = tasks.find((entry) => (task.id && entry.id === task.id)
+      || ((entry.process?.kind ?? "subagent") === task.kind && entry.label === task.label
+        && Math.abs(entry.at - task.startedAt) < 2000));
+    if (task.kind === "subagent") {
+      if (known) known.running = known.returnedAt === undefined;
+      else if (!family.length) tasks.push({
+        id: task.id ?? `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt, running: true,
+      });
+      return;
+    }
+    const process: FlowTask["process"] = {
+      kind: task.kind,
+      state: task.kind === "monitor" ? "listening" : task.kind === "loop" ? "scheduled" : "running",
+      cadence: task.cron,
+      lastActivityAt: Math.max(known?.process?.lastActivityAt ?? 0, task.lastActivityAt ?? 0) || undefined,
+    };
+    if (known) known.process = process;
+    else tasks.push({ id: task.id ?? `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt, process });
+  });
   return { run, trace, events, digest, tasks, start: run.createdAt ?? events[0]?.at ?? run.startedAt };
 }
 
@@ -126,7 +145,17 @@ export function describeActor(
   let label = task ? "Delegated" : branch.run.projectHistory ? "History" : "Recorded";
   if (taskReturned) {
     tone = task?.failed ? "error" : "complete";
-    label = task?.failed ? "Failed" : "Returned";
+    label = task?.failed ? "Failed" : task?.process ? "Ended" : "Returned";
+  } else if (task?.process) {
+    if (time !== null) label = "Recorded";
+    else if (task.process.state === "running") { tone = "active"; label = "Running"; }
+    else if (task.process.state === "listening") label = "Listening";
+    else if (task.process.state === "scheduled") label = "Scheduled";
+    else if (task.process.state === "paused") label = "Paused";
+    else label = "Recorded";
+  } else if (time === null && task?.running) {
+    tone = "active";
+    label = "Working";
   } else if (status) {
     if (status.kind === "error") {
       tone = "error";
@@ -154,7 +183,7 @@ export function describeActor(
     ? branch.events.filter((event) => (time === null || event.at <= time)
       && (event.taskId === task.id || event.id === task.id))
     : events;
-  const signals = signalEvents(recordedSignals);
+  const signals = signalEvents(task?.process ? processEvents(task, recordedSignals, time) : recordedSignals);
   return {
     label, tone, activity: activity ?? signals[signals.length - 1],
     speech: speech ?? (summary ? { id: `summary:${summary}`, kind: "reply", at: digest?.lastReplyAt ?? branch.start, text: summary } : undefined),
@@ -164,20 +193,44 @@ export function describeActor(
   };
 }
 
+export function processEvents(task: FlowTask, events: readonly TraceEvent[], time: number | null): TraceEvent[] {
+  const kind = taskStartKind(task);
+  const activity = task.process?.lastActivityAt;
+  const result = [...events];
+  if (!result.some((event) => event.kind === kind) && (time === null || task.at <= time)) {
+    result.push({ id: `${task.id}:started`, at: task.at, kind, taskId: task.id });
+  }
+  if (activity !== undefined && activity > task.at && (time === null || activity <= time)
+      && !result.some((event) => event.at === activity && event.kind === "task-activity")) {
+    result.push({ id: `${task.id}:activity:${activity}`, at: activity, kind: "task-activity", taskId: task.id });
+  }
+  return result.sort((a, b) => a.at - b.at);
+}
+
 type Cluster = {
   branch: FlowBranch;
   box: Box;
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
-export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean) {
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number) {
   const a = { x: from.x + NODE_ANCHOR.x, y: from.y + NODE_ANCHOR.y };
   const b = { x: to.x + NODE_ANCHOR.x, y: to.y + NODE_ANCHOR.y };
   if (direction === "right") {
     const start = { x: a.x + 29, y: a.y };
     const end = { x: b.x - 29, y: b.y };
-    const rail = Math.min(from.y, to.y);
-    const d = `M ${start.x} ${start.y} C ${start.x + 24} ${start.y}, ${start.x + 16} ${rail}, ${start.x + 53} ${rail} H ${end.x - 53} C ${end.x - 14} ${rail}, ${end.x - 22} ${end.y}, ${end.x} ${end.y}`;
+    let track = from.y + HORIZONTAL_EDGE_Y;
+    let d = `M ${start.x} ${start.y} C ${start.x + 12} ${start.y}, ${start.x + 10} ${track}, ${start.x + 31} ${track}`;
+    if (clusterHeight !== undefined && to.x - from.x > SLOT_X) {
+      const exit = from.x + NODE_WIDTH + 13;
+      const bottom = clusterHeight - 8;
+      d += ` H ${exit - 8} Q ${exit} ${track} ${exit} ${track + 8} V ${bottom - 8} Q ${exit} ${bottom} ${exit + 8} ${bottom}`;
+      track = bottom;
+    }
+    const inlet = to.x - 6;
+    const bend = Math.min(12, Math.abs(end.y - track) / 2);
+    const step = Math.sign(end.y - track) * bend;
+    d += ` H ${inlet - bend} Q ${inlet} ${track} ${inlet} ${track + step} V ${end.y - step} Q ${inlet} ${end.y} ${inlet + bend} ${end.y} H ${end.x}`;
     const tip = returned ? start : end;
     const back = tip.x + (returned ? 7 : -7);
     return { d, arrow: `M ${back} ${tip.y - 4} L ${tip.x} ${tip.y} L ${back} ${tip.y + 4}` };
@@ -193,6 +246,7 @@ export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, r
 
 export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit") {
   const placed = branches.map((branch) => {
+    const header = CLUSTER_HEADER + (direction === "right" ? 16 : 0);
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
     for (const task of branch.tasks) {
@@ -205,7 +259,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     const breadth = Math.min(4, Math.max(...layers.map((layer) => layer.length)));
     const depth = layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
     const width = (direction === "down" ? breadth : depth) * SLOT_X + CLUSTER_PAD * 2 - (SLOT_X - NODE_WIDTH);
-    const height = (direction === "down" ? depth : breadth) * SLOT_Y + CLUSTER_HEADER + CLUSTER_PAD * 2 - (SLOT_Y - NODE_HEIGHT);
+    const height = (direction === "down" ? depth : breadth) * SLOT_Y + header + CLUSTER_PAD * 2 - (SLOT_Y - NODE_HEIGHT);
     const positions = new Map<string, Point>();
     const nodes: Cluster["nodes"] = [];
     let rank = 0;
@@ -216,8 +270,8 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         const count = Math.min(breadth, layer.length - row * breadth);
         const cross = (index % breadth) + (breadth - count) / 2;
         const at = direction === "down"
-          ? { x: CLUSTER_PAD + cross * SLOT_X, y: CLUSTER_HEADER + CLUSTER_PAD + (rank + row) * SLOT_Y }
-          : { x: CLUSTER_PAD + (rank + row) * SLOT_X, y: CLUSTER_HEADER + CLUSTER_PAD + cross * SLOT_Y };
+          ? { x: CLUSTER_PAD + cross * SLOT_X, y: header + CLUSTER_PAD + (rank + row) * SLOT_Y }
+          : { x: CLUSTER_PAD + (rank + row) * SLOT_X, y: header + CLUSTER_PAD + cross * SLOT_Y };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);

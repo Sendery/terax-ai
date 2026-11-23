@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::{
     agentdigest::{
-        claude_result_pending, claude_returned_tasks, codex_thread_name, parse_rfc3339_ms,
+        claude_result_pending, claude_task_notices, codex_thread_name, parse_rfc3339_ms,
     },
     agentsessions::{find_session_file, is_safe_session_id, sessions_root, AgentKind},
 };
@@ -50,6 +50,9 @@ enum Kind {
     Reply,
     Tool,
     Delegated,
+    MonitorStarted,
+    BackgroundStarted,
+    TaskActivity,
     Returned,
     TurnEnded,
     Error,
@@ -210,9 +213,7 @@ fn tool_file(provider: Provider, row: &Value, name: &str, occurrence: usize) -> 
 fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
     let raw = value.as_str().unwrap_or_default();
     if raw.contains("<task-notification>") {
-        for id in claude_returned_tasks(raw).filter(|id| is_safe_session_id(id)) {
-            emit(Kind::Returned, String::new(), Some(id.to_string()));
-        }
+        project_task_notices(raw, emit);
     } else if !raw.trim().is_empty() {
         emit(
             if role == "user" {
@@ -226,10 +227,27 @@ fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, O
     }
 }
 
+fn project_task_notices(raw: &str, emit: &mut impl FnMut(Kind, String, Option<String>)) {
+    for (id, status) in claude_task_notices(raw).filter(|(id, _)| is_safe_session_id(id)) {
+        let kind = match status {
+            Some("failed" | "killed") => Kind::Error,
+            Some("completed" | "stopped") => Kind::Returned,
+            _ => Kind::TaskActivity,
+        };
+        emit(kind, String::new(), Some(id.to_string()));
+    }
+}
+
 fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
     let kind = row["type"].as_str().unwrap_or_default();
     match provider {
         Provider::Claude | Provider::Pi => {
+            if provider == Provider::Claude && kind == "queue-operation" {
+                if row["operation"] == "enqueue" {
+                    project_task_notices(row["content"].as_str().unwrap_or_default(), emit);
+                }
+                return;
+            }
             let message = &row["message"];
             let role = message["role"].as_str().unwrap_or(kind);
             if !matches!(role, "user" | "assistant") || row["isSidechain"] == true {
@@ -255,13 +273,21 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
                                 ]),
                                 safe_key(&block["id"]),
                             );
+                        } else if provider == Provider::Claude
+                            && (name == "Monitor" || (name == "Bash" && block["input"]["run_in_background"] == true))
+                        {
+                            if let Some(id) = safe_key(&block["id"]) {
+                                let kind = if name == "Monitor" { Kind::MonitorStarted } else { Kind::BackgroundStarted };
+                                emit(kind, text(&block["input"]["description"]), Some(id));
+                            }
                         } else {
                             emit(Kind::Tool, name, None);
                         }
                     }
                     "tool_result" if !claude_result_pending(block) => {
                         if let Some(id) = safe_key(&block["tool_use_id"]) {
-                            emit(Kind::Returned, String::new(), Some(id));
+                            let kind = if block["is_error"] == true { Kind::Error } else { Kind::Returned };
+                            emit(kind, String::new(), Some(id));
                         }
                     }
                     _ => {}
@@ -711,6 +737,30 @@ pub async fn agent_flow_trace(
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn projects_background_tools_and_monitor_notifications_without_command_output() {
+        let mut events = Vec::new();
+        let mut emit = |kind, text, id| events.push((kind, text, id));
+        project(Provider::Claude, &serde_json::json!({
+            "type": "assistant", "message": { "role": "assistant", "content": [
+                { "type": "tool_use", "id": "m", "name": "Monitor", "input": { "description": "PR status" } },
+                { "type": "tool_use", "id": "b", "name": "Bash", "input": { "command": "opaque", "run_in_background": true } },
+            ] },
+        }), &mut emit);
+        for (id, state) in [("m", "running"), ("b", "failed")] {
+            project(Provider::Claude, &serde_json::json!({
+                "type": "queue-operation", "operation": "enqueue",
+                "content": format!("<task-notification><tool-use-id>{id}</tool-use-id><status>{state}</status><event>opaque</event></task-notification>"),
+            }), &mut emit);
+        }
+        assert_eq!(events, [
+            (Kind::MonitorStarted, "PR status".into(), Some("m".into())),
+            (Kind::BackgroundStarted, String::new(), Some("b".into())),
+            (Kind::TaskActivity, String::new(), Some("m".into())),
+            (Kind::Error, String::new(), Some("b".into())),
+        ]);
+    }
 
     #[test]
     fn projects_usage_and_explicit_file_paths_without_tool_arguments() {

@@ -18,6 +18,8 @@ import { branchFor, describeActor, eventLabel, makeScene, signalEvents, signalTo
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData } from "@/modules/agent-flow/useFlowData";
+import { backgroundBranch, useFlowShellJobs } from "@/modules/agent-flow/background";
+import { useWatchStore } from "@/modules/watchers/lib/watchStore";
 import "./agent-flow.css";
 
 const HISTORY_READ_AHEAD = 28;
@@ -45,14 +47,19 @@ export default function AgentFlow({
   const [pinnedRun, setPinnedRun] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
   const { runs, children, digests, panes, hidden, deliveries, notifications, loading, failed } = useFlowData(tabs, open, refresh);
+  const watches = useWatchStore((state) => open ? state.watches : null);
+  const runningWatches = useWatchStore((state) => open ? state.running : null);
+  const shellJobs = useFlowShellJobs(open);
+  const background = useMemo(() => backgroundBranch(watches ?? [], runningWatches ?? [], shellJobs), [watches, runningWatches, shellJobs]);
   const active = runs.filter((run) => run.active).length;
   const actualScope = scope ?? (active ? "active" : "all");
 
   const groups = useMemo(() => {
     const choices = new Map<string, string>();
     for (const run of runs) choices.set(run.group, run.projectHistory ? `Project: ${run.tabTitle}` : run.tabTitle);
+    if (background) choices.set(background.run.group, background.run.tabTitle);
     return [...choices].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [runs]);
+  }, [runs, background]);
   const groupKey = groups.some(([key]) => key === group) ? group : "";
   const inScope = useMemo(() => runs.filter((run) =>
     (!groupKey || run.group === groupKey) && (actualScope === "all" || run.active),
@@ -94,9 +101,10 @@ export default function AgentFlow({
   const visibleDeliveries = useMemo(() => resolveDeliveries(deliveries ?? [], panes, runs, hidden, null),
     [deliveries, panes, runs, hidden]);
   const relay = useMemo(() => relayGraph(visibleDeliveries, inScope, groupKey), [visibleDeliveries, inScope, groupKey]);
-  const graphBranches = useMemo(() => [...branches, ...relay.markers.map((run) => ({
+  const showBackground = background && (!groupKey || background.run.group === groupKey) ? background : undefined;
+  const graphBranches = useMemo(() => [...branches, ...(showBackground ? [showBackground] : []), ...relay.markers.map((run) => ({
     run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
-  }))], [branches, relay.markers]);
+  }))], [branches, showBackground, relay.markers]);
   const scene = useMemo(() => makeScene(graphBranches, direction, arrangement), [graphBranches, direction, arrangement]);
   const relations = useMemo(() => [
     ...relay.links.flatMap((link) => {
@@ -155,7 +163,8 @@ export default function AgentFlow({
   if (!open) return null;
 
   const visibleBranches = time === null ? branches : branches.filter((item) => item.start <= time);
-  const totalAgents = visibleBranches.reduce((sum, item) => sum + 1 + beforeTime(item.tasks, time).length, 0);
+  const totalAgents = visibleBranches.reduce((sum, item) => sum + 1 + beforeTime(item.tasks, time).filter((task) => !task.process).length, 0);
+  const totalTasks = graphBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => task.process).length, 0);
 
   function select(next: FlowSelection) {
     setSelection(next);
@@ -200,7 +209,7 @@ export default function AgentFlow({
       <header className="flow-topbar">
         <div className="flow-heading">
           <span className="flow-brand"><HugeiconsIcon icon={Flowchart01Icon} size={18} /></span>
-          <div><h1>Agent Flow</h1><p>{totalAgents} {totalAgents === 1 ? "agent" : "agents"} · {visibleBranches.length} {visibleBranches.length === 1 ? "session" : "sessions"}</p></div>
+          <div><h1>Agent Flow</h1><p>{totalAgents} {totalAgents === 1 ? "agent" : "agents"} · {visibleBranches.length} {visibleBranches.length === 1 ? "session" : "sessions"}{totalTasks ? ` · ${totalTasks} ${totalTasks === 1 ? "task" : "tasks"}` : ""}</p></div>
         </div>
         <div className="flow-controls">
           <select aria-label="Filter source tab" value={groupKey} onChange={(event) => {

@@ -6,8 +6,8 @@ import { relationDescription, relationLabel, type FlowRelation } from "@/modules
 import { accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
-import { beforeTime, FLOW_LABELS, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
-import { contextPercent, describeActor, eventLabel, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
+import { beforeTime, FLOW_LABELS, PROCESS_LABELS, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
+import { contextPercent, describeActor, eventLabel, processEvents, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
 import type { FlowTrace } from "@/modules/agent-flow/traceReader";
 
 const GROUPS = ["Activity", "Messages", "Tools", "Files"] as const;
@@ -50,9 +50,12 @@ export function FlowInspector({
   const [limit, setLimit] = useState(PAGE);
   const [stat, setStat] = useState<string | null>(null);
   const run = branch.run;
-  const relevant = useMemo(() => beforeTime(task?.run ? trace?.events ?? [] : branch.events, time).filter(
-    (event) => event.kind !== "usage" && (task?.run || !task || event.taskId === task.id || event.id === task.id),
-  ), [branch.events, task, time, trace?.events]);
+  const relevant = useMemo(() => {
+    const events = beforeTime(task?.run ? trace?.events ?? [] : branch.events, time).filter(
+      (event) => event.kind !== "usage" && (task?.run || !task || event.taskId === task.id || event.id === task.id),
+    );
+    return task?.process ? processEvents(task, events, time) : events;
+  }, [branch.events, task, time, trace?.events]);
   const actor = describeActor(branch, task, trace, time);
   const focused = relevant.find((event) => event.id === eventId);
   const filtered = [...relevant].reverse().filter((event) => {
@@ -84,7 +87,9 @@ export function FlowInspector({
       </header>
       <div className="flow-inspector-title">
         <h2>{task?.label ?? runName(run, trace?.name)}</h2>
-        <p>{displayAgent(run.agent)} <span>·</span> {task ? "Subagent" : pending ?? actor.label}</p>
+        {task?.process
+          ? <p>{PROCESS_LABELS[task.process.kind]} <span>·</span> {actor.label}{task.process.cadence ? ` · ${task.process.cadence}` : ""}</p>
+          : <p>{displayAgent(run.agent)} <span>·</span> {task ? "Subagent" : pending ?? actor.label}</p>}
         <div className="flow-inspector-actions">
           <button type="button" aria-pressed={pinned} onClick={onPin}>{pinned ? "Unpin session" : "Pin session"}</button>
           {task ? <button type="button" onClick={onRoot}>Go to session</button> : null}

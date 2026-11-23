@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { collectNodeStatus, fileCrossings, fileRelations, normalizedFile, relayGraph, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
-import type { AgentNotification, AgentSession } from "@/modules/agents/lib/types";
+import type { AgentNotification, AgentSession, SessionDigest } from "@/modules/agents/lib/types";
+import { backgroundBranch } from "@/modules/agent-flow/background";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
 import { branchFor, contextPercent, describeActor, edgeGeometry, fitCamera, laneCamera, makeScene, overlaps, signalTone, zoomCamera } from "@/modules/agent-flow/scene";
 import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
 import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
+import { createWatch } from "@/modules/watchers/lib/watch";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
 const child = historyRun({
@@ -85,10 +87,13 @@ describe("Agent Flow", () => {
     const result = edgeGeometry(from, to, "right", true);
     const path = delegation.d.split(" ");
     const start = Number(path[1]);
-    const end = Number(path[path.length - 2]);
+    const end = Number(path.at(-1));
     expect(start).toBeLessThan(end);
+    expect(delegation.d).toContain("107 77 H ");
     expect(delegation.arrow).toContain(`M ${end - 7} 51 L ${end} 55`);
     expect(result.arrow).toContain(`M ${start + 7} 51 L ${start} 55`);
+    const bypass = edgeGeometry(from, { x: 704, y: 150 }, "right", false, 324);
+    expect(bypass.d).toContain("347 316 H");
   });
 
   it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {
@@ -125,7 +130,7 @@ describe("Agent Flow", () => {
       },
     });
     const panes = [pane(1, "permission"), pane(2, "question"), pane(3, null)];
-    const runs = panes.map(({ shellKey, runKey }) => ({ ...root, key: runKey ?? "", shellKey, startedAt: 4 }));
+    const runs = panes.map(({ shellKey, runKey }) => ({ ...root, key: runKey ?? "", shellKey, startedAt: 4, active: true }));
     const notice = (leafId: number, at: number, extra: Partial<AgentNotification> = {}): AgentNotification => ({
       source: "terminal", tabId: 1, leafId, at, id: `notice:${leafId}:${at}`, agent: "claude",
       kind: "attention", tone: "question", reason: "question", tabTitle: "Mixed CLIs", tabColor: null, read: false, ...extra,
@@ -135,7 +140,8 @@ describe("Agent Flow", () => {
     ]);
     expect(statuses.get("run:1")).toEqual({ pending: "Permission required", notice: undefined });
     expect(statuses.get("run:2")).toMatchObject({ pending: "Question waiting", notice: { id: "notice:2:12", tone: "question" } });
-    expect(statuses.has("run:3")).toBe(false);
+    expect(statuses.get("run:3")).toEqual({ pending: undefined, notice: undefined, working: true });
+    expect(collectNodeStatus(panes, [{ ...runs[2], active: false }], []).has("run:3")).toBe(false);
   });
 
   it("resolves explicit deliveries to the recorded session and excludes private endpoints", () => {
@@ -219,6 +225,40 @@ describe("Agent Flow", () => {
     expect(actor.signals.map((event) => signalTone(event.kind))).toEqual(["branch", "return"]);
     expect(actor.speech).toBeUndefined();
     expect(describeActor(branch, branch.tasks[0], undefined, 12).signals.map(({ id }) => id)).toEqual(["1"]);
+  });
+
+  it("joins live process information to recorded tasks and preserves replay boundaries", () => {
+    const run = { ...root, harness: "claude" as const, startedAt: 20_000, leafId: 11, active: true };
+    run.events = [
+      { id: "m", at: 21_000, kind: "monitor-started", taskId: "monitor", text: "Review status" },
+      { id: "a", at: 26_000, kind: "task-activity", taskId: "monitor" },
+      { id: "b", at: 23_000, kind: "background-started", taskId: "script", text: "Package build" },
+      { id: "x", at: 27_000, kind: "error", taskId: "script" },
+    ];
+    const digest: SessionDigest = {
+      sessionId: "root", name: null, recap: null, recapAt: null, lastReply: null, lastReplyAt: null,
+      goal: null, pendingQuestion: null, prs: [], artifacts: [],
+      tasks: [
+        { id: "monitor", kind: "monitor", label: "Review status", startedAt: 21_000, lastActivityAt: 28_000 },
+        { id: "old", kind: "background", label: "Prior process", startedAt: 1 },
+      ],
+    };
+    const branch = branchFor(run, [], { 11: digest }, new Map());
+    expect(branch.tasks.map(({ id }) => id)).toEqual(["monitor", "script"]);
+    const [monitor, script] = branch.tasks;
+    expect(describeActor(branch, monitor, undefined, null)).toMatchObject({ label: "Listening", activity: { at: 28_000 } });
+    expect(describeActor(branch, monitor, undefined, 27_000)).toMatchObject({ label: "Recorded", activity: { at: 26_000 } });
+    expect(describeActor(branch, script, undefined, null)).toMatchObject({ label: "Failed", tone: "error" });
+  });
+
+  it("puts registered watches and native background jobs on a separate activity track", () => {
+    const watch = createWatch({ name: "PR status", command: "check", intervalSeconds: 60, onChange: "notify" }, "pr", 100);
+    const branch = backgroundBranch([{ ...watch, lastRunAt: 160 }], ["pr"], [{ handle: 7, started_at_ms: 120 }]);
+    if (!branch) throw new Error("Background branch missing");
+    expect(branch.tasks[0].process).toEqual({ kind: "monitor", state: "running", cadence: "Every 1 min", lastActivityAt: 160 });
+    expect(buildTimeline([branch], new Map()).lanes[0]).toMatchObject({ title: "Terax tasks", active: true, marks: [
+      { at: 100, kind: "monitor-started" }, { at: 120, kind: "background-started" }, { at: 160, kind: "task-activity" },
+    ] });
   });
 
   it("rewinds a delegation independently of its result", () => {

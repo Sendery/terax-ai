@@ -1,4 +1,4 @@
-import type { FlowKind } from "@/modules/agent-flow/model";
+import { taskStartKind, type FlowKind } from "@/modules/agent-flow/model";
 import type { ResolvedDelivery } from "@/modules/agent-flow/coordination";
 import type { FlowBranch } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
@@ -27,7 +27,7 @@ export function buildTimeline(
     if (!lane) {
       lane = {
         key: shell, title: run.paneLabel ? `${run.tabTitle} · ${run.paneLabel}` : run.tabTitle, description: trace?.name ?? run.name,
-        color: run.color, active: !!run.active, events: new Map(),
+        color: run.color, active: !!run.active || tasks.some((task) => task.process?.state === "running"), events: new Map(),
       };
       lanes.set(shell, lane);
     } else if (run.active) {
@@ -40,10 +40,12 @@ export function buildTimeline(
       row.set(at, mark);
       aggregate.set(at, mark);
     };
-    add({ at: start, kind: "started" });
+    if (run.marker !== "background") add({ at: start, kind: "started" });
     for (const event of events) add(event);
     for (const task of tasks) {
-      add({ at: task.at, kind: "delegated" });
+      add({ at: task.at, kind: taskStartKind(task) });
+      const activity = task.process?.lastActivityAt;
+      if (activity !== undefined && activity > task.at) add({ at: activity, kind: "task-activity" });
       if (task.returnedAt !== undefined) add({ at: task.returnedAt, kind: task.failed ? "error" : "returned" });
       for (const event of traces.get(traceKey(task.run) ?? "")?.events ?? []) add(event);
     }

@@ -78,12 +78,17 @@ pub enum TaskKind {
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveTask {
+    pub id: String,
     pub kind: TaskKind,
     pub label: String,
     /// Epoch milliseconds, so the webview can drop tasks older than the
     /// process now running in the pane: a resumed session inherits entries
     /// whose completion the previous process never lived to write.
     pub started_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_activity_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cron: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq, Eq)]
@@ -113,6 +118,8 @@ struct OpenTask {
     label: String,
     started_at: u64,
     expires_at: Option<u64>,
+    last_activity_at: Option<u64>,
+    cron: Option<String>,
 }
 
 /// Folds transcript lines into a digest. Pure: it never touches the disk, so
@@ -200,15 +207,13 @@ impl DigestBuilder {
         if !keys.iter().any(|key| line.contains(key)) {
             return;
         }
-        // Claude delivers a finished task through a queue operation, a queued
-        // command attachment or a user message depending on timing, so the
-        // notification is found in the raw line rather than in one envelope.
-        if self.agent == DigestAgent::Claude && line.contains("<task-notification>") {
-            self.close_notified(line);
-        }
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             return;
         };
+        // Claude uses different envelopes for the same task notification.
+        if self.agent == DigestAgent::Claude && line.contains("<task-notification>") {
+            self.update_notified(line, timestamp_ms(&value));
+        }
         match self.agent {
             DigestAgent::Claude => self.claude(&value),
             DigestAgent::Pi => self.pi(&value),
@@ -233,9 +238,12 @@ impl DigestBuilder {
                 .iter()
                 .filter(|task| task.expires_at.is_none_or(|at| at > now_ms))
                 .map(|task| ActiveTask {
+                    id: task.id.clone(),
                     kind: task.kind,
                     label: task.label.clone(),
                     started_at: task.started_at,
+                    last_activity_at: task.last_activity_at,
+                    cron: task.cron.clone(),
                 })
                 .collect(),
         }
@@ -344,12 +352,13 @@ impl DigestBuilder {
         }
     }
 
-    /// Closes every task a `<task-notification>` reports as finished. The
-    /// notification names the tool use that started it, which is the key the
-    /// task was opened under.
-    fn close_notified(&mut self, text: &str) {
-        for id in claude_returned_tasks(text) {
-            self.open.retain(|task| task.id != id);
+    fn update_notified(&mut self, text: &str, at: Option<u64>) {
+        for (id, status) in claude_task_notices(text) {
+            if status.is_some_and(|status| TERMINAL_TASK_STATES.contains(&status)) {
+                self.open.retain(|task| task.id != id);
+            } else if let Some((task, at)) = self.open.iter_mut().find(|task| task.id == id).zip(at) {
+                task.last_activity_at = Some(task.last_activity_at.unwrap_or(task.started_at).max(at));
+            }
         }
     }
 
@@ -388,7 +397,11 @@ impl DigestBuilder {
                         }
                         if let Some((label, started)) = self.loop_calls.remove(call) {
                             if let Some(loop_id) = created_loop_id(&text) {
-                                self.open_task(&format!("loop:{loop_id}"), TaskKind::Loop, label, started, None);
+                                let id = format!("loop:{loop_id}");
+                                self.open_task(&id, TaskKind::Loop, label, started, None);
+                                if let Some(task) = self.open.iter_mut().find(|task| task.id == id) {
+                                    task.cron = created_loop_cron(&text);
+                                }
                             }
                         }
                     }
@@ -489,7 +502,9 @@ impl DigestBuilder {
         if self.open.len() >= MAX_OPEN_TASKS {
             self.open.remove(0);
         }
-        self.open.push(OpenTask { id: id.to_string(), kind, label, started_at, expires_at });
+        self.open.push(OpenTask {
+            id: id.to_string(), kind, label, started_at, expires_at, last_activity_at: None, cron: None,
+        });
     }
 }
 
@@ -535,10 +550,10 @@ pub(crate) fn claude_result_pending(block: &Value) -> bool {
     block["is_error"] != true && ASYNC_MARKERS.iter().any(|marker| text.contains(marker))
 }
 
-pub(crate) fn claude_returned_tasks(text: &str) -> impl Iterator<Item = &str> {
+pub(crate) fn claude_task_notices(text: &str) -> impl Iterator<Item = (&str, Option<&str>)> {
     text.split("<task-notification>").skip(1).filter_map(|block| {
-        let status = tag(block, "status")?;
-        TERMINAL_TASK_STATES.contains(&status).then(|| tag(block, "tool-use-id")).flatten()
+        let block = block.split("</task-notification>").next()?;
+        Some((tag(block, "tool-use-id")?, tag(block, "status")))
     })
 }
 
@@ -566,6 +581,14 @@ fn created_loop_id(text: &str) -> Option<&str> {
     let rest = text.split("Loop #").nth(1)?;
     let id: &str = rest.split(|c: char| !c.is_ascii_alphanumeric()).next()?;
     (!id.is_empty() && rest[id.len()..].trim_start().starts_with("created")).then_some(id)
+}
+
+fn created_loop_cron(text: &str) -> Option<String> {
+    let (_, schedule) = text.lines().find(|line| created_loop_id(line).is_some())?.split_once("cron:")?;
+    let fields: Vec<_> = schedule.split_whitespace().take(5).collect();
+    (fields.len() == 5 && fields.iter().all(|field| {
+        field.len() <= 30 && field.bytes().all(|byte| byte.is_ascii_digit() || b"*,-/".contains(&byte))
+    })).then(|| fields.join(" "))
 }
 
 /// Whether a tool call opens a pull request: `gh pr create` in a shell, or a
@@ -1016,9 +1039,12 @@ mod tests {
         let d = fold(DigestAgent::Claude, &[
             MONITOR_USE,
             MONITOR_STARTED,
-            r#"{"type":"user","message":{"role":"user","content":"<task-notification><tool-use-id>toolu_m</tool-use-id><event>PR 1 merged</event></task-notification>"}}"#,
+            r#"{"type":"user","timestamp":"2026-09-29T09:55:00Z","message":{"role":"user","content":"<task-notification><tool-use-id>toolu_m</tool-use-id><event>PR 1 merged</event></task-notification>"}}"#,
         ]);
         assert_eq!(d.tasks.len(), 1);
+        assert_eq!(d.tasks[0].id, "toolu_m");
+        assert_eq!(d.tasks[0].last_activity_at, parse_rfc3339_ms("2026-09-29T09:55:00Z"));
+        assert_eq!(d.tasks[0].cron, None);
     }
 
     #[test]
@@ -1078,6 +1104,7 @@ mod tests {
         assert_eq!(d.last_reply.as_deref(), Some("Done with phase one."));
         assert_eq!(d.tasks.len(), 1);
         assert_eq!(d.tasks[0].kind, TaskKind::Loop);
+        assert_eq!(d.tasks[0].cron.as_deref(), Some("*/15 * * * *"));
         assert_eq!(d.prs[0].repo, "Sendery/terax-ai");
     }
 

@@ -2,21 +2,22 @@ import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
   memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
-import { ArrowDown01Icon, ArrowRight01Icon, ArrowUp01Icon, File01Icon, Flowchart01Icon, MapsIcon, Message01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, ArrowUp01Icon, File01Icon, Flowchart01Icon, MapsIcon, Message01Icon, Radar01Icon, RepeatIcon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
 import { relationDescription, relationLabel, type FlowNodeStatus, type FlowRelation } from "@/modules/agent-flow/coordination";
 import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
-import type { FlowDirection, FlowRun, FlowTask, TraceEvent } from "@/modules/agent-flow/model";
+import { PROCESS_LABELS, type FlowDirection, type FlowRun, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
 import {
-  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, laneCamera, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
+  contextPercent, describeActor, edgeGeometry, eventLabel, fitCamera, HORIZONTAL_EDGE_Y, laneCamera, NODE_HEIGHT, NODE_WIDTH, overlaps, zoomCamera,
   type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowScene, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 
 const number = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+const activityTime = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 const initialCamera = { x: 0, y: 0, scale: 1 };
 
 export function accent(run: FlowRun): CSSProperties {
@@ -91,31 +92,37 @@ const ActorNode = memo(function ActorNode({
   const str = (event?: TraceEvent) => onSelect({ run: run.key, ...(task ? { task } : {}), ...(event ? { event: event.id } : {}) });
   const pending = nodeStatus?.pending;
   const notice = nodeStatus?.notice;
-  const stateLabel = pending ?? (run.marker ? (run.marker === "shell" ? "Shell" : "Command source") : actor.label);
+  const process = entry?.process;
+  const isMarker = !entry && !!run.marker;
+  const activityAt = process ? actor.signals.filter(({ kind }) => kind === "task-activity").at(-1)?.at : undefined;
+  const processIcon = process?.kind === "monitor" ? Radar01Icon : process?.kind === "loop" ? RepeatIcon : TerminalIcon;
+  const markerLabel = run.marker === "shell" ? "Shell" : run.marker === "terax" ? "Command source" : "Terax tasks";
+  const stateLabel = pending ?? (nodeStatus?.working ? "Working" : isMarker ? markerLabel : actor.label);
   const status = pending ?? (actor.activity && !actor.speech ? eventLabel(actor.activity) : stateLabel);
   const flash = notice && recent(notice.at, time, clock);
   const animate = recent(actor.activity?.at, time, clock);
   const context = actor.usage?.context;
   return (
-    <div className="flow-actor" data-tone={pending ? "waiting" : actor.tone} data-compact={compact}
-      data-kind={run.marker ?? (task ? "subagent" : "agent")} data-notice={notice?.tone}
+    <div className="flow-actor" data-tone={pending ? "waiting" : nodeStatus?.working ? "active" : actor.tone} data-compact={compact}
+      data-kind={process ? "process" : isMarker ? run.marker : task ? "subagent" : "agent"} data-notice={notice?.tone}
       style={{ left: area.x, top: area.y, width: NODE_WIDTH, height: NODE_HEIGHT,
         "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
       <button type="button" className="flow-node" aria-label={`${name}, ${stateLabel}, ${run.tabTitle}${notice && !notice.read ? `, ${notice.label}` : ""}`}
         aria-pressed={current} onClick={() => str()}>
         <span className="flow-beacon">
-          {ambient && !run.marker ? (
+          {ambient && !isMarker ? (
             <>
               <i className="flow-beacon-aura" aria-hidden="true" />
               <i className="flow-node-orbit" data-idle={actor.tone !== "active"} aria-hidden="true" />
               <i className="flow-node-satellite" aria-hidden="true" />
             </>
           ) : null}
-          {!compact && !run.marker ? <BeaconSignals actor={actor} /> : null}
+          {!compact && !isMarker ? <BeaconSignals actor={actor} /> : null}
           {animate && !flash ? <i key={actor.activity?.id} className="flow-beacon-wave" aria-hidden="true" /> : null}
           {flash ? <i key={notice.id} className="flow-notice-wave" aria-hidden="true" /> : null}
-          <span className="flow-glyph">{run.marker
-            ? <HugeiconsIcon icon={run.marker === "terax" ? Flowchart01Icon : TerminalIcon} size={21} />
+          <span className="flow-glyph">{process
+            ? <HugeiconsIcon icon={processIcon} size={21} />
+            : isMarker ? <HugeiconsIcon icon={run.marker === "shell" ? TerminalIcon : Flowchart01Icon} size={21} />
             : <AgentIcon agent={run.agent} harness={run.harness} size={23} />}</span>
           <span className="flow-node-status" aria-hidden="true" />
           {notice && !notice.read ? <span className="flow-notice-mark" aria-hidden="true" title={notice.label} /> : null}
@@ -130,9 +137,16 @@ const ActorNode = memo(function ActorNode({
           <span className="flow-node-cost" title="Cost reported by this session">${actor.usage.cost.toFixed(actor.usage.cost < 1 ? 3 : 2)}</span>
         ) : null}
       </button>
-      {!compact && !run.marker ? (
+      {!compact && !isMarker ? (
         <div className="flow-node-events">
-          {actor.speech?.text ? (
+          {entry && process ? (
+            <div className="flow-activity-label flow-process-label">
+              <span>{PROCESS_LABELS[process.kind]}</span>
+              <strong>{process.cadence ?? stateLabel}</strong>
+              {activityAt !== undefined ? <small>Last activity {activityTime.format(activityAt)}</small>
+                : entry.at > 0 ? <small>Started {activityTime.format(entry.at)}</small> : null}
+            </div>
+          ) : actor.speech?.text ? (
             <button type="button" className="flow-speech" key={actor.speech.id}
               data-new={recent(actor.speech.at, time, clock)}
               data-current={current && selection?.event === actor.speech.id}
@@ -375,6 +389,7 @@ export function FlowCanvas({
   const pairOffsets = new Map<string, number>();
   const clock = Date.now();
   let ambientSlots = time === null && !compact ? 16 : 0;
+  let pulseSlots = 16;
   return (
     <div className="flow-canvas" data-ambient={time === null}>
       <section className="flow-viewport" ref={viewport} aria-label="Agent map"
@@ -384,7 +399,9 @@ export function FlowCanvas({
           style={{ transform: `translate(${camera.x * 0.085}px, ${camera.y * 0.085}px)` }}><i /><i /></div>
         <div className="flow-world" data-detail={compact ? "compact" : detailed ? "full" : "conversation"} data-direction={direction}
           data-layout={arrangement}
-          style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
+          style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
+            "--flow-live-stroke": `${1.5 / camera.scale}px`,
+            "--flow-horizontal-edge": `${HORIZONTAL_EDGE_Y}px` } as CSSProperties}>
           {visibleRelations.map((relation) => {
             const from = visibleBoxes.get(relation.from);
             const to = visibleBoxes.get(relation.to);
@@ -399,8 +416,16 @@ export function FlowCanvas({
           {visible.map(({ branch, box, nodes }) => {
             if (time !== null && branch.start > time) return null;
             const show = nodes.filter(({ task }) => !task || time === null || task.at <= time);
+            const status = time === null ? nodeStatus.get(branch.run.key) : undefined;
+            const processCount = show.filter(({ task }) => task?.process).length;
+            const agentCount = show.length - processCount - Number(!!branch.run.marker);
+            const operating = time === null && (!!status?.working || show.some(({ task }) =>
+              task && task.returnedAt === undefined && (task.running || task.process?.state === "running")));
+            const pulse = operating && pulseSlots > 0;
+            if (pulse) pulseSlots--;
             return (
               <section key={branch.run.key} className="flow-cluster" data-active={!!branch.run.active && time === null}
+                data-operating={operating} data-pulse={pulse}
                 data-selected={target?.run === branch.run.key}
                 data-pinned={pinnedRun === branch.run.key}
                 data-linked={activeRelation?.from === branch.run.key || activeRelation?.to === branch.run.key}
@@ -408,13 +433,17 @@ export function FlowCanvas({
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
                 <div className="flow-cluster-tag"><span />{branch.run.tabTitle}{branch.run.paneLabel ? ` · ${branch.run.paneLabel}` : ""}
-                  {!branch.run.marker ? <small>{pinnedRun === branch.run.key ? "Pinned · " : ""}{show.length} {show.length === 1 ? "agent" : "agents"}</small> : null}</div>
+                  {operating ? <b className="flow-cluster-live">Working</b> : null}
+                  {(!branch.run.marker || processCount > 0) ? <small>
+                    {[pinnedRun === branch.run.key ? "Pinned" : "", agentCount ? `${agentCount} ${agentCount === 1 ? "agent" : "agents"}` : "",
+                      processCount ? `${processCount} ${processCount === 1 ? "task" : "tasks"}` : ""].filter(Boolean).join(" · ")}
+                  </small> : null}</div>
                 {show.length > 1 ? (
                   <svg className="flow-connections" width={box.width} height={box.height} aria-hidden="true">
                     {show.map(({ task, parent, at }) => {
                       if (!parent || !task) return null;
                       const returned = task.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-                      const { d, arrow } = edgeGeometry(parent, at, direction, returned);
+                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, box.height);
                       const transit = recent(returned ? task.returnedAt : task.at, time, clock);
                       return (
                         <g key={task.id}>
@@ -436,7 +465,7 @@ export function FlowCanvas({
                       entry={task} trace={trace} selection={target}
                       compact={compact} detailed={detailed || (target?.run === branch.run.key && !compact)}
                       ambient={ambient} clock={clock} time={time} onSelect={onSelect}
-                      nodeStatus={!task && time === null ? nodeStatus.get(branch.run.key) : undefined} />
+                      nodeStatus={!task ? status : undefined} />
                   );
                 })}
               </section>

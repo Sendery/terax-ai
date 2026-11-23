@@ -257,6 +257,29 @@
   border-style: dashed;
 }
 
+.flow-cluster[data-operating="true"] {
+  --flow-live-outline: color-mix(in oklab, var(--flow-accent) 78%, var(--foreground));
+  border-color: var(--flow-live-outline);
+  box-shadow: inset 0 0 0 var(--flow-live-stroke) var(--flow-live-outline);
+}
+
+.flow-cluster[data-pulse="true"]::before {
+  content: "";
+  position: absolute;
+  inset: calc(-1.5 * var(--flow-live-stroke));
+  border-radius: inherit;
+  box-shadow: 0 0 0 var(--flow-live-stroke) var(--flow-live-outline),
+    0 0 calc(4 * var(--flow-live-stroke)) var(--flow-accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: flow-live-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes flow-live-pulse {
+  0%, 100% { opacity: 0.12; }
+  46% { opacity: 0.86; }
+}
+
 .flow-relation-line,
 .flow-relation-label {
   --flow-link: var(--flow-tool);
@@ -361,6 +384,14 @@
   margin-inline-start: auto;
   color: var(--flow-dim);
   font: 11px/1.4 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-cluster-live {
+  color: var(--flow-live-outline);
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 55%, transparent);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font: 10px/1.25 "JetBrains Mono", ui-monospace, monospace;
 }
 
 .flow-connections {
@@ -760,6 +791,13 @@
   background: color-mix(in oklab, var(--flow-accent) 12%, var(--flow-panel));
 }
 
+.flow-process-label small {
+  color: var(--flow-dim);
+  font: 10px/1.25 "JetBrains Mono", ui-monospace, monospace;
+  display: block;
+  margin-top: 4px;
+}
+
 .flow-speech::before {
   position: absolute;
   left: -6px;
@@ -771,6 +809,33 @@
   border-left: inherit;
   border-bottom: inherit;
   background: inherit;
+}
+
+.flow-world[data-direction="right"] .flow-node-events {
+  top: 0;
+  bottom: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.flow-world[data-direction="right"] .flow-node-events button {
+  pointer-events: auto;
+}
+
+.flow-world[data-direction="right"] .flow-node-events > :is(.flow-speech, .flow-activity-label) {
+  position: absolute;
+  bottom: calc(100% - var(--flow-horizontal-edge) + 14px);
+}
+
+.flow-world[data-direction="right"] .flow-speech::before {
+  top: auto;
+  bottom: 4px;
+}
+
+.flow-world[data-direction="right"] .flow-tool-links {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--flow-horizontal-edge) + 16px);
 }
 
 .flow-speech:hover,
