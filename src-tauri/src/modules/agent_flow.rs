@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs::{self, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
@@ -168,7 +168,7 @@ fn explicit_file(args: &Value) -> Option<String> {
     })
 }
 
-fn tool_file(provider: Provider, row: &Value, name: &str) -> Option<String> {
+fn tool_file(provider: Provider, row: &Value, name: &str, occurrence: usize) -> Option<String> {
     if !matches!(
         name.to_ascii_lowercase().as_str(),
         "read" | "write" | "edit" | "view" | "read_file" | "write_file" | "view_file" | "edit_file" | "replace"
@@ -176,11 +176,14 @@ fn tool_file(provider: Provider, row: &Value, name: &str) -> Option<String> {
         return None;
     }
     match provider {
-        Provider::Claude | Provider::Pi => row["message"]["content"]
-            .as_array()?
-            .iter()
-            .filter(|block| block["name"] == name)
-            .find_map(|block| explicit_file(&block["input"]).or_else(|| explicit_file(&block["arguments"]))),
+        Provider::Claude | Provider::Pi => {
+            let block = row["message"]["content"]
+                .as_array()?
+                .iter()
+                .filter(|block| block["name"] == name)
+                .nth(occurrence)?;
+            explicit_file(&block["input"]).or_else(|| explicit_file(&block["arguments"]))
+        }
         Provider::Codex => {
             let args: Value = serde_json::from_str(row["payload"]["arguments"].as_str()?).ok()?;
             explicit_file(&args)
@@ -583,15 +586,24 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
             continue;
         };
         let mut index = 0;
+        let mut tool_occurrences = HashMap::new();
         project(provider, &row, &mut |kind, text, task_id| {
             if events.len() == MAX_EVENTS {
                 events.pop_front();
                 limited = true;
             }
+            let file = if kind == Kind::Tool {
+                let occurrence = tool_occurrences.entry(text.clone()).or_insert(0);
+                let file = tool_file(provider, &row, &text, *occurrence);
+                *occurrence += 1;
+                file
+            } else {
+                None
+            };
             events.push_back(Event {
                 id: format!("{line_offset}:{index}"),
                 at,
-                file: if kind == Kind::Tool { tool_file(provider, &row, &text) } else { None },
+                file,
                 kind,
                 text,
                 task_id,
@@ -685,6 +697,32 @@ pub async fn agent_flow_trace(
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn projects_usage_and_explicit_file_paths_without_tool_arguments() {
+        let mut file = tempfile::tempfile().unwrap();
+        writeln!(file, "{}", serde_json::json!({
+            "type": "assistant", "timestamp": "2026-11-23T10:00:00Z",
+            "message": {
+                "id": "msg_1", "usage": {"input_tokens": 3, "output_tokens": 4, "cache_read_input_tokens": 20},
+                "content": [
+                    {"type": "tool_use", "name": "Read", "input": {"file_path": "src/scene.ts"}},
+                    {"type": "tool_use", "name": "Read", "input": {"file_path": "src/canvas.ts"}},
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "hidden", "path": "hidden"}}
+                ]
+            }
+        })).unwrap();
+        let trace = read_trace(file, Provider::Claude, 0).unwrap();
+        assert_eq!(trace.events[0].file.as_deref(), Some("src/scene.ts"));
+        assert_eq!(trace.events[1].file.as_deref(), Some("src/canvas.ts"));
+        assert_eq!(trace.events[2].file, None);
+        assert_eq!(trace.events[3].usage.as_ref().unwrap().tokens, 27);
+        let rollup = usage_for(Provider::Codex, &serde_json::json!({
+            "type":"event_msg", "payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":123}}}
+        })).unwrap();
+        assert!(rollup.cumulative);
+        assert_eq!(rollup.tokens, 123);
+    }
 
     #[test]
     fn incremental_trace_retries_partial_lines_and_links_claude_delegation() {

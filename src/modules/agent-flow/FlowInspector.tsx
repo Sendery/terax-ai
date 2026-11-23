@@ -81,7 +81,7 @@ export function FlowInspector({
           ) : null}
         </div>
       </div>
-      <div className="flow-inspector-tabs" aria-label="Detail views">
+      <div className="flow-inspector-tabs" role="group" aria-label="Detail views">
         {GROUPS.map((entry) => <button type="button" key={entry} aria-pressed={mode === entry}
           onClick={() => { setMode(entry); setLimit(PAGE); setStat(null); }}>{entry}</button>)}
       </div>

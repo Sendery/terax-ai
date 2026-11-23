@@ -196,7 +196,8 @@ export default function AgentFlow({
             <HugeiconsIcon icon={TerminalIcon} size={15} /> Agents <span>{branches.length}</span>
           </button>
           {navigator ? (
-            <div className="flow-nav-panel" onKeyDown={(event) => { if (event.key === "Escape") setNavigator(false); }}>
+            <div className="flow-nav-panel" role="dialog" aria-label="Find an agent"
+              onKeyDown={(event) => { if (event.key === "Escape") setNavigator(false); }}>
               <input type="search" aria-label="Find an agent session" placeholder="Find a session…" value={search}
                 onChange={(event) => setSearch(event.target.value)} />
               <ul>

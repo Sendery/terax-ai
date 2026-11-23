@@ -4,7 +4,7 @@ import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { loadFlowJournal, flowRunKey, useFlowJournal } from "@/modules/agent-flow/journal";
 import {
-  historyRun, isTraceProvider, mergeRuns,
+  historyRun, mergeRuns,
   type FlowRun, type HistorySession, type TraceEvent,
 } from "@/modules/agent-flow/model";
 import { collectTerminalSources } from "@/modules/session-graph/lib/terminalSources";
@@ -146,7 +146,21 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       if (tab?.kind !== "terminal") return [run];
       return tab.private ? [] : [{ ...run, tabTitle: labelFor(tab), color: tab.color }];
     });
+    const publicProjects = new Set<string>(JSON.parse(sourceKey || "[]"));
+    const liveByProject = new Map<string, number>();
+    for (const run of allowed) {
+      if (run.active && run.cwd) {
+        const key = `${run.harness}:${run.cwd}`;
+        liveByProject.set(key, (liveByProject.get(key) ?? 0) + 1);
+      }
+    }
     const attributed = allowed.map((run) => {
+      const digest = run.leafId === undefined ? undefined : digests?.[run.leafId];
+      if (!run.sessionId && run.active && run.cwd && publicProjects.has(run.cwd) && digest?.sessionId
+        && liveByProject.get(`${run.harness}:${run.cwd}`) === 1
+        && Math.max(digest.lastReplyAt ?? 0, digest.recapAt ?? 0) >= run.startedAt) {
+        return { ...run, sessionId: digest.sessionId, name: digest.name ?? run.name };
+      }
       if (run.sessionId || !run.cwd ||
         (run.harness !== "codex" && run.harness !== "copilot" && run.harness !== "agy")) return run;
       const closeToStart = (at: number, other: FlowRun) => Math.abs(other.startedAt - at) <= 15_000;
@@ -158,7 +172,6 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       );
       if (matching.length !== 1) return run;
       const sessionId = matching[0].sessionId;
-      const digest = run.leafId === undefined ? undefined : digests?.[run.leafId];
       return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
     });
     return mergeRuns(attributed, candidates);

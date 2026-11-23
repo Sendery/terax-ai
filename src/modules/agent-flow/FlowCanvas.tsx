@@ -1,6 +1,6 @@
 import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
-  useEffect, useLayoutEffect, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
 } from "react";
 import { ArrowDown01Icon, ArrowLeft01Icon, Flowchart01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -128,7 +128,7 @@ export function FlowCanvas({
   const fittedBounds = useRef("");
   const focused = useRef<number | null>(null);
 
-  function commit(next: Camera, immediate = false) {
+  const commit = useCallback((next: Camera, immediate = false) => {
     cameraRef.current = next;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     if (immediate) {
@@ -140,7 +140,7 @@ export function FlowCanvas({
       frame.current = null;
       setCamera(cameraRef.current);
     });
-  }
+  }, []);
 
   useLayoutEffect(() => {
     const element = viewport.current;
@@ -167,7 +167,7 @@ export function FlowCanvas({
     if (manualCamera.current || bounds === fittedBounds.current) return;
     fittedBounds.current = bounds;
     commit(fitCamera(scene, size), true);
-  }, [size, scene, fitRequest]);
+  }, [size, scene, fitRequest, commit]);
 
   useEffect(() => {
     if (!focusRequest || focused.current === focusRequest.tick || !size.width) return;
@@ -183,7 +183,7 @@ export function FlowCanvas({
       x: size.width / 2 - (box.x + root.x + NODE_WIDTH / 2) * scale,
       y: size.height / 2 - (box.y + root.y + NODE_HEIGHT / 2) * scale,
     }, true);
-  }, [focusRequest, scene, size]);
+  }, [focusRequest, scene, size, commit]);
 
   useEffect(() => {
     const element = viewport.current;
@@ -205,7 +205,7 @@ export function FlowCanvas({
       element.removeEventListener("wheel", wheel);
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
-  }, []);
+  }, [commit]);
 
   const margin = 150 / camera.scale;
   const view: Box = {
@@ -249,7 +249,6 @@ export function FlowCanvas({
   }
 
   function navigate(event: KeyboardEvent<HTMLElement>) {
-    if ((event.target as HTMLElement).closest("button")) return;
     const directions: Record<string, Point> = {
       ArrowUp: { x: 0, y: 70 }, ArrowDown: { x: 0, y: -70 },
       ArrowLeft: { x: 70, y: 0 }, ArrowRight: { x: -70, y: 0 },
@@ -278,8 +277,8 @@ export function FlowCanvas({
   const mapHeight = scene.height * mapScale;
   return (
     <div className="flow-canvas">
-      <section className="flow-viewport" ref={viewport} role="application" aria-label="Agent map. Arrow keys pan, plus and minus zoom, 0 fits the map."
-        tabIndex={0} onKeyDown={navigate} onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd}
+      <section className="flow-viewport" ref={viewport} aria-label="Agent map"
+        onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd}
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
         <div className="flow-world" data-detail={compact ? "compact" : "full"}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
@@ -328,9 +327,10 @@ export function FlowCanvas({
           </div>
         ) : null}
       </section>
-      <div className="flow-camera">
+      <div className="flow-camera" role="group" aria-label="Map navigation. Arrow keys pan, plus and minus zoom, 0 fits the map."
+        onKeyDown={navigate}>
         <button type="button" aria-label="Zoom out" disabled={camera.scale <= 0.07} onClick={() => zoom(0.8)}>−</button>
-        <span aria-label="Zoom level">{Math.round(camera.scale * 100)}%</span>
+        <span>{Math.round(camera.scale * 100)}%</span>
         <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
         <button type="button" onClick={fitAll}>Fit all</button>
         <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={13} />

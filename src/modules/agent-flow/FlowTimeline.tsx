@@ -30,7 +30,7 @@ export function FlowTimeline({
     return Array.from({ length: count }, (_, slot) => {
       const batch = marks.slice(Math.floor(slot * marks.length / count), Math.floor((slot + 1) * marks.length / count));
       const event = batch.find((mark) => TONES[mark.kind]) ?? batch[0];
-      return { tone: TONES[event.kind] ?? "state", count: batch.length };
+      return { at: event.at, tone: TONES[event.kind] ?? "state", count: batch.length };
     });
   }, [marks]);
 
@@ -52,7 +52,7 @@ export function FlowTimeline({
   const playable = marks.length > 1;
   const progress = marks.length > 1 ? Math.max(0, index) / (marks.length - 1) * 100 : 0;
   return (
-    <footer className="flow-timeline" aria-label="Activity timeline">
+    <section className="flow-timeline" aria-label="Activity timeline">
       <button type="button" className="flow-live" aria-pressed={time === null} onClick={() => jump(null)}>
         <span />{time === null ? "Live" : "Go live"}
       </button>
@@ -78,7 +78,7 @@ export function FlowTimeline({
         </div>
         <div className="flow-track-area" style={{ "--flow-progress": `${progress}%` } as CSSProperties}>
           <div className="flow-time-marks" aria-hidden="true">
-            {bins.map((bin, index) => <i key={index} data-tone={bin.tone} style={{ height: Math.min(18, 4 + bin.count * 2) }} />)}
+            {bins.map((bin) => <i key={bin.at} data-tone={bin.tone} style={{ height: Math.min(18, 4 + bin.count * 2) }} />)}
           </div>
           <input aria-label="Timeline position" type="range" min={0} max={Math.max(1, marks.length - 1)}
             value={Math.max(0, index)} disabled={!playable}
@@ -90,6 +90,6 @@ export function FlowTimeline({
         onChange={(event) => setSpeed(Number(event.target.value))}>
         <option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option>
       </select>
-    </footer>
+    </section>
   );
 }
