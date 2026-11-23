@@ -122,7 +122,7 @@ export default function AgentFlow({
     if (!open || !Number.isFinite(nextExpiry)) return;
     const timer = setTimeout(() => setRetirementTick(Date.now()), Math.max(1, nextExpiry - Date.now()));
     return () => clearTimeout(timer);
-  }, [open, nextExpiry, retirementTick]);
+  }, [open, nextExpiry]);
   const relations = useMemo(() => [
     ...relay.links.flatMap((link) => {
       if (time === null) return [link];
