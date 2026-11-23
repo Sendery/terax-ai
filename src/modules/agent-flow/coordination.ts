@@ -1,4 +1,5 @@
-import type { AgentSession } from "@/modules/agents/lib/types";
+import { notificationLabel } from "@/modules/agents/lib/describeEvent";
+import type { AgentNotification, AgentSession } from "@/modules/agents/lib/types";
 import type { FlowDelivery, FlowEndpoint, FlowRun, TraceEvent } from "@/modules/agent-flow/model";
 import type { FlowBranch } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
@@ -12,7 +13,6 @@ export type FlowTerminal = {
   slot: number;
   split: boolean;
   color?: TabColor;
-  cold: boolean;
   session?: AgentSession;
   runKey?: string;
 };
@@ -21,43 +21,42 @@ export function terminalTitle(pane: FlowTerminal) {
   return pane.split ? `${pane.title} · Shell ${pane.slot}` : pane.title;
 }
 
-export type AttentionItem = {
-  id: string;
-  pane: FlowTerminal;
-  at: number;
-  event?: string;
-  label: string;
-  error?: boolean;
-};
+export type FlowNotice = Pick<AgentNotification, "id" | "at" | "tone" | "read"> & { label: string };
+export type FlowNodeStatus = { pending?: string; notice?: FlowNotice };
 
-export function collectAttention(panes: readonly FlowTerminal[], runs: readonly FlowRun[], traces: ReadonlyMap<string, FlowTrace>) {
-  const open = new Map(panes.map((pane) => [pane.shellKey, pane]));
-  const waiting = panes.flatMap((pane): AttentionItem[] => {
-    const session = pane.session;
-    if (session?.status !== "waiting" || session.attentionSince == null) return [];
-    const label = session.lastReason === "permission" ? "Permission required"
-      : session.lastReason === "question" ? "Question waiting" : "Waiting for input";
-    return [{ id: `${pane.runKey}:${session.attentionSince}`, pane, label, at: session.attentionSince }];
-  }).sort((a, b) => a.at - b.at);
-  const errors = new Map<string, AttentionItem>();
+export function collectNodeStatus(
+  panes: readonly FlowTerminal[], runs: readonly FlowRun[], notifications: readonly AgentNotification[],
+): ReadonlyMap<string, FlowNodeStatus> {
+  const byShell = new Map<string, FlowRun>();
   for (const run of runs) {
-    const pane = run.shellKey && open.get(run.shellKey);
-    if (!pane || (pane.runKey && pane.runKey !== run.key)) continue;
-    const candidates = [run.events, traces.get(traceKey(run) ?? "")?.events ?? []];
-    for (const events of candidates) {
-      for (let index = events.length - 1; index >= 0; index--) {
-        const event = events[index];
-        if (event.kind !== "error" || event.taskId) continue;
-        const previous = errors.get(pane.shellKey);
-        if (!previous || previous.at < event.at) {
-          errors.set(pane.shellKey, { id: `${run.key}:${event.id}`, pane: { ...pane, runKey: run.key },
-            at: event.at, event: event.id, label: "Last error", error: true });
-        }
-        break;
-      }
-    }
+    if (!run.shellKey) continue;
+    const previous = byShell.get(run.shellKey);
+    if (!previous || run.startedAt > previous.startedAt) byShell.set(run.shellKey, run);
   }
-  return [...waiting, ...[...errors.values()].sort((a, b) => b.at - a.at).slice(0, 8)];
+  const latest = new Map<number, AgentNotification>();
+  for (const notice of notifications) {
+    if (notice.source !== "terminal") continue;
+    const preceding = latest.get(notice.leafId);
+    if (!preceding || notice.at > preceding.at) latest.set(notice.leafId, notice);
+  }
+  const statuses = new Map<string, FlowNodeStatus>();
+  for (const pane of panes) {
+    const run = byShell.get(pane.shellKey);
+    if (!run || (pane.runKey && pane.runKey !== run.key)) continue;
+    const session = pane.session;
+    const pending = session?.status === "waiting" && session.attentionSince != null
+      ? session.lastReason === "permission" ? "Permission required"
+        : session.lastReason === "question" ? "Question waiting" : "Waiting for input"
+      : undefined;
+    const recent = latest.get(pane.leafId);
+    let notice: FlowNotice | undefined;
+    if (recent?.tabId === pane.tabId && recent.at >= run.startedAt) {
+      const { id, at, tone, read, kind, reason } = recent;
+      notice = { id, at, tone, read, label: notificationLabel(kind, reason) };
+    }
+    if (pending || notice) statuses.set(run.key, { pending, notice });
+  }
+  return statuses;
 }
 
 export type ResolvedEndpoint = { title: string; pane?: FlowTerminal; run?: FlowRun };
@@ -90,6 +89,69 @@ export function resolveDeliveries(
 
 export type FileTouch = { run: FlowRun; task?: string; event: TraceEvent };
 export type FileCrossing = { path: string; touches: FileTouch[] };
+
+export type FlowRelation =
+  | { key: string; from: string; to: string; kind: "relay"; deliveries: ResolvedDelivery[] }
+  | { key: string; from: string; to: string; kind: "file"; file: FileCrossing };
+
+export function relayGraph(
+  deliveries: readonly ResolvedDelivery[],
+  runs: readonly FlowRun[],
+  group: string,
+) {
+  const inScope = new Set(runs.map((run) => run.key));
+  const markers = new Map<string, FlowRun>();
+  const links = new Map<string, Extract<FlowRelation, { kind: "relay" }>>();
+  function endpointRun(endpoint: ResolvedEndpoint, at: number): FlowRun | undefined {
+    if (endpoint.run) return inScope.has(endpoint.run.key) ? endpoint.run : undefined;
+    const pane = endpoint.pane;
+    if (!pane) return undefined;
+    const paneGroup = pane.shellKey.slice(0, pane.shellKey.lastIndexOf(":"));
+    if (group && paneGroup !== group) return undefined;
+    return {
+      key: `shell:${pane.shellKey}`, group: paneGroup, shellKey: pane.shellKey, marker: "shell",
+      tabTitle: pane.title, paneLabel: pane.split ? `Shell ${pane.slot}` : undefined,
+      name: "Terminal shell", agent: "shell", harness: "generic", color: pane.color, startedAt: at,
+      tabId: pane.tabId, leafId: pane.leafId, active: true, events: [],
+    };
+  }
+  function remember(run: FlowRun) {
+    if (!run.marker) return;
+    const previous = markers.get(run.key);
+    if (!previous || run.startedAt < previous.startedAt) markers.set(run.key, run);
+  }
+  for (const delivery of deliveries) {
+    const to = endpointRun(delivery.to, delivery.at);
+    if (!to) continue;
+    const from = delivery.from ? endpointRun(delivery.from, delivery.at) : {
+      key: "flow:terax", group: "flow:terax", marker: "terax" as const, tabTitle: "Terax", name: "Command source",
+      agent: "terax", harness: "generic" as const, startedAt: delivery.at, events: [],
+    };
+    if (!from || from.key === to.key) continue;
+    remember(from);
+    remember(to);
+    const key = JSON.stringify(["relay", from.key, to.key]);
+    const link = links.get(key);
+    if (link) link.deliveries.push(delivery);
+    else links.set(key, { key, from: from.key, to: to.key, kind: "relay", deliveries: [delivery] });
+  }
+  return { markers: [...markers.values()], links: [...links.values()] };
+}
+
+export function fileRelations(files: readonly FileCrossing[]): FlowRelation[] {
+  return files.flatMap((file) => {
+    const [first, ...others] = file.touches.map(({ run }) => run.key).sort();
+    return others.map((to) => ({
+      key: JSON.stringify(["file", file.path, first, to]), from: first, to, kind: "file", file,
+    }));
+  });
+}
+
+export function relationLabel(relation: FlowRelation) {
+  if (relation.kind === "file") return relation.file.path.split("/").pop() ?? relation.file.path;
+  const count = relation.deliveries.length;
+  return count === 1 ? "Terminal relay" : `${count} terminal relays`;
+}
 
 const WRITE_TOOLS = new Set(["edit", "write", "edit_file", "write_file", "replace"]);
 

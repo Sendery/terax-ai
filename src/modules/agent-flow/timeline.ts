@@ -21,6 +21,7 @@ export function buildTimeline(
   const aggregate = new Map<number, TimeMark>();
 
   for (const { run, tasks, events, start, trace } of branches) {
+    if (run.marker === "terax") continue;
     const shell = run.shellKey ?? (run.leafId === undefined ? run.key : `${run.group}:${run.leafId}`);
     let lane = lanes.get(shell);
     if (!lane) {

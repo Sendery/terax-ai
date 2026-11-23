@@ -2,10 +2,11 @@ import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
   memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
-import { ArrowDown01Icon, ArrowRight01Icon, Flowchart01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, File01Icon, Flowchart01Icon, Message01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
+import { relationLabel, type FlowNodeStatus, type FlowRelation } from "@/modules/agent-flow/coordination";
 import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import type { FlowDirection, FlowRun, FlowTask, TraceEvent } from "@/modules/agent-flow/model";
@@ -30,7 +31,9 @@ function recent(event: number | undefined, time: number | null, clock: number) {
   return event !== undefined && (time === null ? Math.abs(clock - event) < 6000 : event === time);
 }
 
-function RelayLine({ from, to }: { from: Box; to: Box }) {
+function RelationLine({ from, to, relation, selected, offset, onSelect }: {
+  from: Box; to: Box; relation: FlowRelation; selected: boolean; offset: number; onSelect: (key: string) => void;
+}) {
   const across = from.x + from.width <= to.x || to.x + to.width <= from.x;
   const sign = (across ? to.x - from.x : to.y - from.y) < 0 ? -1 : 1;
   const start = across
@@ -40,19 +43,31 @@ function RelayLine({ from, to }: { from: Box; to: Box }) {
     ? { x: to.x + (sign < 0 ? to.width : 0), y: to.y + to.height / 2 }
     : { x: to.x + to.width / 2, y: to.y + (sign < 0 ? to.height : 0) };
   const mid = across ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
-  const controls = across ? `${mid} ${start.y}, ${mid} ${end.y}` : `${start.x} ${mid}, ${end.x} ${mid}`;
+  const controls = across ? `${mid} ${start.y + offset}, ${mid} ${end.y + offset}`
+    : `${start.x + offset} ${mid}, ${end.x + offset} ${mid}`;
   const tip = `${end.x} ${end.y}`;
   const arrow = across
     ? `M ${end.x - sign * 8} ${end.y - 5} L ${tip} L ${end.x - sign * 8} ${end.y + 5}`
     : `M ${end.x - 5} ${end.y - sign * 8} L ${tip} L ${end.x + 5} ${end.y - sign * 8}`;
-  return <svg className="flow-relay-line" width="100%" height="100%" aria-hidden="true">
-    <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
-    <path d={arrow} />
-  </svg>;
+  const label = relationLabel(relation);
+  return <>
+    <svg className="flow-relation-line" data-kind={relation.kind} data-selected={selected} width="100%" height="100%" aria-hidden="true">
+      <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
+      {relation.kind === "relay" ? <path d={arrow} /> : null}
+    </svg>
+    <button type="button" className="flow-relation-label" data-kind={relation.kind} aria-pressed={selected}
+      title={label} aria-label={`Inspect ${relation.kind === "file" ? `shared file ${label}` : label.toLowerCase()}`}
+      style={{ left: (start.x + end.x) / 2 + (across ? 0 : offset * 0.75),
+        top: (start.y + end.y) / 2 + (across ? offset * 0.75 : 0) }}
+      onClick={() => onSelect(relation.key)}>
+      <HugeiconsIcon icon={relation.kind === "file" ? File01Icon : Message01Icon} size={14} />
+      <span>{label}</span>
+    </button>
+  </>;
 }
 
 const ActorNode = memo(function ActorNode({
-  area, branch, entry, trace, name, selection, compact, detailed, ambient, clock, time, onSelect,
+  area, branch, entry, trace, name, selection, compact, detailed, ambient, clock, time, onSelect, nodeStatus, motion,
 }: {
   area: Point;
   branch: FlowBranch;
@@ -63,39 +78,50 @@ const ActorNode = memo(function ActorNode({
   compact: boolean;
   detailed: boolean;
   ambient: boolean;
+  motion: boolean;
   clock: number;
   time: number | null;
   onSelect: (selection: FlowSelection) => void;
+  nodeStatus?: FlowNodeStatus;
 }) {
   const run = branch.run;
   const task = entry?.id;
   const actor = useMemo(() => describeActor(branch, entry, trace, time), [branch, entry, trace, time]);
   const current = selection?.run === run.key && selection.task === task;
   const str = (event?: TraceEvent) => onSelect({ run: run.key, ...(task ? { task } : {}), ...(event ? { event: event.id } : {}) });
-  const status = actor.activity && !actor.speech ? eventLabel(actor.activity) : actor.label;
+  const pending = nodeStatus?.pending;
+  const notice = nodeStatus?.notice;
+  const stateLabel = pending ?? (run.marker ? (run.marker === "shell" ? "Shell" : "Command source") : actor.label);
+  const status = pending ?? (actor.activity && !actor.speech ? eventLabel(actor.activity) : stateLabel);
+  const flash = notice && motion && recent(notice.at, time, clock);
   const animate = recent(actor.activity?.at, time, clock);
   const context = actor.usage?.context;
   return (
-    <div className="flow-actor" data-tone={actor.tone} data-compact={compact} data-kind={task ? "subagent" : "agent"}
+    <div className="flow-actor" data-tone={pending ? "waiting" : actor.tone} data-compact={compact}
+      data-kind={run.marker ?? (task ? "subagent" : "agent")} data-notice={notice?.tone}
       style={{ left: area.x, top: area.y, width: NODE_WIDTH, height: NODE_HEIGHT,
         "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
-      <button type="button" className="flow-node" aria-label={`${name}, ${actor.label}, ${run.tabTitle}`}
+      <button type="button" className="flow-node" aria-label={`${name}, ${stateLabel}, ${run.tabTitle}${notice && !notice.read ? `, ${notice.label}` : ""}`}
         aria-pressed={current} onClick={() => str()}>
         <span className="flow-beacon">
-          {ambient ? (
+          {ambient && !run.marker ? (
             <>
               <i className="flow-beacon-aura" aria-hidden="true" />
               <i className="flow-node-orbit" data-idle={actor.tone !== "active"} aria-hidden="true" />
               <i className="flow-node-satellite" aria-hidden="true" />
             </>
           ) : null}
-          {!compact ? <BeaconSignals actor={actor} /> : null}
-          {animate ? <i key={actor.activity?.id} className="flow-beacon-wave" aria-hidden="true" /> : null}
-          <span className="flow-glyph"><AgentIcon agent={run.agent} harness={run.harness} size={23} /></span>
+          {!compact && !run.marker ? <BeaconSignals actor={actor} /> : null}
+          {animate && !flash ? <i key={actor.activity?.id} className="flow-beacon-wave" aria-hidden="true" /> : null}
+          {flash ? <i key={notice.id} className="flow-notice-wave" aria-hidden="true" /> : null}
+          <span className="flow-glyph">{run.marker
+            ? <HugeiconsIcon icon={run.marker === "terax" ? Flowchart01Icon : TerminalIcon} size={21} />
+            : <AgentIcon agent={run.agent} harness={run.harness} size={23} />}</span>
           <span className="flow-node-status" aria-hidden="true" />
+          {notice && !notice.read ? <span className="flow-notice-mark" aria-hidden="true" title={notice.label} /> : null}
         </span>
         <span className="flow-node-caption" title={name}>{name}</span>
-        <span className="flow-node-state">{actor.label}</span>
+        <span className="flow-node-state">{stateLabel}</span>
         {detailed && actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} tokens</span> : null}
         {detailed && context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
           {contextPercent(context)}% context
@@ -104,7 +130,7 @@ const ActorNode = memo(function ActorNode({
           <span className="flow-node-cost" title="Cost reported by this session">${actor.usage.cost.toFixed(actor.usage.cost < 1 ? 3 : 2)}</span>
         ) : null}
       </button>
-      {!compact ? (
+      {!compact && !run.marker ? (
         <div className="flow-node-events">
           {actor.speech?.text ? (
             <button type="button" className="flow-speech" key={actor.speech.id}
@@ -142,9 +168,10 @@ type CanvasProps = {
   time: number | null;
   target: FlowSelection | null;
   pinnedRun: string | null;
-  linkedRuns: ReadonlySet<string>;
-  linkFrom?: string;
-  linkTo?: string;
+  relations: readonly FlowRelation[];
+  activeRelation?: FlowRelation;
+  nodeStatus: ReadonlyMap<string, FlowNodeStatus>;
+  onRelation: (key: string) => void;
   focusRequest: { key: string; tick: number } | null;
   fitRequest: string;
   loading: boolean;
@@ -154,8 +181,8 @@ type CanvasProps = {
 };
 
 export function FlowCanvas({
-  scene, traces, direction, arrangement, time, target, pinnedRun, linkedRuns, linkFrom, linkTo,
-  focusRequest, fitRequest, loading, motion, onSelect, onVisible,
+  scene, traces, direction, arrangement, time, target, pinnedRun, relations, activeRelation, nodeStatus,
+  focusRequest, fitRequest, loading, motion, onSelect, onVisible, onRelation,
 }: CanvasProps) {
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -338,10 +365,14 @@ export function FlowCanvas({
 
   const compact = camera.scale < 0.48;
   const detailed = camera.scale >= 0.72;
-  const relayEnds = linkFrom && linkTo && linkFrom !== linkTo ? [linkFrom, linkTo].map((key) =>
-    visible.find(({ branch }) => branch.run.key === key && (time === null || branch.start <= time))) : [];
-  const [from, to] = relayEnds;
-  const clock = useMemo(() => scene.clusters.length ? Date.now() : 0, [scene]);
+  const visibleBoxes = new Map(visible.filter(({ branch }) => time === null || branch.start <= time)
+    .map(({ branch, box }) => [branch.run.key, box]));
+  const shown = relations.filter(({ from, to }) => visibleBoxes.has(from) && visibleBoxes.has(to));
+  const visibleRelations = [...shown.filter(({ kind }) => kind === "relay").slice(0, 8),
+    ...shown.filter(({ kind }) => kind === "file").slice(0, 8)];
+  if (activeRelation && !visibleRelations.some(({ key }) => key === activeRelation.key)) visibleRelations.push(activeRelation);
+  const pairOffsets = new Map<string, number>();
+  const clock = useMemo(() => scene.clusters.length ? Date.now() : 0, [scene, nodeStatus, time]);
   const mapScale = Math.min(152 / scene.width, 94 / scene.height);
   const mapWidth = scene.width * mapScale;
   const mapHeight = scene.height * mapScale;
@@ -356,18 +387,30 @@ export function FlowCanvas({
         <div className="flow-world" data-detail={compact ? "compact" : detailed ? "full" : "conversation"} data-direction={direction}
           data-layout={arrangement}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
-          {from && to ? <RelayLine from={from.box} to={to.box} /> : null}
+          {visibleRelations.map((relation) => {
+            const from = visibleBoxes.get(relation.from);
+            const to = visibleBoxes.get(relation.to);
+            if (!from || !to) return null;
+            const pair = JSON.stringify([relation.from, relation.to].sort());
+            const count = pairOffsets.get(pair) ?? 0;
+            pairOffsets.set(pair, count + 1);
+            const offset = (count % 2 ? 1 : -1) * Math.ceil(count / 2) * 30;
+            return <RelationLine key={relation.key} from={from} to={to} relation={relation}
+              selected={relation.key === activeRelation?.key} offset={offset} onSelect={onRelation} />;
+          })}
           {visible.map(({ branch, box, nodes }) => {
             if (time !== null && branch.start > time) return null;
             const show = nodes.filter(({ task }) => !task || time === null || task.at <= time);
             return (
               <section key={branch.run.key} className="flow-cluster" data-active={!!branch.run.active && time === null}
                 data-selected={target?.run === branch.run.key}
-                data-pinned={pinnedRun === branch.run.key} data-linked={linkedRuns.has(branch.run.key)}
+                data-pinned={pinnedRun === branch.run.key}
+                data-linked={activeRelation?.from === branch.run.key || activeRelation?.to === branch.run.key}
+                data-marker={branch.run.marker}
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
                 <div className="flow-cluster-tag"><span />{branch.run.tabTitle}{branch.run.paneLabel ? ` · ${branch.run.paneLabel}` : ""}
-                  <small>{pinnedRun === branch.run.key ? "Pinned · " : ""}{show.length} {show.length === 1 ? "agent" : "agents"}</small></div>
+                  {!branch.run.marker ? <small>{pinnedRun === branch.run.key ? "Pinned · " : ""}{show.length} {show.length === 1 ? "agent" : "agents"}</small> : null}</div>
                 {show.length > 1 ? (
                   <svg className="flow-connections" width={box.width} height={box.height} aria-hidden="true">
                     {show.map(({ task, parent, at }) => {
@@ -394,7 +437,8 @@ export function FlowCanvas({
                     <ActorNode key={task?.id ?? "root"} area={at} branch={branch} name={task?.label ?? runName(branch.run, branch.trace?.name)}
                       entry={task} trace={trace} selection={target}
                       compact={compact} detailed={detailed || (target?.run === branch.run.key && !compact)}
-                      ambient={ambient} clock={clock} time={time} onSelect={onSelect} />
+                      ambient={ambient} clock={clock} time={time} onSelect={onSelect} motion={motion && time === null}
+                      nodeStatus={!task && time === null ? nodeStatus.get(branch.run.key) : undefined} />
                   );
                 })}
               </section>

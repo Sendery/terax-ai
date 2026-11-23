@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { collectAttention, fileCrossings, normalizedFile, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
-import type { AgentSession } from "@/modules/agents/lib/types";
+import { collectNodeStatus, fileCrossings, fileRelations, normalizedFile, relayGraph, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
+import type { AgentNotification, AgentSession } from "@/modules/agents/lib/types";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
@@ -114,9 +114,9 @@ describe("Agent Flow", () => {
     expect(nearTick([], 17)).toBeUndefined();
   });
 
-  it("retains two pending split shells even when another shell reports activity", () => {
+  it("keeps pending split shells distinct and only attaches matching terminal notifications", () => {
     const pane = (leafId: number, lastReason: AgentSession["lastReason"]): FlowTerminal => ({
-      leafId, slot: leafId, tabId: 1, title: "Mixed CLIs", shellKey: `shell:${leafId}`, split: true, cold: false,
+      leafId, slot: leafId, tabId: 1, title: "Mixed CLIs", shellKey: `shell:${leafId}`, split: true,
       runKey: `run:${leafId}`,
       session: {
         leafId, tabId: 1, agent: leafId === 1 ? "codex" : "claude", status: lastReason ? "waiting" : "working",
@@ -124,8 +124,18 @@ describe("Agent Flow", () => {
         lastReason, sessionId: null, ptyId: leafId, integration: "pty-detection", harness: "generic",
       },
     });
-    const attention = collectAttention([pane(1, "permission"), pane(2, "question"), pane(3, null)], [], new Map());
-    expect(attention.map(({ pane, label }) => [pane.leafId, label])).toEqual([[1, "Permission required"], [2, "Question waiting"]]);
+    const panes = [pane(1, "permission"), pane(2, "question"), pane(3, null)];
+    const runs = panes.map(({ shellKey, runKey }) => ({ ...root, key: runKey ?? "", shellKey, startedAt: 4 }));
+    const notice = (leafId: number, at: number, extra: Partial<AgentNotification> = {}): AgentNotification => ({
+      source: "terminal", tabId: 1, leafId, at, id: `notice:${leafId}:${at}`, agent: "claude",
+      kind: "attention", tone: "question", reason: "question", tabTitle: "Mixed CLIs", tabColor: null, read: false, ...extra,
+    });
+    const statuses = collectNodeStatus(panes, runs, [
+      notice(1, 3), notice(2, 12), notice(2, 13, { source: "local" }), notice(3, 15, { tabId: 2 }),
+    ]);
+    expect(statuses.get("run:1")).toEqual({ pending: "Permission required", notice: undefined });
+    expect(statuses.get("run:2")).toMatchObject({ pending: "Question waiting", notice: { id: "notice:2:12", tone: "question" } });
+    expect(statuses.has("run:3")).toBe(false);
   });
 
   it("resolves explicit deliveries to the recorded session and excludes private endpoints", () => {
@@ -145,6 +155,20 @@ describe("Agent Flow", () => {
     ]);
   });
 
+  it("links Terax to a public shell with no transcript without adding a Terax track", () => {
+    const pane: FlowTerminal = { tabId: 15, leafId: 1, shellKey: "launch:15:1", title: "Shell", slot: 1, split: false };
+    const delivery = { id: "relay", at: 18, submitted: true, target: { shellKey: pane.shellKey } };
+    const resolved = resolveDeliveries([delivery], [pane], [], new Set(), null);
+    const graph = relayGraph(resolved, [], "");
+    expect(graph.links).toMatchObject([{ from: "flow:terax", to: `shell:${pane.shellKey}`, kind: "relay" }]);
+    expect(graph.markers.map(({ marker }) => marker)).toEqual(["terax", "shell"]);
+    const traces = new Map();
+    const timeline = buildTimeline(graph.markers.map((run) => branchFor(run, [], null, traces)), traces, resolved);
+    expect(timeline.lanes.map(({ key }) => key)).toEqual([pane.shellKey]);
+    expect(timeline.marks).toEqual([{ at: 18, kind: "delivery" }]);
+    expect(relayGraph(resolved, [], "launch:other").links).toEqual([]);
+  });
+
   it("links explicit write attempts to the same path across sessions and excludes reads and sibling checkouts", () => {
     const write = { id: "tool", at: 12, kind: "tool" as const, text: "Write", file: "./src/../main.ts" };
     const runs = [
@@ -157,6 +181,7 @@ describe("Agent Flow", () => {
     expect(fileCrossings(branches, new Map(), 14)).toEqual([]);
     expect(fileCrossings(branches, new Map(), null).map(({ path, touches }) =>
       [path, touches.map(({ run }) => run.key)])).toEqual([["/project/main.ts", ["two", "one"]]]);
+    expect(fileRelations(fileCrossings(branches, new Map(), null))).toMatchObject([{ from: "one", to: "two", kind: "file" }]);
     expect(normalizedFile("/project", "../outside.ts")).toBeUndefined();
     expect(normalizedFile("C:\\work", "src\\main.ts")).toBe("C:/work/src/main.ts");
   });

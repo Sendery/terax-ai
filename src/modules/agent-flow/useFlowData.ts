@@ -21,6 +21,7 @@ type History = { key: string; sourceKey: string; runs: FlowRun[]; failed: boolea
 export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number) {
   const sessions = useAgentStore((state) => open ? state.sessions : null);
   const digests = useAgentStore((state) => open ? state.digests : null);
+  const notifications = useAgentStore((state) => open ? state.notifications : null);
   const journal = useFlowJournal((state) => open ? state.runs : null);
   const deliveries = useFlowJournal((state) => open ? state.deliveries : null);
   const [history, setHistory] = useState<History>({ key: "", sourceKey: "", runs: [], failed: false });
@@ -41,7 +42,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
         const active = sessions?.[leafId];
         const session = active?.tabId === tab.id ? active : undefined;
         panes.push({ leafId, tabId: tab.id, shellKey, title, color: tab.color,
-          slot: index + 1, split: leaves.length > 1, cold: !!tab.cold, session,
+          slot: index + 1, split: leaves.length > 1, session,
           runKey: session ? flowRunKey(session) : undefined });
       });
     }
@@ -218,6 +219,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     panes,
     hidden,
     deliveries,
+    notifications,
     loading: open && history.key !== historyKey,
     failed: history.key === historyKey && history.failed,
   };

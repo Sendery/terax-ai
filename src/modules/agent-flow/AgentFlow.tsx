@@ -7,10 +7,10 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
-import { collectAttention, fileCrossings, resolveDeliveries } from "@/modules/agent-flow/coordination";
+import { collectNodeStatus, fileCrossings, fileRelations, relayGraph, resolveDeliveries } from "@/modules/agent-flow/coordination";
 import { FlowCanvas, accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { FlowInspector, UsageMetrics } from "@/modules/agent-flow/FlowInspector";
-import { FlowOperations, type FlowConnection, type FlowOperation } from "@/modules/agent-flow/FlowOperations";
+import { FlowRelationDetails } from "@/modules/agent-flow/FlowRelationDetails";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
@@ -41,13 +41,11 @@ export default function AgentFlow({
   const [navigator, setNavigator] = useState(false);
   const [search, setSearch] = useState("");
   const [usage, setUsage] = useState(false);
-  const [operations, setOperations] = useState<FlowOperation>(null);
-  const [connection, setConnection] = useState<FlowConnection>(null);
-  const [dismissed, setDismissed] = useState<readonly string[]>([]);
+  const [relationKey, setRelationKey] = useState<string | null>(null);
   const [pinnedRun, setPinnedRun] = useState<string | null>(null);
   const [motion, setMotion] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
-  const { runs, children, digests, panes, hidden, deliveries, loading, failed } = useFlowData(tabs, open, refresh);
+  const { runs, children, digests, panes, hidden, deliveries, notifications, loading, failed } = useFlowData(tabs, open, refresh);
   const active = runs.filter((run) => run.active).length;
   const actualScope = scope ?? (active ? "active" : "all");
 
@@ -94,31 +92,31 @@ export default function AgentFlow({
   const traces = useFlowTraces(targets, open, refresh);
 
   const branches = useMemo(() => inScope.map((run) => branchFor(run, children, digests, traces)), [inScope, children, digests, traces]);
-  const scene = useMemo(() => makeScene(branches, direction, arrangement), [branches, direction, arrangement]);
-  const branch = branches.find((item) => item.run.key === selection?.run);
+  const visibleDeliveries = useMemo(() => resolveDeliveries(deliveries ?? [], panes, runs, hidden, null),
+    [deliveries, panes, runs, hidden]);
+  const relay = useMemo(() => relayGraph(visibleDeliveries, inScope, groupKey), [visibleDeliveries, inScope, groupKey]);
+  const graphBranches = useMemo(() => [...branches, ...relay.markers.map((run) => ({
+    run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
+  }))], [branches, relay.markers]);
+  const scene = useMemo(() => makeScene(graphBranches, direction, arrangement), [graphBranches, direction, arrangement]);
+  const relations = useMemo(() => [
+    ...relay.links.flatMap((link) => {
+      if (time === null) return [link];
+      const entries = link.deliveries.filter(({ at }) => at <= time);
+      return entries.length ? [{ ...link, deliveries: entries }] : [];
+    }),
+    ...fileRelations(fileCrossings(branches, traces, time)),
+  ], [relay.links, branches, traces, time]);
+  const relation = relations.find(({ key }) => key === relationKey);
+  const nodeStatus = useMemo(() => collectNodeStatus(panes, runs, notifications ?? []), [panes, runs, notifications]);
+  const branch = graphBranches.find((item) => item.run.key === selection?.run);
   const task = branch?.tasks.find((entry) => entry.id === selection?.task && (time === null || entry.at <= time));
   const detailTrace = task ? traces.get(traceKey(task.run) ?? "") : branch?.trace;
   const searchable = search.trim().toLowerCase();
   const matches = navigator ? branches.filter((item) => !searchable ||
     `${item.run.tabTitle} ${runName(item.run, item.trace?.name)} ${displayAgent(item.run.agent)}`.toLowerCase().includes(searchable),
   ) : [];
-  const visibleDeliveries = useMemo(() => resolveDeliveries(deliveries ?? [], panes, runs, hidden, null),
-    [deliveries, panes, runs, hidden]);
-  const replayDeliveries = useMemo(() => visibleDeliveries.filter((item) => time === null || item.at <= time), [visibleDeliveries, time]);
-  const attention = useMemo(() => collectAttention(panes, runs, traces).filter(({ id }) => !dismissed.includes(id)),
-    [panes, runs, traces, dismissed]);
-  const files = useMemo(() => {
-    if (operations !== "connections") return [];
-    const observed = runs.filter((run) => traces.has(traceKey(run) ?? ""));
-    return fileCrossings(observed.map((run) => branchFor(run, children, digests, traces)), traces, time);
-  }, [operations, runs, children, digests, traces, time]);
-  const linkedDelivery = connection?.kind === "delivery" ? replayDeliveries.find(({ id }) => id === connection.key) : undefined;
-  const linkedFile = connection?.kind === "file" ? files.find(({ path }) => path === connection.key) : undefined;
-  const linkedRuns = new Set([
-    linkedDelivery?.from?.run?.key, linkedDelivery?.to.run?.key,
-    ...linkedFile?.touches.map(({ run }) => run.key) ?? [],
-  ].filter((key): key is string => !!key));
-  const timeline = useMemo(() => buildTimeline(branches, traces, visibleDeliveries), [branches, traces, visibleDeliveries]);
+  const timeline = useMemo(() => buildTimeline(graphBranches, traces, visibleDeliveries), [graphBranches, traces, visibleDeliveries]);
   const signalFeed = useMemo(() => {
     const signals: { key: string; run: FlowRun; agent: string; event: TraceEvent; task?: string }[] = [];
     for (const entry of branches) {
@@ -163,8 +161,7 @@ export default function AgentFlow({
   function select(next: FlowSelection) {
     setSelection(next);
     setUsage(false);
-    setOperations(null);
-    setConnection(null);
+    setRelationKey(null);
   }
 
   function selectFromList(key: string) {
@@ -178,38 +175,23 @@ export default function AgentFlow({
     setTime(at);
   }
 
-  function inspectOperation(run: string, event?: string, at?: number, task?: string) {
-    if (!inScope.some(({ key }) => key === run)) {
-      setGroup("");
-      setScope("all");
-    }
+  function inspectRun(run: string, event?: string, at?: number, task?: string) {
     select({ run, task, event });
     setPlaying(false);
-    setTime(at ?? null);
+    if (at !== undefined) setTime(at);
     setFocusRequest((previous) => ({ key: run, tick: (previous?.tick ?? 0) + 1 }));
   }
 
-  function toggleOperation(next: NonNullable<FlowOperation>) {
-    setOperations((current) => current === next ? null : next);
-    setConnection(null);
+  function selectRelation(key: string) {
+    setRelationKey(key);
     setSelection(null);
     setUsage(false);
-  }
-
-  function showConnection(next: FlowConnection) {
-    setConnection(next);
-    const receipt = next?.kind === "delivery" ? replayDeliveries.find(({ id }) => id === next.key) : undefined;
-    const file = next?.kind === "file" ? files.find(({ path }) => path === next.key) : undefined;
-    const connected = [receipt?.from?.run, receipt?.to.run, ...file?.touches.map(({ run }) => run) ?? []];
-    if (connected.some((run) => run && !inScope.some(({ key }) => key === run.key))) {
-      setGroup("");
-      setScope("all");
-    }
   }
 
   function changeScope(next: "active" | "all") {
     setScope(next);
     setSelection(null);
+    setRelationKey(null);
     setPlaying(false);
     setTime(null);
   }
@@ -225,6 +207,7 @@ export default function AgentFlow({
           <select aria-label="Filter source tab" value={groupKey} onChange={(event) => {
             setGroup(event.target.value);
             setSelection(null);
+            setRelationKey(null);
             setPlaying(false);
             setTime(null);
           }}>
@@ -246,17 +229,10 @@ export default function AgentFlow({
             onClick={() => setArrangement((current) => current === "fit" ? "lanes" : "fit")}>
             {arrangement === "fit" ? "Fit to screen" : direction === "right" ? "Session rows" : "Session columns"}
           </button>
-          <button type="button" className="flow-attention-toggle" data-alert={attention.length > 0}
-            aria-expanded={operations === "attention"} onClick={() => toggleOperation("attention")}>
-            Attention <strong>{attention.length}</strong>
-          </button>
-          <button type="button" aria-expanded={operations === "terminals"} onClick={() => toggleOperation("terminals")}>Terminals</button>
-          <button type="button" aria-expanded={operations === "connections"} onClick={() => toggleOperation("connections")}>Connections</button>
           <button type="button" aria-pressed={usage} onClick={() => {
             setUsage((current) => !current);
             setSelection(null);
-            setOperations(null);
-            setConnection(null);
+            setRelationKey(null);
           }}>Usage</button>
           <button type="button" className="flow-motion" aria-label="Motion effects" aria-pressed={motion}
             onClick={() => setMotion((current) => !current)}>
@@ -269,8 +245,8 @@ export default function AgentFlow({
       <div className="flow-stage">
         <FlowCanvas scene={scene} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
           focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
-          pinnedRun={pinnedRun} linkedRuns={linkedRuns}
-          linkFrom={linkedDelivery?.from?.run?.key} linkTo={linkedDelivery?.to.run?.key}
+          pinnedRun={pinnedRun} relations={relations} activeRelation={relation} nodeStatus={nodeStatus}
+          onRelation={selectRelation}
           loading={loading} motion={motion} onSelect={select} onVisible={setNear} />
 
         <div className="flow-navigation">
@@ -314,19 +290,17 @@ export default function AgentFlow({
           </button>
         ) : null}
 
-        {operations ? (
-          <FlowOperations mode={operations} panes={panes} attention={attention} deliveries={replayDeliveries}
-            files={files} connection={connection} close={() => { setOperations(null); setConnection(null); }}
-            activate={onActivate} inspect={inspectOperation} selectConnection={showConnection}
-            openTouch={({ run, event, task }) => inspectOperation(run.key, event.id, event.at, task)}
-            seek={jump}
-            dismiss={(id) => setDismissed((current) => [...current.slice(-79), id])} />
+        {relation ? (
+          <FlowRelationDetails key={relation.key} relation={relation} close={() => setRelationKey(null)}
+            activate={onActivate} inspect={inspectRun} seek={jump} />
         ) : null}
 
-        {branch && !usage && !operations ? (
+        {branch && !usage && !relation ? (
           <FlowInspector key={`${branch.run.key}:${task?.id ?? "root"}`}
             branch={branch} task={task} trace={detailTrace} eventId={selection?.event} time={time}
             onClose={() => setSelection(null)} onJump={jump} onActivate={onActivate}
+            relations={relations.filter(({ from, to }) => from === branch.run.key || to === branch.run.key)}
+            onRelation={selectRelation}
             pinned={pinnedRun === branch.run.key} onPin={() => setPinnedRun((current) => current === branch.run.key ? null : branch.run.key)}
             onRoot={() => select({ run: branch.run.key })} />
         ) : null}

@@ -59,6 +59,7 @@ export type FlowRun = {
   shellKey?: string;
   tabTitle: string;
   paneLabel?: string;
+  marker?: "shell" | "terax";
   color?: TabColor;
   startedAt: number;
   createdAt?: number;

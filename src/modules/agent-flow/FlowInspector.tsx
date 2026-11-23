@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { Cancel01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { displayAgent } from "@/modules/agents/lib/format";
+import { relationLabel, type FlowRelation } from "@/modules/agent-flow/coordination";
 import { accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
@@ -28,7 +29,7 @@ export function UsageMetrics({ usage }: { usage: NonNullable<Actor["usage"]> }) 
 }
 
 export function FlowInspector({
-  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot, pinned, onPin,
+  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot, pinned, onPin, relations, onRelation,
 }: {
   branch: FlowBranch;
   task?: FlowTask;
@@ -41,6 +42,8 @@ export function FlowInspector({
   onRoot: () => void;
   pinned: boolean;
   onPin: () => void;
+  relations: readonly FlowRelation[];
+  onRelation: (key: string) => void;
 }) {
   const [mode, setMode] = useState<(typeof GROUPS)[number]>("Activity");
   const [limit, setLimit] = useState(PAGE);
@@ -110,6 +113,14 @@ export function FlowInspector({
           <button type="button" onClick={() => onJump(focused.at)}>Jump to event</button>
         </div> : null}
         {actor.usage && mode === "Activity" ? <UsageMetrics usage={actor.usage} /> : null}
+        {!task && mode === "Activity" && relations.length ? (
+          <div className="flow-inspector-actions flow-inspector-links">
+            {relations.slice(0, 8).map((relation) => (
+              <button type="button" key={relation.key} data-kind={relation.kind}
+                onClick={() => onRelation(relation.key)}>{relationLabel(relation)}</button>
+            ))}
+          </div>
+        ) : null}
         {stats.length ? <ul className="flow-stat-list">
           {stats.map(([key, events]) => <li key={key}>
             <button type="button" title={key} aria-pressed={stat === key}
