@@ -5,7 +5,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
-import { Cancel01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Flowchart01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef } from "react";
@@ -342,10 +342,12 @@ const OPEN_REFRESH_MS = 10_000;
 export function AgentMonitorPanel({
   onActivate,
   onHide,
+  onOpenFlow,
   tabs,
 }: {
   onActivate: (tabId: number, leafId: number) => void;
   onHide: () => void;
+  onOpenFlow: () => void;
   tabs: readonly Tab[];
 }) {
   const sessions = useAgentStore((state) => state.sessions);
@@ -411,6 +413,16 @@ export function AgentMonitorPanel({
             <span className="text-muted-foreground">{rows.length}</span>
           ) : null}
         </h2>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Open Agent Flow"
+          title="Open Agent Flow"
+          onClick={onOpenFlow}
+          className="size-6 text-muted-foreground hover:text-foreground"
+        >
+          <HugeiconsIcon icon={Flowchart01Icon} size={15} strokeWidth={1.8} />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

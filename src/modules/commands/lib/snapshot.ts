@@ -11,6 +11,7 @@ import {
 import type { TtsStatus } from "@/modules/tts/lib/native";
 
 export type SnapshotTab =
+  | { id: number; kind: "agent-flow"; spaceId: string; title: string; color?: TabColor }
   | {
       id: number;
       kind: "graphx";
@@ -268,6 +269,15 @@ function displayTitle(tab: Tab): string {
 }
 
 function serializeTab(tab: Tab): SnapshotTab {
+  if (tab.kind === "agent-flow") {
+    return {
+      id: tab.id,
+      kind: tab.kind,
+      spaceId: tab.spaceId,
+      title: displayTitle(tab),
+      ...(tab.color ? { color: tab.color } : {}),
+    };
+  }
   if (tab.kind === "terminal") {
     if (tab.private) {
       return {

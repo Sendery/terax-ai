@@ -16,7 +16,7 @@ export function labelFor(t: Tab): string {
   if (t.kind === "git-diff") return t.title;
   if (t.kind === "git-history") return t.title;
   if (t.kind === "pr-review") return t.title;
-  if (t.kind === "reader") return t.title;
+  if (t.kind === "reader" || t.kind === "agent-flow") return t.title;
   if (t.kind === "git-commit-file") return t.title;
   if (!t.cwd) return t.title;
   const parts = t.cwd.split(/[\\/]/).filter(Boolean);

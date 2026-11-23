@@ -211,6 +211,7 @@ export type ReaderTab = TabBase & {
 
 export type Tab =
   | ReaderTab
+  | (TabBase & { id: number; kind: "agent-flow"; title: string })
   | PrReviewTab
   | TerminalTab
   | EditorTab
@@ -1158,6 +1159,23 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     [setTabs],
   );
 
+  const openAgentFlowTab = useCallback(() => {
+    const existing = tabsRef.current.find((tab) => tab.kind === "agent-flow");
+    if (existing) {
+      setActiveId(existing.id);
+      return existing.spaceId;
+    }
+    const id = nextIdRef.current++;
+    setTabs((current) => [...current, {
+      id,
+      kind: "agent-flow",
+      spaceId: activeSpaceIdRef.current,
+      title: "Agent Flow",
+    }]);
+    setActiveId(id);
+    return activeSpaceIdRef.current;
+  }, [setTabs]);
+
   const openReaderTab = useCallback(
     (input: { docId: string; title: string; background?: boolean }) => {
       const curr = tabsRef.current;
@@ -1577,6 +1595,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     openCommitFileDiffTab,
     openPrReviewTab,
     openReaderTab,
+    openAgentFlowTab,
     setPrReviewBase,
     setAiDiffStatus,
     closeAiDiffTab,
