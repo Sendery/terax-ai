@@ -1,11 +1,22 @@
 # Agent Flow
 
 Open **Agent Flow** from the Agent Monitor header. It opens a Terax workspace
-tab. Choose a terminal tab or project from the source selector, then select a
-session to inspect its activity and delegations. Root and subagent cards share
-the source tab accent. The direction button alternates between top to bottom
-and right to left. Use the timeline slider, playback button or an activity
-timestamp to review a point in time. Go live returns to incoming activity.
+tab. The map shows concurrent sessions and their available delegations together.
+Choose a source tab or project, or switch between active and all sessions.
+Agents and subagents share the source tab accent. Replies and prompts appear
+in speech bubbles, tool calls appear beside the agent that made them, and
+delegation and return events travel in opposite directions along their links.
+
+Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
+and use Fit all or the minimap to reorient the canvas. The Agents list can find
+and center a session. The direction button switches between top to bottom and
+right to left. Select an agent, bubble or tool to open its details. Activity,
+Messages, Tools and Files views work at the current replay position. Files
+lists explicit paths reported by supported file tools.
+
+Use the timeline to scrub, step or replay at 1×, 2× or 4×. Go live returns to
+incoming activity. Usage displays available token records for Claude Code,
+Codex and Pi and reported cost for Pi. The amounts cover the loaded traces.
 
 | CLI | Recorded terminal activity | Transcript activity |
 | --- | --- | --- |
@@ -21,11 +32,13 @@ transcripts without a recorded tab association appear under the project. Codex,
 Copilot and Antigravity transcripts join a terminal run when a unique start-time match is
 available in its directory. Resumed or concurrent runs with ambiguous matches
 remain separate. The terminal journal keeps at most 160 recent public runs and
-96 terminal events per run. It stores lifecycle and source metadata. Transcript
-excerpts are fetched on demand, remain in memory and follow the selected live
-session by byte offset. The view reads at most the latest 4 MiB and retains up
-to 600 projected events per trace. Use the existing session history panel for
-the complete supported conversation tree.
+96 terminal events per run. It stores lifecycle and source metadata. The map
+follows active transcripts in bounded batches by byte offset and reads nearby
+historical transcripts on demand. It reads at most the latest 4 MiB and keeps
+up to 600 projected events per trace in memory. Offscreen agent nodes are
+culled, and the map follows the operating system's reduced-motion setting.
+Use the existing session history panel for the complete supported conversation
+tree.
 
 Private panes are excluded from recording and source discovery. When a private
 pane shares a directory, Agent Flow skips that project's history discovery

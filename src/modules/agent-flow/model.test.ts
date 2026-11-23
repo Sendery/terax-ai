@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  beforeTime, flowTasks, historyRun, mergeRuns, placeLane, sessionFamily,
+  beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
+import { branchFor, describeActor, fitCamera, makeScene, overlaps, zoomCamera } from "@/modules/agent-flow/scene";
+import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
 const child = historyRun({
@@ -25,13 +27,44 @@ describe("Agent Flow", () => {
   });
 
   it("places actual descendants on successive layers in both directions", () => {
-    const family = sessionFamily(root, [child, grandchild]);
-    const down = placeLane(family, "down");
-    const left = placeLane(family, "left");
-    expect(down.root.y).toBeLessThan(down.positions.get("child")?.y ?? 0);
-    expect(down.positions.get("child")?.y).toBeLessThan(down.positions.get("grandchild")?.y ?? 0);
-    expect(left.root.x).toBeGreaterThan(left.positions.get("child")?.x ?? Infinity);
-    expect(left.positions.get("child")?.x).toBeGreaterThan(left.positions.get("grandchild")?.x ?? Infinity);
+    const branch = branchFor(root, [child, grandchild], null, new Map());
+    const down = makeScene([branch], "down").clusters[0].nodes;
+    const left = makeScene([branch], "left").clusters[0].nodes;
+    expect(down[0].at.y).toBeLessThan(down[1].at.y);
+    expect(down[1].at.y).toBeLessThan(down[2].at.y);
+    expect(left[0].at.x).toBeGreaterThan(left[1].at.x);
+    expect(left[1].at.x).toBeGreaterThan(left[2].at.x);
+    expect(left[2].parent).toEqual(left[1].at);
+  });
+
+  it("keeps simultaneous hierarchies on the same nonoverlapping map", () => {
+    const other = historyRun({ id: "concurrent", provider: "claude", cwd: "/project", modifiedAt: 40 }, "Other tab");
+    const traces = new Map([[traceKey(other) ?? "", {
+      name: "Concurrent",
+      events: [{ id: "d1", at: 14, kind: "delegated" as const, taskId: "one" }],
+      limited: false,
+      failed: false,
+    }]]);
+    const branches = [branchFor(root, [child, grandchild], null, traces), branchFor(other, [], null, traces)];
+    const scene = makeScene(branches, "down");
+    expect(scene.clusters.map(({ nodes }) => nodes.length)).toEqual([3, 2]);
+    expect(overlaps(scene.clusters[0].box, scene.clusters[1].box)).toBe(false);
+    const fit = fitCamera(scene, { width: 1280, height: 800 });
+    expect(fit.scale * scene.height).toBeLessThan(800);
+    const zoom = zoomCamera(fit, { x: 320, y: 220 }, 1.25);
+    expect((320 - zoom.x) / zoom.scale).toBeCloseTo((320 - fit.x) / fit.scale);
+    expect((220 - zoom.y) / zoom.scale).toBeCloseTo((220 - fit.y) / fit.scale);
+  });
+
+  it("keeps incremental traces stable and uses deduplicated usage at the playhead", () => {
+    const first = { id: "u1", at: 10, kind: "usage" as const, usage: { key: "a", tokens: 58, cumulative: false } };
+    const last = { id: "u2", at: 20, kind: "usage" as const, usage: { key: "a", tokens: 73, cumulative: false } };
+    const empty = { events: [], name: null, nextOffset: 10, reset: false, limited: false };
+    const trace = mergeTrace(undefined, { ...empty, events: [first, last] });
+    expect(mergeTrace(trace, empty)).toBe(trace);
+    const branch = branchFor(root, [], null, new Map([[traceKey(root) ?? "", trace]]));
+    expect(describeActor(branch, undefined, trace, 15).usage?.tokens).toBe(58);
+    expect(describeActor(branch, undefined, trace, null).usage?.tokens).toBe(73);
   });
 
   it("rewinds a delegation independently of its result", () => {

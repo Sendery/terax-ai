@@ -1,161 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useState } from "react";
 import {
-  ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon,
-  Flowchart01Icon, PlayIcon, PauseIcon, TerminalIcon,
+  ArrowDown01Icon, ArrowLeft01Icon, Cancel01Icon, Flowchart01Icon,
+  TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
-import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
-import {
-  beforeTime, CARD_HEIGHT, CARD_WIDTH, FLOW_LABELS, flowTasks,
-  isTraceProvider, placeLane, sessionFamily, type FlowDirection, type FlowRun,
-  type FlowTask, type TraceEvent,
-} from "@/modules/agent-flow/model";
-import { useFlowData, useFlowTrace } from "@/modules/agent-flow/useFlowData";
+import { FlowCanvas, accent, runName } from "@/modules/agent-flow/FlowCanvas";
+import { FlowInspector, UsageMetrics } from "@/modules/agent-flow/FlowInspector";
+import { FlowTimeline, type TimeMark } from "@/modules/agent-flow/FlowTimeline";
+import { beforeTime, sessionFamily, type FlowDirection } from "@/modules/agent-flow/model";
+import { branchFor, describeActor, makeScene, type FlowSelection } from "@/modules/agent-flow/scene";
+import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
+import { useFlowData } from "@/modules/agent-flow/useFlowData";
 import "./agent-flow.css";
 
-const PAGE_SIZE = 18;
-const TASKS_PER_PAGE = 8;
-const ACTIVITY_PER_PAGE = 24;
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" });
-const timeOnly = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
-
-function runName(run: FlowRun, resolvedName?: string | null) {
-  return resolvedName || run.name || (run.sessionId ? `Session ${run.sessionId.slice(0, 8)}` : displayAgent(run.agent));
-}
-
-function runState(run: FlowRun, at: number | null) {
-  const events = beforeTime(run.events, at);
-  for (let index = events.length - 1; index >= 0; index--) {
-    const kind = events[index].kind;
-    if (kind === "error") return { label: "Error", tone: "error" };
-    if (kind === "exited") return { label: "Exited", tone: "rest" };
-    if (kind === "attention") return { label: "Needs input", tone: "attention" };
-    if (kind === "finished") return { label: "Turn complete", tone: "done" };
-    if (kind === "started" || kind === "working") {
-      return run.active || at !== null
-        ? { label: "Working", tone: "live" }
-        : { label: "Last seen working", tone: "rest" };
-    }
-  }
-  return { label: run.projectHistory ? "Project history" : "Recorded", tone: "rest" };
-}
-
-type Point = { x: number; y: number };
-
-function pathBetween(root: Point, child: Point, direction: FlowDirection) {
-  if (direction === "down") {
-    const x1 = root.x + CARD_WIDTH / 2;
-    const x2 = child.x + CARD_WIDTH / 2;
-    const y1 = root.y + CARD_HEIGHT;
-    const y2 = child.y;
-    const middle = (y1 + y2) / 2;
-    return `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`;
-  }
-  const x1 = root.x;
-  const x2 = child.x + CARD_WIDTH;
-  const y1 = root.y + CARD_HEIGHT / 2;
-  const y2 = child.y + CARD_HEIGHT / 2;
-  const middle = (x1 + x2) / 2;
-  return `M ${x1} ${y1} C ${middle} ${y1}, ${middle} ${y2}, ${x2} ${y2}`;
-}
-
-function accent(run: FlowRun): CSSProperties {
-  return { "--flow-accent": run.color ? TAB_COLOR_CSS[run.color] : "var(--muted-foreground)" } as CSSProperties;
-}
-
-function FlowLane({
-  run, time, direction, selected, tasks, task, name, bubble, zoom, onSelect,
-}: {
-  run: FlowRun;
-  time: number | null;
-  direction: FlowDirection;
-  selected: boolean;
-  tasks: FlowTask[];
-  task: string | null;
-  name?: string | null;
-  bubble?: string | null;
-  zoom: number;
-  onSelect: (task: string | null) => void;
-}) {
-  const lane = placeLane(tasks, direction);
-  const status = runState(run, time);
-  const title = runName(run, name);
-  const provider = displayAgent(run.agent);
-  const events = beforeTime(run.events, time);
-  const last = events[events.length - 1];
-  const rootStyle = { left: lane.root.x, top: lane.root.y, width: CARD_WIDTH, height: CARD_HEIGHT };
-  return (
-    <section className="flow-lane" style={accent(run)} aria-label={`${run.tabTitle}, ${title}`}>
-      <div className="flow-lane-heading">
-        <span className="flow-tab-dot" />
-        <span className="flow-lane-name" title={run.tabTitle}>{run.tabTitle}</span>
-        <span>{run.projectHistory ? "Project" : "Terminal"}</span>
-      </div>
-      <div style={{ width: lane.width * zoom, height: lane.height * zoom }}>
-        <div className="flow-lane-world" style={{
-          width: lane.width, height: lane.height, transform: `scale(${zoom})`,
-        }}>
-          {tasks.length ? (
-            <svg className="flow-edges" width={lane.width} height={lane.height} aria-hidden="true">
-              {tasks.map((entry) => {
-                const parent = entry.parentId ? lane.positions.get(entry.parentId) : lane.root;
-                const child = lane.positions.get(entry.id);
-                return parent && child ? (
-                  <path key={entry.id} d={pathBetween(parent, child, direction)} data-selected={task === entry.id} />
-                ) : null;
-              })}
-            </svg>
-          ) : null}
-          <button
-            type="button"
-            className="flow-node"
-            style={rootStyle}
-            data-selected={selected && !task}
-            aria-pressed={selected && !task}
-            onClick={() => onSelect(null)}
-          >
-            <span className="flow-node-header">
-              <span className="flow-provider"><AgentIcon agent={run.agent} harness={run.harness} size={16} /></span>
-              <span className="flow-node-identity">
-                <strong title={title}>{title}</strong>
-                {title !== provider ? <small>{provider}</small> : null}
-              </span>
-              <span className="flow-status-dot" data-tone={status.tone} />
-            </span>
-            <span className="flow-bubble">{bubble || last?.text || status.label}</span>
-            <span className="flow-node-footer">
-              {bubble || last?.text ? status.label : last ? timeOnly.format(last.at) : run.projectHistory ? dateTime.format(run.startedAt) : null}
-            </span>
-          </button>
-          {tasks.map((entry) => (
-            <button type="button" key={entry.id} className="flow-node flow-child"
-              style={{ left: lane.positions.get(entry.id)?.x, top: lane.positions.get(entry.id)?.y, width: CARD_WIDTH, height: CARD_HEIGHT }}
-              data-selected={task === entry.id} aria-pressed={task === entry.id}
-              onClick={() => onSelect(entry.id)}
-            >
-              <span className="flow-node-header">
-                <span className="flow-provider"><HugeiconsIcon icon={Flowchart01Icon} size={15} /></span>
-                <span className="flow-node-identity">
-                  <strong title={entry.label}>{entry.label}</strong>
-                  <small title={`${run.tabTitle} · ${title}`}>{run.tabTitle} · {title}</small>
-                </span>
-              </span>
-              <span className="flow-bubble">{entry.failed ? "Subagent failed" : entry.returnedAt ? "Result returned" : entry.parentId ? "Delegated by subagent" : "Delegated by session"}</span>
-              <span className="flow-node-footer">Subagent · {timeOnly.format(entry.at)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function flowEventPriority(event: TraceEvent) {
-  return event.kind === "reply" || event.kind === "user" || event.kind === "attention";
-}
+const HISTORY_READ_AHEAD = 28;
 
 export default function AgentFlow({
   tabs, open, onActivate,
@@ -164,294 +25,223 @@ export default function AgentFlow({
   open: boolean;
   onActivate: (tabId: number, leafId: number) => void;
 }) {
-  const [refresh, setRefresh] = useState(0);
   const [direction, setDirection] = useState<FlowDirection>("down");
   const [group, setGroup] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [scope, setScope] = useState<"active" | "all" | null>(null);
   const [time, setTime] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [page, setPage] = useState(0);
-  const [taskPage, setTaskPage] = useState(0);
-  const [activityPage, setActivityPage] = useState(1);
-  const [zoom, setZoom] = useState(1);
-  const viewport = useRef<HTMLDivElement | null>(null);
-  const toolbar = useRef<HTMLButtonElement | null>(null);
+  const [selection, setSelection] = useState<FlowSelection | null>(null);
+  const [near, setNear] = useState<string[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [navigator, setNavigator] = useState(false);
+  const [search, setSearch] = useState("");
+  const [usage, setUsage] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
   const { runs, children, digests, loading, failed } = useFlowData(tabs, open, refresh);
+  const active = runs.filter((run) => run.active).length;
+  const actualScope = scope ?? (active ? "active" : "all");
+
   const groups = useMemo(() => {
     const choices = new Map<string, string>();
-    for (const run of runs) {
-      choices.set(run.group, run.projectHistory ? `Project: ${run.tabTitle}` : run.tabTitle);
-    }
+    for (const run of runs) choices.set(run.group, run.projectHistory ? `Project: ${run.tabTitle}` : run.tabTitle);
     return [...choices].sort((a, b) => a[1].localeCompare(b[1]));
   }, [runs]);
   const groupKey = groups.some(([key]) => key === group) ? group : "";
-  const filtered = useMemo(
-    () => (groupKey ? runs.filter((run) => run.group === groupKey) : runs),
-    [groupKey, runs],
-  );
-  const run = filtered.find((item) => item.key === selected);
-  const trace = useFlowTrace(run, open, time === null && run?.active === true, refresh);
-  const activity = useMemo(() => [...(run?.events ?? []), ...trace.events]
-    .sort((a, b) => a.at - b.at),
-  [run, trace.events]);
-  const tasks = useMemo(() => flowTasks(beforeTime(activity, time)), [activity, time]);
-  const family = useMemo(() => sessionFamily(run, children), [run, children]);
-  const digest = run?.active && run.leafId !== undefined ? digests?.[run.leafId] : undefined;
-  const ownsDigest = !!run?.sessionId && digest?.sessionId === run.sessionId;
-  const liveTasks: FlowTask[] = family.length ? beforeTime(family, time)
-    : time === null && ownsDigest && !tasks.length
-    ? (digest?.tasks ?? []).filter((entry) => entry.kind === "subagent")
-      .map((entry, index) => ({ id: `current:${index}`, at: entry.startedAt, label: entry.label }))
-    : tasks;
-  const selectedEntry = liveTasks.find((entry) => entry.id === selectedTask);
-  const childTrace = useFlowTrace(selectedEntry?.run, open, time === null && run?.active === true, refresh);
-  const timeline = useMemo(() => [...new Set([
-    ...filtered.flatMap((item) => item.events.length ? item.events.map((event) => event.at) : [item.startedAt]),
-    ...activity.map((event) => event.at),
-    ...family.map((entry) => entry.at),
-    ...childTrace.events.map((event) => event.at),
-  ])].filter((at) => at > 0).sort((a, b) => a - b), [filtered, activity, family, childTrace.events]);
-  const nextTime = time === null ? -1 : timeline.findIndex((at) => at > time);
-  const cursor = nextTime < 0 ? timeline.length - 1 : Math.max(0, nextTime - 1);
-  const ordered = useMemo(() => filtered
-    .filter((a) => time === null || a.key === selected || (a.createdAt ?? a.events[0]?.at ?? a.startedAt) <= time)
-    .sort((a, b) => Number(!!b.active) - Number(!!a.active) || b.startedAt - a.startedAt),
-  [filtered, selected, time]);
-  const pages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
-  const current = Math.min(page, pages - 1);
-  const visible = ordered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
-  const focused = visible.find((item) => item.key === selected);
-  const taskPages = Math.max(1, Math.ceil(liveTasks.length / TASKS_PER_PAGE));
-  const taskIndex = Math.min(taskPage, taskPages - 1);
-  const visibleTasks = liveTasks.slice(taskIndex * TASKS_PER_PAGE, (taskIndex + 1) * TASKS_PER_PAGE);
-  const activeCount = filtered.filter((item) => item.active).length;
-  const recent = beforeTime(activity, time);
-  const detailEvents = recent.filter((entry) => entry.kind !== "returned" || entry.taskId && tasks.some((item) => item.id === entry.taskId));
-  const selectedEvents = selectedEntry?.run ? beforeTime(childTrace.events, time)
-    : selectedTask ? detailEvents.filter((entry) => entry.taskId === selectedTask || entry.id === selectedTask) : detailEvents;
-  const detailTrace = selectedEntry?.run ? childTrace : trace;
-  const excerpt = [...recent].reverse().find(flowEventPriority);
-  const bubble = excerpt?.text ?? (time === null && ownsDigest ? digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap : undefined);
+  const inScope = useMemo(() => runs.filter((run) =>
+    (!groupKey || run.group === groupKey) && (actualScope === "all" || run.active),
+  ).sort((a, b) => Number(!!b.active) - Number(!!a.active) || b.startedAt - a.startedAt), [runs, groupKey, actualScope]);
+  const selectionRun = selection?.run;
+  const selectionTask = selection?.task;
+  const live = time === null;
 
-  useEffect(() => {
-    if (!open || !playing || time === null) return;
-    let index = timeline.findIndex((at) => at > time);
-    if (index < 0) return;
-    const timer = setInterval(() => {
-      setTime(timeline[index] ?? null);
-      index++;
-      if (index >= timeline.length) {
-        setPlaying(false);
-        clearInterval(timer);
+  const targets = useMemo(() => {
+    if (!open) return [];
+    const nearby = new Set(near);
+    const queue = new Map<string, TraceTarget>();
+    const add = (target: TraceTarget | undefined) => {
+      if (target && (!queue.has(target.key) || target.follow)) queue.set(target.key, target);
+    };
+    const selected = inScope.find((run) => run.key === selectionRun);
+    if (selected) add(traceTarget(selected, live && !!selected.active));
+    let history = 0;
+    for (const run of inScope) {
+      const visible = nearby.has(run.key) || !near.length;
+      if (!run.active && !visible && run !== selected) continue;
+      if (!run.active && run !== selected && history >= HISTORY_READ_AHEAD) continue;
+      if (!run.active) history++;
+      const follow = live && !!run.active;
+      add(traceTarget(run, follow));
+      if (visible || run === selected) {
+        for (const descendant of sessionFamily(run, children)) {
+          if (descendant.run && (follow || descendant.id === selectionTask)) {
+            add(traceTarget(descendant.run, follow));
+          }
+        }
       }
-    }, 550);
-    return () => clearInterval(timer);
-  }, [open, playing, time, timeline]);
+    }
+    return [...queue.values()];
+  }, [open, near, inScope, live, selectionRun, selectionTask, children]);
+  const traces = useFlowTraces(targets, open, refresh);
+
+  const branches = useMemo(() => inScope.map((run) => branchFor(run, children, digests, traces)), [inScope, children, digests, traces]);
+  const scene = useMemo(() => makeScene(branches, direction), [branches, direction]);
+  const branch = branches.find((item) => item.run.key === selection?.run);
+  const task = branch?.tasks.find((entry) => entry.id === selection?.task && (time === null || entry.at <= time));
+  const detailTrace = task?.run ? traces.get(traceKey(task.run) ?? "") : branch?.trace;
+  const searchable = search.trim().toLowerCase();
+  const matches = navigator ? branches.filter((item) => !searchable ||
+    `${item.run.tabTitle} ${runName(item.run, item.trace?.name)} ${displayAgent(item.run.agent)}`.toLowerCase().includes(searchable),
+  ) : [];
+  const marks = useMemo(() => {
+    const at = new Map<number, TimeMark>();
+    const add = (mark: TimeMark) => {
+      if (mark.at > 0 && mark.kind !== "usage") at.set(mark.at, { at: mark.at, kind: mark.kind });
+    };
+    for (const item of branches) {
+      add({ at: item.start, kind: "started" });
+      for (const event of item.events) add(event);
+      for (const entry of item.tasks) {
+        add({ at: entry.at, kind: "delegated" });
+        if (entry.returnedAt !== undefined) add({ at: entry.returnedAt, kind: entry.failed ? "error" : "returned" });
+        if (entry.run) {
+          for (const event of traces.get(traceKey(entry.run) ?? "")?.events ?? []) add(event);
+        }
+      }
+    }
+    return [...at.values()].sort((a, b) => a.at - b.at);
+  }, [branches, traces]);
+  const measurements = useMemo(() => usage ? branches.flatMap((item) => {
+    const entries = [
+      { id: item.run.key, name: runName(item.run, item.trace?.name), value: describeActor(item, undefined, item.trace, time).usage },
+      ...item.tasks.flatMap((subagent) => {
+        const trace = traces.get(traceKey(subagent.run) ?? "");
+        return trace ? [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label, value: describeActor(item, subagent, trace, time).usage }] : [];
+      }),
+    ];
+    return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value }] : []);
+  }) : [], [branches, time, traces, usage]);
+  const aggregate = measurements.reduce<{ tokens: number; cost: number | undefined }>((total, item) => ({
+    tokens: total.tokens + item.value.tokens,
+    cost: item.value.cost === undefined ? total.cost : (total.cost ?? 0) + item.value.cost,
+  }), { tokens: 0, cost: undefined });
 
   if (!open) return null;
 
-  function selectRun(key: string | null, child: string | null = null) {
-    setSelected(key);
-    setSelectedTask(child);
-    if (key !== selected) {
-      setTaskPage(0);
-      if (key) viewport.current?.scrollTo(0, 0);
-    }
-    setActivityPage(1);
+  const visibleBranches = time === null ? branches : branches.filter((item) => item.start <= time);
+  const totalAgents = visibleBranches.reduce((sum, item) => sum + 1 + beforeTime(item.tasks, time).length, 0);
+
+  function select(next: FlowSelection) {
+    setSelection(next);
+    setUsage(false);
   }
 
-  function changePage(next: number) {
-    setPage(next);
-    viewport.current?.scrollTo(0, 0);
+  function selectFromList(key: string) {
+    select({ run: key });
+    setFocusRequest((previous) => ({ key, tick: (previous?.tick ?? 0) + 1 }));
+    setNavigator(false);
   }
 
-  function jump(at: number | null) {
+  function jump(at: number) {
     setPlaying(false);
     setTime(at);
   }
 
-  function fitView() {
-    const bounds = viewport.current;
-    if (!bounds) return;
-    const graph = placeLane(visibleTasks, direction);
-    const width = (bounds.clientWidth - 44) / graph.width;
-    const height = (bounds.clientHeight - 58) / graph.height;
-    setZoom(Math.max(0.35, Math.min(1, width, height)));
-    bounds.scrollTo(0, 0);
-  }
-
-  function closeDetail() {
-    selectRun(null);
-    toolbar.current?.focus();
-  }
-
-  function renderLane(item: FlowRun) {
-    const isSelected = run?.key === item.key;
-    const itemDigest = item.active && item.leafId !== undefined ? digests?.[item.leafId] : undefined;
-    const preview = time === null && item.sessionId && itemDigest?.sessionId === item.sessionId
-      ? itemDigest.pendingQuestion ?? itemDigest.lastReply ?? itemDigest.recap : null;
-    return (
-      <FlowLane key={item.key} run={item} time={time} direction={direction} zoom={zoom}
-        selected={isSelected}
-        name={isSelected ? trace.name : null}
-        bubble={isSelected ? bubble : preview}
-        tasks={isSelected ? visibleTasks : []}
-        task={isSelected ? selectedTask : null}
-        onSelect={(child) => selectRun(item.key, child)}
-      />
-    );
+  function changeScope(next: "active" | "all") {
+    setScope(next);
+    setSelection(null);
+    setPlaying(false);
+    setTime(null);
   }
 
   return (
     <section className="agent-flow" aria-label="Agent Flow">
-      <header className="flow-header">
+      <header className="flow-topbar">
         <div className="flow-heading">
-          <span className="flow-brand"><HugeiconsIcon icon={Flowchart01Icon} size={19} /></span>
-          <div>
-            <h1>Agent Flow</h1>
-            <span>{filtered.length} {filtered.length === 1 ? "session" : "sessions"} · {activeCount} active</span>
-          </div>
+          <span className="flow-brand"><HugeiconsIcon icon={Flowchart01Icon} size={18} /></span>
+          <div><h1>Agent Flow</h1><p>{totalAgents} {totalAgents === 1 ? "agent" : "agents"} · {visibleBranches.length} {visibleBranches.length === 1 ? "session" : "sessions"}</p></div>
         </div>
         <div className="flow-controls">
           <select aria-label="Filter source tab" value={groupKey} onChange={(event) => {
             setGroup(event.target.value);
-            selectRun(null);
-            changePage(0);
+            setSelection(null);
+            setPlaying(false);
+            setTime(null);
           }}>
-            <option value="">All tabs and project history</option>
+            <option value="">All tabs</option>
             {groups.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
-          <button type="button" ref={toolbar}
+          <select aria-label="Session scope" value={actualScope} onChange={(event) => changeScope(event.target.value === "active" ? "active" : "all")}>
+            <option value="active">Active sessions</option>
+            <option value="all">All sessions</option>
+          </select>
+          <button type="button" className="flow-direction" title="Change graph direction"
             aria-label={direction === "down" ? "Switch to right-to-left layout" : "Switch to top-to-bottom layout"}
-            onClick={() => setDirection((old) => old === "down" ? "left" : "down")}
-          >
+            onClick={() => setDirection((current) => current === "down" ? "left" : "down")}>
             <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={15} />
-            {direction === "down" ? "Top to bottom" : "Right to left"}
+            <span>{direction === "down" ? "Top to bottom" : "Right to left"}</span>
           </button>
+          <button type="button" aria-pressed={usage} onClick={() => { setUsage((current) => !current); setSelection(null); }}>Usage</button>
           <button type="button" onClick={() => setRefresh((value) => value + 1)} disabled={loading}>Refresh</button>
-          <button type="button" className="flow-live" aria-pressed={time === null} onClick={() => jump(null)}>
-            <span className="flow-status-dot" data-tone={time === null ? "live" : "rest"} />
-            Live
-          </button>
         </div>
       </header>
 
-      <div className="flow-workspace">
-        <div className="flow-canvas">
-          <div className="flow-canvas-bar">
-            <span>{time === null ? "Session map" : `Replay · ${timeline.length ? dateTime.format(time) : ""}`}</span>
-            <div className="flow-controls">
-              <button type="button" aria-label="Zoom out" disabled={zoom <= 0.35} onClick={() => setZoom((value) => Math.max(0.35, value - 0.15))}>−</button>
-              <span className="flow-zoom">{Math.round(zoom * 100)}%</span>
-              <button type="button" aria-label="Zoom in" disabled={zoom >= 1.6} onClick={() => setZoom((value) => Math.min(1.6, value + 0.15))}>+</button>
-              <button type="button" onClick={fitView}>Fit view</button>
-            </div>
-          </div>
-          <section className="flow-viewport" ref={viewport} aria-label="Scrollable session map">
-            {visible.length ? (
-              <>
-                {focused ? <div className="flow-focus-lane">{renderLane(focused)}</div> : null}
-                <div className="flow-lanes">
-                  {visible.filter((item) => item !== focused).map(renderLane)}
-                </div>
-              </>
-            ) : (
-              <div className="flow-empty" role="status">
-                <HugeiconsIcon icon={Flowchart01Icon} size={32} />
-                <strong>{loading ? "Loading session history" : "No sessions in view"}</strong>
-                <span>{time === null ? "Start a supported agent in a terminal or choose another source." : "Move the timeline forward or return to Live."}</span>
-              </div>
-            )}
-          </section>
-          {pages > 1 || failed ? (
-            <div className="flow-pagination">
-              <span>{failed ? "Some project history could not be loaded." : `Sessions ${current * PAGE_SIZE + 1}–${Math.min(ordered.length, (current + 1) * PAGE_SIZE)} of ${ordered.length}`}</span>
-              {pages > 1 ? <div className="flow-controls">
-                <button type="button" disabled={!current} onClick={() => changePage(current - 1)}>Previous</button>
-                <button type="button" disabled={current + 1 >= pages} onClick={() => changePage(current + 1)}>Next</button>
-              </div> : null}
+      <div className="flow-stage">
+        <FlowCanvas scene={scene} traces={traces} direction={direction} time={time} target={selection}
+          focusRequest={focusRequest} fitRequest={`${direction}:${groupKey}:${actualScope}`}
+          loading={loading} onSelect={select} onVisible={setNear} />
+
+        <div className="flow-navigation">
+          <button type="button" className="flow-nav-toggle" aria-expanded={navigator}
+            onClick={() => setNavigator((current) => !current)}>
+            <HugeiconsIcon icon={TerminalIcon} size={15} /> Agents <span>{branches.length}</span>
+          </button>
+          {navigator ? (
+            <div className="flow-nav-panel" onKeyDown={(event) => { if (event.key === "Escape") setNavigator(false); }}>
+              <input type="search" aria-label="Find an agent session" placeholder="Find a session…" value={search}
+                onChange={(event) => setSearch(event.target.value)} />
+              <ul>
+                {matches.map((item) => <li key={item.run.key}>
+                  <button type="button" style={accent(item.run)} onClick={() => selectFromList(item.run.key)}>
+                    <AgentIcon agent={item.run.agent} harness={item.run.harness} size={16} />
+                    <span><b>{runName(item.run, item.trace?.name)}</b><small>{item.run.tabTitle}</small></span>
+                    <i className="flow-tab-dot" />
+                  </button>
+                </li>)}
+              </ul>
+              {!matches.length ? <p>No matching sessions.</p> : null}
             </div>
           ) : null}
+          {failed ? <small className="flow-history-error" role="status">Some history could not load.</small> : null}
         </div>
 
-        {run ? (
-          <aside className="flow-inspector" aria-label="Session details" style={accent(run)}
-            onKeyDown={(event) => { if (event.key === "Escape") closeDetail(); }}>
-            <header>
-              <span className="flow-inspector-source"><span className="flow-tab-dot" />{run.tabTitle}</span>
-              <button type="button" aria-label="Close session details" onClick={closeDetail}>
-                <HugeiconsIcon icon={Cancel01Icon} size={16} />
+        {branch && !usage ? (
+          <FlowInspector key={`${branch.run.key}:${task?.id ?? "root"}`}
+            branch={branch} task={task} trace={detailTrace} eventId={selection?.event} time={time}
+            onClose={() => setSelection(null)} onJump={jump} onActivate={onActivate}
+            onRoot={() => select({ run: branch.run.key })} />
+        ) : null}
+        {usage ? (
+          <aside className="flow-inspector flow-usage-panel" aria-label="Reported usage">
+            <header className="flow-inspector-header">
+              <strong>Reported usage</strong>
+              <button type="button" className="flow-icon-button" aria-label="Close usage" onClick={() => setUsage(false)}>
+                <HugeiconsIcon icon={Cancel01Icon} size={17} />
               </button>
             </header>
-            <div className="flow-inspector-intro">
-              <h2>{selectedEntry?.label ?? runName(run, trace.name)}</h2>
-              <p>{displayAgent(run.agent)} · {selectedTask ? "Subagent" : runState(run, time).label}</p>
-              {selectedTask ? <button type="button" onClick={() => selectRun(run.key)}>Back to session</button> : null}
-              {run.tabId !== undefined && run.leafId !== undefined && run.active ? (
-                <button type="button" onClick={() => {
-                  if (run.tabId !== undefined && run.leafId !== undefined) onActivate(run.tabId, run.leafId);
-                }}>
-                  <HugeiconsIcon icon={TerminalIcon} size={14} /> Focus terminal
-                </button>
-              ) : null}
-            </div>
-            {taskPages > 1 ? <div className="flow-delegations">
-              <span>Subagents {taskIndex * TASKS_PER_PAGE + 1}–{Math.min(liveTasks.length, (taskIndex + 1) * TASKS_PER_PAGE)} of {liveTasks.length}</span>
-              <div className="flow-controls">
-                <button type="button" aria-label="Previous subagents" disabled={!taskIndex} onClick={() => setTaskPage(taskIndex - 1)}><HugeiconsIcon icon={ArrowLeft01Icon} size={14} /></button>
-                <button type="button" aria-label="Next subagents" disabled={taskIndex + 1 >= taskPages} onClick={() => setTaskPage(taskIndex + 1)}><HugeiconsIcon icon={ArrowRight01Icon} size={14} /></button>
-              </div>
-            </div> : null}
-            <div className="flow-activity">
-              <h3>Activity</h3>
-              {detailTrace.loading ? <p>Loading transcript…</p> : null}
-              {detailTrace.failed ? <p role="status">Transcript unavailable. Recorded terminal events are shown.</p> : null}
-              {detailTrace.limited ? <p>Recent transcript activity is shown.</p> : null}
-              {run.projectHistory ? <p>Matched by project folder.</p> : null}
-              {(!isTraceProvider(run.harness) || !run.sessionId) && !trace.loading
-                ? <p>Terminal events are available for this session.</p> : null}
-              {selectedEvents.length ? (
-                <ol>
-                  {selectedEvents.slice(-activityPage * ACTIVITY_PER_PAGE).reverse().map((event) => (
-                    <li key={event.id}>
-                      <button type="button" onClick={() => jump(event.at)}>
-                        <span><strong>{FLOW_LABELS[event.kind]}</strong><time dateTime={new Date(event.at).toISOString()}>{timeOnly.format(event.at)}</time></span>
-                        {event.text ? <small>{event.text}</small> : null}
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              ) : !detailTrace.loading ? <p>No events at this point in time.</p> : null}
-              {selectedEvents.length > activityPage * ACTIVITY_PER_PAGE ? (
-                <button type="button" onClick={() => setActivityPage((value) => value + 1)}>Earlier events</button>
-              ) : null}
+            <div className="flow-inspector-scroll">
+              {measurements.length ? <>
+                <UsageMetrics usage={aggregate} />
+                <ul className="flow-usage-list">
+                  {measurements.map(({ id, name, value }) => <li key={id}><span>{name}</span><b>{value.tokens.toLocaleString()}</b></li>)}
+                </ul>
+              </> : <p className="flow-inspector-note">No token or cost records are available in this view.</p>}
+              {measurements.length ? <p className="flow-inspector-note">Totals cover usage reported in the loaded transcripts.</p> : null}
             </div>
           </aside>
         ) : null}
       </div>
 
-      <footer className="flow-timeline">
-        <button type="button" aria-label={playing ? "Pause replay" : "Play timeline"} disabled={timeline.length < 2}
-          onClick={() => {
-            if (playing) { setPlaying(false); return; }
-            if (time === null || cursor >= timeline.length - 1) setTime(timeline[0]);
-            setPlaying(true);
-          }}>
-          <HugeiconsIcon icon={playing ? PauseIcon : PlayIcon} size={17} />
-        </button>
-        <div className="flow-scrubber">
-          <div><label htmlFor="agent-flow-time">Timeline</label><span>{time === null ? "Live edge" : timeline.length ? dateTime.format(timeline[cursor]) : ""}</span></div>
-          <input id="agent-flow-time" type="range" min={0} max={Math.max(1, timeline.length - 1)}
-            disabled={timeline.length < 2} value={Math.max(0, cursor)}
-            style={{
-              "--flow-progress": `${timeline.length > 1 ? Math.max(0, cursor) / (timeline.length - 1) * 100 : 0}%`,
-            } as CSSProperties}
-            aria-valuetext={timeline[cursor] ? dateTime.format(timeline[cursor]) : "No recorded events"}
-            onChange={(event) => jump(timeline[Number(event.target.value)] ?? null)} />
-        </div>
-        <button type="button" onClick={() => jump(null)} disabled={time === null}>Go live</button>
-      </footer>
+      <FlowTimeline marks={marks} time={time} setTime={setTime} playing={playing} setPlaying={setPlaying} />
     </section>
   );
 }

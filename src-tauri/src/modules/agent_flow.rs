@@ -53,6 +53,16 @@ enum Kind {
     Returned,
     TurnEnded,
     Error,
+    Usage,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Usage {
+    tokens: u64,
+    cumulative: bool,
+    key: Option<String>,
+    cost: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,6 +73,10 @@ struct Event {
     kind: Kind,
     text: String,
     task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<Usage>,
 }
 
 #[derive(Serialize)]
@@ -105,6 +119,75 @@ fn safe_key(v: &Value) -> Option<String> {
     v.as_str()
         .filter(|id| is_safe_session_id(id))
         .map(String::from)
+}
+
+fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
+    let message = &row["message"];
+    match provider {
+        Provider::Claude
+            if row["type"] == "assistant" && row["isSidechain"] != true =>
+        {
+            let usage = message["usage"].as_object()?;
+            let tokens = ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
+                .into_iter()
+                .filter_map(|key| usage.get(key)?.as_u64())
+                .fold(0u64, u64::saturating_add);
+            let key = safe_key(&message["id"]).or_else(|| safe_key(&row["uuid"]))?;
+            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None })
+        }
+        Provider::Pi if message["role"] == "assistant" => {
+            let usage = &message["usage"];
+            Some(Usage {
+                tokens: usage["totalTokens"].as_u64()?,
+                cumulative: false,
+                key: safe_key(&row["id"]),
+                cost: usage["cost"]["total"].as_f64().filter(|cost| cost.is_finite() && *cost >= 0.0),
+            })
+        }
+        Provider::Codex
+            if row["type"] == "event_msg" && row["payload"]["type"] == "token_count" =>
+        {
+            Some(Usage {
+                tokens: row["payload"]["info"]["total_token_usage"]["total_tokens"].as_u64()?,
+                cumulative: true,
+                key: None,
+                cost: None,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn explicit_file(args: &Value) -> Option<String> {
+    ["file_path", "filePath", "path"].into_iter().find_map(|key| {
+        let path = args[key].as_str()?.trim();
+        if path.is_empty() || path.contains("://") || path.chars().any(char::is_control) {
+            return None;
+        }
+        Some(path.chars().take(240).collect())
+    })
+}
+
+fn tool_file(provider: Provider, row: &Value, name: &str) -> Option<String> {
+    if !matches!(
+        name.to_ascii_lowercase().as_str(),
+        "read" | "write" | "edit" | "view" | "read_file" | "write_file" | "view_file" | "edit_file" | "replace"
+    ) {
+        return None;
+    }
+    match provider {
+        Provider::Claude | Provider::Pi => row["message"]["content"]
+            .as_array()?
+            .iter()
+            .filter(|block| block["name"] == name)
+            .find_map(|block| explicit_file(&block["input"]).or_else(|| explicit_file(&block["arguments"]))),
+        Provider::Codex => {
+            let args: Value = serde_json::from_str(row["payload"]["arguments"].as_str()?).ok()?;
+            explicit_file(&args)
+        }
+        Provider::Copilot => explicit_file(&row["data"]["arguments"]),
+        Provider::Agy => None,
+    }
 }
 
 fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
@@ -444,7 +527,7 @@ fn trace_path(provider: Provider, id: &str) -> Option<PathBuf> {
     let path = resolve(provider, id)?.canonicalize().ok()?;
     let mut paths = PATHS.lock().ok()?;
     paths.retain(|(p, key, _)| *p != provider || key != id);
-    if paths.len() >= 48 {
+    if paths.len() >= 256 {
         paths.pop_front();
     }
     paths.push_back((provider, id.to_string(), path.clone()));
@@ -508,12 +591,29 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
             events.push_back(Event {
                 id: format!("{line_offset}:{index}"),
                 at,
+                file: if kind == Kind::Tool { tool_file(provider, &row, &text) } else { None },
                 kind,
                 text,
                 task_id,
+                usage: None,
             });
             index += 1;
         });
+        if let Some(usage) = usage_for(provider, &row) {
+            if events.len() == MAX_EVENTS {
+                events.pop_front();
+                limited = true;
+            }
+            events.push_back(Event {
+                id: format!("{line_offset}:usage"),
+                at,
+                kind: Kind::Usage,
+                text: String::new(),
+                task_id: None,
+                file: None,
+                usage: Some(usage),
+            });
+        }
     }
     Ok(Trace {
         events: events.into(),

@@ -1,539 +1,1044 @@
 .agent-flow {
-  --flow-stroke: color-mix(in oklab, var(--border) 78%, var(--foreground) 8%);
-  --flow-surface: color-mix(in oklab, var(--card) 86%, var(--background));
-  --flow-accent: var(--muted-foreground);
+  --flow-default: #397ea6;
+  --flow-bg: color-mix(in oklab, var(--background) 91%, #426b83);
+  --flow-panel: color-mix(in oklab, var(--card) 94%, #527894);
+  --flow-line: color-mix(in oklab, var(--foreground) 15%, var(--border));
+  --flow-dim: var(--muted-foreground);
+  --flow-good: #209e7b;
+  --flow-warn: #d89437;
+  --flow-bad: #dc6276;
+  --flow-tool: #3c91ae;
+  --flow-accent: var(--flow-default);
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
-  isolation: isolate;
-  container-type: inline-size;
+  height: 100%;
   overflow: hidden;
-  background: var(--background);
+  background: var(--flow-bg);
   color: var(--foreground);
   font-size: 12px;
+  container-type: inline-size;
+}
+
+.dark .agent-flow {
+  --flow-default: #86c4eb;
+  --flow-bg: color-mix(in oklab, var(--background) 76%, #080e27);
+  --flow-panel: color-mix(in oklab, var(--card) 86%, #152137);
+  --flow-line: color-mix(in oklab, var(--foreground) 14%, #263c52);
+  --flow-good: #66e1bc;
+  --flow-warn: #f0b75e;
+  --flow-tool: #7bd4f0;
 }
 
 .agent-flow button,
-.agent-flow select {
-  border-radius: 7px;
-}
-
-.agent-flow button:not(.flow-node):not(.flow-activity li button),
-.agent-flow select {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 2px 8px;
-  border: 1px solid var(--flow-stroke);
-  background: var(--card);
-  color: var(--foreground);
-  white-space: nowrap;
+.agent-flow select,
+.agent-flow input {
+  font: inherit;
 }
 
 .agent-flow button:focus-visible,
 .agent-flow select:focus-visible,
+.agent-flow input:focus-visible,
 .flow-viewport:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 .agent-flow button:disabled {
-  cursor: default;
-  opacity: 0.45;
+  opacity: 0.38;
 }
 
-.agent-flow button:not(:disabled):hover {
-  border-color: var(--flow-accent);
-}
-
-.flow-header,
-.flow-timeline,
-.flow-canvas-bar,
-.flow-pagination {
+.flow-topbar,
+.flow-timeline {
+  z-index: 2;
+  position: relative;
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
-  flex: none;
-  background: var(--flow-surface);
-  border-bottom: 1px solid var(--flow-stroke);
+  gap: 12px;
+  padding: 10px 15px;
+  background: var(--flow-panel);
 }
 
-.flow-header,
-.flow-canvas-bar,
-.flow-pagination {
+.flow-topbar {
   justify-content: space-between;
-}
-
-.flow-header {
   flex-wrap: wrap;
+  border-bottom: 1px solid var(--flow-line);
 }
 
 .flow-heading,
-.flow-controls {
+.flow-controls,
+.flow-transport,
+.flow-inspector-actions {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.flow-controls,
+.flow-inspector-actions {
+  flex-wrap: wrap;
 }
 
 .flow-heading {
   gap: 10px;
 }
 
-.flow-heading h1 {
+.flow-brand,
+.flow-empty-symbol {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 38%, var(--flow-line));
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in oklab, var(--flow-accent) 22%, var(--flow-panel)), var(--flow-panel));
+  color: color-mix(in oklab, var(--flow-accent) 78%, var(--foreground));
+}
+
+.flow-heading h1,
+.flow-inspector h2,
+.flow-empty h2 {
   margin: 0;
   font-size: 15px;
-  line-height: 1.1;
-  font-weight: 660;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  font-weight: 675;
 }
 
-.flow-heading div > span,
-.flow-canvas-bar,
-.flow-pagination,
-.flow-scrubber div > span {
-  color: var(--muted-foreground);
+.flow-heading p,
+.flow-inspector-title p,
+.flow-empty p {
+  margin: 2px 0 0;
+  color: var(--flow-dim);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 
-.flow-brand,
-.flow-provider {
-  display: grid;
-  flex: none;
-  place-items: center;
-  border-radius: 8px;
+.flow-controls button,
+.flow-controls select,
+.flow-camera button,
+.flow-nav-toggle,
+.flow-transport button,
+.flow-timeline select,
+.flow-live,
+.flow-inspector-actions button,
+.flow-inspector-scroll > button,
+.flow-inspector-focus button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 2px 8px;
   color: var(--foreground);
-  border: 1px solid var(--flow-stroke);
-  background: color-mix(in oklab, var(--flow-accent) 12%, var(--card));
-}
-
-.flow-brand {
-  width: 34px;
-  height: 34px;
-}
-
-.flow-controls {
-  flex-wrap: wrap;
+  background: var(--flow-panel);
+  border: 1px solid var(--flow-line);
+  border-radius: 7px;
+  white-space: nowrap;
 }
 
 .flow-controls select {
-  max-width: min(225px, 58vw);
+  max-width: min(196px, 46vw);
 }
 
-.flow-live[aria-pressed="true"] {
-  --flow-accent: #34b981;
-  border-color: color-mix(in oklab, var(--flow-accent) 60%, var(--flow-stroke)) !important;
+.flow-controls button:hover:not(:disabled),
+.flow-camera button:hover:not(:disabled),
+.flow-transport button:hover:not(:disabled),
+.flow-nav-toggle:hover,
+.flow-inspector-actions button:hover,
+.flow-live:hover,
+.flow-controls button[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--flow-accent) 76%, var(--flow-line));
+  background: color-mix(in oklab, var(--flow-accent) 11%, var(--flow-panel));
 }
 
-.flow-workspace {
-  display: flex;
+.flow-stage,
+.flow-canvas,
+.flow-viewport {
+  position: relative;
   flex: 1;
   min-height: 0;
-}
-
-.flow-canvas {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
   min-width: 0;
-  min-height: 0;
-}
-
-.flow-canvas-bar,
-.flow-pagination {
-  padding-block: 6px;
-}
-
-.flow-canvas-bar .flow-controls {
-  gap: 5px;
-}
-
-.flow-zoom {
-  min-width: 36px;
-  text-align: center;
-}
-
-.flow-pagination {
-  border-top: 1px solid var(--flow-stroke);
-  border-bottom: 0;
+  display: flex;
 }
 
 .flow-viewport {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: radial-gradient(circle, color-mix(in oklab, var(--muted-foreground) 22%, transparent) 1px, transparent 1.3px) 12px 12px / 21px 21px,
-    linear-gradient(165deg, color-mix(in oklab, var(--card) 32%, var(--background)), var(--background) 65%);
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background:
+    radial-gradient(ellipse at 48% 42%, color-mix(in oklab, var(--flow-default) 12%, transparent), transparent 68%),
+    radial-gradient(circle, color-mix(in oklab, var(--flow-default) 38%, transparent) 0.75px, transparent 1.4px) 0 0 / 113px 97px,
+    radial-gradient(circle, color-mix(in oklab, var(--flow-dim) 28%, transparent) 0.55px, transparent 1.2px) 11px 11px / 23px 23px,
+    var(--flow-bg);
 }
 
-.flow-lanes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 18px;
+.flow-viewport[data-dragging="true"] {
+  cursor: grabbing;
 }
 
-.flow-focus-lane {
-  display: flex;
-  justify-content: safe center;
-  padding: 18px 18px 0;
+.flow-world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
 }
 
-.flow-focus-lane .flow-lane {
-  box-shadow: 0 8px 28px #0002;
+.flow-cluster {
+  position: absolute;
+  isolation: isolate;
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 32%, transparent);
+  border-radius: 23px;
+  background:
+    radial-gradient(ellipse at 24% 0%, color-mix(in oklab, var(--flow-accent) 11%, transparent), transparent 61%),
+    color-mix(in oklab, var(--flow-panel) 35%, transparent);
 }
 
-.flow-lane {
-  flex: none;
-  border: 1px solid color-mix(in oklab, var(--flow-accent) 32%, var(--flow-stroke));
-  border-radius: 12px;
-  background: color-mix(in oklab, var(--flow-accent) 5%, var(--background) 89%, transparent);
+.flow-cluster[data-active="true"] {
+  border-color: color-mix(in oklab, var(--flow-accent) 48%, transparent);
 }
 
-.flow-lane-heading {
+.flow-cluster-tag {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 11px 8px;
-  border-bottom: 1px solid color-mix(in oklab, var(--flow-accent) 20%, var(--flow-stroke));
-  color: var(--muted-foreground);
-  font-size: 10px;
-}
-
-.flow-tab-dot {
-  flex: none;
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;
-  background: var(--flow-accent);
-}
-
-.flow-lane-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--foreground);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.flow-lane-world {
-  position: relative;
-  transform-origin: top left;
-}
-
-.flow-edges {
-  position: absolute;
-  inset: 0;
-  color: var(--flow-accent);
+  font-size: 13px;
+  font-weight: 640;
   pointer-events: none;
 }
 
-.flow-edges path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.75;
-  opacity: 0.55;
+.flow-cluster-tag > span,
+.flow-tab-dot,
+.flow-live > span {
+  flex: none;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--flow-accent);
 }
 
-.flow-edges path[data-selected="true"] {
-  opacity: 1;
-  stroke-width: 2.25;
+.flow-cluster-tag small {
+  margin-inline-start: auto;
+  color: var(--flow-dim);
+  font: 11px/1.4 "JetBrains Mono", ui-monospace, monospace;
 }
 
-.agent-flow .flow-node {
+.flow-connections {
   position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.flow-edge,
+.flow-transit {
+  fill: none;
+  stroke: var(--flow-accent);
+}
+
+.flow-edge {
+  stroke-width: 2;
+  opacity: 0.53;
+}
+
+.flow-edge[data-returned="true"] {
+  stroke-dasharray: 3 5;
+  opacity: 0.4;
+}
+
+.flow-transit {
+  opacity: 0;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 0.12 0.88;
+  animation: flow-travel 1.2s ease-in-out both;
+}
+
+.flow-transit[data-returned="true"] {
+  animation-direction: reverse;
+}
+
+@keyframes flow-travel {
+  0% { stroke-dashoffset: 0.13; opacity: 0; }
+  15%, 85% { opacity: 1; }
+  100% { stroke-dashoffset: -0.98; opacity: 0; }
+}
+
+.flow-actor {
+  position: absolute;
+  --flow-status: var(--flow-dim);
+}
+
+.flow-actor[data-tone="active"] { --flow-status: var(--flow-accent); }
+.flow-actor[data-tone="waiting"] { --flow-status: var(--flow-warn); }
+.flow-actor[data-tone="complete"] { --flow-status: var(--flow-good); }
+.flow-actor[data-tone="error"] { --flow-status: var(--flow-bad); }
+
+.flow-node {
+  position: absolute;
+  top: 21px;
+  left: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  text-align: left;
+  align-items: center;
+  gap: 3px;
+  width: 94px;
+  padding: 0 0 3px;
+  color: inherit;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+}
+
+.flow-beacon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 32%, transparent);
+  background: radial-gradient(circle, color-mix(in oklab, var(--flow-accent) 20%, transparent), transparent 72%);
+}
+
+.flow-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 49px;
+  height: 49px;
+  border-radius: 16px 16px 16px 7px;
+  transform: rotate(-12deg);
+  border: 1.5px solid var(--flow-accent);
+  background: linear-gradient(140deg, color-mix(in oklab, var(--flow-accent) 35%, var(--flow-panel)), var(--flow-panel));
+  color: color-mix(in oklab, var(--flow-accent) 73%, var(--foreground));
+  box-shadow: 0 0 16px color-mix(in oklab, var(--flow-accent) 22%, transparent), inset 0 0 12px #fff1;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.flow-glyph > * {
+  transform: rotate(12deg);
+}
+
+.flow-actor[data-kind="subagent"] .flow-glyph {
+  width: 43px;
+  height: 43px;
+  border-radius: 15px;
+  border-style: dashed;
+}
+
+.flow-node:hover .flow-glyph,
+.flow-node[aria-pressed="true"] .flow-glyph {
+  transform: rotate(-5deg) scale(1.12);
+  box-shadow: 0 0 24px color-mix(in oklab, var(--flow-accent) 48%, transparent);
+}
+
+.flow-node-status {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--flow-panel);
+  border-radius: 50%;
+  background: var(--flow-status);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--flow-status) 60%, transparent);
+}
+
+.flow-beacon-wave {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--flow-accent);
+  border-radius: 50%;
+  animation: flow-wave 1.35s ease-out both;
+  pointer-events: none;
+}
+
+.flow-node-orbit {
+  position: absolute;
+  inset: -5px;
+  border: 1px solid transparent;
+  border-top-color: var(--flow-accent);
+  border-radius: 50%;
+  opacity: 0.75;
+  pointer-events: none;
+  animation: flow-orbit 4s linear infinite;
+}
+
+@keyframes flow-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes flow-wave {
+  from { transform: scale(0.87); opacity: 0.8; }
+  to { transform: scale(1.7); opacity: 0; }
+}
+
+.flow-node-caption {
+  max-width: 100%;
   overflow: hidden;
-  border: 1px solid var(--flow-stroke);
-  border-inline-start: 3px solid var(--flow-accent);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: 0 5px 14px #0001;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 670;
 }
 
-.flow-node[data-selected="true"] {
+.flow-node-state,
+.flow-node-usage {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: color-mix(in oklab, var(--flow-status) 84%, var(--foreground));
+}
+
+.flow-node-usage {
+  font: 9px/1.3 "JetBrains Mono", ui-monospace, monospace;
+  color: var(--flow-dim);
+}
+
+.flow-actor[data-compact="true"] .flow-node {
+  left: 0;
+  width: min(100%, 175px);
+  align-items: flex-start;
+  padding-inline-start: 13px;
+  text-align: start;
+}
+
+.flow-actor[data-compact="true"] .flow-node-state {
+  font-size: 15px;
+  padding-inline-start: 6px;
+}
+
+.flow-actor[data-compact="true"] .flow-node-caption {
+  padding-inline-start: 6px;
+  font-size: 19px;
+}
+
+.flow-actor[data-compact="true"] .flow-node-usage {
+  display: none;
+}
+
+.flow-node-events {
+  position: absolute;
+  top: 9px;
+  left: 107px;
+  right: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.flow-speech,
+.flow-activity-label {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 9px;
+  text-align: left;
+  border-radius: 3px 12px 12px;
+  border: 1px solid color-mix(in oklab, var(--flow-accent) 43%, var(--flow-line));
+  background: color-mix(in oklab, var(--flow-accent) 12%, var(--flow-panel));
+}
+
+.flow-speech::before {
+  position: absolute;
+  left: -6px;
+  top: 30px;
+  width: 9px;
+  height: 9px;
+  content: "";
+  transform: rotate(45deg);
+  border-left: inherit;
+  border-bottom: inherit;
+  background: inherit;
+}
+
+.flow-speech:hover,
+.flow-speech[data-current="true"] {
   border-color: var(--flow-accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--flow-accent) 12%, transparent);
 }
 
-.flow-node-header {
+.flow-speech > span,
+.flow-activity-label > span {
+  color: color-mix(in oklab, var(--flow-accent) 74%, var(--foreground));
+  font: 10px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-speech strong,
+.flow-activity-label strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 520;
+  overflow-wrap: anywhere;
+}
+
+.flow-activity-label {
+  background: color-mix(in oklab, var(--flow-panel) 62%, transparent);
+  border-style: dashed;
+}
+
+.flow-tool-links {
+  display: grid;
+  gap: 5px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid color-mix(in oklab, var(--flow-accent) 56%, transparent);
+  margin-inline-start: 7px;
+}
+
+.flow-tool-links button {
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  padding: 3px 7px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid color-mix(in oklab, var(--flow-tool) 48%, var(--flow-line));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--flow-tool) 10%, var(--flow-panel));
+  color: color-mix(in oklab, var(--flow-tool) 78%, var(--foreground));
+  font: 10px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-tool-links button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--flow-dim);
+}
+
+.flow-tool-links button:hover,
+.flow-tool-links button[data-current="true"] {
+  border-color: var(--flow-tool);
+}
+
+.flow-speech[data-new="true"],
+.flow-tool-links [data-new="true"] {
+  animation: flow-arrive 420ms cubic-bezier(0.19, 0.7, 0.35, 1) both;
+}
+
+@keyframes flow-arrive {
+  from { opacity: 0; transform: translateX(-7px) scale(0.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.flow-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
+  padding: 24px;
+  text-align: center;
+}
+
+.flow-empty-symbol {
+  width: 66px;
+  color: var(--flow-accent);
+}
+
+.flow-camera,
+.flow-minimap,
+.flow-navigation {
+  position: absolute;
+  z-index: 1;
+}
+
+.flow-camera,
+.flow-minimap,
+.flow-nav-panel,
+.flow-inspector {
+  border: 1px solid var(--flow-line);
+  border-radius: 11px;
+  background: var(--flow-panel);
+  box-shadow: 0 6px 24px #0002;
+}
+
+.flow-camera {
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+}
+
+.flow-camera span {
+  min-width: 39px;
+  color: var(--flow-dim);
+  text-align: center;
+  font: 10px/1 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-camera > svg {
+  margin: 0 3px;
+  color: var(--flow-dim);
+}
+
+.flow-minimap {
+  bottom: 12px;
+  right: 12px;
+  padding: 5px;
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 107px;
+  overflow: hidden;
+}
+
+.flow-minimap svg {
+  border-radius: 5px;
+}
+
+.flow-minimap rect {
+  fill: color-mix(in oklab, var(--flow-accent) 25%, transparent);
+}
+
+.flow-minimap rect[data-active="true"] {
+  fill: color-mix(in oklab, var(--flow-accent) 56%, transparent);
+}
+
+.flow-minimap .flow-map-window {
+  fill: transparent;
+  stroke: var(--flow-dim);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.flow-navigation {
+  top: 11px;
+  left: 11px;
+}
+
+.flow-nav-toggle > span {
+  min-width: 21px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--flow-accent) 14%, var(--flow-panel));
+  color: var(--flow-dim);
+}
+
+.flow-history-error {
+  display: block;
+  margin-top: 5px;
+  color: var(--flow-warn);
+}
+
+.flow-nav-panel {
+  display: grid;
+  gap: 6px;
+  width: 263px;
+  max-width: 64vw;
+  margin-top: 6px;
+  padding: 8px;
+}
+
+.flow-nav-panel input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--flow-line);
+  border-radius: 5px;
+  background: var(--flow-bg);
+}
+
+.flow-nav-panel ul,
+.flow-stat-list,
+.flow-event-list,
+.flow-usage-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.flow-nav-panel ul {
+  max-height: min(44vh, 285px);
+  overflow: auto;
+}
+
+.flow-nav-panel button {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 5px;
+  text-align: start;
 }
 
-.flow-provider {
-  width: 30px;
-  height: 30px;
+.flow-nav-panel button:hover {
+  background: color-mix(in oklab, var(--flow-accent) 13%, var(--flow-panel));
 }
 
-.flow-node-identity {
-  display: flex;
+.flow-nav-panel button > span {
   flex: 1;
-  flex-direction: column;
   min-width: 0;
-  line-height: 1.3;
 }
 
-.flow-node-identity strong,
-.flow-node-identity small {
+.flow-nav-panel b,
+.flow-nav-panel small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.flow-node-identity small,
-.flow-node-footer {
-  color: var(--muted-foreground);
-  font-size: 10px;
-}
-
-.flow-status-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted-foreground);
-}
-
-.flow-status-dot[data-tone="live"],
-.flow-status-dot[data-tone="done"] {
-  background: #29b57c;
-}
-
-.flow-status-dot[data-tone="attention"] {
-  background: #df9d2f;
-}
-
-.flow-status-dot[data-tone="error"] {
-  background: #e35b63;
-}
-
-.flow-bubble {
-  display: -webkit-box;
-  position: relative;
-  align-content: center;
-  padding: 7px 8px;
-  min-height: 34px;
-  border-radius: 3px 8px 8px 8px;
-  background: color-mix(in oklab, var(--flow-accent) 11%, var(--card));
-  font-size: 11px;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  line-height: 1.35;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.flow-node-footer {
-  margin-top: auto;
-}
-
-.flow-empty {
-  min-height: 180px;
-  height: 100%;
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  color: var(--muted-foreground);
-}
-
-.flow-empty strong {
-  color: var(--foreground);
+.flow-nav-panel small {
+  color: var(--flow-dim);
 }
 
 .flow-inspector {
-  flex: 0 0 clamp(230px, 31%, 320px);
+  position: absolute;
+  z-index: 1;
+  inset-block: 12px 131px;
+  inset-inline-end: 12px;
+  width: clamp(240px, 30%, 335px);
   display: flex;
   flex-direction: column;
-  min-width: 0;
   min-height: 0;
-  background: var(--flow-surface);
-  border-inline-start: 1px solid var(--flow-stroke);
+  overflow: hidden;
+  animation: flow-inspect 190ms ease-out both;
 }
 
-.flow-inspector header,
-.flow-delegations {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+@keyframes flow-inspect {
+  from { opacity: 0; transform: translateX(9px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.flow-inspector-header,
+.flow-inspector-title,
+.flow-inspector-tabs {
   padding: 8px 11px;
-  border-bottom: 1px solid var(--flow-stroke);
+  border-bottom: 1px solid var(--flow-line);
 }
 
-.flow-inspector-source {
+.flow-inspector-header,
+.flow-inspector-header > div,
+.flow-inspector-tabs {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.flow-inspector-header {
+  justify-content: space-between;
+}
+
+.flow-inspector h2 {
   overflow-wrap: anywhere;
 }
 
-.flow-inspector-intro,
-.flow-activity {
-  padding: 12px;
+.flow-icon-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: var(--flow-dim);
 }
 
-.flow-inspector-intro {
-  border-bottom: 1px solid var(--flow-stroke);
+.flow-icon-button:hover,
+.flow-inspector-tabs button:hover {
+  background: color-mix(in oklab, var(--flow-accent) 14%, transparent);
+  color: var(--foreground);
 }
 
-.flow-inspector-intro h2 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 650;
-  overflow-wrap: anywhere;
+.flow-inspector-actions {
+  margin-top: 6px;
 }
 
-.flow-inspector-intro p,
-.flow-activity p {
-  color: var(--muted-foreground);
-  margin-block: 4px 8px;
+.flow-inspector-actions:empty {
+  display: none;
+}
+
+.flow-inspector-tabs {
+  padding-block: 5px;
+  gap: 3px;
+}
+
+.flow-inspector-tabs button {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 3px;
+  color: var(--flow-dim);
+  border-radius: 5px;
   font-size: 11px;
 }
 
-.flow-inspector-intro button + button {
-  margin-inline-start: 5px;
+.flow-inspector-tabs button[aria-pressed="true"] {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--flow-accent) 18%, var(--flow-panel));
 }
 
-.flow-activity {
+.flow-inspector-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding: 8px;
 }
 
-.flow-activity h3 {
-  margin: 0 0 7px;
-  font-weight: 630;
+.flow-inspector-note {
+  margin: 6px;
+  color: var(--flow-dim);
+  font-size: 11px;
 }
 
-.flow-activity ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.flow-inspector-focus {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 7px;
+  padding: 8px;
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--flow-accent) 14%, var(--flow-panel));
+  overflow-wrap: anywhere;
 }
 
-.flow-activity li button {
-  display: block;
-  width: 100%;
-  border: 1px solid transparent;
-  padding: 6px;
-  text-align: start;
+.flow-inspector-focus small,
+.flow-inspector-focus span {
+  color: var(--flow-dim);
 }
 
-.flow-activity li button:hover {
-  background: var(--card);
+.flow-inspector-focus button {
+  justify-self: start;
 }
 
-.flow-activity li button > span {
+.flow-usage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.flow-usage > div {
+  padding: 6px 8px;
+  border: 1px solid var(--flow-line);
+  border-radius: 7px;
+  background: var(--flow-bg);
+}
+
+.flow-usage dt {
+  color: var(--flow-dim);
+  font-size: 10px;
+}
+
+.flow-usage dd,
+.flow-usage-list b {
+  margin: 2px 0 0;
+  color: var(--flow-good);
+  font: 13px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-usage-list li,
+.flow-stat-list button,
+.flow-event-list button > span {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  justify-content: space-between;
   gap: 6px;
 }
 
-.flow-activity li strong {
-  font-size: 11px;
-  font-weight: 590;
+.flow-stat-list {
+  padding-bottom: 7px;
 }
 
-.flow-activity li time,
-.flow-activity li small {
-  color: var(--muted-foreground);
+.flow-stat-list button {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-align: start;
+  border: 1px solid transparent;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--flow-accent) 21%, transparent) var(--flow-stat), transparent 0);
+}
+
+.flow-stat-list button[aria-pressed="true"] {
+  border-color: var(--flow-accent);
+}
+
+.flow-stat-list button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-event-list button {
+  width: 100%;
+  padding: 6px;
+  border-radius: 5px;
+  border-top: 1px solid var(--flow-line);
+  text-align: start;
+}
+
+.flow-event-list button:hover,
+.flow-event-list button[aria-current="step"] {
+  background: color-mix(in oklab, var(--flow-accent) 11%, var(--flow-panel));
+}
+
+.flow-event-list time,
+.flow-event-list small {
+  color: var(--flow-dim);
   font-size: 10px;
   overflow-wrap: anywhere;
 }
 
-.flow-activity li time {
+.flow-event-list time {
   flex: none;
-  font-variant-numeric: tabular-nums;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
 .flow-timeline {
-  border-top: 1px solid var(--flow-stroke);
-  border-bottom: 0;
+  border-top: 1px solid var(--flow-line);
 }
 
-.flow-scrubber {
+.flow-live[aria-pressed="true"] {
+  color: var(--flow-good);
+  border-color: color-mix(in oklab, var(--flow-good) 50%, var(--flow-line));
+}
+
+.flow-live > span {
+  background: var(--flow-dim);
+}
+
+.flow-live[aria-pressed="true"] > span {
+  background: var(--flow-good);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--flow-good) 66%, transparent);
+}
+
+.flow-transport {
+  gap: 3px;
+}
+
+.flow-transport button {
+  padding-inline: 5px;
+}
+
+.flow-time-track {
   flex: 1;
-  min-width: 0;
+  min-width: 64px;
 }
 
-.flow-scrubber div {
+.flow-time-label {
   display: flex;
   justify-content: space-between;
   gap: 5px;
+  color: var(--flow-dim);
+  font: 10px/1.2 "JetBrains Mono", ui-monospace, monospace;
 }
 
-.flow-scrubber input {
-  display: block;
+.flow-track-area {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 20px;
+}
+
+.flow-time-marks {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1px;
+  position: absolute;
+  inset: 0 5px;
+  pointer-events: none;
+}
+
+.flow-time-marks i {
+  flex: 1;
+  max-width: 5px;
+  border-radius: 99px;
+  background: var(--flow-dim);
+  opacity: 0.86;
+}
+
+.flow-time-marks i[data-tone="speech"] { background: var(--flow-accent); }
+.flow-time-marks i[data-tone="branch"] { background: #a587ed; }
+.flow-time-marks i[data-tone="tool"] { background: var(--flow-tool); }
+.flow-time-marks i[data-tone="return"] { background: var(--flow-good); }
+.flow-time-marks i[data-tone="alert"] { background: var(--flow-warn); }
+
+.flow-track-area input {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 5px;
-  margin-block: 7px 4px;
+  height: 20px;
+  margin: 0;
+  appearance: none;
   border-radius: 9px;
-  appearance: none;
-  background: linear-gradient(to right,
-    color-mix(in oklab, var(--foreground) 64%, var(--background)) var(--flow-progress),
-    var(--flow-stroke) var(--flow-progress));
+  background: transparent;
+  cursor: ew-resize;
 }
 
-.flow-scrubber input::-webkit-slider-thumb {
-  appearance: none;
-  width: 13px;
-  height: 13px;
-  border: 2px solid var(--card);
-  border-radius: 50%;
-  background: var(--foreground);
-  box-shadow: 0 0 0 1px var(--muted-foreground);
-}
-
-.flow-scrubber input::-moz-range-thumb {
+.flow-track-area input::-webkit-slider-thumb {
   width: 10px;
-  height: 10px;
-  border: 2px solid var(--card);
-  border-radius: 50%;
-  background: var(--foreground);
+  height: 20px;
+  appearance: none;
+  border: 1px solid var(--flow-accent);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--flow-accent) 65%, transparent);
 }
 
-@container (max-width: 610px) {
-  .flow-workspace {
-    flex-direction: column;
+.flow-track-area input::-moz-range-thumb {
+  width: 10px;
+  height: 18px;
+  border: 1px solid var(--flow-accent);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--flow-accent) 65%, transparent);
+}
+
+.flow-track-area::before {
+  position: absolute;
+  inset: 9px 1px auto;
+  height: 2px;
+  border-radius: 2px;
+  content: "";
+  background: linear-gradient(90deg, color-mix(in oklab, var(--flow-accent) 42%, var(--flow-line)) var(--flow-progress), var(--flow-line) 0);
+}
+
+@container (max-width: 650px) {
+  .flow-topbar,
+  .flow-timeline {
+    padding: 7px 8px;
+    gap: 6px;
+  }
+
+  .flow-direction span {
+    display: none;
   }
 
   .flow-inspector {
-    flex-basis: 43%;
-    border-inline-start: 0;
-    border-top: 1px solid var(--flow-stroke);
+    top: auto;
+    bottom: 48px;
+    height: min(54%, 315px);
+    inset-inline: 8px;
+    width: auto;
   }
 
-  .flow-header,
-  .flow-timeline {
-    padding: 7px;
-    gap: 7px;
+  .flow-minimap {
+    transform: scale(0.75);
+    transform-origin: bottom right;
   }
+}
 
-  .flow-lanes {
-    padding: 8px;
-  }
-
-  .flow-focus-lane {
-    padding: 8px 8px 0;
+@media (prefers-reduced-motion: reduce) {
+  .agent-flow *,
+  .agent-flow *::before,
+  .agent-flow *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

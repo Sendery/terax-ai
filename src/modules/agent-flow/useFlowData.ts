@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { loadFlowJournal, flowRunKey, useFlowJournal } from "@/modules/agent-flow/journal";
 import {
   historyRun, isTraceProvider, mergeRuns,
-  type FlowRun, type HistorySession, type Trace, type TraceEvent,
+  type FlowRun, type HistorySession, type TraceEvent,
 } from "@/modules/agent-flow/model";
 import { collectTerminalSources } from "@/modules/session-graph/lib/terminalSources";
 import { labelFor } from "@/modules/tabs/lib/tabLabel";
@@ -13,8 +13,7 @@ import type { Tab } from "@/modules/tabs/lib/useTabs";
 import { findLeafCwd, hasLeaf } from "@/modules/terminal/lib/panes";
 
 const HISTORY_LIMIT = 25;
-const MAX_TRACE_EVENTS = 600;
-const POLL_MS = 2000;
+const LIVE_HISTORY_MS = 8500;
 
 type History = { key: string; sourceKey: string; runs: FlowRun[]; failed: boolean };
 
@@ -82,13 +81,24 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       }
       const extraResult = await extra;
       if (activeKey && !stopped) {
-        retry = setTimeout(() => {
-          void invoke<HistorySession[]>("agent_flow_history", { cwds }).then((records) => {
-            if (stopped) return;
-            for (const record of records) add(record);
-            setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed });
-          }).catch(() => {});
-        }, 4000);
+        const followHistory = async () => {
+          if (stopped) return;
+          if (document.visibilityState !== "hidden") {
+            try {
+              const records = await invoke<HistorySession[]>("agent_flow_history", { cwds });
+              if (stopped) return;
+              const size = found.size;
+              for (const record of records) add(record);
+              if (found.size !== size || extraResult === false) {
+                setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed });
+              }
+            } catch {
+              // Keep the last usable history while a provider restarts.
+            }
+          }
+          if (!stopped) retry = setTimeout(followHistory, LIVE_HISTORY_MS);
+        };
+        retry = setTimeout(followHistory, 2800);
       }
       if (!stopped) setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed: failed || extraResult === false });
     })();
@@ -165,74 +175,4 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     loading: open && history.key !== historyKey,
     failed: history.key === historyKey && history.failed,
   };
-}
-
-type TraceState = {
-  key: string;
-  events: TraceEvent[];
-  name: string | null;
-  loading: boolean;
-  limited: boolean;
-  failed: boolean;
-};
-
-const EMPTY_TRACE: TraceState = {
-  key: "", events: [], name: null, loading: false, limited: false, failed: false,
-};
-
-export function useFlowTrace(run: FlowRun | undefined, open: boolean, follow: boolean, refresh: number) {
-  const [state, setState] = useState(EMPTY_TRACE);
-  const cursor = useRef({ key: "", offset: 0 });
-  const id = run?.sessionId;
-  const provider = run?.harness;
-  const key = open && id && provider && isTraceProvider(provider) ? `${provider}:${id}:${refresh}` : "";
-  useEffect(() => {
-    if (!key || !id || !provider) return;
-    let stopped = false;
-    if (cursor.current.key !== key) cursor.current = { key, offset: 0 };
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const next = async () => {
-      try {
-        const offset = cursor.current.offset;
-        const trace = await invoke<Trace>("agent_flow_trace", { provider, id, offset });
-        if (stopped) return;
-        const first = offset === 0;
-        cursor.current.offset = trace.nextOffset;
-        if (first || trace.reset || trace.events.length || trace.name) {
-          setState((old) => {
-            const same = old.key === key && !trace.reset;
-            const combined = same ? [...old.events, ...trace.events] : trace.events;
-            return {
-              key,
-              events: combined.slice(-MAX_TRACE_EVENTS),
-              name: trace.name ?? (same ? old.name : null),
-              loading: false,
-              limited: trace.limited || (same && old.limited) || combined.length > MAX_TRACE_EVENTS,
-              failed: false,
-            };
-          });
-        } else {
-          setState((old) => old.failed ? { ...old, failed: false } : old);
-        }
-        if (follow) timer = setTimeout(next, POLL_MS);
-      } catch {
-        if (stopped) return;
-        setState((old) => ({
-          ...(old.key === key ? old : EMPTY_TRACE),
-          key,
-          loading: false,
-          failed: true,
-        }));
-        if (follow) timer = setTimeout(next, POLL_MS * 3);
-      }
-    };
-    void next();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [id, key, provider, follow]);
-
-  if (key && key !== state.key) return { ...EMPTY_TRACE, loading: true };
-  return key ? state : EMPTY_TRACE;
 }
