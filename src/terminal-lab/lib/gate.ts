@@ -3,7 +3,7 @@ import type { RunPlan, LabReport } from "@/terminal-lab/lib/report";
 
 export const GATE_MEGABYTES_PER_SESSION = 1024;
 
-/** Fixed before measurement; no xterm comparison can interrupt collection of the engine gate. */
+/** Fixed before measurement, so nothing can interrupt collection of the engine gate. */
 export async function runEngineGate(
   plan: Pick<RunPlan, "stage" | "font" | "colors" | "onProgress">,
   report: LabReport,

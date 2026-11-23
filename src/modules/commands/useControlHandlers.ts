@@ -11,7 +11,7 @@ import {
   whenSessionReady,
   writeToSession,
 } from "@/modules/terminal";
-import { focusLeafInput } from "@/modules/terminal/lib/useTerminalSession";
+import { focusLeafInput } from "@/modules/terminal/lib/leafSession";
 import {
   startWatchRunner,
   stopWatchRunner,

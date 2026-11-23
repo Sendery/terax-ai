@@ -25,13 +25,13 @@ test("idle RSS excludes startup, teardown and an exited app", () => {
   assert.equal(isIdleSample({ ...sample, processes: [] }, 10), false);
 });
 
-test("successful runs require both complete echo measurements and successful cleanup", () => {
+test("successful runs require a complete echo measurement and successful cleanup", () => {
   const echo = { count: 50, samples: Array(50).fill(1), timeouts: 0 };
-  const run = { mode: "bench", timedOut: false, reportExists: true, outcome: { code: 0 }, cleanup: { errors: [], survivors: [] }, report: { errors: [], bench: Array(6).fill({}), xtermBench: Array(6).fill({}), captures: { engine: true, xterm: true }, echo: { engine: echo, xterm: echo } } };
+  const run = { mode: "bench", timedOut: false, reportExists: true, outcome: { code: 0 }, cleanup: { errors: [], survivors: [] }, report: { errors: [], bench: Array(6).fill({}), captures: { engine: true }, echo: { engine: echo } } };
   assert.equal(successfulRun(run), true);
   assert.equal(successfulRun({ ...run, guiSession: { available: false, locked: true } }), false);
   assert.equal(successfulRun({ ...run, samples: [{guiSession: {available: false}}] }), false);
-  assert.equal(successfulRun({ ...run, report: { ...run.report, echo: { engine: { count: 0, samples: [], timeouts: 50 }, xterm: echo } } }), false);
+  assert.equal(successfulRun({ ...run, report: { ...run.report, echo: { engine: { count: 0, samples: [], timeouts: 50 } } } }), false);
   assert.equal(successfulRun({ ...run, report: {} }), false);
   assert.equal(successfulRun({ ...run, cleanup: { errors: [], survivors: [{ pid: 1 }] } }), false);
 });
@@ -71,9 +71,9 @@ test("native failure retains partial measurements and can never pass as a final 
 
 test("explicit lab mode selection is closed and cannot reduce a gate workload", async () => {
   const { selectedModes } = await import("./terminal-lab.mjs");
-  assert.deepEqual(selectedModes(), ["bench", "idle-engine", "idle-xterm"]);
+  assert.deepEqual(selectedModes(), ["bench", "idle-engine"]);
   assert.deepEqual(selectedModes("gate-engine"), ["gate-engine"]);
-  assert.deepEqual(selectedModes("idle-engine,idle-xterm"), ["idle-engine", "idle-xterm"]);
+  assert.deepEqual(selectedModes("bench,idle-engine"), ["bench", "idle-engine"]);
   for (const value of ["", "other", "bench,bench", "gate-engine,", "gate-engine:1"])
     assert.throws(() => selectedModes(value));
 });

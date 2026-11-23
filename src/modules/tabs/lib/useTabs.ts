@@ -21,7 +21,7 @@ import {
   siblingLeafOf,
   splitLeaf,
 } from "@/modules/terminal/lib/panes";
-import { disposeSession } from "@/modules/terminal/lib/useTerminalSession";
+import { disposeSession } from "@/modules/terminal/lib/leafSession";
 import {
   startTransition,
   type SetStateAction,

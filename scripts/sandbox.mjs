@@ -73,8 +73,8 @@ function main() {
     );
   }
   writeFileSync(configPath, JSON.stringify(sandboxConfigOverride(baseConfig, { signingIdentity })));
-  const args = ["exec", "tauri", mode, "--config", configPath, ...rest];
-  const result = spawnSync("pnpm", args, { stdio: "inherit", shell: process.platform === "win32" });
+  const args = ["scripts/tauri-native.mjs", mode, "--config", configPath, ...rest];
+  const result = spawnSync(process.execPath, args, { stdio: "inherit" });
   process.exit(result.status ?? 1);
 }
 

@@ -124,7 +124,7 @@ pub enum OutputSink {
 enum Pipeline {
     Raw(Channel<Response>),
     #[cfg(feature = "ghostty-engine")]
-    Engine(EnginePipeline),
+    Engine(Box<EnginePipeline>),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -191,12 +191,12 @@ pub fn spawn(
             if let Some(channel) = on_clipboard {
                 engine.handle.on_clipboard(move || channel.send(1).is_ok());
             }
-            Pipeline::Engine(EnginePipeline {
+            Pipeline::Engine(Box::new(EnginePipeline {
                 agent_detector,
                 core: slot.install(engine)?,
                 slot,
                 on_failure: Arc::new(move |message| { let _ = on_failure.send(message); }),
-            })
+            }))
         }
     };
     guard.disarm();
@@ -238,7 +238,7 @@ pub fn spawn(
         }
         #[cfg(feature = "ghostty-engine")]
         Pipeline::Engine(engine) => {
-            spawn_engine_threads(id, app, reader, engine, on_exit, child, exited)
+            spawn_engine_threads(id, app, reader, *engine, on_exit, child, exited)
         }
     }
 

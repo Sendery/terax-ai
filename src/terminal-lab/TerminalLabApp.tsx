@@ -32,11 +32,8 @@ import {
   useLabColors,
   useLabFont,
 } from "@/terminal-lab/lib/useLabAppearance";
-import { XtermPane } from "@/terminal-lab/XtermPane";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const ENABLE_HINT =
-  "node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine";
 const READY_TIMEOUT_MS = 20_000;
 const SHELL_SETTLE_MS = 1500;
 const AUTORUN_WATCHDOG_MS = 40 * 60_000;
@@ -61,8 +58,8 @@ const LAB_CSS =
   ".lab-table{border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}.lab-table td,.lab-table th{padding:2px 6px}.lab-table th{font-weight:500}";
 
 /**
- * Developer window comparing the libghostty-vt engine with xterm.js and
- * measuring the frame path. Opened from the palette or by autorun.
+ * Developer window measuring the libghostty-vt engine and its frame path.
+ * Opened from the palette or by autorun.
  */
 export function TerminalLabApp() {
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -79,7 +76,6 @@ export function TerminalLabApp() {
     colors,
   });
   const engineTarget = useRef<LabTarget | null>(null);
-  const xtermTarget = useRef<LabTarget | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const liveReport = useRef<LabReport | null>(null);
   const isAutorun = useRef(false);
@@ -151,9 +147,7 @@ export function TerminalLabApp() {
             colors: latest.current.colors,
             megabytes,
             engine: engineTarget.current,
-            xterm: xtermTarget.current,
             onProgress: progress,
-            autorun: initialReport !== undefined,
           },
           report,
         );
@@ -171,12 +165,6 @@ export function TerminalLabApp() {
       report.echo.engine = await echoOf(
         "engine",
         engineTarget.current,
-        { onProgress: progress },
-        report,
-      );
-      report.echo.xterm = await echoOf(
-        "xterm",
-        xtermTarget.current,
         { onProgress: progress },
         report,
       );
@@ -229,9 +217,7 @@ export function TerminalLabApp() {
         if (ok) {
           const ready = await waitFor(
             () =>
-              (config.mode !== "bench" ||
-                (engineTarget.current !== null &&
-                  xtermTarget.current !== null)) &&
+              (config.mode !== "bench" || engineTarget.current !== null) &&
               stageRef.current !== null,
             READY_TIMEOUT_MS,
           );
@@ -272,18 +258,14 @@ export function TerminalLabApp() {
               config,
             );
           } else {
-            for (const [pane, target] of [
-              ["engine", engineTarget.current],
-              ["xterm", xtermTarget.current],
-            ] as const) {
-              progress(partial, `capture ${pane}`);
-              try {
-                if (!target) throw new Error("pane not ready");
-                await saveLabCapture(pane, await scriptedSession(target));
-                partial.captures[pane] = true;
-              } catch (error) {
-                partial.errors.push(`capture ${pane}: ${String(error)}`);
-              }
+            progress(partial, "capture engine");
+            try {
+              const target = engineTarget.current;
+              if (!target) throw new Error("pane not ready");
+              await saveLabCapture("engine", await scriptedSession(target));
+              partial.captures.engine = true;
+            } catch (error) {
+              partial.errors.push(`capture engine: ${String(error)}`);
             }
             const canvas = document.querySelector("canvas");
             if (canvas) partial.runtime.gpu = gpuMetadata(canvas);
@@ -314,9 +296,6 @@ export function TerminalLabApp() {
   const setEngineTarget = useCallback((target: LabTarget | null) => {
     engineTarget.current = target;
   }, []);
-  const setXtermTarget = useCallback((target: LabTarget | null) => {
-    xtermTarget.current = target;
-  }, []);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground text-xs">
@@ -331,8 +310,8 @@ export function TerminalLabApp() {
         <p className="px-3 text-muted-foreground">Checking the engine...</p>
       ) : available === false ? (
         <p className="px-3">
-          This build lacks the ghostty-engine feature. Run{" "}
-          <code className="font-mono">{ENABLE_HINT}</code> to enable it.
+          This build was compiled without the ghostty-engine feature, so the
+          terminal engine is unavailable.
         </p>
       ) : (
         <main className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3">
@@ -346,11 +325,6 @@ export function TerminalLabApp() {
                 colors={colors}
                 autorun={autorun !== null}
                 onTarget={setEngineTarget}
-              />
-              <XtermPane
-                font={font}
-                autorun={autorun !== null}
-                onTarget={setXtermTarget}
               />
             </div>
           )}

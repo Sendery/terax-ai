@@ -30,24 +30,23 @@ jobs:
       - name: macOS pkg-config
         if: runner.os == 'macOS'
         run: command -v pkg-config || brew install pkgconf
+      - name: Windows pkg-config
+        if: runner.os == 'Windows'
+        run: choco install pkgconfiglite -y
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm check-types
       - run: pnpm test
       - run: node --test scripts/libghostty/core.node-test.mjs scripts/libghostty/licenses.node-test.mjs scripts/libghostty/provisional.node-test.mjs
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Feature clippy without Zig
-        if: runner.os != 'Windows'
         env:
           CARGO_TARGET_DIR: target/prebuilt-consumer
-        run: node scripts/with-zig.mjs -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked --features ghostty-engine -- -D warnings
+        run: node scripts/with-zig.mjs --native-core -- cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Feature tests without Zig
-        if: runner.os != 'Windows'
         env:
           CARGO_TARGET_DIR: target/prebuilt-consumer
-        run: node scripts/with-zig.mjs -- cargo test --manifest-path src-tauri/Cargo.toml --locked --features ghostty-engine
+        run: node scripts/with-zig.mjs --native-core -- cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Reject implicit source builds before producer processes start
         if: runner.os != 'Windows'
         run: node --test scripts/libghostty/policy.node-test.mjs

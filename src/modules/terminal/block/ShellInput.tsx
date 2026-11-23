@@ -12,7 +12,7 @@ import {
   setLeafInputActivity,
   setLeafInputFocus,
   subscribeLeafDraft,
-} from "../lib/useTerminalSession";
+} from "../lib/leafSession";
 import { useTerminalFont } from "../lib/useTerminalFont";
 import {
   historyCommands,

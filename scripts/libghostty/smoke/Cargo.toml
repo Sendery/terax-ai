@@ -4,6 +4,10 @@ version = "0.0.0"
 edition = "2024"
 publish = false
 [workspace]
+
+[features]
+native-core = []
+
 [dependencies]
 libghostty-vt = { version = "=0.2.2", default-features = false }
 libghostty-vt-sys = { version = "=0.2.2", default-features = false, features = ["pkg-config"] }

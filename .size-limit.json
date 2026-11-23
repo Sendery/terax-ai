@@ -5,8 +5,7 @@
       "dist/assets/main-*.js",
       "dist/assets/react-*.js",
       "dist/assets/radix-*.js",
-      "dist/assets/alert-dialog-*.js",
-      "dist/assets/xterm-*.js"
+      "dist/assets/alert-dialog-*.js"
     ],
     "limit": "540 KB",
     "gzip": true

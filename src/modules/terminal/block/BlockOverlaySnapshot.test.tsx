@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("@tauri-apps/api/path", () => ({ homeDir: async () => "/public" }));
 import { BlockOverlaySnapshot } from "@/modules/terminal/block/BlockOverlay";
-import type { PositionedBlock } from "@/modules/terminal/block/lib/blockDecorations";
+import type { PositionedBlock } from "@/modules/terminal/block/lib/types";
 
 it("renders the shared completed and sticky chrome as inert frozen metadata", () => {
   const block: PositionedBlock = {

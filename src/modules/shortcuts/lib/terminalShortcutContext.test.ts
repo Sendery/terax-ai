@@ -13,7 +13,6 @@ function descendant(...ancestors: string[]): EventTarget {
 }
 
 describe.each([
-  ["legacy input", descendant(".xterm")],
   [
     "native input",
     descendant("[data-native-terminal-grid]", "[data-native-terminal-leaf]"),

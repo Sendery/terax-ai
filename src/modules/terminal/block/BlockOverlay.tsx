@@ -23,7 +23,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { homeDir } from "@tauri-apps/api/path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { PositionedBlock, VisibleBlocks } from "./lib/blockDecorations";
+import type { PositionedBlock, VisibleBlocks } from "./lib/types";
 import { capAttachOutput } from "./lib/outputCap";
 import {
   BlockSearchController,

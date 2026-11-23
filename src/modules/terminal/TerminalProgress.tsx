@@ -1,5 +1,5 @@
 import { useTerminalProgress } from "@/modules/terminal/lib/terminalProgress";
-import { ptyIdForLeaf } from "@/modules/terminal/lib/useTerminalSession";
+import { ptyIdForLeaf } from "@/modules/terminal/lib/leafSession";
 
 export function TerminalProgress({ leafId }: { leafId: number }) {
   const progress = useTerminalProgress((state) => state.values[leafId]);

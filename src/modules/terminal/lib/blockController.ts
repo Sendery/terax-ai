@@ -7,7 +7,7 @@ import {
   leafCwd,
   submitToLeaf,
   subscribeLeafBlockMode,
-} from "./useTerminalSession";
+} from "./leafSession";
 
 export type BlockController = {
   blockMode: BlockMode;

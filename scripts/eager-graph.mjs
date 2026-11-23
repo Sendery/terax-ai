@@ -21,8 +21,6 @@ export const DEFAULT_WATCH = [
   "@codemirror",
   "@uiw",
   "motion",
-  "@xterm",
-  "xterm",
 ];
 
 const exts = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs"];

@@ -16,7 +16,11 @@ name = "terax_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-# Terminal Lab only. Use `node ../scripts/with-zig.mjs --` for pinned prebuilts.
+default = ["ghostty-engine"]
+# The terminal engine, and the only one the app has. It links a prebuilt
+# libghostty-vt, so run cargo through `node ../scripts/with-zig.mjs --`.
+# `--no-default-features` still compiles for work that does not touch the
+# terminal, but that build cannot open one.
 ghostty-engine = ["dep:libghostty-vt", "dep:libghostty-vt-sys"]
 
 [build-dependencies]

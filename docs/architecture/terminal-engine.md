@@ -1,11 +1,11 @@
 # Terminal engine (libghostty-vt + WebGL2)
 
-Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-webgl2.md`. This file is the single source of truth for the Rust and the TypeScript side; when the two disagree, this file wins and gets fixed first. The engine remains behind an off-by-default cargo feature. The initial phases 0 and 1 use Terminal Lab; ordinary native terminal panes now have an explicit sandbox development opt-in, described below. Production defaults and the full parity/rollout requirements have not changed.
+Contract for the engine described in `docs/plans/2026-11-10-terminal-ghostty-vt-webgl2.md`. This file is the single source of truth for the Rust and the TypeScript side; when the two disagree, this file wins and gets fixed first. The native engine serves all terminal panes. Cargo enables `ghostty-engine` by default. Terminal Lab uses the same engine.
 
 ## Current implementation checkpoint
 
 Ordinary and blocks panes, app/agent/task consumers, active/inactive capture,
-exact-row retention and host clear are integrated behind the sandbox opt-in.
+exact-row retention and host clear are integrated on the native path.
 The completion pass adds negotiated mouse, Alt-click cursor navigation, selection autoscroll, readline,
 OSC9/99 notifications, OSC9;4 progress and Kitty Unicode placeholders.
 See [the source inventory and acceptance boundary](../plans/2026-11-15-terminal-complete-implementation.md).
@@ -37,19 +37,18 @@ or archive change.
 2. **Frames are droppable, state is not.** The webview holds no terminal state it cannot rebuild from one full frame. A frame that is not sent is simply superseded by the next one.
 3. **One frame in flight per terminal.** Rust sends a frame only when it holds a credit. The webview returns the credit after it has applied the frame and a display frame has been presented. A hidden or throttled window therefore produces no frames and no work.
 4. **The terminal lives on one thread.** `libghostty-vt` types are `!Send`. The `Terminal`, the `RenderState` and both iterators are created, used and dropped on the engine thread. Everything else talks to it through its queue.
-5. **Unused costs nothing.** Without the `ghostty-engine` feature no engine code is compiled. With it, nothing runs until a terminal is opened on the engine.
-6. **The xterm.js path is untouched.** `pty_open` and everything downstream of it behave byte for byte as before. Shared code is refactored only where the engine needs a seam, and the existing tests stay green.
+5. **No terminal work until a leaf opens.** The native engine is linked at build time and creates its state when a terminal starts.
 
 ## Build
 
-- Cargo feature `ghostty-engine` is off by default. It enables `libghostty-vt = "=0.2.2"` without its default features and the optional `libghostty-vt-sys = "=0.2.2"` dependency with `pkg-config`. The safe crate does not forward that feature.
-- `node scripts/with-zig.mjs -- <command...>` defaults to a checksum-pinned static archive. Pins and availability are in `scripts/libghostty/pin.json`. An unavailable target, download failure, checksum mismatch or missing pkg-config is an error, never permission to build from source. Native GNU Linux x86_64, MSVC Windows x86_64 and both macOS architectures are the planned targets; cross-target consumption is rejected.
+- Cargo enables `ghostty-engine` by default. It links the pinned `libghostty-vt` and `libghostty-vt-sys` 0.2.2 via pkg-config.
+- `pnpm tauri dev`, `pnpm dev:sandbox` and the build scripts use `node scripts/with-zig.mjs --native-core -- <command...>`. Both patched ABI exports are required. Universal macOS builds select both library slices through Cargo's target-specific pkg-config variables.
 - The wrapper verifies the archive, extracts the static library and headers under `src-tauri/target/toolchains/`, relocates `libghostty-vt-static.pc`, and preflights pkg-config. A deny-only Zig executable blocks the crate's implicit source fallback. It never provisions Zig in prebuilt mode. Static Windows linkage uses `ghostty-vt-static.lib`, never the DLL import library `ghostty-vt.lib`.
 - Both Cargo workspaces patch `libghostty-vt-sys` to the pinned copy in `src-tauri/vendor/`. That copy rejects entry to the source-build function unless `TERAX_GHOSTTY_SOURCE_BUILD=1`, before cloning or starting Zig. The explicit source wrapper supplies that opt-in; prebuilt mode rejects it. The PATH guard is an additional barrier, not the source-build policy.
 - `node scripts/with-zig.mjs --provisional /absolute/path/to/archive.tar.gz -- <command...>` accepts only the separately pinned experimental ARM64 archive in `scripts/libghostty/provisional.json`. It verifies the supplied bytes even when a cached copy exists, strips the archive's outer directory, and uses an isolated provisional cache. It never downloads or changes canonical release pins. This is an explicit validation route, not a validated release. Native acceptance is recorded separately.
 - The producer verifies its checked-in dependency notices and source checks before building. The notice manifest is tied to the Ghostty commit and Zig version; upgrading either requires reviewing and repinning the license bundle. Existing assets are not repaired by a later manifest update.
 - Explicit source build: `node scripts/with-zig.mjs --source -- <command...>`. This provisions checksum-verified Zig 0.15.2 and builds pinned Ghostty `a887df42c56f6de86c0fe6da9c4eeca37931e083`, with `ReleaseFast` unless overridden. The initial source build needs network access. Source mode uses the host's real SDK; no SDK substitute or xcrun shim is provided. Use a compatible SDK or prebuilt archive if native compilation fails. Do not run source mode on the protected original development Mac.
-- Sandbox with the engine: `node scripts/with-zig.mjs -- pnpm dev:sandbox --features ghostty-engine`. Archives that still have a null checksum are unavailable, not verified releases.
+- Apple Silicon debug app: `TERAX_GHOSTTY_ARCHIVE=/absolute/path/to/core.tar.gz pnpm build:dev-app`. This builds the app with the development name and no updater artifacts or signing. No installation or launch is performed. Set `TERAX_GHOSTTY_ARCHIVE_DIR` to a directory of pinned per-target archive names for multi-target consumption. The wrapper will look for published assets if no matching local file is supplied.
 - Commands are always registered. Without the feature, `gterm_available` returns `false` and every other `gterm_*` command returns `engine-unavailable`.
 
 ## Rust layout
@@ -114,7 +113,7 @@ Autorun reporting, status, capture and fixture commands require all three: the s
 
 `colors` is `{ foreground, background, cursor?, palette }`. Foreground, background, the optional cursor and every palette entry must be ASCII `#rrggbb` strings; the palette must contain exactly 16 entries. Rust rejects malformed colors before starting a session or queuing an update. The engine applies its initial colors before its first frame. Live changes are coalesced in the control record and produce a full frame after the outstanding credit returns. Palette entries 16 through 255 retain the terminal core's existing defaults. Omitting colors preserves the core defaults; omitting cursor resets the default cursor color.
 
-The lab resolves the same theme tokens as its xterm.js pane, including CSS color formats, into explicit RGB values before crossing IPC. A theme change while an open is pending is replayed after the session id arrives. Normal engine sessions similarly replay a changed size after opening; benchmark sessions do not invoke the PTY resize command.
+The lab resolves theme tokens, including CSS color formats, into explicit RGB values before crossing IPC. A theme change while an open is pending is replayed after the session id arrives. Normal engine sessions similarly replay a changed size after opening; benchmark sessions do not invoke the PTY resize command.
 
 The byte, frame, encoding, send-call, wait and accepted-credit counters are cumulative. `encodeMicros` includes snapshot extraction, binary encoding and the owned-frame copy. `sendMicros` measures the synchronous frame sink call (the native `Channel.send` call), not arrival or decoding in JavaScript. It includes failed sink attempts; per-successful-frame averages only describe clean complete runs. `scrollbackRows` is an instantaneous history-row gauge sampled on the engine thread at startup and after feeds and resizes, not a cumulative counter. A failed native query returns `null`, never an assumed or stale count. `credits` counts accepted acknowledgements only, excluding the initial credit and stale or duplicate acknowledgements. `creditWaitMicros` measures time when output or a full frame is pending but the pump has no credit, not total frame-to-ack latency. It was already cumulative before this handoff; regression tests cover successive waiting intervals without double-counting.
 
@@ -593,15 +592,9 @@ Ordinary-pane input uses these APIs as described below. The existing lab input
 binding remains Phase 1; its checks do not establish product input parity.
 
 
-### Ordinary native pane integration (experimental)
+### Ordinary and blocks panes
 
-Build `ghostty-engine` and set `VITE_TERAX_TERMINAL_ENGINE=ghostty` to route
-ordinary non-block panes to `NativeTerminalPane`. This is an explicit sandbox
-development switch, not the production default or a claim of full parity.
-Existing registered native or legacy owners determine the engine after a view
-remount, even if the blocks preference changed. Native blocks mount the shared
-BlockOverlay and BlockWatermark through one NativeBlockView per EngineSession;
-normal builds still use the legacy route until full functional parity.
+`NativeTerminalPane` owns the view for ordinary and blocks panes. Native blocks mount the shared `BlockOverlay` and `BlockWatermark` through one `NativeBlockView` per `EngineSession`.
 
 `NativeLeafSession` lives in the leaf registry independently of React mounts.
 Splitting, moving or hiding a pane detaches its input/view without terminating

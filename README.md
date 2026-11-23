@@ -58,7 +58,7 @@ Terax is a lightweight open-source terminal-first AI-native development environm
 
 ### Terminal
 
-- xterm.js with WebGL renderer, multi-tab with background streaming
+- Ghostty terminal engine with WebGL2, multiple tabs and background streaming
 - GPU-accelerated block-based terminal with editor-like command input
 - Native PTY backend via `portable-pty` (zsh, bash, pwsh, fish, cmd)
 - Split panels (horizontal and vertical)
@@ -178,7 +178,7 @@ cd src-tauri && cargo nextest run --locked                           # or: cargo
 
 ## Tech stack
 
-Tauri 2, Rust, `portable-pty`, React 19, TypeScript, Vite, xterm.js, CodeMirror 6, Vercel AI SDK v6, Tailwind v4, shadcn/ui, Zustand.
+Tauri 2, Rust, `portable-pty`, libghostty-vt, React 19, TypeScript, Vite, CodeMirror 6, Vercel AI SDK v6, Tailwind v4, shadcn/ui, Zustand.
 
 ## Contributing
 

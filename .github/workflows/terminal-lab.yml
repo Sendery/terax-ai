@@ -19,8 +19,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "false"
       CARGO_PROFILE_DEV_DEBUG_ASSERTIONS: "false"
       CARGO_PROFILE_DEV_INCREMENTAL: "false"
-      TERAX_TERMINAL_LAB_CORE_SOURCE: "https://github.com/Sendery/terax-ai/actions/runs/42835004064 (libghostty-x86_64-macos; native smoke passed; release publication pending)"
-      TERAX_TERMINAL_LAB_CORE_SHA256: "9a045b43db4a32733316b075a5b38a681fc34591656c7a4eeb923b1d9e6fed01"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,32 +35,6 @@ jobs:
         run: command -v pkg-config && command -v python3 && xcrun --sdk macosx --show-sdk-version
       - run: pnpm install --frozen-lockfile
       - run: node --test scripts/terminal-lab.node-test.mjs scripts/terminal-lab-cleanup.node-test.mjs
-      - name: Fetch native Intel core from the verified producer run
-        uses: actions/download-artifact@v4
-        with:
-          name: libghostty-x86_64-macos
-          run-id: 42835004064
-          github-token: ${{ github.token }}
-          path: lab-core-artifact
-      - name: Verify immutable bytes and configure job-local prebuilt cache
-        run: |
-          node --input-type=module <<'JS'
-          import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-          import { archiveName, hostTriple, verifyChecksum } from "./scripts/libghostty/core.mjs";
-          const source = JSON.parse(readFileSync("scripts/libghostty/source.json", "utf8"));
-          const pins = JSON.parse(readFileSync("scripts/libghostty/pin.json", "utf8"));
-          const triple = hostTriple();
-          if (triple !== "x86_64-macos") throw new Error("This fixture is native Intel macOS only");
-          const name = archiveName(source, triple);
-          const archive = `lab-core-artifact/${name}`;
-          verifyChecksum(readFileSync(archive), process.env.TERAX_TERMINAL_LAB_CORE_SHA256);
-          pins.targets[triple].sha256 = process.env.TERAX_TERMINAL_LAB_CORE_SHA256;
-          pins.targets[triple].publication = "pending; CI artifact bootstrap only";
-          pins.targets[triple].validation = process.env.TERAX_TERMINAL_LAB_CORE_SOURCE;
-          writeFileSync("scripts/libghostty/pin.json", JSON.stringify(pins, null, 2));
-          mkdirSync("src-tauri/target/toolchains", { recursive: true });
-          copyFileSync(archive, `src-tauri/target/toolchains/${name}`);
-          JS
       - name: Configure isolated lab-only sandbox
         run: |
           node --input-type=module <<'JS'
@@ -73,7 +45,7 @@ jobs:
           writeFileSync("src-tauri/tauri.lab-ci.json", JSON.stringify(config));
           JS
       - name: Build optimized Rust and production frontend without Zig
-        run: node scripts/with-zig.mjs -- pnpm exec tauri build --debug --no-bundle --features ghostty-engine --config "$PWD/src-tauri/tauri.lab-ci.json"
+        run: pnpm tauri build --debug --no-bundle --config "$PWD/src-tauri/tauri.lab-ci.json"
       - name: Run native WKWebView lab twice and measure external RSS
         run: node scripts/terminal-lab.mjs src-tauri/target/debug/terax "$RUNNER_TEMP/terminal-lab-results"
       - name: Upload measurements, captures and failures
@@ -89,6 +61,5 @@ jobs:
             ${{ runner.temp }}/terminal-lab-results/*/runner.json
             ${{ runner.temp }}/terminal-lab-results/*/baseline-processes.json
             ${{ runner.temp }}/terminal-lab-results/*/report.engine.png
-            ${{ runner.temp }}/terminal-lab-results/*/report.xterm.png
             ${{ runner.temp }}/terminal-lab-results/*/app.log
           retention-days: 14

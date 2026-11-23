@@ -9,8 +9,11 @@ export function hostTriple(platform = process.platform, arch = process.arch) {
 
 export function parseArgs(args) {
   const split = args.indexOf("--");
-  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--source | --provisional <archive>] -- <command> [args...]");
+  if (split < 0 || split === args.length - 1) throw new Error("usage: node scripts/with-zig.mjs [--native-core | --source | --provisional <archive> | --variant native-core-v1 --archive <archive>] -- <command> [args...]");
   const flags = args.slice(0, split);
+  if (flags.length === 1 && flags[0] === "--native-core") {
+    return { source: false, nativeCore: true, command: args.slice(split + 1) };
+  }
   if (flags[0] === "--variant") {
     if (flags.length !== 4 || flags[1] !== "native-core-v1" || flags[2] !== "--archive" ||
         !flags[3] || flags[3].startsWith("--")) throw new Error("native core variant requires one local archive");
@@ -32,6 +35,29 @@ export function selectedTarget(pin, triple, env = {}, command = []) {
   if ([requested, ...targets].filter(Boolean).some((value) => value !== target.rustTarget)) throw new Error("prebuilt cross-compilation is not supported");
   if (!/^[a-f0-9]{64}$/.test(target.sha256 ?? "")) throw new Error(`prebuilt ${triple} is not published and checksum-pinned yet; no source fallback`);
   return target;
+}
+
+export function nativeCoreHosts(triple, command, env = {}) {
+  const targets = new Set(command.flatMap((arg, i) =>
+    arg === "--target" ? [command[i + 1]] : arg.startsWith("--target=") ? [arg.slice(9)] : [],
+  ));
+  if (env.CARGO_BUILD_TARGET) targets.add(env.CARGO_BUILD_TARGET);
+  if (!targets.size) return [triple];
+  if (targets.size !== 1) throw new Error("conflicting native core targets");
+  const [target] = targets;
+  if (triple?.endsWith("-macos")) {
+    if (target === "universal-apple-darwin") {
+      return [triple, triple === "aarch64-macos" ? "x86_64-macos" : "aarch64-macos"];
+    }
+    if (target === "aarch64-apple-darwin") return ["aarch64-macos"];
+    if (target === "x86_64-apple-darwin") return ["x86_64-macos"];
+  }
+  if (target === ({
+    "x86_64-linux": "x86_64-unknown-linux-gnu",
+    "aarch64-linux": "aarch64-unknown-linux-gnu",
+    "x86_64-windows": "x86_64-pc-windows-msvc",
+  })[triple]) return [triple];
+  throw new Error(`unsupported native core target ${target} on ${triple}`);
 }
 
 export function verifyChecksum(bytes, expected) {

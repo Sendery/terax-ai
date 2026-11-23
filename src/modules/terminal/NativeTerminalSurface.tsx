@@ -4,10 +4,7 @@ import { engineAvailable } from "@/modules/terminal/gl/engineSession";
 import type { TerminalRenderer } from "@/modules/terminal/gl/gridRenderer";
 import { createTerminalRenderer } from "@/modules/terminal/gl/createTerminalRenderer";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import {
-  nativeTerminalRequested,
-  NativeSurfaceContext,
-} from "@/modules/terminal/gl/nativeSurfaceContext";
+import { NativeSurfaceContext } from "@/modules/terminal/gl/nativeSurfaceContext";
 import {
   useTerminalEngineColors,
   useTerminalEngineFont,
@@ -23,12 +20,6 @@ import {
 
 /** One canvas/context/atlas for all ordinary terminal tabs and split panes. */
 export function NativeTerminalSurface({ children }: { children: ReactNode }) {
-  if (!nativeTerminalRequested)
-    return <div className="relative h-full w-full">{children}</div>;
-  return <ActiveNativeTerminalSurface>{children}</ActiveNativeTerminalSurface>;
-}
-
-function ActiveNativeTerminalSurface({ children }: { children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   const currentRenderer = useRef<TerminalRenderer | null>(null);
   const listeners = useRef(new Set<() => void>());

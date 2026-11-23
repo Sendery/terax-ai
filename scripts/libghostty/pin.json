@@ -1,4 +1,34 @@
 {
+  "nativeCoreTargets": {
+    "x86_64-macos": {
+      "rustTarget": "x86_64-apple-darwin",
+      "producerTarget": "x86_64-macos.11.0",
+      "sha256": "8286aa3332d8edbd7370777fd4a96e24cd7633b2a893ca304a2453af4f9d8b9b",
+      "publication": "pending",
+      "validation": "cross-built on Apple Silicon; both patched symbols and all 11 x86_64 Mach-O member deployment targets verified"
+    },
+    "x86_64-linux": {
+      "rustTarget": "x86_64-unknown-linux-gnu",
+      "producerTarget": "x86_64-linux-gnu.2.35",
+      "sha256": "08e2cf2de69942b69fbf28fbf9387936846394936d038be8998446fa2e1be55b",
+      "publication": "pending",
+      "validation": "cross-built on Apple Silicon; archive members and both patched symbols verified"
+    },
+    "aarch64-linux": {
+      "rustTarget": "aarch64-unknown-linux-gnu",
+      "producerTarget": "aarch64-linux-gnu.2.35",
+      "sha256": "958cb311dc962d4dcd3fc4b76a3a7f9b28b3b1afe2bf6f1edc19e95f71edaea5",
+      "publication": "pending",
+      "validation": "cross-built on Apple Silicon; archive members and both patched symbols verified"
+    },
+    "x86_64-windows": {
+      "rustTarget": "x86_64-pc-windows-msvc",
+      "producerTarget": "x86_64-windows-msvc",
+      "sha256": null,
+      "publication": "blocked",
+      "validation": "Zig on Apple Silicon requires matching Windows SDK and MSVC CRT headers to compile simdutf and highway"
+    }
+  },
   "targets": {
     "aarch64-macos": {
       "rustTarget": "aarch64-apple-darwin",

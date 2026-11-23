@@ -1,17 +1,5 @@
 import type { PaneRect } from "@/modules/terminal/gl/gridRenderer";
 
-export function terminalEngineChoice(value: unknown): "ghostty" | "xterm" {
-  return value === "ghostty" ? "ghostty" : "xterm";
-}
-
-export function initialLeafEngine(
-  requested: boolean,
-  _blocks: boolean,
-  existing?: "ghostty" | "xterm",
-): "ghostty" | "xterm" {
-  return existing ?? (requested ? "ghostty" : "xterm");
-}
-
 export function nativePaneLayout(
   pane: { left: number; top: number; width: number; height: number },
   surface: { left: number; top: number },
