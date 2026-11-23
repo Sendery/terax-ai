@@ -106,7 +106,12 @@ Three distinct surfaces:
 
 ### Secrets (`src-tauri/src/modules/secrets.rs`)
 
-- `secrets_get` / `secrets_set` / `secrets_delete` / `secrets_get_all` - OS keychain access, service `terax-ai`
+- `secrets_get` / `secrets_set` / `secrets_delete` / `secrets_get_all` - OS keychain access, service `terax-ai`. On macOS all of a profile's secrets share one keychain item (`secrets_vault.rs`).
+
+### Privacy (`src-tauri/src/modules/privacy.rs`)
+
+- `privacy_full_disk_access` - `granted`, `denied`, `unknown` or `not-applicable`, from reads that never raise a prompt
+- `privacy_open_full_disk_access` - opens System Settings > Privacy & Security > Full Disk Access
 
 ### Agent hooks (`src-tauri/src/modules/agent.rs`)
 

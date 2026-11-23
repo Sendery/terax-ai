@@ -12,9 +12,10 @@
 //!   instance to start owns it) and the waker's exported deadline;
 //! - the label of the OS unit the waker installs, which is otherwise fixed, so
 //!   installing it from a sandbox replaced the installed app's unit;
-//! - the keychain service secrets are written to. Reads fall back to the
-//!   installed app's entries, so a sandbox starts with working keys and never
-//!   changes them.
+//! - the keychain items secrets are kept in. On macOS a sandbox has a vault of
+//!   its own, filled once from the installed app's (see `secrets_vault`); on
+//!   Windows reads fall back to the installed app's entries. Either way a
+//!   sandbox starts with working keys and never changes the installed app's.
 //!
 //! On first launch a sandbox is seeded with a copy of the installed app's
 //! stores, and it keeps its own copy from then on. The copy is a dry run of the
@@ -82,8 +83,8 @@ pub fn scoped_service(service: &str, sandbox: bool) -> String {
     }
 }
 
-/// A deleted secret in a sandbox is stored as this, so a read does not fall
-/// back to the installed app's value and resurrect it.
+/// A deleted secret in a sandbox is stored as this in a per-secret item, so a
+/// read does not fall back to the installed app's value and resurrect it.
 pub const DELETED_SECRET: &str = "";
 
 /// Resolves a sandbox read: its own entry wins, a tombstone hides the
@@ -190,6 +191,14 @@ pub fn app_profile() -> &'static str {
 
 /// Left in the sandbox's data dir to ask the next launch for a fresh copy.
 const RESET_MARKER: &str = ".reset-from-installed";
+/// Left by a reset for the secrets vault, which is only read once the webview
+/// asks for a key and so cannot be replaced during `seed_on_launch`.
+const SECRETS_RESET_MARKER: &str = ".reset-secrets-from-installed";
+
+pub fn secrets_reset_marker(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+    Some(app.path().app_data_dir().ok()?.join(SECRETS_RESET_MARKER))
+}
 
 /// Asks for the sandbox's stores to be replaced by a fresh copy of the
 /// installed app's on the next launch, and the webview then relaunches.
@@ -223,6 +232,12 @@ pub fn seed_on_launch(app: &tauri::AppHandle) {
     };
     let marker = own.join(RESET_MARKER);
     let reset = marker.exists();
+    if reset {
+        let _ = std::fs::create_dir_all(&own);
+        if let Err(err) = std::fs::write(own.join(SECRETS_RESET_MARKER), b"") {
+            log::warn!("the sandbox secrets will not be reset: {err}");
+        }
+    }
     match seed_stores(&installed, &own, reset) {
         Ok(copied) => {
             if !copied.is_empty() {

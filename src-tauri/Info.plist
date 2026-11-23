@@ -6,5 +6,9 @@
 	<string>A program running within Terax would like to use the camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>A program running within Terax would like to use your microphone.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>A program running within Terax would like to control another application.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A program running within Terax would like to reach devices on your local network.</string>
 </dict>
 </plist>

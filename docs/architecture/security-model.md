@@ -64,8 +64,8 @@ Local LLM endpoints are explicitly allowed because the user opted in by pointing
 
 API keys are stored via `secrets_*` commands (`src-tauri/src/modules/secrets.rs`):
 
-- macOS: Keychain via `keyring`
-- Windows: Credential Manager via `keyring`
+- macOS: Keychain via `keyring`, every secret of a profile in one item (`terax-vault` / `secrets`, a small JSON document; `secrets_vault.rs`), so a new build asks for the keychain password once instead of once per key. See [macOS permissions](../macos-permissions.md).
+- Windows: Credential Manager via `keyring`, one credential per secret
 - Linux: a JSON file in the app's local data dir with mode `0600` (atomic write to `.tmp` then rename)
 
 Service constant: `terax-ai`. Keys never touch disk outside the keychain/Linux secrets file, never go in `localStorage`, and never appear in logs.

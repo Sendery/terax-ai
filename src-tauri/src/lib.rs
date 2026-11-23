@@ -3,7 +3,7 @@ pub mod modules;
 use modules::{
     agent, agent_cli, agentdigest, agentsessions, capture, fs, git, history, lsp, mcp, net, notify,
     oauth, pi,
-    pisessions, profile,
+    pisessions, privacy, profile,
     pty, reader, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
@@ -421,6 +421,8 @@ pub fn run() {
             notify::agent_notify,
             profile::app_profile,
             profile::sandbox_reset_from_installed,
+            privacy::privacy_full_disk_access,
+            privacy::privacy_open_full_disk_access,
             agentsessions::agent_session_read,
             agentsessions::agent_sessions_list,
             agentsessions::agent_session_branch,
