@@ -3,10 +3,12 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import {
+  SelectionActionItems,
+  type SelectionActions,
+} from "@/modules/ai/components/SelectionActionItems";
 import {
   type ReadAloudOptions,
   ReadMenuItems,
@@ -15,10 +17,7 @@ import { useSounding } from "@/modules/reader/lib/sounding";
 import {
   ClipboardPasteIcon,
   Copy01Icon,
-  Flowchart01Icon,
-  Note01Icon,
   Refresh01Icon,
-  SparklesIcon,
   TextWrapIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -33,16 +32,10 @@ import {
 export type { ReadAloudOptions };
 
 /**
- * Selection actions shared with the floating popup that a primary-button
- * selection raises. Each receives the selection captured when the menu opened,
- * rather than re-reading it: on macOS xterm's `rightClickSelectsWord` can
- * replace the selection under the pointer before the menu is even built.
+ * On macOS xterm's `rightClickSelectsWord` can replace the selection under the
+ * pointer before the menu is built, hence the captured selection.
  */
-export type TerminalSelectionActions = {
-  onAsk: (text: string) => void;
-  onAddToNote: (text: string) => void;
-  onOpenMermaid: (text: string) => void;
-};
+export type TerminalSelectionActions = SelectionActions;
 
 type Props = {
   children: ReactNode;
@@ -168,37 +161,10 @@ function MenuBody({
       {selectionActions ? (
         <>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            disabled={selection.length === 0}
-            onSelect={() => selectionActions.onAsk(selection)}
-          >
-            <HugeiconsIcon icon={SparklesIcon} size={14} strokeWidth={1.75} />
-            <span className="flex-1">Ask Terax</span>
-            <ContextMenuShortcut>
-              {fmtShortcut(MOD_KEY, "J")}
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={selection.length === 0}
-            onSelect={() => selectionActions.onAddToNote(selection)}
-          >
-            <HugeiconsIcon icon={Note01Icon} size={14} strokeWidth={1.75} />
-            <span className="flex-1">Add to Note</span>
-            <ContextMenuShortcut>
-              {fmtShortcut(MOD_KEY, "L")}
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={selection.length === 0}
-            onSelect={() => selectionActions.onOpenMermaid(selection)}
-          >
-            <HugeiconsIcon
-              icon={Flowchart01Icon}
-              size={14}
-              strokeWidth={1.75}
-            />
-            <span className="flex-1">Open Mermaid</span>
-          </ContextMenuItem>
+          <SelectionActionItems
+            selection={selection}
+            actions={selectionActions}
+          />
         </>
       ) : null}
       {offersSpeech && onReadAloud ? (

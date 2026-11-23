@@ -7,6 +7,10 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import {
+  SelectionActionItems,
+  type SelectionActions,
+} from "@/modules/ai/components/SelectionActionItems";
 import { useSounding } from "@/modules/reader/lib/sounding";
 import {
   ClipboardPasteIcon,
@@ -32,6 +36,8 @@ export type ReadContextMenuBinding = {
   readClipboard: () => Promise<string>;
   onRead: (text: string, options: ReadAloudOptions) => void;
   onStop: () => void;
+  /** Ask Terax, Add to Note and Open Mermaid on the selection. */
+  selectionActions?: SelectionActions;
 };
 
 type Props = {
@@ -41,9 +47,9 @@ type Props = {
 
 /**
  * Right-click in the editor and in both Markdown views: the clipboard
- * actions the webview's own menu used to give, plus the reading actions the
- * terminal offers, so "right-click a selection and choose Read here" holds
- * in every text view.
+ * actions the webview's own menu used to give, plus the selection and reading
+ * actions the terminal offers, so every text view answers a right-click on a
+ * selection the same way.
  */
 export function ReadContextMenu({ children, binding }: Props) {
   return (
@@ -107,6 +113,15 @@ function MenuBody({ binding }: { binding: ReadContextMenuBinding }) {
           <span className="flex-1">Paste</span>
           <ContextMenuShortcut>{fmtShortcut(MOD_KEY, "V")}</ContextMenuShortcut>
         </ContextMenuItem>
+      ) : null}
+      {binding.selectionActions ? (
+        <>
+          <ContextMenuSeparator />
+          <SelectionActionItems
+            selection={selection}
+            actions={binding.selectionActions}
+          />
+        </>
       ) : null}
       <ContextMenuSeparator />
       {blocked ? (

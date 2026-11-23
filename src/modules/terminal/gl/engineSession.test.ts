@@ -1,4 +1,3 @@
-import { createSelectionPopup } from "@/modules/ai/hooks/selectionPopup";
 import type { ApplyResult } from "@/modules/terminal/gl/cellBuffer";
 import {
   type DecodedFrame,
@@ -2264,110 +2263,23 @@ it("can revert a rejected command to the confirmed applied rows without a phanto
   expect(commands("gterm_set_scrollback_rows")).toHaveLength(1);
 });
 
-describe("semantic selection popup ownership", () => {
-  it("keeps a popup actionable across actual EngineSession read refreshes while query revisions advance", async () => {
+describe("selection snapshot refresh", () => {
+  it("takes the text a read discovers when the selection was clipped", async () => {
     const session = await openSession(new FakeRenderer());
     await session.select({ kind: "all" });
-    const released = session.select({ kind: "release" });
-    const mutation = session.selectionMutationRevision;
-    expect(mutation).toBeTypeOf("number");
-    const query = session.selectionRevision;
-    const show = vi.fn();
-    const action = vi.fn();
-    const popup = createSelectionPopup({
-      readSelection: () => session.getSelection(),
-      show,
-      defer: (run) => run(),
-    });
-    popup.native({
-      x: 20,
-      y: 30,
-      selection: released,
-      current: () =>
-        session.id !== null &&
-        session.historyAvailable &&
-        session.selectionMutationRevision === mutation,
-    });
-    await released;
-    for (let frame = 0; frame < 3; frame++)
-      await session.select({ kind: "read" });
-    expect(session.selectionRevision).toBeGreaterThan(query);
-    expect(session.selectionMutationRevision).toBe(mutation);
-    expect(show).toHaveBeenLastCalledWith({ x: 20, y: 30 });
-    popup.act(action);
-    expect(action).toHaveBeenCalledTimes(1);
-    popup.dispose();
-    await session.close();
-  });
-  it("retires popup ownership for mutating selection commands even when their text is identical", async () => {
-    const session = await openSession(new FakeRenderer());
-    await session.select({ kind: "all" });
-    for (const command of [
-      { kind: "clear" },
-      { kind: "all" },
-      { kind: "release" },
-    ] as const) {
-      const previous = session.selectionMutationRevision;
-      await session.select(command);
-      expect(session.selectionMutationRevision).toBeGreaterThan(previous);
-    }
-    await session.close();
-  });
-  it("retires popup ownership if a read discovers changed or clipped selected text", async () => {
-    const session = await openSession(new FakeRenderer());
-    await session.select({ kind: "all" });
-    const previous = session.selectionMutationRevision;
     ipc.selection = Promise.resolve("clipped selection");
     await session.select({ kind: "read" });
     expect(session.getSelection()).toBe("clipped selection");
-    expect(session.selectionMutationRevision).toBeGreaterThan(previous);
     await session.close();
   });
-  it("retires popup ownership if refreshing selected text fails", async () => {
+  it("drops the selected text if refreshing it fails", async () => {
     const session = await openSession(new FakeRenderer());
     await session.select({ kind: "all" });
-    const previous = session.selectionMutationRevision;
     ipc.selection = Promise.reject(new Error("selection unavailable"));
     await expect(session.select({ kind: "read" })).rejects.toThrow(
       "unavailable",
     );
     expect(session.getSelection()).toBeNull();
-    expect(session.selectionMutationRevision).toBeGreaterThan(previous);
     await session.close();
-  });
-  it("retires popup ownership on history shrink admission and clear", async () => {
-    const session = await openSession(new FakeRenderer());
-    publishHistory(appliedHistory());
-    await session.select({ kind: "all" });
-    const beforeShrink = session.selectionMutationRevision;
-    session.setScrollbackRows(200);
-    expect(session.selectionMutationRevision).toBeGreaterThan(beforeShrink);
-    publishHistory(appliedHistory(2, 1, 200, 0));
-    await microtasks();
-    const beforeClear = session.selectionMutationRevision;
-    ipc.clear = Promise.resolve(true);
-    ipc.state = appliedHistory(3, 2, 200, 0);
-    expect(await session.clear()).toBe(true);
-    expect(session.selectionMutationRevision).toBeGreaterThan(beforeClear);
-    await session.close();
-  });
-  it("retires popup ownership for block selection but preserves it for block search cleanup", async () => {
-    const session = await openSession(new FakeRenderer());
-    await session.select({ kind: "all" });
-    const beforeBlock = session.selectionMutationRevision;
-    ipc.blockAction = Promise.resolve({
-      kind: "selection",
-      applied: true,
-      blockId: "b1",
-      selection: "block one",
-    });
-    await session.blockAction({ kind: "select", blockId: "b1" });
-    expect(session.selectionMutationRevision).toBeGreaterThan(beforeBlock);
-    const selected = session.selectionMutationRevision;
-    ipc.blockAction = Promise.resolve({ kind: "cleared" });
-    await session.blockAction({ kind: "clearSearch" });
-    expect(session.selectionMutationRevision).toBe(selected);
-    await session.close();
-    expect(session.selectionMutationRevision).toBeGreaterThan(selected);
   });
 });

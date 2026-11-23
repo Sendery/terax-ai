@@ -191,7 +191,6 @@ that voice; it is not sent to the engine as a prompt.
 | Surface | How |
 | --- | --- |
 | Terminal, editor, Markdown | Select text, right-click, **Speak**: default voice, a language, or one specific profile. **Stop** is in the same menu while anything plays, Speak or the Reader. The same menu offers the Reader's Read here and Read in new tab. |
-| Selection popup | **Speak** beside Ask Terax, Read here and Read in new tab. |
 | Shortcut | `Mod+Shift+R` speaks the current selection, or says why it cannot (nothing selected, a private terminal). `Mod+Shift+.` stops whatever is sounding and only claims the key while something is. |
 | Command palette | The **Voice** group: Speak selection, in Spanish, in English, Stop, open voice settings. |
 

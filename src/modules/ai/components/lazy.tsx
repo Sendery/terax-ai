@@ -1,7 +1,6 @@
 import type { PresenceState } from "@/lib/usePresence";
 import { lazy, Suspense } from "react";
 import type { AgentRunBridgeProps } from "./AgentRunBridge";
-import type { SelectionAskAiProps } from "./SelectionAskAi";
 
 const AgentRunBridgeInner = lazy(() =>
   import("./AgentRunBridge").then((m) => ({ default: m.AgentRunBridge })),
@@ -21,10 +20,6 @@ const AiChatBottomPaneInner = lazy(() =>
 
 const AiInputBarConnectInner = lazy(() =>
   import("./AiInputBar").then((m) => ({ default: m.AiInputBarConnect })),
-);
-
-const SelectionAskAiInner = lazy(() =>
-  import("./SelectionAskAi").then((m) => ({ default: m.SelectionAskAi })),
 );
 
 export function AgentRunBridge(props: AgentRunBridgeProps) {
@@ -72,14 +67,6 @@ export function AiInputBarConnect({
   return (
     <Suspense fallback={null}>
       <AiInputBarConnectInner onAdd={onAdd} onDismiss={onDismiss} />
-    </Suspense>
-  );
-}
-
-export function SelectionAskAi(props: SelectionAskAiProps) {
-  return (
-    <Suspense fallback={null}>
-      <SelectionAskAiInner {...props} />
     </Suspense>
   );
 }

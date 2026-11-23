@@ -295,7 +295,6 @@ export class EngineSession {
   private queuedInputBytes = 0;
   private closing: Promise<void> | null = null;
   private selectionVersion = 0;
-  private selectionMutationVersion = 0;
   private selectionSnapshotVersion = 0;
   private selectionQueries: Promise<void> = Promise.resolve();
   private selectionPending = 0;
@@ -676,7 +675,6 @@ export class EngineSession {
   private failCore(message: string): void {
     if (this.closed || this.failed) return;
     this.failed = true;
-    this.selectionMutationVersion++;
     this.captureConsumer?.cancel(new Error(message));
     this.selectionSnapshot = null;
     this.inputStateValue = null;
@@ -1114,7 +1112,6 @@ export class EngineSession {
     );
     if (this.selectionSnapshot !== null) this.selectionRefreshNeeded = true;
     this.selectionVersion++;
-    this.selectionMutationVersion++;
     this.selectionSnapshot = null;
     this.notifyHistoryChange();
   }
@@ -1356,10 +1353,6 @@ export class EngineSession {
     return this.selectionVersion;
   }
 
-  get selectionMutationRevision(): number {
-    return this.selectionMutationVersion;
-  }
-
   getSelection(): string | null {
     return this.historyAvailable ? this.selectionSnapshot : null;
   }
@@ -1379,7 +1372,6 @@ export class EngineSession {
     }
     const snapshot = { ...command };
     const version = ++this.selectionVersion;
-    if (snapshot.kind !== "read") this.selectionMutationVersion++;
     if (command.kind !== "read" && command.kind !== "release")
       this.selectionSnapshot = null;
     this.selectionPending++;
@@ -1404,22 +1396,16 @@ export class EngineSession {
           )
             throw new Error("invalid terminal selection reply");
           if (version === this.selectionVersion) {
-            const selected =
+            this.selectionSnapshot =
               typeof text === "string" && text.length > 0 ? text : null;
-            if (snapshot.kind === "read" && this.selectionSnapshot !== selected)
-              this.selectionMutationVersion++;
-            this.selectionSnapshot = selected;
             this.selectionSnapshotVersion = version;
           }
           return text;
         } catch (error) {
           // A native mutation can succeed before formatting fails. Never copy
           // text from the previous selection after an unsuccessful query.
-          if (this.selectionSnapshotVersion <= version) {
-            if (snapshot.kind === "read" && this.selectionSnapshot !== null)
-              this.selectionMutationVersion++;
+          if (this.selectionSnapshotVersion <= version)
             this.selectionSnapshot = null;
-          }
           throw error;
         }
       })
@@ -1530,10 +1516,7 @@ export class EngineSession {
     const version = blockActionSelects(snapshot)
       ? ++this.selectionVersion
       : null;
-    if (version !== null) {
-      this.selectionMutationVersion++;
-      this.selectionSnapshot = null;
-    }
+    if (version !== null) this.selectionSnapshot = null;
     return this.blockQuery(
       "gterm_block_action",
       { command: snapshot },
@@ -1666,7 +1649,6 @@ export class EngineSession {
   private release(): void {
     this.closed = true;
     this.cancelPendingResize();
-    this.selectionMutationVersion++;
     this.captureConsumer?.cancel(
       new Error("Terminal capture is no longer available."),
     );

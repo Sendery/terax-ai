@@ -21,6 +21,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtShortcut, MOD_KEY, SHIFT_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import { writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import {
   TAB_COLORS,
   TAB_COLOR_CSS,
@@ -34,6 +35,7 @@ import {
   Cancel01Icon,
   Clock01Icon,
   ComputerTerminal02Icon,
+  Copy01Icon,
   Flowchart01Icon,
   GitBranchIcon,
   GitCompareIcon,
@@ -52,7 +54,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { AgentTabBadge } from "./AgentTabBadge";
+import { tabFilePath } from "./lib/tabFilePath";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
 
@@ -240,6 +244,7 @@ export function TabBar({
               const isPreview = t.kind === "editor" && (t as EditorTab).preview;
               const isActive = t.id === activeId;
               const isNew = !firstRender && !seen.has(t.id);
+              const filePath = tabFilePath(t);
 
               const srcIndex = tabs.findIndex((x) => x.id === draggingId);
               const showGap = (gap: number) =>
@@ -474,6 +479,21 @@ export function TabBar({
                         )}
                       </ContextMenuSubContent>
                     </ContextMenuSub>
+                    {filePath ? (
+                      <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem
+                          onSelect={() => void copyFilePath(filePath)}
+                        >
+                          <HugeiconsIcon
+                            icon={Copy01Icon}
+                            size={14}
+                            strokeWidth={1.75}
+                          />
+                          <span className="flex-1">Copy path</span>
+                        </ContextMenuItem>
+                      </>
+                    ) : null}
                     {tabs.length > 1 && (
                       <>
                         <ContextMenuSeparator />
@@ -595,6 +615,11 @@ export function TabBar({
       </div>
     </div>
   );
+}
+
+async function copyFilePath(path: string) {
+  await writeTerminalClipboard(path);
+  toast.success("Path copied", { description: path });
 }
 
 function DropIndicator() {

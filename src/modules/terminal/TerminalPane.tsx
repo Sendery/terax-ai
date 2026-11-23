@@ -58,7 +58,7 @@ export type TerminalPaneProps = {
   onOpenFileLink?: (path: string, location?: TerminalFileLocation) => void;
   onReadAloud?: (text: string, options: ReadAloudOptions) => void;
   onStopReading?: () => void;
-  /** Ask Terax / Add to Note / Open Mermaid, shared with the selection popup. */
+  /** Ask Terax / Add to Note / Open Mermaid in the right-click menu. */
   selectionActions?: TerminalSelectionActions;
   /** Hides Read aloud, the same way a private terminal is hidden from AI. */
   privateTerminal?: boolean;

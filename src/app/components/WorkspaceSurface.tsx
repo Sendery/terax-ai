@@ -127,6 +127,13 @@ export function WorkspaceSurface({
   const isGitHistoryTab = kind === "git-history";
   const isPrReviewTab = kind === "pr-review";
   const isReaderTab = kind === "reader";
+  const readerMenu: ReadContextMenuBinding = {
+    ...editorReadMenu,
+    readSelection: () => window.getSelection()?.toString() ?? null,
+    blockedReason: () => null,
+    documentFallback: () => false,
+    editable: () => false,
+  };
 
   const dock =
     activeTab && activeTab.kind !== "reader" ? activeTab.readerDock : undefined;
@@ -270,6 +277,7 @@ export function WorkspaceSurface({
               activeId={activeId}
               onClose={onReaderClose}
               onTitle={onReaderTitle}
+              readMenu={readerMenu}
               binding={{
                 onPick: readerDock.onPick,
                 onDeleted: readerDock.onDeleted,
@@ -283,6 +291,7 @@ export function WorkspaceSurface({
           <ReaderDock
             key={dockTabId}
             docId={dock.docId}
+            readMenu={readerMenu}
             height={dock.height}
             onResize={(h) => readerDock.onResize(dockTabId, h)}
             onClose={() => readerDock.onClose(dockTabId)}

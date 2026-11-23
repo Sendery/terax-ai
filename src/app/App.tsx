@@ -36,12 +36,10 @@ import {
   AiChatDock,
   AiMiniWindow,
   LocalAgentNotificationsBridge,
-  SelectionAskAi,
   useAiBootstrap,
   useAiLiveBridge,
   useChatLayoutStore,
   useChatStore,
-  useSelectionAskAi,
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { native } from "@/modules/ai/lib/native";
@@ -1036,17 +1034,6 @@ export default function App() {
     stopEverything();
   }, []);
 
-  const {
-    askPopup,
-    setAskPopup,
-    onAskFromSelection,
-    onAddToNoteFromSelection,
-    runSelectionAction,
-  } = useSelectionAskAi({
-    captureActiveSelection,
-    askFromSelection,
-    addSelectionToNote,
-  });
   const openMermaidWithSource = useCallback(
     (selection: string) => {
       const source = validateMermaidSource(selection);
@@ -1055,9 +1042,8 @@ export default function App() {
         return;
       }
       newMermaidTab(source.source);
-      setAskPopup(null);
     },
-    [newMermaidTab, setAskPopup],
+    [newMermaidTab],
   );
 
   const openNewGraphTab = useCallback(() => {
@@ -1101,15 +1087,8 @@ export default function App() {
     [newMermaidTab],
   );
 
-  const onOpenMermaidFromSelection = useCallback(() => {
-    const selection = captureActiveSelection();
-    if (!selection) return;
-    openMermaidWithSource(selection);
-  }, [captureActiveSelection, openMermaidWithSource]);
-
-  // Same three actions the selection popup offers, so the terminal's right-click
-  // menu is a superset of it and the popup no longer needs to appear alongside.
-  const terminalSelectionActions = useMemo(
+  /** The selection actions every text view's right-click menu offers. */
+  const selectionMenuActions = useMemo(
     () => ({
       onAsk: askWithSelection,
       onAddToNote: addTextToNote,
@@ -1117,7 +1096,6 @@ export default function App() {
     }),
     [askWithSelection, addTextToNote, openMermaidWithSource],
   );
-  const askPresence = usePresence(Boolean(askPopup), 120);
 
   const openNewTab = useCallback(() => {
     newTab(inheritedCwdForNewTab());
@@ -2205,8 +2183,15 @@ export default function App() {
       readClipboard: readTerminalClipboard,
       onRead: speakAloud,
       onStop: stopReading,
+      selectionActions: selectionMenuActions,
     }),
-    [captureReadableSelection, activeTabNow, speakAloud, stopReading],
+    [
+      captureReadableSelection,
+      activeTabNow,
+      speakAloud,
+      stopReading,
+      selectionMenuActions,
+    ],
   );
 
   const readerPanelHost = useMemo(
@@ -3165,7 +3150,7 @@ export default function App() {
                         onOpenFileLink={handleOpenTerminalFileLink}
                         onReadAloud={speakAloud}
                         onStopReading={stopReading}
-                        selectionActions={terminalSelectionActions}
+                        selectionActions={selectionMenuActions}
                         homePath={home}
                         registerEditorHandle={registerEditorHandle}
                         onEditorDirtyChange={handleEditorDirty}
@@ -3378,29 +3363,6 @@ export default function App() {
             }
             onOpenDoc={focusReaderDoc}
           />
-          {askPresence.mounted ? (
-            <SelectionAskAi
-              state={askPresence.state}
-              x={askPopup?.x ?? 0}
-              y={askPopup?.y ?? 0}
-              onAsk={onAskFromSelection}
-              onAddToNote={onAddToNoteFromSelection}
-              onOpenMermaid={() =>
-                runSelectionAction(onOpenMermaidFromSelection)
-              }
-              reading={
-                speakReason(activeTab) === PRIVATE_READ_REASON
-                  ? undefined
-                  : {
-                      onReadHere: () => runSelectionAction(readHere),
-                      onReadInNewTab: () => runSelectionAction(readInNewTab),
-                      onSpeak: () =>
-                        runSelectionAction(() => readSelectionAloud()),
-                    }
-              }
-              onDismiss={() => setAskPopup(null)}
-            />
-          ) : null}
 
           <CommandPalette
             open={commandPaletteOpen}

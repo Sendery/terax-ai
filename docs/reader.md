@@ -25,7 +25,6 @@ It uses the speech stack described in [tts.md](tts.md). Nothing leaves the machi
   - **Read here with** does the same with a voice chosen for that document;
   - **Read in new tab** opens it in a Reader tab;
   - **Stop** silences whatever is sounding, Speak or the Reader.
-- **The selection popup** that a selection raises offers Read here, Read in new tab and Speak beside Ask Terax.
 - **From the command palette:** Speak selection, Read here, Read in new tab, Show or hide the Reader panel, Play or pause the Reader, Resume and Stop. An entry that cannot apply to the tab on screen says why instead of disappearing: a private terminal, or a view with no text such as a preview or a diff.
 - **From an agent.** Agents use `reader.open` with `text`, or with an absolute `path`. It docks in the panel unless they pass `placement: "tab"`, and it opens paused unless they pass `play: true`, so an agent never talks over what you are hearing. `tts.speak` is different: it is a short spoken message and plays at once.
 

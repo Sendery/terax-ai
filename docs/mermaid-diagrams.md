@@ -16,9 +16,9 @@ validated by the real Mermaid parser, and only then committed to the tab.
   starter flowchart, because an empty source is not valid Mermaid and would
   otherwise greet you with a parse error. The starter sits inside the Visual
   mode subset, so both editing modes work on it right away.
-- **From the terminal or an editor:** select a Mermaid snippet, then choose
-  **Open Mermaid** in the selection popup. Fenced ` ```mermaid ` blocks are
-  unwrapped automatically.
+- **From the terminal or an editor:** select a Mermaid snippet, right-click it
+  and choose **Open Mermaid**. Fenced ` ```mermaid ` blocks are unwrapped
+  automatically.
 - **From Pi:** the `@crynta/pi-terax` extension exposes `mermaid.open` and
   `mermaid.update`. See [Pi Terax bridge](pi-terax.md) for payloads and limits.
 - **From a workspace tab:** Mermaid tabs persist with the space, including their

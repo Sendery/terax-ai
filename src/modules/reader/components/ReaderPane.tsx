@@ -34,11 +34,13 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { ReadContextMenu, type ReadContextMenuBinding } from "./ReadContextMenu";
 import { ReaderText } from "./ReaderText";
 import { ReaderTransport } from "./ReaderTransport";
 
 type Props = {
   docId: string;
+  readMenu: ReadContextMenuBinding;
   /** The tab is the one on screen. */
   visible: boolean;
   onClose: () => void;
@@ -65,6 +67,7 @@ const READING_LINE = 0.4;
 
 export function ReaderPane({
   docId,
+  readMenu,
   visible,
   onClose,
   onTitle,
@@ -435,23 +438,25 @@ export function ReaderPane({
         onTouchMove={() => setFreeScroll(true)}
         onClick={onClick}
       >
-        <article
-          className={cn(
-            "mx-auto max-w-[72ch] font-serif",
-            docked
-              ? "px-12 pt-4 pb-[60%] text-[15px] leading-[1.7]"
-              : "px-12 pt-10 pb-[45vh] text-[17px] leading-[1.75]",
-          )}
-        >
-          <ReaderText
-            doc={entry.doc}
-            segment={readingSegment}
-            word={reading}
-            live={sounding}
-            cursor={cursor}
-            cutsByBlock={cutsByBlock}
-          />
-        </article>
+        <ReadContextMenu binding={readMenu}>
+          <article
+            className={cn(
+              "mx-auto max-w-[72ch] font-serif",
+              docked
+                ? "px-12 pt-4 pb-[60%] text-[15px] leading-[1.7]"
+                : "px-12 pt-10 pb-[45vh] text-[17px] leading-[1.75]",
+            )}
+          >
+            <ReaderText
+              doc={entry.doc}
+              segment={readingSegment}
+              word={reading}
+              live={sounding}
+              cursor={cursor}
+              cutsByBlock={cutsByBlock}
+            />
+          </article>
+        </ReadContextMenu>
       </div>
       {freeScroll && (sounding || cursor !== null) ? (
         <button
