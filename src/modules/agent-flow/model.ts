@@ -166,4 +166,4 @@ export function sessionFamily(run: FlowRun | undefined, history: readonly FlowRu
   return result;
 }
 
-export type FlowDirection = "down" | "left";
+export type FlowDirection = "down" | "right";

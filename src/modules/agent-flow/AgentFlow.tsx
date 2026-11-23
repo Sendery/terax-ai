@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import {
-  ArrowDown01Icon, ArrowLeft01Icon, Cancel01Icon, Flowchart01Icon,
+  ArrowDown01Icon, ArrowRight01Icon, Cancel01Icon, Flowchart01Icon,
   SparklesIcon, TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -183,15 +183,15 @@ export default function AgentFlow({
             <option value="all">All sessions</option>
           </select>
           <button type="button" className="flow-direction" title="Change graph direction"
-            aria-label={direction === "down" ? "Switch to right-to-left layout" : "Switch to top-to-bottom layout"}
-            onClick={() => setDirection((current) => current === "down" ? "left" : "down")}>
-            <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={15} />
-            <span>{direction === "down" ? "Top to bottom" : "Right to left"}</span>
+            aria-label={direction === "down" ? "Switch to left-to-right layout" : "Switch to top-to-bottom layout"}
+            onClick={() => setDirection((current) => current === "down" ? "right" : "down")}>
+            <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowRight01Icon} size={15} />
+            <span>{direction === "down" ? "Top to bottom" : "Left to right"}</span>
           </button>
           <button type="button" className="flow-arrangement" aria-label="Session lanes"
             aria-pressed={arrangement === "lanes"} title="Switch between fitting the map and one lane per session"
             onClick={() => setArrangement((current) => current === "fit" ? "lanes" : "fit")}>
-            {arrangement === "fit" ? "Fit to screen" : direction === "left" ? "Session rows" : "Session columns"}
+            {arrangement === "fit" ? "Fit to screen" : direction === "right" ? "Session rows" : "Session columns"}
           </button>
           <button type="button" aria-pressed={usage} onClick={() => { setUsage((current) => !current); setSelection(null); }}>Usage</button>
           <button type="button" className="flow-motion" aria-label="Motion effects" aria-pressed={motion}

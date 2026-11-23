@@ -171,16 +171,15 @@ type Cluster = {
 };
 
 export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean) {
-  const xOffset = direction === "left" ? NODE_WIDTH - NODE_ANCHOR.x : NODE_ANCHOR.x;
-  const a = { x: from.x + xOffset, y: from.y + NODE_ANCHOR.y };
-  const b = { x: to.x + xOffset, y: to.y + NODE_ANCHOR.y };
-  if (direction === "left") {
-    const start = { x: a.x - 29, y: a.y };
-    const end = { x: b.x + 29, y: b.y };
+  const a = { x: from.x + NODE_ANCHOR.x, y: from.y + NODE_ANCHOR.y };
+  const b = { x: to.x + NODE_ANCHOR.x, y: to.y + NODE_ANCHOR.y };
+  if (direction === "right") {
+    const start = { x: a.x + 29, y: a.y };
+    const end = { x: b.x - 29, y: b.y };
     const rail = Math.min(from.y, to.y);
-    const d = `M ${start.x} ${start.y} C ${start.x - 24} ${start.y}, ${start.x - 16} ${rail}, ${start.x - 53} ${rail} H ${end.x + 53} C ${end.x + 14} ${rail}, ${end.x + 22} ${end.y}, ${end.x} ${end.y}`;
+    const d = `M ${start.x} ${start.y} C ${start.x + 24} ${start.y}, ${start.x + 16} ${rail}, ${start.x + 53} ${rail} H ${end.x - 53} C ${end.x - 14} ${rail}, ${end.x - 22} ${end.y}, ${end.x} ${end.y}`;
     const tip = returned ? start : end;
-    const back = tip.x + (returned ? -7 : 7);
+    const back = tip.x + (returned ? 7 : -7);
     return { d, arrow: `M ${back} ${tip.y - 4} L ${tip.x} ${tip.y} L ${back} ${tip.y + 4}` };
   }
   const start = { x: a.x, y: a.y + 29 };
@@ -218,7 +217,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         const cross = (index % breadth) + (breadth - count) / 2;
         const at = direction === "down"
           ? { x: CLUSTER_PAD + cross * SLOT_X, y: CLUSTER_HEADER + CLUSTER_PAD + (rank + row) * SLOT_Y }
-          : { x: CLUSTER_PAD + (depth - 1 - rank - row) * SLOT_X, y: CLUSTER_HEADER + CLUSTER_PAD + cross * SLOT_Y };
+          : { x: CLUSTER_PAD + (rank + row) * SLOT_X, y: CLUSTER_HEADER + CLUSTER_PAD + cross * SLOT_Y };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);
@@ -233,16 +232,11 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     const crossSize = placed.reduce((max, group) => Math.max(max, across ? group.height : group.width), 0);
     let nextLane = GUTTER;
     const clusters = placed.map((group): Cluster => {
-      const offset = across ? 0 : crossSize - group.width;
       const box = across
         ? { x: nextLane, y: GUTTER, width: group.width, height: crossSize }
         : { x: GUTTER, y: nextLane, width: crossSize, height: group.height };
       nextLane += (across ? group.width : group.height) + GUTTER;
-      const shift = (point: Point) => ({ x: point.x + offset, y: point.y });
-      const nodes = offset ? group.nodes.map(({ task, at, parent }) => ({
-        task, at: shift(at), parent: parent && shift(parent),
-      })) : group.nodes;
-      return { branch: group.branch, box, nodes };
+      return { branch: group.branch, box, nodes: group.nodes };
     });
     return {
       clusters,
@@ -281,11 +275,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       best = layout;
     }
   }
-  const layout = best ?? { clusters: [], width: GUTTER, height: GUTTER };
-  if (direction === "left") {
-    for (const { box } of layout.clusters) box.x = layout.width - box.x - box.width;
-  }
-  return layout;
+  return best ?? { clusters: [], width: GUTTER, height: GUTTER };
 }
 
 export type FlowScene = ReturnType<typeof makeScene>;
@@ -299,12 +289,11 @@ export function fitCamera(scene: { width: number; height: number }, viewport: { 
   return { scale, x: (viewport.width - scene.width * scale) / 2, y: (viewport.height - scene.height * scale) / 2 };
 }
 
-export function laneCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }, direction: FlowDirection): Camera {
-  const down = direction === "down";
+export function laneCamera(scene: { width: number; height: number }, viewport: { width: number; height: number }): Camera {
   const scale = Math.max(0.56, Math.min(1, fitCamera(scene, viewport).scale));
   const freeX = viewport.width - scene.width * scale;
   const freeY = viewport.height - scene.height * scale;
-  return { scale, x: freeX >= 0 ? freeX / 2 : down ? 0 : freeX, y: Math.max(0, freeY / 2) };
+  return { scale, x: Math.max(0, freeX / 2), y: Math.max(0, freeY / 2) };
 }
 
 export function zoomCamera(camera: Camera, point: Point, factor: number): Camera {

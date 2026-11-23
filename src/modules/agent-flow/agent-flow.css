@@ -252,15 +252,6 @@
   border-bottom: 1px solid color-mix(in oklab, var(--flow-accent) 21%, transparent);
 }
 
-.flow-world[data-direction="left"] .flow-cluster-tag {
-  flex-direction: row-reverse;
-}
-
-.flow-world[data-direction="left"] .flow-cluster-tag small {
-  margin-inline-start: 0;
-  margin-inline-end: auto;
-}
-
 .flow-cluster-tag {
   position: absolute;
   top: 12px;
@@ -609,28 +600,6 @@
   gap: 7px;
 }
 
-.flow-world[data-direction="left"] .flow-node {
-  left: auto;
-  right: 0;
-}
-
-.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node {
-  width: 94px;
-  padding-inline-start: 0;
-  align-items: center;
-  text-align: center;
-}
-
-.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node-caption,
-.flow-world[data-direction="left"] .flow-actor[data-compact="true"] .flow-node-state {
-  padding-inline-start: 0;
-}
-
-.flow-world[data-direction="left"] .flow-node-events {
-  left: 0;
-  right: 107px;
-}
-
 .flow-speech,
 .flow-activity-label {
   position: relative;
@@ -656,15 +625,6 @@
   border-left: inherit;
   border-bottom: inherit;
   background: inherit;
-}
-
-.flow-world[data-direction="left"] .flow-speech::before {
-  left: auto;
-  right: -6px;
-  border-left: 0;
-  border-bottom: 0;
-  border-top: inherit;
-  border-right: inherit;
 }
 
 .flow-speech:hover,
@@ -702,16 +662,6 @@
   padding-inline-start: 8px;
   border-inline-start: 1px solid color-mix(in oklab, var(--flow-accent) 56%, transparent);
   margin-inline-start: 7px;
-}
-
-.flow-world[data-direction="left"] .flow-tool-links {
-  margin-inline-start: 0;
-  margin-inline-end: 7px;
-  padding-inline-start: 0;
-  padding-inline-end: 8px;
-  border-inline-start: 0;
-  border-inline-end: 1px solid color-mix(in oklab, var(--flow-accent) 56%, transparent);
-  justify-items: end;
 }
 
 .flow-tool-links button {

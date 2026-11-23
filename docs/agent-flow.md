@@ -14,8 +14,8 @@ button can stop the effects, and replay leaves the ambient movement still.
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
 and use Fit all or the minimap to reorient the canvas. The Agents list can find
 and center a session. The direction button switches between top to bottom and
-right to left. In the right-to-left view, each session starts on the right and
-delegates toward the left. Switch from Fit to screen to session lanes to give
+left to right. In the horizontal view, each session starts on the left and
+delegates toward the right. Switch from Fit to screen to session lanes to give
 each session its own column in the vertical view or row in the horizontal view.
 Pan across the lanes to explore, or fit the whole map using the canvas controls.
 Select an agent, bubble or tool to open its details. Activity,

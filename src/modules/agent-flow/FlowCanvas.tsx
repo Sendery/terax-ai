@@ -182,9 +182,9 @@ export function FlowCanvas({
     if (manualCamera.current || bounds === fittedBounds.current) return;
     fittedBounds.current = bounds;
     const next = arrangement === "lanes" && !fitAllRequested.current
-      ? laneCamera(scene, size, direction) : fitCamera(scene, size);
+      ? laneCamera(scene, size) : fitCamera(scene, size);
     commit(next, true);
-  }, [size, scene, fitRequest, commit, arrangement, direction]);
+  }, [size, scene, fitRequest, commit, arrangement]);
 
   useEffect(() => {
     if (!focusRequest || focused.current === focusRequest.tick || !size.width) return;

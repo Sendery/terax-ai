@@ -30,12 +30,12 @@ describe("Agent Flow", () => {
   it("places actual descendants on successive layers in both directions", () => {
     const branch = branchFor(root, [child, grandchild], null, new Map());
     const down = makeScene([branch], "down").clusters[0].nodes;
-    const left = makeScene([branch], "left").clusters[0].nodes;
+    const right = makeScene([branch], "right").clusters[0].nodes;
     expect(down[0].at.y).toBeLessThan(down[1].at.y);
     expect(down[1].at.y).toBeLessThan(down[2].at.y);
-    expect(left[0].at.x).toBeGreaterThan(left[1].at.x);
-    expect(left[1].at.x).toBeGreaterThan(left[2].at.x);
-    expect(left[2].parent).toEqual(left[1].at);
+    expect(right[0].at.x).toBeLessThan(right[1].at.x);
+    expect(right[1].at.x).toBeLessThan(right[2].at.x);
+    expect(right[2].parent).toEqual(right[1].at);
   });
 
   it("keeps simultaneous hierarchies on the same nonoverlapping map", () => {
@@ -57,36 +57,36 @@ describe("Agent Flow", () => {
     expect((220 - zoom.y) / zoom.scale).toBeCloseTo((220 - fit.y) / fit.scale);
   });
 
-  it("aligns session origins on the right in rows and at the top in columns", () => {
+  it("aligns session origins on the left in rows and at the top in columns", () => {
     const other = historyRun({ id: "another", provider: "pi", cwd: "/project", modifiedAt: 40 }, "Another tab");
     const branches = [branchFor(root, [child, grandchild], null, new Map()), branchFor(other, [], null, new Map())];
-    const rows = makeScene(branches, "left", "lanes");
+    const rows = makeScene(branches, "right", "lanes");
     const [firstRow, secondRow] = rows.clusters;
-    expect(firstRow.box.x + firstRow.box.width).toBe(secondRow.box.x + secondRow.box.width);
+    expect(firstRow.box.x).toBe(secondRow.box.x);
     expect(firstRow.box.y + firstRow.box.height).toBeLessThan(secondRow.box.y);
     expect(firstRow.nodes[0].at.x).toBe(secondRow.nodes[0].at.x);
-    expect(firstRow.nodes[1].at.x).toBeLessThan(firstRow.nodes[0].at.x);
-    expect(laneCamera(rows, { width: 1000, height: 200 }, "left").y).toBe(0);
+    expect(firstRow.nodes[1].at.x).toBeGreaterThan(firstRow.nodes[0].at.x);
+    expect(laneCamera(rows, { width: 200, height: 200 })).toMatchObject({ x: 0, y: 0 });
 
     const columns = makeScene(branches, "down", "lanes");
     const [firstColumn, secondColumn] = columns.clusters;
     expect(firstColumn.box.y).toBe(secondColumn.box.y);
     expect(firstColumn.box.x + firstColumn.box.width).toBeLessThan(secondColumn.box.x);
     expect(firstColumn.nodes[0].at.y).toBe(secondColumn.nodes[0].at.y);
-    expect(laneCamera(columns, { width: 200, height: 800 }, "down").x).toBe(0);
+    expect(laneCamera(columns, { width: 200, height: 800 }).x).toBe(0);
   });
 
-  it("points the horizontal connection left for delegation and right for its return", () => {
-    const from = { x: 352, y: 0 };
-    const to = { x: 0, y: 0 };
-    const delegation = edgeGeometry(from, to, "left", false);
-    const result = edgeGeometry(from, to, "left", true);
+  it("points the horizontal connection right for delegation and left for its return", () => {
+    const from = { x: 0, y: 0 };
+    const to = { x: 352, y: 0 };
+    const delegation = edgeGeometry(from, to, "right", false);
+    const result = edgeGeometry(from, to, "right", true);
     const path = delegation.d.split(" ");
     const start = Number(path[1]);
     const end = Number(path[path.length - 2]);
-    expect(start).toBeGreaterThan(end);
-    expect(delegation.arrow).toContain(`M ${end + 7} 51 L ${end} 55`);
-    expect(result.arrow).toContain(`M ${start - 7} 51 L ${start} 55`);
+    expect(start).toBeLessThan(end);
+    expect(delegation.arrow).toContain(`M ${end - 7} 51 L ${end} 55`);
+    expect(result.arrow).toContain(`M ${start + 7} 51 L ${start} 55`);
   });
 
   it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {
