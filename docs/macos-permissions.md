@@ -35,7 +35,10 @@ What Full Disk Access does not cover, each asked once and kept across builds:
 - **Notifications**: agent notifications, per app.
 - **Accessibility, Screen Recording**: never requested by Terax itself; a tool in a pane that needs them is granted through Terax in System Settings.
 
-`Info.plist` declares a usage description for each of these and `entitlements.plist` the matching hardened-runtime entitlement. Without both macOS does not ask at all: it refuses the child process silently.
+`Info.plist` declares usage descriptions for camera, microphone, Apple
+Events and local network. `entitlements.plist` supplies the hardened-runtime
+entitlements for camera, audio input and Apple Events. macOS manages the
+other grants separately through its own prompts or System Settings.
 
 ## Keychain: one item per profile
 
