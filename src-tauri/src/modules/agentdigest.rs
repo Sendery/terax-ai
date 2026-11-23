@@ -339,10 +339,7 @@ impl DigestBuilder {
         };
         // A foreground subagent returns its answer here; one that runs on
         // reports back later through a task notification.
-        let text = flatten_text(&block["content"]);
-        let still_running =
-            block["is_error"] != true && ASYNC_MARKERS.iter().any(|marker| text.contains(marker));
-        if !still_running {
+        if !claude_result_pending(block) {
             self.open.remove(index);
         }
     }
@@ -351,13 +348,8 @@ impl DigestBuilder {
     /// notification names the tool use that started it, which is the key the
     /// task was opened under.
     fn close_notified(&mut self, text: &str) {
-        for block in text.split("<task-notification>").skip(1) {
-            let (Some(id), Some(status)) = (tag(block, "tool-use-id"), tag(block, "status")) else {
-                continue;
-            };
-            if TERMINAL_TASK_STATES.contains(&status) {
-                self.open.retain(|task| task.id != id);
-            }
+        for id in claude_returned_tasks(text) {
+            self.open.retain(|task| task.id != id);
         }
     }
 
@@ -536,6 +528,18 @@ fn flatten_text(value: &Value) -> String {
             .join("\n"),
         _ => String::new(),
     }
+}
+
+pub(crate) fn claude_result_pending(block: &Value) -> bool {
+    let text = flatten_text(&block["content"]);
+    block["is_error"] != true && ASYNC_MARKERS.iter().any(|marker| text.contains(marker))
+}
+
+pub(crate) fn claude_returned_tasks(text: &str) -> impl Iterator<Item = &str> {
+    text.split("<task-notification>").skip(1).filter_map(|block| {
+        let status = tag(block, "status")?;
+        TERMINAL_TASK_STATES.contains(&status).then(|| tag(block, "tool-use-id")).flatten()
+    })
 }
 
 fn first_text(value: &Value) -> Option<String> {

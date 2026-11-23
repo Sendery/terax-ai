@@ -1163,7 +1163,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     const existing = tabsRef.current.find((tab) => tab.kind === "agent-flow");
     if (existing) {
       setActiveId(existing.id);
-      return;
+      return existing.spaceId;
     }
     const id = nextIdRef.current++;
     setTabs((current) => [...current, {
@@ -1173,6 +1173,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
       title: "Agent Flow",
     }]);
     setActiveId(id);
+    return activeSpaceIdRef.current;
   }, [setTabs]);
 
   const openReaderTab = useCallback(

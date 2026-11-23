@@ -1740,6 +1740,23 @@ export default function App() {
     [setActiveId, focusPane],
   );
 
+  const onOpenAgentFlow = useCallback(() => {
+    const spaceId = openAgentFlowTab();
+    const spaces = useSpaces.getState();
+    if (spaces.activeId !== spaceId) spaces.setActive(spaceId);
+  }, [openAgentFlowTab]);
+
+  const onFocusFlowTerminal = useCallback(
+    (tabId: number, leafId: number) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (tab?.kind !== "terminal" || tab.private || !hasLeaf(tab.paneTree, leafId)) return;
+      const spaces = useSpaces.getState();
+      if (spaces.activeId !== tab.spaceId) spaces.setActive(tab.spaceId);
+      onActivateAgent(tabId, leafId);
+    },
+    [onActivateAgent, tabsRef],
+  );
+
   const onActivateLocalAgent = useCallback(() => {
     openPanel();
     focusInput(null);
@@ -3159,7 +3176,7 @@ export default function App() {
                         onSetRenderableView={setRenderableView}
                         onMermaidSourceChange={updateMermaidSource}
                         onMermaidVisualLayoutChange={updateMermaidVisualLayout}
-                        onActivateAgent={onActivateAgent}
+                        onActivateAgent={onFocusFlowTerminal}
                       />
                     </div>
 
@@ -3240,7 +3257,7 @@ export default function App() {
                     <AgentMonitorPanel
                       onActivate={onActivateAgent}
                       onHide={hideAgentMonitor}
-                      onOpenFlow={openAgentFlowTab}
+                      onOpenFlow={onOpenAgentFlow}
                       tabs={tabs}
                     />
                   </ResizablePanel>

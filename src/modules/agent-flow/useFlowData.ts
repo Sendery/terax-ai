@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { loadFlowJournal, flowRunKey, useFlowJournal } from "@/modules/agent-flow/journal";
@@ -16,13 +16,13 @@ const HISTORY_LIMIT = 25;
 const MAX_TRACE_EVENTS = 600;
 const POLL_MS = 2000;
 
-type History = { key: string; runs: FlowRun[]; failed: boolean };
+type History = { key: string; sourceKey: string; runs: FlowRun[]; failed: boolean };
 
 export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number) {
   const sessions = useAgentStore((state) => open ? state.sessions : null);
   const digests = useAgentStore((state) => open ? state.digests : null);
   const journal = useFlowJournal((state) => open ? state.runs : null);
-  const [history, setHistory] = useState<History>({ key: "", runs: [], failed: false });
+  const [history, setHistory] = useState<History>({ key: "", sourceKey: "", runs: [], failed: false });
   const activeKey = Object.values(sessions ?? {}).filter(
     (session) => session.harness === "codex" || session.harness === "copilot",
   ).map((session) => flowRunKey(session)).join(",");
@@ -54,7 +54,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     void (async () => {
       const found = new Map<string, FlowRun>();
       const add = (session: HistorySession) => {
-        const label = session.cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? session.cwd;
+        const label = session.cwd.split(/[\\/]/).filter(Boolean).pop() ?? session.cwd;
         const run = historyRun(session, label);
         found.set(run.key, run);
       };
@@ -85,11 +85,11 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
           void invoke<HistorySession[]>("agent_flow_history", { cwds }).then((records) => {
             if (stopped) return;
             for (const record of records) add(record);
-            setHistory({ key: historyKey, runs: [...found.values()], failed });
+            setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed });
           }).catch(() => {});
         }, 4000);
       }
-      if (!stopped) setHistory({ key: historyKey, runs: [...found.values()], failed: failed || extraResult === false });
+      if (!stopped) setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed: failed || extraResult === false });
     })();
     return () => { stopped = true; clearTimeout(retry); };
   }, [sourceKey, historyKey, activeKey]);
@@ -114,7 +114,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       };
       byKey.set(key, {
         key,
-        group: record?.group ?? key.split(":")[0] + ":" + tab.id,
+        group: record?.group ?? `${key.split(":")[0]}:${tab.id}`,
         tabTitle: labelFor(tab),
         color: tab.color,
         startedAt: session.startedAt,
@@ -129,7 +129,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
         leafId: session.leafId,
       });
     }
-    const candidates = history.key === historyKey ? history.runs : [];
+    const candidates = history.sourceKey === sourceKey ? history.runs : [];
     const allowed = [...byKey.values()].filter((run) => {
       const tab = run.tabId === undefined ? undefined : currentTabs.get(run.tabId);
       return tab?.kind !== "terminal" || !tab.private;
@@ -138,7 +138,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       if (run.sessionId || !run.cwd || (run.harness !== "codex" && run.harness !== "copilot")) return run;
       const closeToStart = (at: number, other: FlowRun) => Math.abs(other.startedAt - at) <= 15_000;
       const matching = candidates.filter((entry) =>
-        entry.harness === run.harness && entry.cwd === run.cwd && entry.createdAt !== undefined &&
+        !entry.parentId && entry.harness === run.harness && entry.cwd === run.cwd && entry.createdAt !== undefined &&
         closeToStart(entry.createdAt, run) &&
         allowed.filter((other) => other.harness === run.harness && other.cwd === run.cwd &&
           closeToStart(entry.createdAt ?? 0, other)).length === 1,
@@ -149,10 +149,15 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       return { ...run, sessionId, name: digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name };
     });
     return mergeRuns(attributed, candidates);
-  }, [sessions, digests, journal, tabs, history, historyKey]);
+  }, [sessions, digests, journal, tabs, history, sourceKey]);
+
+  const children = useMemo(() => history.sourceKey === sourceKey
+    ? history.runs.filter((run) => !!run.parentId)
+    : [], [history, sourceKey]);
 
   return {
     runs,
+    children,
     digests,
     loading: open && history.key !== historyKey,
     failed: history.key === historyKey && history.failed,
@@ -174,20 +179,22 @@ const EMPTY_TRACE: TraceState = {
 
 export function useFlowTrace(run: FlowRun | undefined, open: boolean, follow: boolean, refresh: number) {
   const [state, setState] = useState(EMPTY_TRACE);
+  const cursor = useRef({ key: "", offset: 0 });
   const id = run?.sessionId;
   const provider = run?.harness;
-  const key = open && id && provider && isTraceProvider(provider) ? `${provider}:${id}` : "";
+  const key = open && id && provider && isTraceProvider(provider) ? `${provider}:${id}:${refresh}` : "";
   useEffect(() => {
     if (!key || !id || !provider) return;
     let stopped = false;
-    let offset = 0;
+    if (cursor.current.key !== key) cursor.current = { key, offset: 0 };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const next = async () => {
       try {
+        const offset = cursor.current.offset;
         const trace = await invoke<Trace>("agent_flow_trace", { provider, id, offset });
         if (stopped) return;
         const first = offset === 0;
-        offset = trace.nextOffset;
+        cursor.current.offset = trace.nextOffset;
         if (first || trace.reset || trace.events.length || trace.name) {
           setState((old) => {
             const same = old.key === key && !trace.reset;
@@ -204,7 +211,7 @@ export function useFlowTrace(run: FlowRun | undefined, open: boolean, follow: bo
         } else {
           setState((old) => old.failed ? { ...old, failed: false } : old);
         }
-        if (trace.pending || follow) timer = setTimeout(next, trace.pending ? 150 : POLL_MS);
+        if (follow) timer = setTimeout(next, POLL_MS);
       } catch {
         if (stopped) return;
         setState((old) => ({
@@ -216,12 +223,12 @@ export function useFlowTrace(run: FlowRun | undefined, open: boolean, follow: bo
         if (follow) timer = setTimeout(next, POLL_MS * 3);
       }
     };
-    void next();
+    if (follow || cursor.current.offset === 0) void next();
     return () => {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [id, key, provider, follow, refresh]);
+  }, [id, key, provider, follow]);
 
   if (key && key !== state.key) return { ...EMPTY_TRACE, loading: true };
   return key ? state : EMPTY_TRACE;

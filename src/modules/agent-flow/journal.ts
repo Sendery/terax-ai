@@ -65,7 +65,7 @@ export function recordFlowSignal(
   let kind: FlowKind | null = signal.kind === "bound" ? null : signal.kind;
   if (kind === "exited" && signal.exitCode) kind = "error";
   const past = old?.events ?? [];
-  const previous = past.at(-1);
+  const previous = past[past.length - 1];
   const at = signal.kind === "started" ? session.startedAt : Date.now();
   const events = kind && (!previous || kind !== previous.kind || kind === "subagent" || kind === "notification")
     ? [...past, {

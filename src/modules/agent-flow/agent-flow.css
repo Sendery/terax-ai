@@ -158,7 +158,8 @@
 }
 
 .flow-pagination {
-  border-block: 1px solid var(--flow-stroke) 0;
+  border-top: 1px solid var(--flow-stroke);
+  border-bottom: 0;
 }
 
 .flow-viewport {

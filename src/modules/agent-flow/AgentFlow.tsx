@@ -10,7 +10,8 @@ import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
 import {
   beforeTime, CARD_HEIGHT, CARD_WIDTH, FLOW_LABELS, flowTasks,
-  isTraceProvider, placeLane, type FlowDirection, type FlowRun, type TraceEvent,
+  isTraceProvider, placeLane, sessionFamily, type FlowDirection, type FlowRun,
+  type FlowTask, type TraceEvent,
 } from "@/modules/agent-flow/model";
 import { useFlowData, useFlowTrace } from "@/modules/agent-flow/useFlowData";
 import "./agent-flow.css";
@@ -42,7 +43,6 @@ function runState(run: FlowRun, at: number | null) {
   return { label: run.projectHistory ? "Project history" : "Recorded", tone: "rest" };
 }
 
-type Task = ReturnType<typeof flowTasks>[number];
 type Point = { x: number; y: number };
 
 function pathBetween(root: Point, child: Point, direction: FlowDirection) {
@@ -73,17 +73,18 @@ function FlowLane({
   time: number | null;
   direction: FlowDirection;
   selected: boolean;
-  tasks: Task[];
+  tasks: FlowTask[];
   task: string | null;
   name?: string | null;
   bubble?: string | null;
   zoom: number;
   onSelect: (task: string | null) => void;
 }) {
-  const lane = placeLane(tasks.length, direction);
+  const lane = placeLane(tasks, direction);
   const status = runState(run, time);
   const title = runName(run, name);
-  const last = beforeTime(run.events, time).at(-1);
+  const events = beforeTime(run.events, time);
+  const last = events[events.length - 1];
   const rootStyle = { left: lane.root.x, top: lane.root.y, width: CARD_WIDTH, height: CARD_HEIGHT };
   return (
     <section className="flow-lane" style={accent(run)} aria-label={`${run.tabTitle}, ${title}`}>
@@ -98,10 +99,13 @@ function FlowLane({
         }}>
           {tasks.length ? (
             <svg className="flow-edges" width={lane.width} height={lane.height} aria-hidden="true">
-              {tasks.map((entry, index) => (
-                <path key={entry.id} d={pathBetween(lane.root, lane.positions[index], direction)}
-                  data-selected={task === entry.id} />
-              ))}
+              {tasks.map((entry) => {
+                const parent = entry.parentId ? lane.positions.get(entry.parentId) : lane.root;
+                const child = lane.positions.get(entry.id);
+                return parent && child ? (
+                  <path key={entry.id} d={pathBetween(parent, child, direction)} data-selected={task === entry.id} />
+                ) : null;
+              })}
             </svg>
           ) : null}
           <button
@@ -123,9 +127,9 @@ function FlowLane({
             <span className="flow-bubble">{bubble || last?.text || status.label}</span>
             <span className="flow-node-footer">{status.label}</span>
           </button>
-          {tasks.map((entry, index) => (
+          {tasks.map((entry) => (
             <button type="button" key={entry.id} className="flow-node flow-child"
-              style={{ left: lane.positions[index].x, top: lane.positions[index].y, width: CARD_WIDTH, height: CARD_HEIGHT }}
+              style={{ left: lane.positions.get(entry.id)?.x, top: lane.positions.get(entry.id)?.y, width: CARD_WIDTH, height: CARD_HEIGHT }}
               data-selected={task === entry.id} aria-pressed={task === entry.id}
               onClick={() => onSelect(entry.id)}
             >
@@ -136,7 +140,7 @@ function FlowLane({
                   <small title={`${run.tabTitle} · ${title}`}>{run.tabTitle} · {title}</small>
                 </span>
               </span>
-              <span className="flow-bubble">{entry.returnedAt ? "Result returned" : "Delegated by session"}</span>
+              <span className="flow-bubble">{entry.returnedAt ? "Result returned" : entry.parentId ? "Delegated by subagent" : "Delegated by session"}</span>
               <span className="flow-node-footer">Subagent · {timeOnly.format(entry.at)}</span>
             </button>
           ))}
@@ -170,7 +174,7 @@ export default function AgentFlow({
   const [zoom, setZoom] = useState(1);
   const viewport = useRef<HTMLDivElement | null>(null);
   const toolbar = useRef<HTMLButtonElement | null>(null);
-  const { runs, digests, loading, failed } = useFlowData(tabs, open, refresh);
+  const { runs, children, digests, loading, failed } = useFlowData(tabs, open, refresh);
   const groups = useMemo(() => {
     const choices = new Map<string, string>();
     for (const run of runs) {
@@ -189,17 +193,22 @@ export default function AgentFlow({
     .sort((a, b) => a.at - b.at),
   [run, trace.events]);
   const tasks = useMemo(() => flowTasks(beforeTime(activity, time)), [activity, time]);
-  const selectedEntry = tasks.find((entry) => entry.id === selectedTask);
+  const family = useMemo(() => sessionFamily(run, children), [run, children]);
   const digest = run?.active && run.leafId !== undefined ? digests?.[run.leafId] : undefined;
   const ownsDigest = !!run?.sessionId && digest?.sessionId === run.sessionId;
-  const liveTasks = time === null && ownsDigest && !tasks.length
+  const liveTasks: FlowTask[] = family.length ? beforeTime(family, time)
+    : time === null && ownsDigest && !tasks.length
     ? (digest?.tasks ?? []).filter((entry) => entry.kind === "subagent")
       .map((entry, index) => ({ id: `current:${index}`, at: entry.startedAt, label: entry.label }))
     : tasks;
+  const selectedEntry = liveTasks.find((entry) => entry.id === selectedTask);
+  const childTrace = useFlowTrace(selectedEntry?.run, open, time === null && run?.active === true, refresh);
   const timeline = useMemo(() => [...new Set([
     ...filtered.flatMap((item) => item.events.length ? item.events.map((event) => event.at) : [item.startedAt]),
     ...activity.map((event) => event.at),
-  ])].filter((at) => at > 0).sort((a, b) => a - b), [filtered, activity]);
+    ...family.map((entry) => entry.at),
+    ...childTrace.events.map((event) => event.at),
+  ])].filter((at) => at > 0).sort((a, b) => a - b), [filtered, activity, family, childTrace.events]);
   const nextTime = time === null ? -1 : timeline.findIndex((at) => at > time);
   const cursor = nextTime < 0 ? timeline.length - 1 : Math.max(0, nextTime - 1);
   const ordered = useMemo(() => filtered
@@ -215,7 +224,9 @@ export default function AgentFlow({
   const activeCount = filtered.filter((item) => item.active).length;
   const recent = beforeTime(activity, time);
   const detailEvents = recent.filter((entry) => entry.kind !== "returned" || entry.taskId && tasks.some((item) => item.id === entry.taskId));
-  const selectedEvents = selectedTask ? detailEvents.filter((entry) => entry.taskId === selectedTask || entry.id === selectedTask) : detailEvents;
+  const selectedEvents = selectedEntry?.run ? beforeTime(childTrace.events, time)
+    : selectedTask ? detailEvents.filter((entry) => entry.taskId === selectedTask || entry.id === selectedTask) : detailEvents;
+  const detailTrace = selectedEntry?.run ? childTrace : trace;
   const excerpt = [...recent].reverse().find(flowEventPriority);
   const bubble = excerpt?.text ?? (time === null && ownsDigest ? digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap : undefined);
 
@@ -255,7 +266,7 @@ export default function AgentFlow({
 
   function fitView() {
     const bounds = viewport.current?.clientWidth ?? 0;
-    const widest = placeLane(visibleTasks.length, direction).width;
+    const widest = placeLane(visibleTasks, direction).width;
     setZoom(Math.max(0.35, Math.min(1, (bounds - 44) / widest)));
     viewport.current?.scrollTo(0, 0);
   }
@@ -310,7 +321,7 @@ export default function AgentFlow({
               <button type="button" onClick={fitView}>Fit view</button>
             </div>
           </div>
-          <div className="flow-viewport" ref={viewport} tabIndex={0} aria-label="Scrollable session map">
+          <section className="flow-viewport" ref={viewport} aria-label="Scrollable session map">
             {visible.length ? (
               <div className="flow-lanes">
                 {visible.map((item) => (
@@ -331,7 +342,7 @@ export default function AgentFlow({
                 <span>{time === null ? "Start a supported agent in a terminal or choose another source." : "Move the timeline forward or return to Live."}</span>
               </div>
             )}
-          </div>
+          </section>
           {pages > 1 || failed ? (
             <div className="flow-pagination">
               <span>{failed ? "Some project history could not be loaded." : `Sessions ${current * PAGE_SIZE + 1}–${Math.min(ordered.length, (current + 1) * PAGE_SIZE)} of ${ordered.length}`}</span>
@@ -373,9 +384,9 @@ export default function AgentFlow({
             </div> : null}
             <div className="flow-activity">
               <h3>Activity</h3>
-              {trace.loading ? <p>Loading transcript…</p> : null}
-              {trace.failed ? <p role="status">Transcript unavailable. Recorded terminal events are shown.</p> : null}
-              {trace.limited ? <p>Recent transcript activity is shown.</p> : null}
+              {detailTrace.loading ? <p>Loading transcript…</p> : null}
+              {detailTrace.failed ? <p role="status">Transcript unavailable. Recorded terminal events are shown.</p> : null}
+              {detailTrace.limited ? <p>Recent transcript activity is shown.</p> : null}
               {run.projectHistory ? <p>Matched by project folder.</p> : null}
               {(!isTraceProvider(run.harness) || !run.sessionId) && !trace.loading
                 ? <p>Terminal events are available for this session.</p> : null}
@@ -390,7 +401,7 @@ export default function AgentFlow({
                     </li>
                   ))}
                 </ol>
-              ) : !trace.loading ? <p>No events at this point in time.</p> : null}
+              ) : !detailTrace.loading ? <p>No events at this point in time.</p> : null}
               {selectedEvents.length > activityPage * ACTIVITY_PER_PAGE ? (
                 <button type="button" onClick={() => setActivityPage((value) => value + 1)}>Earlier events</button>
               ) : null}

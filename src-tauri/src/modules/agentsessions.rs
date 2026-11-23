@@ -131,7 +131,7 @@ pub fn is_safe_session_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-fn sessions_root(agent: AgentKind) -> Option<PathBuf> {
+pub(crate) fn sessions_root(agent: AgentKind) -> Option<PathBuf> {
     let home = dirs::home_dir()?;
     Some(match agent {
         AgentKind::Pi => home.join(".pi").join("agent").join("sessions"),

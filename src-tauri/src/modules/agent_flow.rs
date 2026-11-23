@@ -3,14 +3,15 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    agentdigest::parse_rfc3339_ms,
-    agentsessions::{find_session_file, is_safe_session_id, AgentKind},
+    agentdigest::{claude_result_pending, claude_returned_tasks, parse_rfc3339_ms},
+    agentsessions::{find_session_file, is_safe_session_id, sessions_root, AgentKind},
 };
 
 const READ_BYTES: u64 = 4 * 1024 * 1024;
@@ -18,7 +19,7 @@ const LINE_BYTES: usize = 512 * 1024;
 const MAX_EVENTS: usize = 600;
 const MAX_FILES: usize = 2_000;
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
     Claude,
@@ -35,6 +36,8 @@ pub struct HistorySession {
     cwd: String,
     modified_at: u64,
     created_at: Option<u64>,
+    parent_id: Option<String>,
+    name: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -67,7 +70,6 @@ pub struct Trace {
     next_offset: u64,
     reset: bool,
     limited: bool,
-    pending: bool,
 }
 
 fn text(value: &Value) -> String {
@@ -96,6 +98,17 @@ fn safe_key(v: &Value) -> Option<String> {
     v.as_str().filter(|id| is_safe_session_id(id)).map(String::from)
 }
 
+fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
+    let raw = value.as_str().unwrap_or_default();
+    if raw.contains("<task-notification>") {
+        for id in claude_returned_tasks(raw).filter(|id| is_safe_session_id(id)) {
+            emit(Kind::Returned, String::new(), Some(id.to_string()));
+        }
+    } else if !raw.trim().is_empty() {
+        emit(if role == "user" { Kind::User } else { Kind::Reply }, text(value), None);
+    }
+}
+
 fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
     let kind = row["type"].as_str().unwrap_or_default();
     match provider {
@@ -107,11 +120,11 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             }
             let content = &message["content"];
             if content.is_string() {
-                emit(if role == "user" { Kind::User } else { Kind::Reply }, text(content), None);
+                message_text(role, content, emit);
             }
             for block in content.as_array().into_iter().flatten() {
                 match block["type"].as_str().unwrap_or_default() {
-                    "text" => emit(if role == "user" { Kind::User } else { Kind::Reply }, text(&block["text"]), None),
+                    "text" => message_text(role, &block["text"], emit),
                     "tool_use" | "toolCall" => {
                         let name = text(&block["name"]);
                         if matches!(name.as_str(), "Agent" | "Task" | "subagent") {
@@ -125,7 +138,7 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
                             emit(Kind::Tool, name, None);
                         }
                     }
-                    "tool_result" => {
+                    "tool_result" if !claude_result_pending(block) => {
                         if let Some(id) = safe_key(&block["tool_use_id"]) {
                             emit(Kind::Returned, String::new(), Some(id));
                         }
@@ -231,6 +244,7 @@ fn metadata(path: &Path, provider: Provider) -> Option<HistorySession> {
         (Provider::Copilot, "session.start") => (&row["data"]["sessionId"], &row["data"]["context"]["cwd"]),
         _ => return None,
     };
+    let spawn = &row["payload"]["source"]["subagent"]["thread_spawn"];
     let modified_at = path.metadata().ok()?.modified().ok()?
         .duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
     Some(HistorySession {
@@ -239,13 +253,19 @@ fn metadata(path: &Path, provider: Provider) -> Option<HistorySession> {
         cwd: cwd.as_str()?.to_string(),
         modified_at,
         created_at: row["timestamp"].as_str().and_then(parse_rfc3339_ms),
+        parent_id: safe_key(&spawn["parent_thread_id"]),
+        name: spawn["agent_nickname"].as_str().map(|_| text(&spawn["agent_nickname"])),
     })
 }
 
 fn resolve(provider: Provider, id: &str) -> Option<PathBuf> {
     match provider {
-        Provider::Claude => find_session_file(AgentKind::Claude, id),
-        Provider::Pi => find_session_file(AgentKind::Pi, id),
+        Provider::Claude | Provider::Pi => {
+            let agent = if matches!(provider, Provider::Claude) { AgentKind::Claude } else { AgentKind::Pi };
+            let root = sessions_root(agent)?.canonicalize().ok()?;
+            let path = find_session_file(agent, id)?.canonicalize().ok()?;
+            path.starts_with(root).then_some(path)
+        }
         Provider::Codex | Provider::Copilot => integrations(provider).into_iter().find(|path| {
             let hint = match provider {
                 Provider::Codex => path.file_stem().is_some_and(|name| name.to_string_lossy().ends_with(id)),
@@ -257,38 +277,44 @@ fn resolve(provider: Provider, id: &str) -> Option<PathBuf> {
     }
 }
 
+type CachedPaths = VecDeque<(Provider, String, PathBuf)>;
+static PATHS: Mutex<CachedPaths> = Mutex::new(VecDeque::new());
+
+fn trace_path(provider: Provider, id: &str) -> Option<PathBuf> {
+    let cached = PATHS.lock().ok()?.iter().find(|entry| entry.0 == provider && entry.1 == id)
+        .map(|entry| entry.2.clone());
+    if let Some(path) = cached.filter(|path| path.canonicalize().is_ok_and(|resolved| resolved == *path)) {
+        return Some(path);
+    }
+    let path = resolve(provider, id)?.canonicalize().ok()?;
+    let mut paths = PATHS.lock().ok()?;
+    paths.retain(|(p, key, _)| *p != provider || key != id);
+    if paths.len() >= 48 {
+        paths.pop_front();
+    }
+    paths.push_back((provider, id.to_string(), path.clone()));
+    Some(path)
+}
+
 fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Trace> {
     let size = file.metadata()?.len();
-    let reset = offset == 0 || offset > size;
+    let reset = offset == 0 || offset > size || size.saturating_sub(offset) > READ_BYTES;
     let mut next_offset = if reset { size.saturating_sub(READ_BYTES) } else { offset };
     let mut limited = reset && next_offset > 0;
     let mut reader = BufReader::new(file);
     reader.seek(SeekFrom::Start(next_offset.saturating_sub(u64::from(limited))))?;
     if limited {
-        next_offset = next_offset - 1 + reader.skip_until(b'\n')? as u64;
+        let align_budget = size - next_offset + 1;
+        next_offset = next_offset - 1 + (&mut reader).take(align_budget).skip_until(b'\n')? as u64;
     }
     let mut events = VecDeque::new();
     let mut line = Vec::new();
     let mut name = None;
-    let mut pending = false;
-    let mut reader = reader.take(READ_BYTES + LINE_BYTES as u64);
+    let mut reader = reader.take(size.saturating_sub(next_offset));
     while next_offset < size {
         line.clear();
         let bytes = reader.read_until(b'\n', &mut line)?;
-        if bytes == 0 {
-            pending = next_offset < size;
-            break;
-        }
         if line.last() != Some(&b'\n') {
-            // A writer can append the rest after this read. When the budget cut
-            // an oversized line, skip it through the next newline instead.
-            if next_offset + bytes as u64 >= size {
-                break;
-            }
-            let mut inner = reader.into_inner();
-            next_offset += bytes as u64 + inner.skip_until(b'\n')? as u64;
-            limited = true;
-            pending = next_offset < size;
             break;
         }
         let line_offset = next_offset;
@@ -313,7 +339,7 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
             index += 1;
         });
     }
-    Ok(Trace { events: events.into(), name, next_offset, reset, limited, pending })
+    Ok(Trace { events: events.into(), name, next_offset, reset, limited })
 }
 
 #[tauri::command]
@@ -341,7 +367,7 @@ pub async fn agent_flow_trace(provider: Provider, id: String, offset: u64) -> Re
         return Err("Invalid session id".to_owned());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let path = resolve(provider, &id).ok_or("Transcript unavailable")?;
+        let path = trace_path(provider, &id).ok_or("Transcript unavailable")?;
         read_trace(File::open(path).map_err(|error| error.to_string())?, provider, offset)
             .map_err(|error| error.to_string())
     }).await.map_err(|error| error.to_string())?
