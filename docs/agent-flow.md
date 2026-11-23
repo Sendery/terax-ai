@@ -8,8 +8,8 @@ in speech bubbles, tool calls appear beside the agent that made them, and
 delegation and return events travel in opposite directions along their links.
 During live viewing, the halo and its markers move even while an agent is
 idle. The colored ring segments show the latest recorded signal types.
-The latest-signal card opens the corresponding agent and event. The Motion
-button can stop the effects, and replay leaves the ambient movement still.
+The latest-signal card opens the corresponding agent and event. Replay pauses
+ambient movement.
 
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
 and use Fit all or the minimap to reorient the canvas. The Agents list can find
@@ -28,8 +28,8 @@ keep its position on screen as incoming activity changes the map.
 
 Live nodes pulse when Terax records a notification for their shell. Pending
 permission and input labels stay with their own nodes until the shell resumes.
-The notification bell keeps the full notification history and actions. The
-Motion setting and system reduced motion apply to the canvas effects.
+The notification bell keeps the full notification history and actions. Canvas
+effects respect the operating system's reduced-motion setting.
 
 Manage terminal tabs in the existing workspace controls. Terax AI can list,
 inspect, focus and organize public terminals from its chat panel. This includes

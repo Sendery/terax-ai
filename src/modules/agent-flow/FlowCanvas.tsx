@@ -68,7 +68,7 @@ function RelationLine({ from, to, relation, selected, offset, onSelect }: {
 }
 
 const ActorNode = memo(function ActorNode({
-  area, branch, entry, trace, name, selection, compact, detailed, ambient, clock, time, onSelect, nodeStatus, motion,
+  area, branch, entry, trace, name, selection, compact, detailed, ambient, clock, time, onSelect, nodeStatus,
 }: {
   area: Point;
   branch: FlowBranch;
@@ -79,7 +79,6 @@ const ActorNode = memo(function ActorNode({
   compact: boolean;
   detailed: boolean;
   ambient: boolean;
-  motion: boolean;
   clock: number;
   time: number | null;
   onSelect: (selection: FlowSelection) => void;
@@ -94,7 +93,7 @@ const ActorNode = memo(function ActorNode({
   const notice = nodeStatus?.notice;
   const stateLabel = pending ?? (run.marker ? (run.marker === "shell" ? "Shell" : "Command source") : actor.label);
   const status = pending ?? (actor.activity && !actor.speech ? eventLabel(actor.activity) : stateLabel);
-  const flash = notice && motion && recent(notice.at, time, clock);
+  const flash = notice && recent(notice.at, time, clock);
   const animate = recent(actor.activity?.at, time, clock);
   const context = actor.usage?.context;
   return (
@@ -176,14 +175,13 @@ type CanvasProps = {
   focusRequest: { key: string; tick: number } | null;
   fitRequest: string;
   loading: boolean;
-  motion: boolean;
   onSelect: (selection: FlowSelection) => void;
   onVisible: (runs: string[]) => void;
 };
 
 export function FlowCanvas({
   scene, traces, direction, arrangement, time, target, pinnedRun, relations, activeRelation, nodeStatus,
-  focusRequest, fitRequest, loading, motion, onSelect, onVisible, onRelation,
+  focusRequest, fitRequest, loading, onSelect, onVisible, onRelation,
 }: CanvasProps) {
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -377,9 +375,9 @@ export function FlowCanvas({
   const mapScale = Math.min(152 / scene.width, 94 / scene.height);
   const mapWidth = scene.width * mapScale;
   const mapHeight = scene.height * mapScale;
-  let ambientSlots = !motion || time !== null || compact ? 0 : 16;
+  let ambientSlots = time === null && !compact ? 16 : 0;
   return (
-    <div className="flow-canvas" data-ambient={motion && time === null}>
+    <div className="flow-canvas" data-ambient={time === null}>
       <section className="flow-viewport" ref={viewport} aria-label="Agent map"
         onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd}
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
@@ -438,7 +436,7 @@ export function FlowCanvas({
                     <ActorNode key={task?.id ?? "root"} area={at} branch={branch} name={task?.label ?? runName(branch.run, branch.trace?.name)}
                       entry={task} trace={trace} selection={target}
                       compact={compact} detailed={detailed || (target?.run === branch.run.key && !compact)}
-                      ambient={ambient} clock={clock} time={time} onSelect={onSelect} motion={motion && time === null}
+                      ambient={ambient} clock={clock} time={time} onSelect={onSelect}
                       nodeStatus={!task && time === null ? nodeStatus.get(branch.run.key) : undefined} />
                   );
                 })}

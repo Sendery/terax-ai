@@ -1628,10 +1628,6 @@
     display: none;
   }
 
-  .flow-motion span {
-    display: none;
-  }
-
   .flow-activity-hud .flow-hud-time {
     display: none;
   }
@@ -1654,13 +1650,6 @@
   .flow-timeline { --flow-timeline-end: 76px; }
   .flow-shell-toggle span { display: none; }
   .flow-time-label span:last-child { display: none; }
-}
-
-.agent-flow[data-motion="false"] *,
-.agent-flow[data-motion="false"] *::before,
-.agent-flow[data-motion="false"] *::after {
-  animation: none !important;
-  transition: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

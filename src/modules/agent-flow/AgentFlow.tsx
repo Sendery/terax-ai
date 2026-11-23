@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowDown01Icon, ArrowRight01Icon, Cancel01Icon, Flowchart01Icon,
-  SparklesIcon, TerminalIcon,
+  TerminalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
@@ -43,7 +43,6 @@ export default function AgentFlow({
   const [usage, setUsage] = useState(false);
   const [relationKey, setRelationKey] = useState<string | null>(null);
   const [pinnedRun, setPinnedRun] = useState<string | null>(null);
-  const [motion, setMotion] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{ key: string; tick: number } | null>(null);
   const { runs, children, digests, panes, hidden, deliveries, notifications, loading, failed } = useFlowData(tabs, open, refresh);
   const active = runs.filter((run) => run.active).length;
@@ -197,7 +196,7 @@ export default function AgentFlow({
   }
 
   return (
-    <section className="agent-flow" aria-label="Agent Flow" data-motion={motion}>
+    <section className="agent-flow" aria-label="Agent Flow">
       <header className="flow-topbar">
         <div className="flow-heading">
           <span className="flow-brand"><HugeiconsIcon icon={Flowchart01Icon} size={18} /></span>
@@ -234,10 +233,6 @@ export default function AgentFlow({
             setSelection(null);
             setRelationKey(null);
           }}>Usage</button>
-          <button type="button" className="flow-motion" aria-label="Motion effects" aria-pressed={motion}
-            onClick={() => setMotion((current) => !current)}>
-            <HugeiconsIcon icon={SparklesIcon} size={14} /> <span>Motion</span>
-          </button>
           <button type="button" onClick={() => setRefresh((value) => value + 1)} disabled={loading}>Refresh</button>
         </div>
       </header>
@@ -247,7 +242,7 @@ export default function AgentFlow({
           focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
           pinnedRun={pinnedRun} relations={relations} activeRelation={relation} nodeStatus={nodeStatus}
           onRelation={selectRelation}
-          loading={loading} motion={motion} onSelect={select} onVisible={setNear} />
+          loading={loading} onSelect={select} onVisible={setNear} />
 
         <div className="flow-navigation">
           <button type="button" className="flow-nav-toggle" aria-expanded={navigator}
