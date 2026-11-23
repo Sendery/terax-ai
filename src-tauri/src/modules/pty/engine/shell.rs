@@ -16,7 +16,14 @@ pub struct ShellState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShellEvent {
-    PromptStart,
+    /// `OSC 133;A`. `redraws` is the shell's promise (`terax_redraw=1`) that
+    /// on a window size change it repaints its prompt from the row of the
+    /// last `A` or `P` mark; see prompt_redraw.rs.
+    PromptStart {
+        redraws: bool,
+    },
+    /// `OSC 133;P`: a prompt line starts on the cursor row.
+    PromptLine,
     PromptEnd,
     CommandStart {
         command: String,
@@ -329,10 +336,17 @@ impl ShellIntegration {
                     match action {
                         "A" => {
                             if self.capture_events {
-                                self.event = Some(ShellEvent::PromptStart);
+                                self.event = Some(ShellEvent::PromptStart {
+                                    redraws: parts.any(|part| part == "terax_redraw=1"),
+                                });
                             }
                             self.allow_cwd = true;
                             self.state.command_running = false;
+                        }
+                        "P" => {
+                            if self.capture_events {
+                                self.event = Some(ShellEvent::PromptLine);
+                            }
                         }
                         "D" => {
                             if let Some(exit_code) =
@@ -735,6 +749,55 @@ mod prompt_revision_tests {
         assert_eq!(shell.state().prompt_version, 2);
         assert!(shell.state().shell_ready);
         assert!(!shell.state().command_running);
+    }
+    fn events(bytes: &str) -> Vec<ShellEvent> {
+        let mut shell = ShellIntegration::new(Some("prompt-test-token".into()));
+        let mut events = Vec::new();
+        shell
+            .ingest_segments(bytes.as_bytes(), |_, event| {
+                events.extend(event);
+                Ok(())
+            })
+            .unwrap();
+        events
+    }
+    #[test]
+    fn prompt_start_carries_the_redraw_promise_only_when_signed_and_exact() {
+        let start = |redraws| vec![ShellEvent::PromptStart { redraws }];
+        assert_eq!(
+            events("\x1b]133;A;aid=prompt-test-token;terax_redraw=1\x1b\\"),
+            start(true)
+        );
+        assert_eq!(
+            events("\x1b]133;A;terax_redraw=1;aid=prompt-test-token\x07"),
+            start(true)
+        );
+        for plain in [
+            "\x1b]133;A;aid=prompt-test-token\x1b\\",
+            "\x1b]133;A;aid=prompt-test-token;terax_redraw=0\x1b\\",
+            "\x1b]133;A;aid=prompt-test-token;redraw=1\x1b\\",
+        ] {
+            assert_eq!(events(plain), start(false), "{plain:?}");
+        }
+        assert_eq!(events("\x1b]133;A;terax_redraw=1\x1b\\"), vec![]);
+        assert_eq!(events("\x1b]133;A;aid=wrong;terax_redraw=1\x1b\\"), vec![]);
+    }
+    #[test]
+    fn signed_prompt_line_marks_are_events_and_change_no_state() {
+        let mut shell = ShellIntegration::new(Some("prompt-test-token".into()));
+        let before = shell.state().clone();
+        let mut seen = Vec::new();
+        shell
+            .ingest_segments(
+                b"\x1b]133;P;k=i;aid=prompt-test-token\x1b\\\x1b]133;P;k=s\x1b\\\x1b]133;P;k=s;aid=prompt-test-token\x07",
+                |_, event| {
+                    seen.extend(event);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(seen, vec![ShellEvent::PromptLine, ShellEvent::PromptLine]);
+        assert_eq!(shell.state(), &before);
     }
 }
 

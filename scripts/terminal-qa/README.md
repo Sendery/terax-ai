@@ -38,3 +38,20 @@ node ../scripts/with-zig.mjs --variant native-core-v1 --archive <core.tar.gz> --
 Options: `TERAX_REPLAY_RAW` (skip the filter), `TERAX_REPLAY_NO_REFLOW`,
 `TERAX_REPLAY_CLEAR` (erase the screen before each resize), and
 `TERAX_REPLAY_COPY_EACH` (print Select All before each resize).
+
+For the signed shell prompt redraw path, run the following on the QA host
+from this worktree. The capture uses isolated shell profiles with a long
+two-line prompt, prints sample output, types an unfinished command, and
+resizes nine times.
+
+```sh
+bash scripts/terminal-qa/capture-shell-resize.sh /tmp/terax-resize-captures
+TERAX_REPLAY=/tmp/terax-resize-captures/zsh.json \
+TERAX_REPLAY_MARKERS='short line,long sentence that keeps going,echo second command' \
+ghostty_cargo test --features ghostty-engine --lib \
+  prompt_redraw_tests::replay_capture_through_prompt_redraw -- --ignored --nocapture
+```
+
+Run the replay again with `bash.json`. Expect each marker once in Select All
+and the current prompt intact. The `fidelity_tests::replay_capture` run gives
+the comparison without the signed prompt redraw handling.

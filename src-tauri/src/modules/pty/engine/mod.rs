@@ -31,6 +31,10 @@ mod graphics;
 mod graphics_placeholders;
 #[cfg(all(test, feature = "ghostty-engine"))]
 mod fidelity_tests;
+#[cfg(feature = "ghostty-engine")]
+mod prompt_redraw;
+#[cfg(all(test, feature = "ghostty-engine"))]
+mod prompt_redraw_tests;
 #[cfg(all(test, feature = "ghostty-engine"))]
 mod host_tests;
 #[cfg(feature = "ghostty-engine")]
@@ -1060,6 +1064,7 @@ mod runtime {
         /// Reused buffer for the bytes after `erase_wrap`.
         erase_wrap_out: Vec<u8>,
         shell: super::shell::ShellIntegration,
+        prompt_redraw: super::prompt_redraw::PromptRedraw,
         blocks: Option<super::blocks::BlockStore>,
         block_frames: Option<super::blocks::BlockFrames>,
         block_actions: Option<super::block_actions::BlockActions>,
@@ -1085,16 +1090,27 @@ mod runtime {
 
         fn feed_filtered(&mut self, bytes: &[u8]) {
             self.keyboard_modes.ingest(bytes);
+            let prompt_redraw = &mut self.prompt_redraw;
             if let Some(blocks) = &mut self.blocks {
-                if let Err(error) =
-                    blocks.feed(&mut self.term, &mut self.shell, bytes, block_time())
-                {
+                if let Err(error) = blocks.feed_observed(
+                    &mut self.term,
+                    &mut self.shell,
+                    bytes,
+                    block_time(),
+                    |term, event| prompt_redraw.observe(term, event),
+                ) {
                     log::warn!("terminal block tracking failed: {error}");
                     self.health.fail(EngineFailure::SnapshotFailed);
                 }
             } else {
-                self.shell.ingest(bytes);
-                if let Err(error) = super::graphics::write(&mut self.term, bytes) {
+                let term = &mut self.term;
+                if let Err(error) = self.shell.ingest_segments(bytes, |segment, event| {
+                    super::graphics::write(term, segment).map_err(|error| error.to_string())?;
+                    if let Some(event) = &event {
+                        prompt_redraw.observe(term, event);
+                    }
+                    Ok(())
+                }) {
                     log::warn!("terminal graphics policy failed: {error}");
                     self.health.fail(EngineFailure::SnapshotFailed);
                 }
@@ -1239,6 +1255,12 @@ mod runtime {
                 if ((cols, rows) != self.size || (width, height) != self.cell_pixels)
                     && validate_size(cols, rows).is_ok()
                 {
+                    if cols != self.size.0 {
+                        // The shell repaints its prompt after the reflow;
+                        // see prompt_redraw.rs.
+                        self.prompt_redraw
+                            .before_reflow(&mut self.term, self.erase_wrap.at_ground());
+                    }
                     match self.term.resize(cols, rows, width, height) {
                         Ok(()) => {
                             self.size = (cols, rows);
@@ -1679,6 +1701,7 @@ mod runtime {
             erase_wrap: super::erase_wrap::EraseWrapFix::default(),
             erase_wrap_out: Vec::new(),
             shell,
+            prompt_redraw: super::prompt_redraw::PromptRedraw::default(),
             blocks: blocks_enabled.then(super::blocks::BlockStore::default),
             block_frames: blocks_enabled.then(super::blocks::BlockFrames::default),
             block_actions: blocks_enabled.then(super::block_actions::BlockActions::default),
