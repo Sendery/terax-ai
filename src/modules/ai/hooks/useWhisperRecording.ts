@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useChatStore } from "../store/chatStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import { reportOnce } from "@/modules/isolator/lib/cleanup";
 import { transcribeAudio, type SttOptions } from "../lib/stt";
 import type { SttProvider } from "../config";
 import { STT_MODEL_ENGINE } from "@/modules/stt/lib/catalog";
@@ -162,6 +163,12 @@ export function useWhisperRecording({
         dictionary: prefs.sttDictionary,
         live: prefs.sttLiveSegments,
         idleStopMinutes: prefs.ttsIdleStopMinutes,
+        cleanup: prefs.cleanDictationAudio
+          ? {
+              device: prefs.isolatorDevice,
+              onSkip: (reason) => reportOnce(reason, (m) => toast.warning(m)),
+            }
+          : undefined,
       });
       startingRef.current = false;
       if (stopRequestedRef.current) void stopLocal();

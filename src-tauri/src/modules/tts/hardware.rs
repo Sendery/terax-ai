@@ -61,6 +61,10 @@ pub struct EnginePlan {
     pub torch_backend: Option<String>,
     /// One line per choice, shown in Settings as the reason for it.
     pub notes: Vec<String>,
+    /// Costs worth knowing before choosing this engine here: slow on this
+    /// device, tight on memory. A warning never makes an engine unsupported;
+    /// only an incompatible architecture does.
+    pub warnings: Vec<String>,
 }
 
 impl Hardware {
@@ -117,6 +121,7 @@ fn base(device: &str, hw: &Hardware) -> EnginePlan {
         steps: None,
         torch_backend: torch_backend(hw),
         notes: Vec::new(),
+        warnings: Vec::new(),
     }
 }
 
@@ -214,9 +219,11 @@ pub fn plan(engine: Engine, hw: &Hardware) -> EnginePlan {
                 p.steps = Some(16);
                 p.threads = Some(cores.min(8));
                 p.notes.push(format!(
-                    "Runs on the CPU with {} threads and 16 diffusion steps; expect it to be slow.",
+                    "Runs on the CPU with {} threads and 16 diffusion steps.",
                     cores.min(8)
                 ));
+                p.warnings
+                    .push("Slow on the CPU: a diffusion model meant for a GPU.".into());
                 p
             }
         }
@@ -241,19 +248,60 @@ pub fn plan(engine: Engine, hw: &Hardware) -> EnginePlan {
             }
         }
         Engine::Rumble => rumble_plan(hw, cores),
+        Engine::Isolator => isolator_plan(hw, cores),
     };
     if plan.supported {
         wheel_note(&mut plan);
         if let Some(bytes) = hw.memory_bytes {
             let gb = bytes / (1024 * 1024 * 1024);
             if engine == Engine::Omnivoice && gb < 12 {
-                plan.notes.push(format!(
+                plan.warnings.push(format!(
                     "{gb} GB of memory is tight for OmniVoice's 3.3 GB of weights."
                 ));
             }
         }
     }
     plan
+}
+
+/// Seconds of processing per second of audio, measured with the pinned
+/// requirements on Linux (16 CPU threads, and an RTX 3060).
+const ISOLATOR_CPU_SECONDS_PER_SECOND: f32 = 8.7;
+const ISOLATOR_CUDA_SECONDS_PER_SECOND: f32 = 0.35;
+
+/// Inworld Voice Isolator. Its Mamba scan runs in plain PyTorch (the CUDA
+/// kernels need a compiler toolchain), which a GPU absorbs and a CPU does not.
+/// Every device stays available; the CPU one says what it costs.
+fn isolator_plan(hw: &Hardware, cores: u32) -> EnginePlan {
+    if let Some(gpu) = &hw.nvidia {
+        let mut p = base("cuda", hw);
+        p.notes.push(format!(
+            "Runs on {} with bfloat16 autocast: about {:.2} s of work per second of audio on an RTX 3060.",
+            gpu.name, ISOLATOR_CUDA_SECONDS_PER_SECOND
+        ));
+        p
+    } else if hw.apple_silicon {
+        let mut p = base("mps", hw);
+        p.notes.push(
+            "Runs on the Apple GPU (MPS) in float32; the CPU takes over when this macOS lacks the Metal FFT the model needs.".into(),
+        );
+        p.warnings.push(
+            "Not measured on Apple Silicon yet: time a short dictation before relying on it while reading.".into(),
+        );
+        p
+    } else {
+        let mut p = base("cpu", hw);
+        p.threads = Some(cores.min(8));
+        p.notes.push(format!(
+            "Runs on the CPU in float32 with {} threads.",
+            cores.min(8)
+        ));
+        p.warnings.push(format!(
+            "Slow on the CPU: about {:.0} s of work per second of audio. Fine for cleaning a voice sample once; dictation and reading will lag well behind real time.",
+            ISOLATOR_CPU_SECONDS_PER_SECOND
+        ));
+        p
+    }
 }
 
 /// VRAM below which a GPU is not worth it for Rumble-2-Flash: 1.0 GB of bf16
@@ -540,9 +588,9 @@ mod tests {
         let cpu = plan(Engine::Omnivoice, &linux_cpu());
         assert_eq!((cpu.device.as_str(), cpu.steps), ("cpu", Some(16)));
         assert!(
-            cpu.notes.iter().any(|n| n.contains("tight")),
+            cpu.warnings.iter().any(|n| n.contains("tight")),
             "8 GB must be flagged: {:?}",
-            cpu.notes
+            cpu.warnings
         );
     }
 
@@ -612,6 +660,48 @@ mod tests {
                 assert_eq!(p.supported, p.unsupported_reason.is_none());
             }
         }
+    }
+
+    /// Only an incompatible architecture refuses an engine; a slow machine
+    /// gets a warning and keeps the choice.
+    #[test]
+    fn only_an_incompatible_architecture_is_unsupported() {
+        for hw in [m4_pro(), linux_cpu(), linux_cuda()] {
+            for engine in Engine::ALL {
+                let p = plan(engine, &hw);
+                if !p.supported {
+                    assert_eq!(engine, Engine::Zonos3, "{engine:?} on {}", hw.summary());
+                    assert!(!hw.apple_silicon);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_isolator_is_offered_everywhere_and_warns_on_a_cpu() {
+        let cpu = plan(Engine::Isolator, &linux_cpu());
+        assert!(cpu.supported);
+        assert_eq!(cpu.device, "cpu");
+        assert!(
+            cpu.warnings.iter().any(|w| w.contains("Slow on the CPU")),
+            "{:?}",
+            cpu.warnings
+        );
+        let gpu = plan(Engine::Isolator, &linux_cuda());
+        assert!(gpu.supported);
+        assert_eq!(gpu.device, "cuda");
+        assert!(gpu.warnings.is_empty(), "{:?}", gpu.warnings);
+        let mac = plan(Engine::Isolator, &m4_pro());
+        assert!(mac.supported);
+        assert_eq!(mac.device, "mps");
+        assert_eq!(mac.torch_backend, None);
+    }
+
+    #[test]
+    fn omnivoice_on_a_cpu_warns_instead_of_hiding() {
+        let p = plan(Engine::Omnivoice, &linux_cpu());
+        assert!(p.supported);
+        assert!(!p.warnings.is_empty());
     }
 
     #[test]

@@ -69,6 +69,14 @@ device by hand still wins over the plan.
 | Pocket TTS | CPU, 2 threads, no quantization | CUDA, about 2.6 times its CPU | CPU, up to 4 threads, int8 on x86 |
 | OmniVoice | MPS in float32, 16 steps; the audio tokenizer stays on the CPU | CUDA in float16, 32 steps | CPU in float32, 16 steps (slow) |
 | ZONOS3-Mini | MLX on the GPU, quantized backbone | not offered | not offered |
+| Voice Isolator | MPS in float32 | CUDA with bfloat16 autocast | CPU in float32, up to 8 threads (slow, with a warning) |
+
+**Offered, warned, never hidden.** A plan refuses an engine only when the
+architecture cannot run it: ZONOS3-Mini needs MLX, so it needs Apple Silicon.
+A machine that is merely slow keeps every choice, and the plan's `warnings`
+say what it costs (OmniVoice and the Voice Isolator on a CPU, OmniVoice with
+less than 12 GB of memory). Warnings show in amber on the engine card; notes
+stay the grey "Tuned for" list.
 
 The Pocket TTS row was measured on an M4 Pro: 11.8 times real time on one
 thread, 13.2 on two, no better on four; int8 measured 11.4 to 12.4, so it stays
@@ -259,6 +267,56 @@ of silence come back empty. The process footprint is about 2.0 GB on MPS
 uses as context biasing. `/warmup` on a dictation engine also transcribes one
 second of silence and reports `selfTest`. `/synthesize` on a dictation engine,
 and `/transcribe` on a reading engine, answer 409 `wrong_kind`.
+
+## Audio cleanup
+
+The **Voice Isolator** ([Inworld](https://github.com/inworld-ai/voice-isolator),
+Apache 2.0) removes noise and background around a voice while keeping the
+speaker's timbre. It is a third kind of engine, `cleanup`, on the same runtime,
+installer and loopback sidecar, reported apart as `cleaners` and
+`cleanerModels` in the status. Its card is in **Settings, Voice, Advanced**.
+
+| Engine | Model | Weights | Installed |
+| --- | --- | --- | --- |
+| Voice Isolator | `voice-isolator-v1`, the offline checkpoint (64M parameters, 48 kHz) | 256 MB, pinned to commit `9b0285b` and checked against its SHA-256 at load | 830 MB with CPU PyTorch; 4.9 GB with the CUDA build an NVIDIA machine installs |
+
+Three switches, all off until you turn them on:
+
+- **Clean dictation input**: each dictated segment is cleaned before it is
+  transcribed. Also in Settings, Dictation, Style.
+- **Clean reading output**: Speak and the Reader clean each sentence before it
+  plays. Synthesized speech is usually clean already; this helps most with a
+  cloned voice that copied a noisy sample. The Reader keeps cleaned clips in
+  their own cache folder, so switching it on or off never replays the other
+  kind, and readings cached before keep their clips.
+- **Clean imported voice samples**: the sample is cleaned once, before it is
+  stored for cloning. Also in the voice editor, under the sample.
+
+When a switch is on but cleanup cannot run (not installed, model missing, the
+engine failed), the audio is used as recorded and the reason shows once per
+session. Dictation and reading never fail because of cleanup. A cancelled
+dictation or reading still cancels.
+
+Measured on Linux with the pinned requirements, through the sidecar, on 10.8 s
+of noisy speech:
+
+| Device | Time | Per second of audio |
+| --- | --- | --- |
+| RTX 3060 (CUDA) | 4.3 s warm, 6.4 s cold | about 0.35 s |
+| CPU, 16 threads | 88 to 97 s | about 8.7 s |
+
+The model is a band-split Mamba. Its fast CUDA kernels (`mamba-ssm`) need a
+compiler toolchain, which Terax does not install, so the scan runs in plain
+PyTorch on every device; that is what makes the CPU slow. Apple Silicon (MPS)
+is supported by the package from PyTorch 2.6 but has not been measured yet, so
+its card carries a warning until it is. When this macOS lacks the Metal FFT the
+model needs, the engine uses the CPU instead.
+
+`POST /isolate?model=voice-isolator-v1` takes a mono 16-bit PCM WAV between 8
+and 48 kHz (up to 20 MB) and answers with a WAV of the same rate and frame
+count. Under 20 ms of audio comes back untouched. `/synthesize` and
+`/transcribe` on the cleanup engine, and `/isolate` on any other engine, answer
+409 `wrong_kind`.
 
 ## Removing everything
 

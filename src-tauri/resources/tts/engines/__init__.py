@@ -1,4 +1,4 @@
-"""Speech and transcription engine adapters. Third-party imports stay inside load()/synthesize()."""
+"""Speech, transcription and cleanup engine adapters. Third-party imports stay inside load()/synthesize()."""
 
 from __future__ import annotations
 
@@ -36,4 +36,12 @@ def create_engine(name: str):
         from .zonos3 import Zonos3Engine
 
         return Zonos3Engine()
+    if name == "isolator":
+        from .isolator import IsolatorEngine
+
+        return IsolatorEngine()
+    if name == "fake-isolator":
+        from .fake_isolator import FakeIsolator
+
+        return FakeIsolator()
     raise ValueError("unknown engine: {}".format(name))

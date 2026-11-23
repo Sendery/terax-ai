@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
+  setCleanDictationAudio,
   setSttLanguage,
   setSttLiveSegments,
   setSttMode,
@@ -21,7 +22,12 @@ import {
   type SttLanguage,
 } from "@/modules/stt/lib/settings";
 import { LANGUAGE_LABELS, TTS_LANGUAGES } from "@/modules/tts";
-import { Clock01Icon, LanguageSkillIcon, TextFontIcon } from "@hugeicons/core-free-icons";
+import {
+  Clock01Icon,
+  LanguageSkillIcon,
+  SparklesIcon,
+  TextFontIcon,
+} from "@hugeicons/core-free-icons";
 import { Card, Row } from "../voice/ui";
 
 /** What the model returns for a short dictation, before any style. */
@@ -32,6 +38,7 @@ export function StyleTab() {
   const mode = usePreferencesStore((s) => s.sttMode);
   const dictionary = usePreferencesStore((s) => s.sttDictionary);
   const live = usePreferencesStore((s) => s.sttLiveSegments);
+  const clean = usePreferencesStore((s) => s.cleanDictationAudio);
 
   return (
     <section className="flex flex-col gap-3">
@@ -118,6 +125,25 @@ export function StyleTab() {
             ? "On: a pause of 0.6 s after at least 2 s of speech sends that part to the engine."
             : "Off: the whole recording is transcribed when you stop."}{" "}
           Local engine only.
+        </p>
+      </Card>
+
+      <Card
+        title="Clean the microphone"
+        icon={SparklesIcon}
+        subtitle="Remove noise and background from each segment with the Voice Isolator before it is transcribed."
+        action={
+          <Switch
+            checked={clean}
+            onCheckedChange={(checked) => void setCleanDictationAudio(checked)}
+            aria-label="Clean dictation input"
+          />
+        }
+      >
+        <p className="text-[10.5px] text-muted-foreground">
+          Install the Voice Isolator in Settings, Voice, Advanced, where its card
+          says how long cleaning takes on this machine. Until it is installed,
+          audio is transcribed as recorded. Local engine only.
         </p>
       </Card>
     </section>

@@ -15,6 +15,7 @@ pub const POCKET_SPEC_VERSION: u32 = 1;
 pub const OMNIVOICE_SPEC_VERSION: u32 = 1;
 pub const ZONOS3_SPEC_VERSION: u32 = 1;
 pub const RUMBLE_SPEC_VERSION: u32 = 1;
+pub const ISOLATOR_SPEC_VERSION: u32 = 1;
 
 /// The interpreter every engine gets unless it needs a newer one.
 pub const PYTHON_VERSION: &str = "3.11";
@@ -29,6 +30,9 @@ pub enum Engine {
     Zonos3,
     /// Speech to text: Reson8's Rumble-2-Flash, the Light dictation tier.
     Rumble,
+    /// Audio cleanup: Inworld's Voice Isolator, for dictation input, reading
+    /// output and voice samples.
+    Isolator,
 }
 
 /// What an engine does: read text aloud, or turn speech into text.
@@ -37,18 +41,20 @@ pub enum Engine {
 pub enum EngineKind {
     Speech,
     Transcription,
+    Cleanup,
 }
 
 impl Engine {
     /// Every engine, for the loops that must not miss one (purge, sizes,
     /// kill on exit).
-    pub const ALL: [Engine; 6] = [
+    pub const ALL: [Engine; 7] = [
         Engine::Kokoro,
         Engine::Chatterbox,
         Engine::Pocket,
         Engine::Omnivoice,
         Engine::Zonos3,
         Engine::Rumble,
+        Engine::Isolator,
     ];
 
     /// The engines that read aloud; every voice list is built from these.
@@ -63,9 +69,13 @@ impl Engine {
     /// The engines that transcribe dictation.
     pub const TRANSCRIPTION: [Engine; 1] = [Engine::Rumble];
 
+    /// The engines that clean audio for the other two.
+    pub const CLEANUP: [Engine; 1] = [Engine::Isolator];
+
     pub fn kind(self) -> EngineKind {
         match self {
             Engine::Rumble => EngineKind::Transcription,
+            Engine::Isolator => EngineKind::Cleanup,
             _ => EngineKind::Speech,
         }
     }
@@ -78,6 +88,7 @@ impl Engine {
             Engine::Omnivoice => "omnivoice",
             Engine::Zonos3 => "zonos3",
             Engine::Rumble => "rumble",
+            Engine::Isolator => "isolator",
         }
     }
 
@@ -89,6 +100,7 @@ impl Engine {
             Engine::Omnivoice => OMNIVOICE_SPEC_VERSION,
             Engine::Zonos3 => ZONOS3_SPEC_VERSION,
             Engine::Rumble => RUMBLE_SPEC_VERSION,
+            Engine::Isolator => ISOLATOR_SPEC_VERSION,
         }
     }
 
@@ -111,6 +123,7 @@ impl Engine {
             Engine::Omnivoice => Model::Omnivoice,
             Engine::Zonos3 => Model::Zonos3Mini,
             Engine::Rumble => Model::Rumble2Flash,
+            Engine::Isolator => Model::VoiceIsolatorV1,
         }
     }
 
@@ -122,6 +135,7 @@ impl Engine {
             Engine::Omnivoice => "requirements-omnivoice.txt",
             Engine::Zonos3 => "requirements-zonos3.txt",
             Engine::Rumble => "requirements-rumble.txt",
+            Engine::Isolator => "requirements-isolator.txt",
         }
     }
 
@@ -190,6 +204,7 @@ impl FromStr for Engine {
             "omnivoice" => Ok(Engine::Omnivoice),
             "zonos3" => Ok(Engine::Zonos3),
             "rumble" => Ok(Engine::Rumble),
+            "isolator" => Ok(Engine::Isolator),
             other => Err(format!("unknown tts engine: {other}")),
         }
     }
@@ -213,10 +228,12 @@ pub enum Model {
     Zonos3Mini,
     #[serde(rename = "rumble-2-flash")]
     Rumble2Flash,
+    #[serde(rename = "voice-isolator-v1")]
+    VoiceIsolatorV1,
 }
 
 impl Model {
-    pub const ALL: [Model; 8] = [
+    pub const ALL: [Model; 9] = [
         Model::Kokoro82m,
         Model::ChatterboxMultilingual,
         Model::ChatterboxTurbo,
@@ -225,6 +242,7 @@ impl Model {
         Model::Omnivoice,
         Model::Zonos3Mini,
         Model::Rumble2Flash,
+        Model::VoiceIsolatorV1,
     ];
 
     pub fn id(self) -> &'static str {
@@ -237,6 +255,7 @@ impl Model {
             Model::Omnivoice => "omnivoice",
             Model::Zonos3Mini => "zonos3-mini",
             Model::Rumble2Flash => "rumble-2-flash",
+            Model::VoiceIsolatorV1 => "voice-isolator-v1",
         }
     }
 
@@ -256,6 +275,7 @@ impl Model {
             Model::Omnivoice => "k2-fsa/OmniVoice",
             Model::Zonos3Mini => "Zyphra/ZONOS3-Mini",
             Model::Rumble2Flash => "Reson8/Rumble-2-Flash",
+            Model::VoiceIsolatorV1 => "inworld/voice-isolator",
         }
     }
 
@@ -270,6 +290,7 @@ impl Model {
             Model::Omnivoice => "models--k2-fsa--OmniVoice",
             Model::Zonos3Mini => "models--Zyphra--ZONOS3-Mini",
             Model::Rumble2Flash => "models--Reson8--Rumble-2-Flash",
+            Model::VoiceIsolatorV1 => "models--inworld--voice-isolator",
         }
     }
 }
@@ -284,6 +305,7 @@ pub fn engine_of(model: Model) -> Engine {
         Model::Omnivoice => Engine::Omnivoice,
         Model::Zonos3Mini => Engine::Zonos3,
         Model::Rumble2Flash => Engine::Rumble,
+        Model::VoiceIsolatorV1 => Engine::Isolator,
     }
 }
 
@@ -300,6 +322,7 @@ impl FromStr for Model {
             "omnivoice" => Ok(Model::Omnivoice),
             "zonos3-mini" => Ok(Model::Zonos3Mini),
             "rumble-2-flash" => Ok(Model::Rumble2Flash),
+            "voice-isolator-v1" => Ok(Model::VoiceIsolatorV1),
             other => Err(format!("unknown tts model: {other}")),
         }
     }
@@ -416,6 +439,18 @@ pub const SERVER_FILES: &[EmbeddedFile] = &[
         body: include_str!("../../../resources/tts/engines/rumble.py"),
     },
     EmbeddedFile {
+        rel: "engines/isolator.py",
+        body: include_str!("../../../resources/tts/engines/isolator.py"),
+    },
+    EmbeddedFile {
+        rel: "engines/fake_isolator.py",
+        body: include_str!("../../../resources/tts/engines/fake_isolator.py"),
+    },
+    EmbeddedFile {
+        rel: "requirements-isolator.txt",
+        body: include_str!("../../../resources/tts/requirements-isolator.txt"),
+    },
+    EmbeddedFile {
         rel: "requirements-rumble.txt",
         body: include_str!("../../../resources/tts/requirements-rumble.txt"),
     },
@@ -492,11 +527,21 @@ mod tests {
     }
 
     #[test]
-    fn speech_and_transcription_split_every_engine_exactly_once() {
+    fn speech_transcription_and_cleanup_split_every_engine_exactly_once() {
         let mut seen: Vec<Engine> = Engine::SPEECH
             .into_iter()
             .chain(Engine::TRANSCRIPTION)
+            .chain(Engine::CLEANUP)
             .collect();
+        for engine in Engine::CLEANUP {
+            assert_eq!(engine.kind(), EngineKind::Cleanup, "{engine:?}");
+        }
+        assert_eq!(Engine::Isolator.default_model(), Model::VoiceIsolatorV1);
+        assert_eq!(Model::VoiceIsolatorV1.hf_repo(), "inworld/voice-isolator");
+        assert_eq!(
+            serde_json::to_string(&EngineKind::Cleanup).unwrap(),
+            "\"cleanup\""
+        );
         for engine in Engine::SPEECH {
             assert_eq!(engine.kind(), EngineKind::Speech, "{engine:?}");
         }

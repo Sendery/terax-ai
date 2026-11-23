@@ -238,6 +238,33 @@ export async function synthesize(
   return blob;
 }
 
+/** Cleanup on a CPU runs about nine times slower than real time, so a long
+ *  clip needs far more room than synthesis. */
+export const DEFAULT_ISOLATE_TIMEOUT_MS = 15 * 60_000;
+
+/**
+ * Posts a mono 16-bit PCM WAV to a cleanup engine and returns the isolated
+ * voice as a WAV of the same rate and length.
+ */
+export async function isolate(
+  endpoint: TtsEndpoint,
+  model: string,
+  wav: Uint8Array,
+  options: RequestOptions = {},
+): Promise<Uint8Array> {
+  const res = await request(
+    endpoint,
+    `/isolate?model=${encodeURIComponent(model)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav" },
+      body: new Blob([wav as Uint8Array<ArrayBuffer>], { type: "audio/wav" }),
+    },
+    { ...options, timeoutMs: options.timeoutMs ?? DEFAULT_ISOLATE_TIMEOUT_MS },
+  );
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 /** Times every synthesis so Settings can show the real speed on this machine. */
 async function measure(model: string, blob: Blob, elapsedMs: number): Promise<void> {
   try {

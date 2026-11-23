@@ -51,6 +51,13 @@ describe("voiceKeyOf", () => {
     expect(voiceKeyOf({ ...voice, params: { speed: 1.2 } })).not.toBe(base);
     expect(base).toMatch(/^[0-9a-f]{14}$/);
   });
+
+  it("keeps cleaned clips in their own folder without moving the old ones", () => {
+    const base = voiceKeyOf(voice);
+    expect(voiceKeyOf(voice, false)).toBe(base);
+    expect(voiceKeyOf(voice, true)).not.toBe(base);
+    expect(voiceKeyOf(voice, true)).toMatch(/^[0-9a-f]{14}$/);
+  });
 });
 
 describe("cuts", () => {
