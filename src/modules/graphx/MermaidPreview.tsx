@@ -19,7 +19,12 @@ export function MermaidPreview({
 }) {
   const validated = validateMermaidSource(source);
   if (!validated.ok) {
-    return <p className="p-3 text-xs text-muted-foreground">{validated.message}</p>;
+    return (
+      <div className="p-3">
+        <p className="text-xs text-muted-foreground">{validated.message}</p>
+        {fallback}
+      </div>
+    );
   }
   return (
     <MermaidGraph
