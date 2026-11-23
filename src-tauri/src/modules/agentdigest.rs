@@ -836,8 +836,10 @@ fn first_line(path: &Path) -> Option<String> {
 
 /// Codex keeps thread names in an index next to its rollouts; the last line
 /// for an id is its current name.
-fn codex_thread_name(session_id: &str) -> Option<String> {
-    let index = dirs::home_dir()?.join(".codex").join("session_index.jsonl");
+pub(crate) fn codex_thread_name(session_id: &str) -> Option<String> {
+    let root = std::env::var_os("CODEX_HOME").map(PathBuf::from)
+        .filter(|dir| dir.is_absolute()).or_else(|| Some(dirs::home_dir()?.join(".codex")))?;
+    let index = root.join("session_index.jsonl");
     let mut text = String::new();
     File::open(index).ok()?.take(8 * 1024 * 1024).read_to_string(&mut text).ok()?;
     text.lines()

@@ -83,6 +83,7 @@ function FlowLane({
   const lane = placeLane(tasks, direction);
   const status = runState(run, time);
   const title = runName(run, name);
+  const provider = displayAgent(run.agent);
   const events = beforeTime(run.events, time);
   const last = events[events.length - 1];
   const rootStyle = { left: lane.root.x, top: lane.root.y, width: CARD_WIDTH, height: CARD_HEIGHT };
@@ -120,12 +121,14 @@ function FlowLane({
               <span className="flow-provider"><AgentIcon agent={run.agent} harness={run.harness} size={16} /></span>
               <span className="flow-node-identity">
                 <strong title={title}>{title}</strong>
-                <small>{displayAgent(run.agent)}</small>
+                {title !== provider ? <small>{provider}</small> : null}
               </span>
               <span className="flow-status-dot" data-tone={status.tone} />
             </span>
             <span className="flow-bubble">{bubble || last?.text || status.label}</span>
-            <span className="flow-node-footer">{status.label}</span>
+            <span className="flow-node-footer">
+              {bubble || last?.text ? status.label : last ? timeOnly.format(last.at) : run.projectHistory ? dateTime.format(run.startedAt) : null}
+            </span>
           </button>
           {tasks.map((entry) => (
             <button type="button" key={entry.id} className="flow-node flow-child"
@@ -140,7 +143,7 @@ function FlowLane({
                   <small title={`${run.tabTitle} · ${title}`}>{run.tabTitle} · {title}</small>
                 </span>
               </span>
-              <span className="flow-bubble">{entry.returnedAt ? "Result returned" : entry.parentId ? "Delegated by subagent" : "Delegated by session"}</span>
+              <span className="flow-bubble">{entry.failed ? "Subagent failed" : entry.returnedAt ? "Result returned" : entry.parentId ? "Delegated by subagent" : "Delegated by session"}</span>
               <span className="flow-node-footer">Subagent · {timeOnly.format(entry.at)}</span>
             </button>
           ))}
@@ -218,6 +221,7 @@ export default function AgentFlow({
   const pages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const visible = ordered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+  const focused = visible.find((item) => item.key === selected);
   const taskPages = Math.max(1, Math.ceil(liveTasks.length / TASKS_PER_PAGE));
   const taskIndex = Math.min(taskPage, taskPages - 1);
   const visibleTasks = liveTasks.slice(taskIndex * TASKS_PER_PAGE, (taskIndex + 1) * TASKS_PER_PAGE);
@@ -250,7 +254,10 @@ export default function AgentFlow({
   function selectRun(key: string | null, child: string | null = null) {
     setSelected(key);
     setSelectedTask(child);
-    if (key !== selected) setTaskPage(0);
+    if (key !== selected) {
+      setTaskPage(0);
+      if (key) viewport.current?.scrollTo(0, 0);
+    }
     setActivityPage(1);
   }
 
@@ -265,15 +272,35 @@ export default function AgentFlow({
   }
 
   function fitView() {
-    const bounds = viewport.current?.clientWidth ?? 0;
-    const widest = placeLane(visibleTasks, direction).width;
-    setZoom(Math.max(0.35, Math.min(1, (bounds - 44) / widest)));
-    viewport.current?.scrollTo(0, 0);
+    const bounds = viewport.current;
+    if (!bounds) return;
+    const graph = placeLane(visibleTasks, direction);
+    const width = (bounds.clientWidth - 44) / graph.width;
+    const height = (bounds.clientHeight - 58) / graph.height;
+    setZoom(Math.max(0.35, Math.min(1, width, height)));
+    bounds.scrollTo(0, 0);
   }
 
   function closeDetail() {
     selectRun(null);
     toolbar.current?.focus();
+  }
+
+  function renderLane(item: FlowRun) {
+    const isSelected = run?.key === item.key;
+    const itemDigest = item.active && item.leafId !== undefined ? digests?.[item.leafId] : undefined;
+    const preview = time === null && item.sessionId && itemDigest?.sessionId === item.sessionId
+      ? itemDigest.pendingQuestion ?? itemDigest.lastReply ?? itemDigest.recap : null;
+    return (
+      <FlowLane key={item.key} run={item} time={time} direction={direction} zoom={zoom}
+        selected={isSelected}
+        name={isSelected ? trace.name : null}
+        bubble={isSelected ? bubble : preview}
+        tasks={isSelected ? visibleTasks : []}
+        task={isSelected ? selectedTask : null}
+        onSelect={(child) => selectRun(item.key, child)}
+      />
+    );
   }
 
   return (
@@ -323,18 +350,12 @@ export default function AgentFlow({
           </div>
           <section className="flow-viewport" ref={viewport} aria-label="Scrollable session map">
             {visible.length ? (
-              <div className="flow-lanes">
-                {visible.map((item) => (
-                  <FlowLane key={item.key} run={item} time={time} direction={direction} zoom={zoom}
-                    selected={run?.key === item.key}
-                    name={run?.key === item.key ? trace.name : null}
-                    bubble={run?.key === item.key ? bubble : null}
-                    tasks={run?.key === item.key ? visibleTasks : []}
-                    task={run?.key === item.key ? selectedTask : null}
-                    onSelect={(child) => selectRun(item.key, child)}
-                  />
-                ))}
-              </div>
+              <>
+                {focused ? <div className="flow-focus-lane">{renderLane(focused)}</div> : null}
+                <div className="flow-lanes">
+                  {visible.filter((item) => item !== focused).map(renderLane)}
+                </div>
+              </>
             ) : (
               <div className="flow-empty" role="status">
                 <HugeiconsIcon icon={Flowchart01Icon} size={32} />
@@ -423,6 +444,9 @@ export default function AgentFlow({
           <div><label htmlFor="agent-flow-time">Timeline</label><span>{time === null ? "Live edge" : timeline.length ? dateTime.format(timeline[cursor]) : ""}</span></div>
           <input id="agent-flow-time" type="range" min={0} max={Math.max(1, timeline.length - 1)}
             disabled={timeline.length < 2} value={Math.max(0, cursor)}
+            style={{
+              "--flow-progress": `${timeline.length > 1 ? Math.max(0, cursor) / (timeline.length - 1) * 100 : 0}%`,
+            } as CSSProperties}
             aria-valuetext={timeline[cursor] ? dateTime.format(timeline[cursor]) : "No recorded events"}
             onChange={(event) => jump(timeline[Number(event.target.value)] ?? null)} />
         </div>

@@ -76,6 +76,7 @@ export type FlowTask = {
   label: string;
   at: number;
   returnedAt?: number;
+  failed?: boolean;
   parentId?: string;
   run?: FlowRun;
 };
@@ -86,9 +87,12 @@ export function flowTasks(events: readonly TraceEvent[]): FlowTask[] {
     if (event.kind === "delegated") {
       const id = event.taskId ?? event.id;
       tasks.set(id, { id, label: event.text || "Subagent", at: event.at });
-    } else if (event.kind === "returned" && event.taskId) {
+    } else if ((event.kind === "returned" || event.kind === "error") && event.taskId) {
       const task = tasks.get(event.taskId);
-      if (task) task.returnedAt = event.at;
+      if (task) {
+        task.returnedAt = event.at;
+        if (event.kind === "error") task.failed = true;
+      }
     }
   }
   return [...tasks.values()];

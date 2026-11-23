@@ -36,9 +36,10 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     })));
     const privateTabs = new Set(terminals.filter((tab) => tab.private).map((tab) => tab.id));
     const privateCwds = new Set(sources.filter((source) => privateTabs.has(source.tabId)).map((source) => source.cwd));
-    return JSON.stringify([...new Set(sources.map((source) => source.cwd))]
-      .filter((cwd) => !privateCwds.has(cwd)).sort());
-  }, [open, tabs]);
+    const knownCwds = (journal ?? []).flatMap((run) => run.cwd ? [run.cwd] : []);
+    return JSON.stringify([...new Set([...sources.map((source) => source.cwd), ...knownCwds.reverse()])]
+      .filter((cwd) => !privateCwds.has(cwd)).slice(0, 100).sort());
+  }, [open, tabs, journal]);
   const historyKey = sourceKey ? `${refresh}:${activeKey}:${sourceKey}` : "";
 
   useEffect(() => {
@@ -130,9 +131,10 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       });
     }
     const candidates = history.sourceKey === sourceKey ? history.runs : [];
-    const allowed = [...byKey.values()].filter((run) => {
+    const allowed = [...byKey.values()].flatMap((run) => {
       const tab = run.tabId === undefined ? undefined : currentTabs.get(run.tabId);
-      return tab?.kind !== "terminal" || !tab.private;
+      if (tab?.kind !== "terminal") return [run];
+      return tab.private ? [] : [{ ...run, tabTitle: labelFor(tab), color: tab.color }];
     });
     const attributed = allowed.map((run) => {
       if (run.sessionId || !run.cwd ||
@@ -224,7 +226,7 @@ export function useFlowTrace(run: FlowRun | undefined, open: boolean, follow: bo
         if (follow) timer = setTimeout(next, POLL_MS * 3);
       }
     };
-    if (follow || cursor.current.offset === 0) void next();
+    void next();
     return () => {
       stopped = true;
       clearTimeout(timer);

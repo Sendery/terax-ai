@@ -21,6 +21,7 @@ export const useFlowJournal = create<{ runs: FlowRun[] }>(() => ({ runs: [] }));
 
 let loaded: Promise<void> | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
+let eventSequence = 0;
 
 export function loadFlowJournal(): Promise<void> {
   loaded ??= store.get<FlowRun[]>("runs").then((stored) => {
@@ -69,7 +70,7 @@ export function recordFlowSignal(
   const at = signal.kind === "started" ? session.startedAt : Date.now();
   const events = kind && (!previous || kind !== previous.kind || kind === "subagent" || kind === "notification")
     ? [...past, {
-      id: `${key}:${at}:${kind}:${past.length}`,
+      id: `${key}:${++eventSequence}`,
       at,
       kind,
       ...(kind === "attention" && signal.reason ? { text: {

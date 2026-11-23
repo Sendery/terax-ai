@@ -16,7 +16,7 @@ timestamp to review a point in time. Go live returns to incoming activity.
 | Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace |
 | Grok | Process status and terminal alerts | Terminal activity is retained from this version |
 
-Project history is discovered for open public terminal directories. Previous
+Project history is discovered for open and recently recorded public terminal directories. Previous
 transcripts without a recorded tab association appear under the project. Codex,
 Copilot and Antigravity transcripts join a terminal run when a unique start-time match is
 available in its directory. Resumed or concurrent runs with ambiguous matches
