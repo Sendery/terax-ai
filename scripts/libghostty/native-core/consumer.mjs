@@ -6,6 +6,7 @@ export function receiptForHost(source, receipt, host) {
   if (host === receipt.host) return receipt;
   const target = source.nativeCoreTargets?.[host];
   if (!target) throw new Error("native core archive does not support this host");
+  if (target.sha256 === null) throw new Error(`native core archive is unavailable for ${host}: ${target.validation}`);
   return { ...receipt, ...target, host };
 }
 

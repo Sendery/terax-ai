@@ -55,6 +55,26 @@ c390cf1908007dc0ab9f1c6914384532c8482cbd6fbe5aea2752e610425e09ae.
 This does not establish runtime compatibility with macOS 11. The matching consumer receipt and safe Rust adapter passed focal integration
 gates; see the own integration report for current scope and remaining UI checks.
 
+## Additional targets
+
+On the authorized Apple Silicon producer, run
+`TERAX_EXPLICIT_SOURCE_PRODUCER=1 node scripts/libghostty/native-core/produce-cross.mjs <clean checkout> <new output directory> <target>`.
+This verifies and patches a disposable checkout, then packages the static
+library, headers, pkg-config metadata, the source manifest and license notices.
+It verifies both patched symbols. The Intel archive also verifies all object
+deployment versions. Cross compilation does not exercise the target runtime.
+Linux archives use glibc 2.35. The MSVC target requires Windows SDK and MSVC
+CRT headers, which are absent on the Apple Silicon producer.
+
+The application consumes the measured Apple Silicon receipt in
+`consumer.json` and additional target pins under `nativeCoreTargets` in
+`scripts/libghostty/pin.json`. Both use the same patch, manifest and header
+identities. The older unpatched producer pins are separate. For local builds,
+name archives `libghostty-vt-0.2.2-a887df4-<target>.tar.gz` under
+`TERAX_GHOSTTY_ARCHIVE_DIR`, or point `TERAX_GHOSTTY_ARCHIVE` to the host
+archive. The public asset endpoint for these names is
+`Sendery/terax-ai` under `terax-native-core-v1`, pending publication.
+
 
 ## Verified local consumer
 

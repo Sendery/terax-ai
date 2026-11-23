@@ -144,7 +144,8 @@ async function main() {
     writeFileSync(source, 'fn main() { eprintln!("prebuilt mode forbids Zig: pkg-config route failed"); std::process::exit(97); }');
     if (!existsSync(join(guard, "zig.exe"))) run("rustc", [source, "-o", join(guard, "zig.exe")]);
   }
-  run(command[0], command.slice(1), { env, shell: process.platform === "win32" });
+  const shell = process.platform === "win32" && /(?:^|[\\/])(?:pnpm|[^\\/]+\.(?:cmd|bat))$/i.test(command[0]);
+  run(command[0], command.slice(1), { env, shell });
 }
 
 try { await main(); } catch (error) {
