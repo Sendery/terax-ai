@@ -10,7 +10,7 @@ Terax loads `TERAX.md` from the workspace root as agent memory (similar to AGENT
 - Package manager: **pnpm**
 - Platforms: macOS, Linux, Windows
 - Frontend checks: `pnpm lint`, `pnpm check-types`, `pnpm test`
-- Rust checks: `cd src-tauri && cargo clippy --all-targets --locked -- -D warnings`, `cd src-tauri && cargo nextest run --locked` (local fallback: `cargo test --locked`)
+- Rust checks: run Cargo through `node scripts/with-zig.mjs --native-core --` with the manifest at `src-tauri/Cargo.toml`.
 
 ## Quality bar
 
@@ -25,7 +25,7 @@ Production-grade or it does not ship. Every change is judged against all of thes
 Verify before claiming done:
 
 - Frontend: `pnpm lint`, `pnpm check-types`, `pnpm test`
-- Rust: `cd src-tauri && cargo clippy --all-targets --locked -- -D warnings`, `cd src-tauri && cargo nextest run --locked` (or `cargo test --locked`)
+- Rust: wrap `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings` and `cargo test --manifest-path src-tauri/Cargo.toml --locked` with `node scripts/with-zig.mjs --native-core --`.
 
 A change to a core subsystem (terminal/shell spawn, workspace auth, git, fs, IPC or AI tool surface) needs a test that locks the invariant.
 
