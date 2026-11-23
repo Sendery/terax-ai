@@ -94,10 +94,11 @@ export function branchFor(
       });
       return;
     }
+    const minuteStep = task.cron?.match(/^\*\/([1-9][0-9]?) \* \* \* \*$/)?.[1];
     const process: FlowTask["process"] = {
       kind: task.kind,
       state: task.kind === "monitor" ? "listening" : task.kind === "loop" ? "scheduled" : "running",
-      cadence: task.cron,
+      cadence: minuteStep ? `Every ${minuteStep} min` : task.cron ? `Cron · ${task.cron}` : undefined,
       lastActivityAt: Math.max(known?.process?.lastActivityAt ?? 0, task.lastActivityAt ?? 0) || undefined,
     };
     if (known) known.process = process;

@@ -87,7 +87,7 @@ describe("Agent Flow", () => {
     const result = edgeGeometry(from, to, "right", true);
     const path = delegation.d.split(" ");
     const start = Number(path[1]);
-    const end = Number(path.at(-1));
+    const end = Number(path[path.length - 1]);
     expect(start).toBeLessThan(end);
     expect(delegation.d).toContain("107 77 H ");
     expect(delegation.arrow).toContain(`M ${end - 7} 51 L ${end} 55`);

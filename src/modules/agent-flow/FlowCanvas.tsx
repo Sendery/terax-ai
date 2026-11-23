@@ -94,7 +94,8 @@ const ActorNode = memo(function ActorNode({
   const notice = nodeStatus?.notice;
   const process = entry?.process;
   const isMarker = !entry && !!run.marker;
-  const activityAt = process ? actor.signals.filter(({ kind }) => kind === "task-activity").at(-1)?.at : undefined;
+  const latestProcessActivity = process ? actor.signals.filter(({ kind }) => kind === "task-activity") : [];
+  const activityAt = latestProcessActivity[latestProcessActivity.length - 1]?.at;
   const processIcon = process?.kind === "monitor" ? Radar01Icon : process?.kind === "loop" ? RepeatIcon : TerminalIcon;
   const markerLabel = run.marker === "shell" ? "Shell" : run.marker === "terax" ? "Command source" : "Terax tasks";
   const stateLabel = pending ?? (nodeStatus?.working ? "Working" : isMarker ? markerLabel : actor.label);
