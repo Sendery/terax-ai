@@ -44,7 +44,7 @@ export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" 
 export function signalTone(kind: FlowKind): SignalTone {
   if (kind === "reply" || kind === "user") return "message";
   if (kind === "tool") return "tool";
-  if (kind === "delegated" || kind === "subagent") return "branch";
+  if (kind === "delegated" || kind === "subagent" || kind === "delivery") return "branch";
   if (kind === "returned" || kind === "finished" || kind === "turn-ended") return "return";
   if (kind === "attention" || kind === "notification" || kind === "error") return "attention";
   return "state";

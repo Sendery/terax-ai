@@ -243,6 +243,32 @@
   box-shadow: 0 0 28px color-mix(in oklab, var(--flow-accent) 13%, transparent);
 }
 
+.flow-cluster[data-pinned="true"] {
+  border-style: dashed;
+  border-color: var(--flow-accent);
+}
+
+.flow-cluster[data-linked="true"] {
+  border-color: var(--flow-accent);
+  box-shadow: 0 0 22px color-mix(in oklab, var(--flow-accent) 25%, transparent);
+}
+
+.flow-relay-line {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  stroke: var(--flow-tool);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow-relay-line path:first-child {
+  stroke-dasharray: 5 6;
+}
+
 .flow-world[data-layout="lanes"] .flow-cluster {
   border-radius: 15px;
 }
@@ -1029,6 +1055,171 @@
   overflow-wrap: anywhere;
 }
 
+.flow-attention-toggle strong {
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  font: 10px/1.3 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-controls .flow-attention-toggle[data-alert="true"] {
+  color: var(--flow-warn);
+  border-color: color-mix(in oklab, var(--flow-warn) 58%, var(--flow-line));
+  background: color-mix(in oklab, var(--flow-warn) 12%, var(--flow-panel));
+}
+
+.flow-controls button[aria-expanded="true"] {
+  border-color: color-mix(in oklab, var(--flow-accent) 68%, var(--flow-line));
+}
+
+.flow-ops {
+  width: clamp(300px, 33%, 416px);
+}
+
+.flow-ops-content {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.flow-ops-content h3,
+.flow-ops-content p {
+  margin: 0;
+}
+
+.flow-ops-content h3 {
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.flow-ops-content :is(p, small) {
+  color: var(--flow-dim);
+  overflow-wrap: anywhere;
+}
+
+.flow-ops-note {
+  font: 10px/1.4 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.flow-ops-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-ops-list li {
+  min-width: 0;
+}
+
+.flow-ops-list li[data-kind] {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--flow-line);
+  border-inline-start: 2px solid var(--flow-warn);
+  border-radius: 6px;
+}
+
+.flow-ops-list li[data-kind="error"] {
+  border-inline-start-color: var(--flow-bad);
+}
+
+.flow-ops-list li[data-kind] small {
+  display: block;
+  margin-top: 2px;
+}
+
+.flow-ops :is(.flow-ops-content button, input, select) {
+  min-height: 27px;
+  padding: 3px 7px;
+  color: var(--foreground);
+  border: 1px solid var(--flow-line);
+  border-radius: 6px;
+  background: var(--flow-panel);
+}
+
+.flow-ops :is(.flow-ops-content button:hover:not(:disabled), .flow-ops-choice[aria-pressed="true"]) {
+  border-color: color-mix(in oklab, var(--flow-accent) 68%, var(--flow-line));
+  background: color-mix(in oklab, var(--flow-accent) 11%, var(--flow-panel));
+}
+
+.flow-ops-choice {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  text-align: start;
+}
+
+.flow-ops-choice i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--flow-default);
+}
+
+.flow-ops-choice span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flow-ops-choice b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-ops-row-buttons,
+.flow-ops-actions-head,
+.flow-ops-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.flow-ops-actions-head strong {
+  margin-inline-end: auto;
+}
+
+.flow-ops-actions {
+  display: grid;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--flow-line);
+}
+
+.flow-ops-actions form {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--flow-line);
+  border-radius: 7px;
+}
+
+.flow-ops-actions label {
+  display: grid;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--flow-dim);
+}
+
+.flow-ops-actions .flow-ops-checkbox {
+  display: flex;
+  gap: 6px;
+}
+
+.flow-ops-checkbox input {
+  min-height: 0;
+}
+
 .flow-icon-button {
   display: grid;
   place-items: center;
@@ -1480,6 +1671,10 @@
     height: min(54%, 315px);
     inset-inline: 8px;
     width: auto;
+  }
+
+  .flow-ops {
+    height: min(70%, 510px);
   }
 
   .flow-minimap {

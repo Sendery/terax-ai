@@ -34,6 +34,7 @@ export type TerminalControlDeps = {
   setTabTitle: (tabId: number, title: string) => void;
   whenReady: (leafId: number) => Promise<void>;
   write: (leafId: number, data: string) => boolean;
+  onDelivery?: (target: { tabId: number; leafId: number }, source: { tabId: number; leafId: number } | undefined, submitted: boolean) => void;
   focusInput: (leafId: number) => void;
   maxPanesPerTab: number;
 };
@@ -219,16 +220,24 @@ export function createTerminalControl(deps: TerminalControlDeps): TerminalHandle
       return { closed: leafId, tabClosed: last };
     },
 
-    sendToTerminal: async ({ leafId, text, submit }) => {
+    sendToTerminal: async ({ leafId, text, submit, sourceLeafId }) => {
       const tab = terminalOf(deps.getTabs(), leafId);
       if (tab.cold || !deps.isMounted(leafId))
         failure(
           `Terminal pane ${leafId} has not started yet; focus its tab with terminal.focus first`,
         );
       await deps.whenReady(leafId);
-      const sent = deps.write(leafId, submit === false ? text : `${text}\r`);
+      const tabs = deps.getTabs();
+      const target = terminalOf(tabs, leafId);
+      const source = sourceLeafId === undefined ? undefined : {
+        tabId: terminalOf(tabs, sourceLeafId).id,
+        leafId: sourceLeafId,
+      };
+      const submitted = submit !== false;
+      const sent = deps.write(leafId, submitted ? `${text}\r` : text);
       if (!sent) failure(`Terminal pane ${leafId} is not accepting input`);
-      return { leafId, tabId: tab.id, submitted: submit !== false };
+      deps.onDelivery?.({ tabId: target.id, leafId }, source, submitted);
+      return { leafId, tabId: target.id, submitted };
     },
   };
 }

@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
-import { loadFlowJournal, flowRunKey, useFlowJournal } from "@/modules/agent-flow/journal";
+import type { FlowTerminal } from "@/modules/agent-flow/coordination";
+import { loadFlowJournal, flowRunKey, flowShellKey, useFlowJournal } from "@/modules/agent-flow/journal";
 import {
   historyRun, mergeRuns,
   type FlowRun, type HistorySession, type TraceEvent,
@@ -10,7 +11,7 @@ import {
 import { collectTerminalSources } from "@/modules/session-graph/lib/terminalSources";
 import { labelFor } from "@/modules/tabs/lib/tabLabel";
 import type { Tab } from "@/modules/tabs/lib/useTabs";
-import { findLeafCwd, hasLeaf } from "@/modules/terminal/lib/panes";
+import { findLeafCwd, hasLeaf, leafIds } from "@/modules/terminal/lib/panes";
 
 const HISTORY_LIMIT = 25;
 const LIVE_HISTORY_MS = 8500;
@@ -21,7 +22,30 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
   const sessions = useAgentStore((state) => open ? state.sessions : null);
   const digests = useAgentStore((state) => open ? state.digests : null);
   const journal = useFlowJournal((state) => open ? state.runs : null);
+  const deliveries = useFlowJournal((state) => open ? state.deliveries : null);
   const [history, setHistory] = useState<History>({ key: "", sourceKey: "", runs: [], failed: false });
+  const { panes, hidden } = useMemo(() => {
+    const panes: FlowTerminal[] = [];
+    const hidden = new Set<string>();
+    if (!open) return { panes, hidden };
+    for (const tab of tabs) {
+      if (tab.kind !== "terminal") continue;
+      const leaves = leafIds(tab.paneTree);
+      const title = labelFor(tab);
+      leaves.forEach((leafId, index) => {
+        const shellKey = flowShellKey(tab.id, leafId);
+        if (tab.private) {
+          hidden.add(shellKey);
+          return;
+        }
+        const session = sessions?.[leafId];
+        panes.push({ leafId, tabId: tab.id, shellKey, title, color: tab.color,
+          slot: index + 1, split: leaves.length > 1, cold: !!tab.cold, session,
+          runKey: session ? flowRunKey(session) : undefined });
+      });
+    }
+    return { panes, hidden };
+  }, [open, tabs, sessions]);
   const activeKey = Object.values(sessions ?? {}).filter(
     (session) => session.harness === "codex" || session.harness === "copilot" || session.harness === "agy",
   ).map((session) => flowRunKey(session)).join(",");
@@ -109,11 +133,13 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     if (!sessions) return [];
     const byKey = new Map((journal ?? []).map((run) => [run.key, run]));
     const currentTabs = new Map(tabs.map((tab) => [tab.id, tab]));
+    const publicPanes = new Map(panes.map((pane) => [pane.leafId, pane]));
     for (const session of Object.values(sessions)) {
       const tab = currentTabs.get(session.tabId);
       if (tab?.kind !== "terminal" || tab.private || !hasLeaf(tab.paneTree, session.leafId)) continue;
       const key = flowRunKey(session);
       const record = byKey.get(key);
+      const pane = publicPanes.get(session.leafId);
       const digest = digests?.[session.leafId];
       const sessionId = session.sessionId ?? record?.sessionId;
       const syntheticEvent: TraceEvent = {
@@ -126,7 +152,9 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       byKey.set(key, {
         key,
         group: record?.group ?? `${key.split(":")[0]}:${tab.id}`,
+        shellKey: flowShellKey(tab.id, session.leafId),
         tabTitle: labelFor(tab),
+        paneLabel: pane?.split ? `Shell ${pane.slot}` : undefined,
         color: tab.color,
         startedAt: session.startedAt,
         harness: session.harness,
@@ -175,7 +203,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
     });
     return mergeRuns(attributed, candidates);
-  }, [sessions, digests, journal, tabs, history, sourceKey]);
+  }, [sessions, digests, journal, tabs, panes, history, sourceKey]);
 
   const children = useMemo(() => history.sourceKey === sourceKey
     ? history.runs.filter((run) => !!run.parentId)
@@ -185,6 +213,9 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     runs,
     children,
     digests,
+    panes,
+    hidden,
+    deliveries,
     loading: open && history.key !== historyKey,
     failed: history.key === historyKey && history.failed,
   };

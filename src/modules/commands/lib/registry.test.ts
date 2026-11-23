@@ -1035,6 +1035,17 @@ describe("scheduled task commands", () => {
   });
 });
 
+describe("terminal relay attribution", () => {
+  it("passes a public source pane id to the terminal handler", async () => {
+    const h = handlers();
+    const payload = { leafId: 2, sourceLeafId: 1, text: "fixture", submit: false };
+    const result = await createCommandRegistry(h).call({ id: "terminal.send", payload });
+    expect(result.ok).toBe(true);
+    expect(h.sendToTerminal).toHaveBeenCalledWith(payload);
+    expect(validateCommandRequest({ id: "terminal.send", payload: { ...payload, sourceLeafId: -1 } }).ok).toBe(false);
+  });
+});
+
 describe("tab.setColor command", () => {
   it("validates that tabId is required", () => {
     expect(

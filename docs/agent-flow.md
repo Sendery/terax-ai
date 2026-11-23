@@ -22,6 +22,36 @@ Select an agent, bubble or tool to open its details. Activity,
 Messages, Tools and Files views work at the current replay position. Files
 lists explicit paths reported by supported file tools.
 
+At overview zoom, the map shows names and states. Zoom in to reveal
+conversations, then tools and telemetry. Pin a session from its inspector to
+keep its position on screen as incoming activity changes the map.
+
+**Attention** shows pending permissions, questions and other input requests
+alongside recent errors. The list covers public shells across tabs, including
+separate CLI sessions in one tab. Inspect an item on the map or focus its
+terminal directly. A live request uses the monitor's state until the shell
+resumes.
+
+**Terminals** lists every public shell, including split panes and shells
+without a detected session. Select a shell to focus it, rename or recolor its
+tab, or prepare terminal input. Input is staged by default. Choose Press Enter
+after typing to submit it. Ask Terax AI opens an editable draft for the selected
+shells. Terax AI can use the existing app commands to list, inspect, focus and
+organize public terminals and to send input with the usual approval.
+
+**Connections** shows explicit terminal relays and observed shared file
+activity. Use `terminal.send` with the destination `leafId` and optional
+`sourceLeafId` from `terminal.list` to link two shells. Shells may share a tab
+or be in different tabs or spaces. Agent Flow retains the endpoints, time and
+whether input was staged or submitted. Message text stays out of the relay
+journal. A successful write to the terminal establishes delivery to the pane.
+The connection uses the source pane declared by the caller. Conversation
+between tools outside this route depends on the links recorded by the CLI.
+
+Shared file activity shows explicit write attempts by distinct sessions on the
+same normalized path. Select a match to inspect each event or open the Git
+diff. Results cover the transcripts loaded in this view.
+
 Use the timeline to scrub, step or replay at 1×, 2× or 4×. It opens as a single
 activity overview. Expand Shells to show one track per terminal pane, including
 separate panes in the same tab. All tracks share the same time scale and

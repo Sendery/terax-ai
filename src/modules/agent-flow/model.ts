@@ -15,6 +15,7 @@ export const FLOW_LABELS = {
   tool: "Tool call",
   delegated: "Delegated",
   returned: "Returned",
+  delivery: "Terminal input",
   "turn-ended": "Turn complete",
   usage: "Token usage",
 } as const;
@@ -57,6 +58,7 @@ export type FlowRun = {
   group: string;
   shellKey?: string;
   tabTitle: string;
+  paneLabel?: string;
   color?: TabColor;
   startedAt: number;
   createdAt?: number;
@@ -71,6 +73,16 @@ export type FlowRun = {
   events: TraceEvent[];
   active?: boolean;
   projectHistory?: boolean;
+};
+
+export type FlowEndpoint = { shellKey: string; runKey?: string };
+
+export type FlowDelivery = {
+  id: string;
+  at: number;
+  submitted: boolean;
+  source?: FlowEndpoint;
+  target: FlowEndpoint;
 };
 
 export function isTraceProvider(harness: AgentHarness): harness is TraceProvider {

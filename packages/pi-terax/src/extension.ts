@@ -117,7 +117,7 @@ const runTool = defineTool({
   name: "terax_run",
   label: "Run in Terax",
   description:
-    "Invoke a Terax command that executes shell input with the user's permissions: terminal.send types a line into a terminal pane, terminal.open and terminal.split start a pane running a command, and watch.add, watch.update, watch.setEnabled and watch.run manage watches (a command polled on an interval that reports when its output changes, to follow a pull request, deploy or build). Read the arguments with terax_call app.commands. Private terminals are refused.",
+    "Invoke a Terax command that executes shell input with the user's permissions: terminal.send types a line into a terminal pane and accepts sourceLeafId to link an explicit relay in Agent Flow; terminal.open and terminal.split start a pane running a command; watch.add, watch.update, watch.setEnabled and watch.run manage watches. Read the arguments with terax_call app.commands. Private terminals are refused.",
   parameters: Type.Object({
     command: Type.Union(TERAX_SHELL_COMMAND_IDS.map((id) => Type.Literal(id))),
     payload: Type.Object(

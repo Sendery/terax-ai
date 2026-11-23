@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { collectAttention, fileCrossings, normalizedFile, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
+import type { AgentSession } from "@/modules/agents/lib/types";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
@@ -110,6 +112,53 @@ describe("Agent Flow", () => {
     expect(timeFraction(12, 5, 40)).toBe(0.2);
     expect(nearTick(timeline.lanes[1].marks, 17)?.at).toBe(20);
     expect(nearTick([], 17)).toBeUndefined();
+  });
+
+  it("retains two pending split shells even when another shell reports activity", () => {
+    const pane = (leafId: number, lastReason: AgentSession["lastReason"]): FlowTerminal => ({
+      leafId, slot: leafId, tabId: 1, title: "Mixed CLIs", shellKey: `shell:${leafId}`, split: true, cold: false,
+      runKey: `run:${leafId}`,
+      session: {
+        leafId, tabId: 1, agent: leafId === 1 ? "codex" : "claude", status: lastReason ? "waiting" : "working",
+        startedAt: 4, lastActivityAt: 20, attentionSince: lastReason ? 10 : null, lastSignal: lastReason ? "attention" : "working",
+        lastReason, sessionId: null, ptyId: leafId, integration: "pty-detection", harness: "generic",
+      },
+    });
+    const attention = collectAttention([pane(1, "permission"), pane(2, "question"), pane(3, null)], [], new Map());
+    expect(attention.map(({ pane, label }) => [pane.leafId, label])).toEqual([[1, "Permission required"], [2, "Question waiting"]]);
+  });
+
+  it("resolves explicit deliveries to the recorded session and excludes private endpoints", () => {
+    const source = { ...root, key: "source", shellKey: "a", createdAt: 4 };
+    const target = { ...root, key: "target", shellKey: "b", createdAt: 5 };
+    const delivery = {
+      id: "one", at: 12, submitted: true,
+      source: { shellKey: "a", runKey: "source" }, target: { shellKey: "b", runKey: "target" },
+    };
+    const observed = resolveDeliveries([delivery], [], [source, target], new Set(), null);
+    expect(observed.map(({ from, to }) => [from?.run?.key, to.run?.key])).toEqual([["source", "target"]]);
+    expect(resolveDeliveries([delivery], [], [source, target], new Set(["a"]), null)).toEqual([]);
+    expect(resolveDeliveries([delivery], [], [source, target], new Set(), 11)).toEqual([]);
+    const timeline = buildTimeline([branchFor(source, [], null, new Map()), branchFor(target, [], null, new Map())], new Map(), observed);
+    expect(timeline.lanes.map(({ marks }) => marks[marks.length - 1])).toEqual([
+      { at: 12, kind: "delivery" }, { at: 12, kind: "delivery" },
+    ]);
+  });
+
+  it("links explicit write attempts to the same path across sessions and excludes reads and sibling checkouts", () => {
+    const write = { id: "tool", at: 12, kind: "tool" as const, text: "Write", file: "./src/../main.ts" };
+    const runs = [
+      { ...root, key: "one", events: [write] },
+      { ...root, key: "two", events: [{ ...write, at: 15, file: "/project/main.ts", text: "edit_file" }] },
+      { ...root, key: "reader", events: [{ ...write, text: "Read" }] },
+      { ...root, key: "other-checkout", cwd: "/project-2", events: [write] },
+    ];
+    const branches = runs.map((run) => branchFor(run, [], null, new Map()));
+    expect(fileCrossings(branches, new Map(), 14)).toEqual([]);
+    expect(fileCrossings(branches, new Map(), null).map(({ path, touches }) =>
+      [path, touches.map(({ run }) => run.key)])).toEqual([["/project/main.ts", ["two", "one"]]]);
+    expect(normalizedFile("/project", "../outside.ts")).toBeUndefined();
+    expect(normalizedFile("C:\\work", "src\\main.ts")).toBe("C:/work/src/main.ts");
   });
 
   it("keeps incremental traces stable and uses deduplicated usage at the playhead", () => {

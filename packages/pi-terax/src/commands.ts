@@ -115,7 +115,7 @@ export function isTeraxCommandId(value: unknown): value is TeraxCommandId {
 export const TERAX_SHELL_COMMAND_IDS = [
   "terminal.open",
   "terminal.split",
-  "terminal.send",
+  "terminal.send", // Also handles Agent Flow relays with sourceLeafId.
   "watch.add",
   "watch.update",
   "watch.setEnabled",

@@ -90,6 +90,7 @@ export const COMMAND_POLICY: Record<CommandId, CommandPolicy> = {
   "terminal.split": "approve",
   "terminal.focus": "act",
   "terminal.close": "approve",
+  // Relay attribution changes the record, never the approval decision.
   "terminal.send": "approve",
   "space.list": "read",
   "space.focus": "act",

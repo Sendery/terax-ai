@@ -1,4 +1,5 @@
 import type { FlowKind } from "@/modules/agent-flow/model";
+import type { ResolvedDelivery } from "@/modules/agent-flow/coordination";
 import type { FlowBranch } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 import type { TabColor } from "@/modules/tabs/lib/tabColors";
@@ -13,7 +14,9 @@ export type TimeLane = {
   marks: TimeMark[];
 };
 
-export function buildTimeline(branches: readonly FlowBranch[], traces: ReadonlyMap<string, FlowTrace>) {
+export function buildTimeline(
+  branches: readonly FlowBranch[], traces: ReadonlyMap<string, FlowTrace>, deliveries: readonly ResolvedDelivery[] = [],
+) {
   const lanes = new Map<string, Omit<TimeLane, "marks"> & { events: Map<number, TimeMark> }>();
   const aggregate = new Map<number, TimeMark>();
 
@@ -22,7 +25,7 @@ export function buildTimeline(branches: readonly FlowBranch[], traces: ReadonlyM
     let lane = lanes.get(shell);
     if (!lane) {
       lane = {
-        key: shell, title: run.tabTitle, description: trace?.name ?? run.name,
+        key: shell, title: run.paneLabel ? `${run.tabTitle} · ${run.paneLabel}` : run.tabTitle, description: trace?.name ?? run.name,
         color: run.color, active: !!run.active, events: new Map(),
       };
       lanes.set(shell, lane);
@@ -43,6 +46,15 @@ export function buildTimeline(branches: readonly FlowBranch[], traces: ReadonlyM
       if (task.returnedAt !== undefined) add({ at: task.returnedAt, kind: task.failed ? "error" : "returned" });
       for (const event of traces.get(traceKey(task.run) ?? "")?.events ?? []) add(event);
     }
+  }
+  for (const { at, source, target } of deliveries) {
+    const to = lanes.get(target.shellKey);
+    const from = source && lanes.get(source.shellKey);
+    if (!to && !from) continue;
+    const mark = { at, kind: "delivery" } as const;
+    to?.events.set(at, mark);
+    from?.events.set(at, mark);
+    aggregate.set(at, mark);
   }
   const sorted = (events: Map<number, TimeMark>) => [...events.values()].sort((a, b) => a.at - b.at);
   return {

@@ -275,7 +275,7 @@ export const MCP_GROUPS: readonly GroupSpec[] = [
       send_to_terminal: {
         command: "terminal.send",
         summary:
-          "Type one line into a pane and press Enter (submit false leaves it at the prompt).",
+          "Type one line into a pane. Pass sourceLeafId for an explicit Agent Flow relay; submit false leaves the line at the prompt.",
       },
     },
   },

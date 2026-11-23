@@ -28,7 +28,7 @@ export function UsageMetrics({ usage }: { usage: NonNullable<Actor["usage"]> }) 
 }
 
 export function FlowInspector({
-  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot,
+  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot, pinned, onPin,
 }: {
   branch: FlowBranch;
   task?: FlowTask;
@@ -39,6 +39,8 @@ export function FlowInspector({
   onJump: (at: number) => void;
   onActivate: (tabId: number, leafId: number) => void;
   onRoot: () => void;
+  pinned: boolean;
+  onPin: () => void;
 }) {
   const [mode, setMode] = useState<(typeof GROUPS)[number]>("Activity");
   const [limit, setLimit] = useState(PAGE);
@@ -80,6 +82,7 @@ export function FlowInspector({
         <h2>{task?.label ?? runName(run, trace?.name)}</h2>
         <p>{displayAgent(run.agent)} <span>·</span> {task ? "Subagent" : actor.label}</p>
         <div className="flow-inspector-actions">
+          <button type="button" aria-pressed={pinned} onClick={onPin}>{pinned ? "Unpin session" : "Pin session"}</button>
           {task ? <button type="button" onClick={onRoot}>Go to session</button> : null}
           {run.tabId !== undefined && run.leafId !== undefined && run.active ? (
             <button type="button" onClick={() => {

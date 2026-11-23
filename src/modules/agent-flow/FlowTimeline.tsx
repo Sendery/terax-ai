@@ -10,7 +10,7 @@ export const flowTime = new Intl.DateTimeFormat(undefined, { timeStyle: "medium"
 
 const TONES: Partial<Record<FlowKind, string>> = {
   tool: "tool", delegated: "branch", returned: "return", reply: "speech", user: "speech",
-  attention: "alert", error: "alert",
+  attention: "alert", error: "alert", delivery: "branch",
 };
 const TRACK_RESOLUTION = 10_000;
 const DENSITY = 128;

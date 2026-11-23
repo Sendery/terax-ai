@@ -2,7 +2,7 @@ import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
   memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
-import { ArrowDown01Icon, ArrowLeft01Icon, Flowchart01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, Flowchart01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
@@ -30,8 +30,18 @@ function recent(event: number | undefined, time: number | null, clock: number) {
   return event !== undefined && (time === null ? Math.abs(clock - event) < 6000 : event === time);
 }
 
+function RelayLine({ from, to }: { from: Box; to: Box }) {
+  const start = { x: from.x + from.width / 2, y: from.y };
+  const end = { x: to.x + to.width / 2, y: to.y };
+  const turn = Math.min(start.y, end.y) - 34;
+  return <svg className="flow-relay-line" width="100%" height="100%" aria-hidden="true">
+    <path d={`M ${start.x} ${start.y} C ${start.x} ${turn}, ${end.x} ${turn}, ${end.x} ${end.y}`} />
+    <path d={`M ${end.x - 5} ${end.y - 8} L ${end.x} ${end.y} L ${end.x + 5} ${end.y - 8}`} />
+  </svg>;
+}
+
 const ActorNode = memo(function ActorNode({
-  area, branch, entry, trace, name, selection, compact, ambient, clock, time, onSelect,
+  area, branch, entry, trace, name, selection, compact, detailed, ambient, clock, time, onSelect,
 }: {
   area: Point;
   branch: FlowBranch;
@@ -40,6 +50,7 @@ const ActorNode = memo(function ActorNode({
   name: string;
   selection: FlowSelection | null;
   compact: boolean;
+  detailed: boolean;
   ambient: boolean;
   clock: number;
   time: number | null;
@@ -74,11 +85,11 @@ const ActorNode = memo(function ActorNode({
         </span>
         <span className="flow-node-caption" title={name}>{name}</span>
         <span className="flow-node-state">{actor.label}</span>
-        {actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} tokens</span> : null}
-        {context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
+        {detailed && actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} tokens</span> : null}
+        {detailed && context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
           {contextPercent(context)}% context
         </span> : null}
-        {actor.usage?.cost !== undefined && !compact ? (
+        {actor.usage?.cost !== undefined && detailed ? (
           <span className="flow-node-cost" title="Cost reported by this session">${actor.usage.cost.toFixed(actor.usage.cost < 1 ? 3 : 2)}</span>
         ) : null}
       </button>
@@ -93,7 +104,7 @@ const ActorNode = memo(function ActorNode({
               <strong>{actor.speech.text}</strong>
             </button>
           ) : <div className="flow-activity-label"><span>{task ? "Subagent" : displayAgent(run.agent)}</span><strong>{status}</strong></div>}
-          {actor.tools.length ? (
+          {detailed && actor.tools.length ? (
             <div className="flow-tool-links">
               {actor.tools.map((event) => (
                 <button type="button" key={event.id} data-new={recent(event.at, time, clock)}
@@ -119,6 +130,10 @@ type CanvasProps = {
   arrangement: FlowArrangement;
   time: number | null;
   target: FlowSelection | null;
+  pinnedRun: string | null;
+  linkedRuns: ReadonlySet<string>;
+  linkFrom?: string;
+  linkTo?: string;
   focusRequest: { key: string; tick: number } | null;
   fitRequest: string;
   loading: boolean;
@@ -128,7 +143,8 @@ type CanvasProps = {
 };
 
 export function FlowCanvas({
-  scene, traces, direction, arrangement, time, target, focusRequest, fitRequest, loading, motion, onSelect, onVisible,
+  scene, traces, direction, arrangement, time, target, pinnedRun, linkedRuns, linkFrom, linkTo,
+  focusRequest, fitRequest, loading, motion, onSelect, onVisible,
 }: CanvasProps) {
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -141,6 +157,7 @@ export function FlowCanvas({
   const fitAllRequested = useRef(false);
   const fittedBounds = useRef("");
   const focused = useRef<number | null>(null);
+  const lastAnchor = useRef<{ key: string; position: Point } | null>(null);
 
   const commit = useCallback((next: Camera, immediate = false) => {
     cameraRef.current = next;
@@ -179,12 +196,32 @@ export function FlowCanvas({
       fittedBounds.current = "";
     }
     const bounds = `${scene.width}:${scene.height}:${size.width}:${size.height}`;
-    if (manualCamera.current || bounds === fittedBounds.current) return;
+    if (manualCamera.current || bounds === fittedBounds.current || (pinnedRun && lastAnchor.current && fittedBounds.current)) return;
     fittedBounds.current = bounds;
     const next = arrangement === "lanes" && !fitAllRequested.current
       ? laneCamera(scene, size) : fitCamera(scene, size);
     commit(next, true);
-  }, [size, scene, fitRequest, commit, arrangement]);
+  }, [size, scene, fitRequest, commit, arrangement, pinnedRun]);
+
+  useLayoutEffect(() => {
+    const pinned = pinnedRun && scene.clusters.find(({ branch }) => branch.run.key === pinnedRun);
+    const previous = lastAnchor.current;
+    if (!pinned) {
+      lastAnchor.current = null;
+      return;
+    }
+    const key = `${fitRequest}:${pinnedRun}`;
+    const at = pinned.nodes[0].at;
+    const position = { x: pinned.box.x + at.x, y: pinned.box.y + at.y };
+    lastAnchor.current = { key, position };
+    if (previous?.key !== key || (previous.position.x === position.x && previous.position.y === position.y)) return;
+    const current = cameraRef.current;
+    commit({
+      ...current,
+      x: current.x + (previous.position.x - position.x) * current.scale,
+      y: current.y + (previous.position.y - position.y) * current.scale,
+    }, true);
+  }, [scene, pinnedRun, fitRequest, commit]);
 
   useEffect(() => {
     if (!focusRequest || focused.current === focusRequest.tick || !size.width) return;
@@ -289,6 +326,10 @@ export function FlowCanvas({
   }
 
   const compact = camera.scale < 0.48;
+  const detailed = camera.scale >= 0.72;
+  const relayEnds = linkFrom && linkTo && linkFrom !== linkTo ? [linkFrom, linkTo].map((key) =>
+    visible.find(({ branch }) => branch.run.key === key && (time === null || branch.start <= time))) : [];
+  const [from, to] = relayEnds;
   const clock = useMemo(() => scene.clusters.length ? Date.now() : 0, [scene]);
   const mapScale = Math.min(152 / scene.width, 94 / scene.height);
   const mapWidth = scene.width * mapScale;
@@ -301,18 +342,21 @@ export function FlowCanvas({
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
         <div className="flow-atmosphere" aria-hidden="true"
           style={{ transform: `translate(${camera.x * 0.085}px, ${camera.y * 0.085}px)` }}><i /><i /></div>
-        <div className="flow-world" data-detail={compact ? "compact" : "full"} data-direction={direction}
+        <div className="flow-world" data-detail={compact ? "compact" : detailed ? "full" : "conversation"} data-direction={direction}
           data-layout={arrangement}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
+          {from && to ? <RelayLine from={from.box} to={to.box} /> : null}
           {visible.map(({ branch, box, nodes }) => {
             if (time !== null && branch.start > time) return null;
             const show = nodes.filter(({ task }) => !task || time === null || task.at <= time);
             return (
               <section key={branch.run.key} className="flow-cluster" data-active={!!branch.run.active && time === null}
                 data-selected={target?.run === branch.run.key}
+                data-pinned={pinnedRun === branch.run.key} data-linked={linkedRuns.has(branch.run.key)}
                 style={{ ...accent(branch.run), left: box.x, top: box.y, width: box.width, height: box.height }}
                 aria-label={branch.run.tabTitle}>
-                <div className="flow-cluster-tag"><span />{branch.run.tabTitle}<small>{show.length} {show.length === 1 ? "agent" : "agents"}</small></div>
+                <div className="flow-cluster-tag"><span />{branch.run.tabTitle}{branch.run.paneLabel ? ` · ${branch.run.paneLabel}` : ""}
+                  <small>{pinnedRun === branch.run.key ? "Pinned · " : ""}{show.length} {show.length === 1 ? "agent" : "agents"}</small></div>
                 {show.length > 1 ? (
                   <svg className="flow-connections" width={box.width} height={box.height} aria-hidden="true">
                     {show.map(({ task, parent, at }) => {
@@ -338,7 +382,8 @@ export function FlowCanvas({
                   return (
                     <ActorNode key={task?.id ?? "root"} area={at} branch={branch} name={task?.label ?? runName(branch.run, branch.trace?.name)}
                       entry={task} trace={trace} selection={target}
-                      compact={compact} ambient={ambient} clock={clock} time={time} onSelect={onSelect} />
+                      compact={compact} detailed={detailed || (target?.run === branch.run.key && !compact)}
+                      ambient={ambient} clock={clock} time={time} onSelect={onSelect} />
                   );
                 })}
               </section>
@@ -359,7 +404,7 @@ export function FlowCanvas({
         <span>{Math.round(camera.scale * 100)}%</span>
         <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
         <button type="button" onClick={fitAll}>Fit all</button>
-        <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowLeft01Icon} size={13} />
+        <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowRight01Icon} size={13} />
       </fieldset>
       {scene.clusters.length ? (
         <button type="button" className="flow-minimap" aria-label="Minimap. Click to center, or press Enter to fit all."
