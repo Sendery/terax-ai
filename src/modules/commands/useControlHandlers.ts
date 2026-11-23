@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useMemo } from "react";
 import { useAgentStore } from "@/modules/agents";
+import { recordFlowDelivery } from "@/modules/agent-flow/journal";
 import { readTerminalContext } from "@/modules/ai/lib/terminalContext";
 import { switchChatLayout } from "@/modules/ai/store/chatLayoutStore";
 import { hasKeyForModel, useChatStore } from "@/modules/ai/store/chatStore";
@@ -137,6 +138,9 @@ export function useControlHandlers(params: Params): ControlHandlers {
       setTabTitle: (tabId, title) => updateTab(tabId, { customTitle: title }),
       whenReady: whenSessionReady,
       write: writeToSession,
+      onDelivery: (target, source, submitted) => {
+        recordFlowDelivery(target, source, submitted, useAgentStore.getState().sessions);
+      },
       focusInput: focusLeafInput,
       maxPanesPerTab: MAX_PANES_PER_TAB,
     });

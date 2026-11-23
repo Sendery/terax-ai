@@ -1,4 +1,4 @@
-import type { AgentHarness } from "@/modules/agents/lib/types";
+import type { AgentHarness, DigestTaskKind } from "@/modules/agents/lib/types";
 import type { TabColor } from "@/modules/tabs/lib/tabColors";
 
 export const FLOW_LABELS = {
@@ -14,11 +14,20 @@ export const FLOW_LABELS = {
   reply: "Agent reply",
   tool: "Tool call",
   delegated: "Delegated",
+  "monitor-started": "Monitor started",
+  "background-started": "Background job started",
+  "loop-started": "Loop scheduled",
+  "task-activity": "Task activity",
   returned: "Returned",
+  delivery: "Terminal input",
   "turn-ended": "Turn complete",
+  usage: "Token usage",
 } as const;
 
 export type FlowKind = keyof typeof FLOW_LABELS;
+export const PROCESS_LABELS = { monitor: "Monitor", background: "Background job", loop: "Loop" } as const;
+export type ProcessKind = Exclude<DigestTaskKind, "subagent">;
+const PROCESS_START = { monitor: "monitor-started", background: "background-started", loop: "loop-started" } as const;
 export type TraceProvider = "claude" | "pi" | "codex" | "copilot" | "agy";
 export type TraceEvent = {
   id: string;
@@ -26,6 +35,14 @@ export type TraceEvent = {
   kind: FlowKind;
   text?: string;
   taskId?: string | null;
+  file?: string | null;
+  usage?: {
+    tokens: number;
+    cumulative: boolean;
+    key?: string | null;
+    cost?: number | null;
+    context?: { input: number; window: number };
+  } | null;
 };
 export type Trace = {
   events: TraceEvent[];
@@ -46,7 +63,10 @@ export type HistorySession = {
 export type FlowRun = {
   key: string;
   group: string;
+  shellKey?: string;
   tabTitle: string;
+  paneLabel?: string;
+  marker?: "shell" | "terax" | "background";
   color?: TabColor;
   startedAt: number;
   createdAt?: number;
@@ -61,6 +81,16 @@ export type FlowRun = {
   events: TraceEvent[];
   active?: boolean;
   projectHistory?: boolean;
+};
+
+export type FlowEndpoint = { shellKey: string; runKey?: string };
+
+export type FlowDelivery = {
+  id: string;
+  at: number;
+  submitted: boolean;
+  source?: FlowEndpoint;
+  target: FlowEndpoint;
 };
 
 export function isTraceProvider(harness: AgentHarness): harness is TraceProvider {
@@ -79,14 +109,30 @@ export type FlowTask = {
   failed?: boolean;
   parentId?: string;
   run?: FlowRun;
+  running?: boolean;
+  process?: {
+    kind: ProcessKind;
+    state?: "running" | "listening" | "scheduled" | "paused";
+    lastActivityAt?: number;
+    cadence?: string;
+  };
 };
+
+export function taskStartKind(task: FlowTask): FlowKind {
+  return task.process ? PROCESS_START[task.process.kind] : "delegated";
+}
 
 export function flowTasks(events: readonly TraceEvent[]): FlowTask[] {
   const tasks = new Map<string, FlowTask>();
   for (const event of events) {
-    if (event.kind === "delegated") {
+    if (event.kind === "delegated" || event.kind === "monitor-started" || event.kind === "background-started") {
       const id = event.taskId ?? event.id;
-      tasks.set(id, { id, label: event.text || "Subagent", at: event.at });
+      const kind = event.kind === "monitor-started" ? "monitor" : event.kind === "background-started" ? "background" : undefined;
+      tasks.set(id, { id, label: event.text || (kind ? PROCESS_LABELS[kind] : "Subagent"), at: event.at,
+        ...(kind && { process: { kind } }) });
+    } else if (event.kind === "task-activity" && event.taskId) {
+      const process = tasks.get(event.taskId)?.process;
+      if (process) process.lastActivityAt = event.at;
     } else if ((event.kind === "returned" || event.kind === "error") && event.taskId) {
       const task = tasks.get(event.taskId);
       if (task) {
@@ -156,44 +202,4 @@ export function sessionFamily(run: FlowRun | undefined, history: readonly FlowRu
   return result;
 }
 
-export type FlowDirection = "down" | "left";
-
-export const CARD_WIDTH = 244;
-export const CARD_HEIGHT = 132;
-const GAP = 28;
-const LEG = 78;
-const INSET = 24;
-
-export function placeLane(tasks: readonly FlowTask[], direction: FlowDirection) {
-  const columns = new Map<string, number>();
-  const layers: FlowTask[][] = [[]];
-  for (const task of tasks) {
-    const layer = (task.parentId ? columns.get(task.parentId) ?? 0 : 0) + 1;
-    columns.set(task.id, layer);
-    if (!layers[layer]) layers[layer] = [];
-    layers[layer].push(task);
-  }
-  const depth = layers.length;
-  const cross = Math.max(1, ...layers.map((layer) => layer.length));
-  const crossStep = (direction === "down" ? CARD_WIDTH : CARD_HEIGHT) + GAP;
-  const depthStep = (direction === "down" ? CARD_HEIGHT : CARD_WIDTH) + LEG;
-  const positions = new Map<string, { x: number; y: number }>();
-  for (let level = 1; level < depth; level++) {
-    const layer = layers[level];
-    for (const [index, task] of layer.entries()) {
-      const axis = INSET + (index + (cross - layer.length) / 2) * crossStep;
-      positions.set(task.id, direction === "down"
-        ? { x: axis, y: INSET + level * depthStep }
-        : { x: INSET + (depth - level - 1) * depthStep, y: axis });
-    }
-  }
-  const rootCross = INSET + (cross - 1) * crossStep / 2;
-  return {
-    root: direction === "down"
-      ? { x: rootCross, y: INSET }
-      : { x: INSET + (depth - 1) * depthStep, y: rootCross },
-    positions,
-    width: CARD_WIDTH + INSET * 2 + (direction === "down" ? (cross - 1) * crossStep : (depth - 1) * depthStep),
-    height: CARD_HEIGHT + INSET * 2 + (direction === "down" ? (depth - 1) * depthStep : (cross - 1) * crossStep),
-  };
-}
+export type FlowDirection = "down" | "right";

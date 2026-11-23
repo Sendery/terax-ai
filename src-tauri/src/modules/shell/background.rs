@@ -1,6 +1,6 @@
 use std::io::Read;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
@@ -44,6 +44,7 @@ pub struct BackgroundProc {
     pub child: Arc<SharedChild>,
     pub buffer: Mutex<BoundedRingBuffer>,
     pub exited: AtomicBool,
+    exited_at_ms: AtomicU64,
     pub exit_code: AtomicI32,
     pub exit_unknown: AtomicBool,
 }
@@ -64,6 +65,7 @@ pub struct BackgroundProcInfo {
     pub cwd: Option<String>,
     pub started_at_ms: u64,
     pub exited: bool,
+    pub exited_at_ms: Option<u64>,
     pub exit_code: Option<i32>,
 }
 
@@ -102,6 +104,7 @@ impl BackgroundProc {
             cwd: self.cwd.clone(),
             started_at_ms: self.started_at_ms,
             exited,
+            exited_at_ms: exited.then(|| self.exited_at_ms.load(Ordering::Relaxed)),
             exit_code,
         }
     }
@@ -111,6 +114,13 @@ impl Drop for BackgroundProc {
     fn drop(&mut self) {
         self.kill();
     }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 pub fn spawn(
@@ -151,18 +161,14 @@ pub fn spawn(
     })?;
     let child = shared;
 
-    let started_at_ms = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
     let proc = Arc::new(BackgroundProc {
         command: trimmed,
         cwd,
-        started_at_ms,
+        started_at_ms: now_ms(),
         child,
         buffer: Mutex::new(BoundedRingBuffer::new(RING_CAP)),
         exited: AtomicBool::new(false),
+        exited_at_ms: AtomicU64::new(0),
         exit_code: AtomicI32::new(0),
         exit_unknown: AtomicBool::new(false),
     });
@@ -206,6 +212,7 @@ pub fn spawn(
                 },
                 Err(_) => proc_ref.exit_unknown.store(true, Ordering::Release),
             }
+            proc_ref.exited_at_ms.store(now_ms().max(proc_ref.started_at_ms), Ordering::Relaxed);
             proc_ref.exited.store(true, Ordering::Release);
         });
     }
@@ -234,5 +241,22 @@ mod tests {
     fn a_zero_cap_retires_every_exited_process() {
         let procs = [(7, true), (8, false), (9, true)];
         assert_eq!(handles_to_retire(&procs, 0), vec![7, 9]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn background_info_records_the_exit_time_and_code() {
+        let proc = super::spawn("exit 3".into(), None, super::WorkspaceEnv::Local).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            let info = proc.info(1);
+            if let Some(ended) = info.exited_at_ms {
+                assert!(ended >= info.started_at_ms);
+                assert_eq!(info.exit_code, Some(3));
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            super::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }

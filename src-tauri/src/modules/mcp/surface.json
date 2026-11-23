@@ -561,7 +561,7 @@
     {
       "name": "terax_terminals",
       "title": "Drive Terax terminals",
-      "description": "Open, split, focus and close terminal panes, and type into them. Typing runs whatever is at the prompt with the user's permissions, so confirm intent before sending commands that change anything. Read pane ids with terax_inspect list_terminals and their output with terax_inspect read_terminal. Private terminals are refused.\n\nActions:\n- open_terminal(cwd?, command?, title?): Open a terminal tab, optionally running a command in it.\n- split_terminal(leafId, direction, command?): Split a pane to the right or down; a tab holds four panes at most.\n- focus_terminal(leafId): Focus a pane, switching space and tab as needed.\n- close_terminal(leafId): Close a pane and end its shell.\n- send_to_terminal(leafId, text, submit?): Type one line into a pane and press Enter (submit false leaves it at the prompt).",
+      "description": "Open, split, focus and close terminal panes, and type into them. Typing runs whatever is at the prompt with the user's permissions, so confirm intent before sending commands that change anything. Read pane ids with terax_inspect list_terminals and their output with terax_inspect read_terminal. Private terminals are refused.\n\nActions:\n- open_terminal(cwd?, command?, title?): Open a terminal tab, optionally running a command in it.\n- split_terminal(leafId, direction, command?): Split a pane to the right or down; a tab holds four panes at most.\n- focus_terminal(leafId): Focus a pane, switching space and tab as needed.\n- close_terminal(leafId): Close a pane and end its shell.\n- send_to_terminal(leafId, sourceLeafId?, text, submit?): Type one line into a pane. Pass sourceLeafId for an explicit Agent Flow relay; submit false leaves the line at the prompt.",
       "annotations": {
         "title": "Drive Terax terminals",
         "readOnlyHint": false,
@@ -606,6 +606,10 @@
               "down"
             ],
             "description": "Where the new pane goes relative to the split one."
+          },
+          "sourceLeafId": {
+            "type": "integer",
+            "description": "Optional public source pane id from terminal.list. Records an explicit connection in Agent Flow."
           },
           "text": {
             "type": "string",
@@ -654,6 +658,7 @@
           "command": "terminal.send",
           "params": [
             "leafId",
+            "sourceLeafId",
             "text",
             "submit"
           ]

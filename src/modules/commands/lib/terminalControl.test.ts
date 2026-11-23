@@ -149,6 +149,21 @@ describe("terminal control", () => {
     expect(deps.write).toHaveBeenLastCalledWith(2, "git status\r");
   });
 
+  it("records explicit public endpoints only after a successful write", async () => {
+    const onDelivery = vi.fn();
+    const { control, deps, state } = setup([terminal(1, 2), terminal(3, 4), SECRET], { onDelivery });
+    await control.sendToTerminal({ leafId: 4, sourceLeafId: 2, text: "fixture", submit: false });
+    expect(onDelivery).toHaveBeenCalledWith({ tabId: 3, leafId: 4 }, { tabId: 1, leafId: 2 }, false);
+    await expect(control.sendToTerminal({ leafId: 4, sourceLeafId: 6, text: "fixture" })).rejects.toMatchObject({
+      code: "command_failed",
+    });
+    expect(deps.write).toHaveBeenCalledTimes(1);
+    const delayed = control.sendToTerminal({ leafId: 4, sourceLeafId: 2, text: "fixture" });
+    state.tabs[1] = terminal(3, 4, { private: true });
+    await expect(delayed).rejects.toMatchObject({ code: "command_failed" });
+    expect(onDelivery).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the last terminal open", () => {
     const { control, deps } = setup([terminal(1, 2)]);
     expect(() => control.closeTerminal({ leafId: 2 })).toThrow();

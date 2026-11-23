@@ -594,6 +594,15 @@ mod tests {
     }
 
     #[test]
+    fn passes_terminal_relay_arguments_to_the_command_registry() {
+        let line = br#"{"version":1,"id":"relay","token":"tok","command":"terminal.send","payload":{"leafId":3,"sourceLeafId":2,"text":"fixture","submit":false}}"#;
+        let request = decode_request_line(line, "tok").expect("terminal relay must be allowed");
+        assert_eq!(request.command, "terminal.send");
+        assert_eq!(request.payload["sourceLeafId"], 2);
+        assert_eq!(request.payload["leafId"], 3);
+    }
+
+    #[test]
     fn allows_graphx_control_commands() {
         for command in [
             "graphx.open",

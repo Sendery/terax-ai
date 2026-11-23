@@ -89,7 +89,7 @@ export type ControlPayloads = {
   };
   "terminal.focus": { leafId: number };
   "terminal.close": { leafId: number };
-  "terminal.send": { leafId: number; text: string; submit?: boolean };
+  "terminal.send": { leafId: number; text: string; submit?: boolean; sourceLeafId?: number };
   "space.list": undefined;
   "space.focus": { spaceId: string };
   "tab.moveToSpace": { tabId: number; spaceId: string };
@@ -395,6 +395,13 @@ const CONTROL_SPECS: Record<ControlCommandId, ControlSpec> = {
       "Type text into a terminal pane, as if the user had. It runs whatever is at the prompt: a shell command, or an answer to the program in the foreground. Refused for private terminals.",
     params: [
       LEAF_ID,
+      {
+        name: "sourceLeafId",
+        type: "integer",
+        required: false,
+        min: 0,
+        description: "Optional public source pane id from terminal.list. Records an explicit connection in Agent Flow.",
+      },
       {
         name: "text",
         type: "string",
