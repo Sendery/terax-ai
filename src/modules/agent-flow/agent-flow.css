@@ -905,6 +905,7 @@
 }
 
 .flow-map-dock {
+  z-index: 2;
   bottom: 12px;
   left: 12px;
   display: flex;
