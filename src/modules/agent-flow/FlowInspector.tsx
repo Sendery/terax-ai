@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { Cancel01Icon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { displayAgent } from "@/modules/agents/lib/format";
-import { relationLabel, type FlowRelation } from "@/modules/agent-flow/coordination";
+import { relationDescription, relationLabel, type FlowRelation } from "@/modules/agent-flow/coordination";
 import { accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
@@ -29,7 +29,7 @@ export function UsageMetrics({ usage }: { usage: NonNullable<Actor["usage"]> }) 
 }
 
 export function FlowInspector({
-  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot, pinned, onPin, relations, onRelation,
+  branch, task, trace, eventId, time, onClose, onJump, onActivate, onRoot, pinned, onPin, relations, onRelation, pending,
 }: {
   branch: FlowBranch;
   task?: FlowTask;
@@ -44,6 +44,7 @@ export function FlowInspector({
   onPin: () => void;
   relations: readonly FlowRelation[];
   onRelation: (key: string) => void;
+  pending?: string;
 }) {
   const [mode, setMode] = useState<(typeof GROUPS)[number]>("Activity");
   const [limit, setLimit] = useState(PAGE);
@@ -83,7 +84,7 @@ export function FlowInspector({
       </header>
       <div className="flow-inspector-title">
         <h2>{task?.label ?? runName(run, trace?.name)}</h2>
-        <p>{displayAgent(run.agent)} <span>·</span> {task ? "Subagent" : actor.label}</p>
+        <p>{displayAgent(run.agent)} <span>·</span> {task ? "Subagent" : pending ?? actor.label}</p>
         <div className="flow-inspector-actions">
           <button type="button" aria-pressed={pinned} onClick={onPin}>{pinned ? "Unpin session" : "Pin session"}</button>
           {task ? <button type="button" onClick={onRoot}>Go to session</button> : null}
@@ -116,7 +117,7 @@ export function FlowInspector({
         {!task && mode === "Activity" && relations.length ? (
           <div className="flow-inspector-actions flow-inspector-links">
             {relations.slice(0, 8).map((relation) => (
-              <button type="button" key={relation.key} data-kind={relation.kind}
+              <button type="button" key={relation.key} data-kind={relation.kind} aria-label={relationDescription(relation)}
                 onClick={() => onRelation(relation.key)}>{relationLabel(relation)}</button>
             ))}
           </div>

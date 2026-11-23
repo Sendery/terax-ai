@@ -6,7 +6,7 @@ import { ArrowDown01Icon, ArrowRight01Icon, File01Icon, Flowchart01Icon, Message
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
-import { relationLabel, type FlowNodeStatus, type FlowRelation } from "@/modules/agent-flow/coordination";
+import { relationDescription, relationLabel, type FlowNodeStatus, type FlowRelation } from "@/modules/agent-flow/coordination";
 import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import type { FlowDirection, FlowRun, FlowTask, TraceEvent } from "@/modules/agent-flow/model";
@@ -50,13 +50,14 @@ function RelationLine({ from, to, relation, selected, offset, onSelect }: {
     ? `M ${end.x - sign * 8} ${end.y - 5} L ${tip} L ${end.x - sign * 8} ${end.y + 5}`
     : `M ${end.x - 5} ${end.y - sign * 8} L ${tip} L ${end.x + 5} ${end.y - sign * 8}`;
   const label = relationLabel(relation);
+  const description = relationDescription(relation);
   return <>
     <svg className="flow-relation-line" data-kind={relation.kind} data-selected={selected} width="100%" height="100%" aria-hidden="true">
       <path d={`M ${start.x} ${start.y} C ${controls}, ${tip}`} />
       {relation.kind === "relay" ? <path d={arrow} /> : null}
     </svg>
     <button type="button" className="flow-relation-label" data-kind={relation.kind} aria-pressed={selected}
-      title={label} aria-label={`Inspect ${relation.kind === "file" ? `shared file ${label}` : label.toLowerCase()}`}
+      title={description} aria-label={description}
       style={{ left: (start.x + end.x) / 2 + (across ? 0 : offset * 0.75),
         top: (start.y + end.y) / 2 + (across ? offset * 0.75 : 0) }}
       onClick={() => onSelect(relation.key)}>
@@ -372,7 +373,7 @@ export function FlowCanvas({
     ...shown.filter(({ kind }) => kind === "file").slice(0, 8)];
   if (activeRelation && !visibleRelations.some(({ key }) => key === activeRelation.key)) visibleRelations.push(activeRelation);
   const pairOffsets = new Map<string, number>();
-  const clock = useMemo(() => scene.clusters.length ? Date.now() : 0, [scene, nodeStatus, time]);
+  const clock = Date.now();
   const mapScale = Math.min(152 / scene.width, 94 / scene.height);
   const mapWidth = scene.width * mapScale;
   const mapHeight = scene.height * mapScale;

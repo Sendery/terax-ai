@@ -153,6 +153,12 @@ export function relationLabel(relation: FlowRelation) {
   return count === 1 ? "Terminal relay" : `${count} terminal relays`;
 }
 
+export function relationDescription(relation: FlowRelation) {
+  if (relation.kind === "file") return `Shared file ${relation.file.path}`;
+  const latest = relation.deliveries[0];
+  return `${relationLabel(relation)}: ${latest.from?.title ?? "Terax"} to ${latest.to.title}`;
+}
+
 const WRITE_TOOLS = new Set(["edit", "write", "edit_file", "write_file", "replace"]);
 
 export function normalizedFile(cwd: string | undefined, file: string) {

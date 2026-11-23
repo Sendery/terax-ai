@@ -299,6 +299,7 @@ export default function AgentFlow({
           <FlowInspector key={`${branch.run.key}:${task?.id ?? "root"}`}
             branch={branch} task={task} trace={detailTrace} eventId={selection?.event} time={time}
             onClose={() => setSelection(null)} onJump={jump} onActivate={onActivate}
+            pending={time === null ? nodeStatus.get(branch.run.key)?.pending : undefined}
             relations={relations.filter(({ from, to }) => from === branch.run.key || to === branch.run.key)}
             onRelation={selectRelation}
             pinned={pinnedRun === branch.run.key} onPin={() => setPinnedRun((current) => current === branch.run.key ? null : branch.run.key)}
