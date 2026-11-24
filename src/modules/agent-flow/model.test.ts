@@ -393,6 +393,11 @@ describe("Agent Flow", () => {
     expect(describeActor(branch, undefined, trace, null).label).toBe("Turn complete");
     expect(branch.tasks[0].returnedAt).toBe(20);
     expect(liveBranches([branch], traces, 31_000, null).branches[0].tasks).toEqual([]);
+    expect(liveBranches([branch], traces, 31_000, null, true).branches).toEqual([]);
+    expect(liveBranches([branch], traces, 31_000, { run: run.key }, true).branches).toHaveLength(1);
+    const next = { ...trace, events: [...trace.events, { id: "new", at: 31_001, kind: "user" as const }] };
+    traces.set(traceKey(run) ?? "", next);
+    expect(liveBranches([branchFor(run, [child], null, traces)], traces, 31_002, null, true).branches).toHaveLength(1);
   });
 
   it("rewinds a delegation independently of its result", () => {

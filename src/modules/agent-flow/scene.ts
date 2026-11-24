@@ -175,10 +175,15 @@ function retirementAt(task: FlowTask, traces: ReadonlyMap<string, FlowTrace>): n
   return lastActivity + UNCONFIRMED_IDLE_MS;
 }
 
-export function liveBranches(branches: readonly FlowBranch[], traces: ReadonlyMap<string, FlowTrace>, now: number, selection: FlowSelection | null) {
+export function liveBranches(
+  branches: readonly FlowBranch[],
+  traces: ReadonlyMap<string, FlowTrace>,
+  now: number,
+  selection: FlowSelection | null,
+  hideCompletedRuns = false,
+) {
   let nextExpiry = Infinity;
   const visible = branches.flatMap((branch) => {
-    if (!branch.tasks.length) return [branch];
     const kept = new Set<string>();
     const byId = new Map(branch.tasks.map((task) => [task.id, task]));
     for (const task of branch.tasks) {
@@ -192,8 +197,16 @@ export function liveBranches(branches: readonly FlowBranch[], traces: ReadonlyMa
         ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
       }
     }
-    if (kept.size === branch.tasks.length) return [branch];
     if (!kept.size && branch.run.marker === "background") return [];
+    if (hideCompletedRuns && !kept.size && branch.run.active && !branch.run.marker && selection?.run !== branch.run.key) {
+      const outcome = runOutcome(branch);
+      if (outcome) {
+        const expiry = outcome.at + FINISHED_LINGER_MS;
+        if (expiry <= now) return [];
+        nextExpiry = Math.min(nextExpiry, expiry);
+      }
+    }
+    if (kept.size === branch.tasks.length) return [branch];
     return [{ ...branch, tasks: branch.tasks.filter((task) => kept.has(task.id)) }];
   });
   return { branches: visible, nextExpiry };

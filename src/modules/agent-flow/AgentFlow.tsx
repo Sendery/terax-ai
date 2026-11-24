@@ -129,8 +129,8 @@ export function AgentFlowView({
     run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
   }))], [branches, showBackground, relay.markers]);
   const { branches: canvasBranches, nextExpiry } = useMemo(() => live
-    ? liveBranches(graphBranches, traces, Math.max(Date.now(), retirementTick), selection)
-    : { branches: graphBranches, nextExpiry: Infinity }, [live, graphBranches, retirementTick, selection, traces]);
+    ? liveBranches(graphBranches, traces, Math.max(Date.now(), retirementTick), selection, actualScope === "active")
+    : { branches: graphBranches, nextExpiry: Infinity }, [live, graphBranches, retirementTick, selection, traces, actualScope]);
   useEffect(() => {
     if (!open || !Number.isFinite(nextExpiry)) return;
     const timer = setTimeout(() => setRetirementTick(Date.now()), Math.max(1, nextExpiry - Date.now()));
@@ -192,7 +192,7 @@ export function AgentFlowView({
 
   if (!open) return null;
 
-  const visibleBranches = time === null ? branches : branches.filter((item) => item.start <= time);
+  const visibleBranches = canvasBranches.filter((item) => !item.run.marker && (time === null || item.start <= time));
   const totalAgents = visibleBranches.length + canvasBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => !task.process).length, 0);
   const totalTasks = canvasBranches.reduce((sum, item) => sum + beforeTime(item.tasks, time).filter((task) => task.process).length, 0);
 
