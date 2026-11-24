@@ -11,7 +11,8 @@ use serde_json::Value;
 
 use super::{
     agentdigest::{
-        claude_result_pending, claude_task_notices, codex_thread_name, parse_rfc3339_ms,
+        claude_pending_task_id, claude_result_pending, claude_task_notices, codex_thread_name,
+        parse_rfc3339_ms,
     },
     agentsessions::{find_session_file, is_safe_session_id, sessions_root, AgentKind},
 };
@@ -52,6 +53,7 @@ enum Kind {
     Delegated,
     MonitorStarted,
     BackgroundStarted,
+    TaskAlias,
     TaskActivity,
     Returned,
     TurnEnded,
@@ -230,8 +232,8 @@ fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, O
 fn project_task_notices(raw: &str, emit: &mut impl FnMut(Kind, String, Option<String>)) {
     for (id, status) in claude_task_notices(raw).filter(|(id, _)| is_safe_session_id(id)) {
         let kind = match status {
-            Some("failed" | "killed") => Kind::Error,
-            Some("completed" | "stopped") => Kind::Returned,
+            Some("failed" | "killed" | "timed_out") => Kind::Error,
+            Some("completed" | "stopped" | "cancelled" | "canceled") => Kind::Returned,
             _ => Kind::TaskActivity,
         };
         emit(kind, String::new(), Some(id.to_string()));
@@ -250,6 +252,13 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             }
             let message = &row["message"];
             let role = message["role"].as_str().unwrap_or(kind);
+            if provider == Provider::Pi && role == "toolResult" {
+                if let Some(id) = safe_key(&message["toolCallId"]) {
+                    let kind = if message["isError"] == true { Kind::Error } else { Kind::Returned };
+                    emit(kind, String::new(), Some(id));
+                }
+                return;
+            }
             if !matches!(role, "user" | "assistant") || row["isSidechain"] == true {
                 return;
             }
@@ -284,10 +293,16 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
                             emit(Kind::Tool, name, None);
                         }
                     }
-                    "tool_result" if !claude_result_pending(block) => {
+                    "tool_result" => {
                         if let Some(id) = safe_key(&block["tool_use_id"]) {
-                            let kind = if block["is_error"] == true { Kind::Error } else { Kind::Returned };
-                            emit(kind, String::new(), Some(id));
+                            if claude_result_pending(block) {
+                                if let Some(alias) = claude_pending_task_id(block) {
+                                    emit(Kind::TaskAlias, alias, Some(id));
+                                }
+                            } else {
+                                let kind = if block["is_error"] == true { Kind::Error } else { Kind::Returned };
+                                emit(kind, String::new(), Some(id));
+                            }
                         }
                     }
                     _ => {}
@@ -759,6 +774,29 @@ mod tests {
             (Kind::BackgroundStarted, String::new(), Some("b".into())),
             (Kind::TaskActivity, String::new(), Some("m".into())),
             (Kind::Error, String::new(), Some("b".into())),
+        ]);
+    }
+
+    #[test]
+    fn projects_claude_task_aliases_and_pi_tool_results() {
+        let mut events = Vec::new();
+        let mut emit = |kind, text, id| events.push((kind, text, id));
+        project(Provider::Claude, &serde_json::json!({
+            "type": "user", "message": { "role": "user", "content": [
+                { "type": "tool_result", "tool_use_id": "b", "content": "Command running in background with ID: b4." },
+            ] },
+        }), &mut emit);
+        project(Provider::Claude, &serde_json::json!({
+            "type": "queue-operation", "operation": "enqueue",
+            "content": "<task-notification><task-id>b4</task-id><status>completed</status></task-notification>",
+        }), &mut emit);
+        project(Provider::Pi, &serde_json::json!({
+            "type": "message", "message": { "role": "toolResult", "toolCallId": "p", "isError": true },
+        }), &mut emit);
+        assert_eq!(events, [
+            (Kind::TaskAlias, "b4".into(), Some("b".into())),
+            (Kind::Returned, String::new(), Some("b4".into())),
+            (Kind::Error, String::new(), Some("p".into())),
         ]);
     }
 

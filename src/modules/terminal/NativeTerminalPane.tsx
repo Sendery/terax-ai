@@ -527,7 +527,7 @@ export const NativeTerminalPane = forwardRef<
     const originalSession = engine.current;
     const element = host.current;
     if (!owner || !element) return;
-    const { clientX, clientY, button, ctrlKey } = event;
+    const { clientX, clientY, button, ctrlKey, shiftKey, metaKey } = event;
     void (async () => {
       await owner.opened;
       const session = engine.current;
@@ -557,6 +557,8 @@ export const NativeTerminalPane = forwardRef<
           clientY,
           button,
           ctrlKey,
+          shiftKey,
+          metaKey,
         }),
       );
     })().catch((cause) => setError(String(cause)));

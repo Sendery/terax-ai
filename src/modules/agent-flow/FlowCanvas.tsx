@@ -12,7 +12,7 @@ import { TAB_COLOR_CSS } from "@/modules/tabs/lib/tabColors";
 import { BeaconSignals, ToolMark } from "@/modules/agent-flow/FlowSignals";
 import { PROCESS_LABELS, type FlowDirection, type FlowRun, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
 import {
-  COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, eventLabel, fitFlowCamera, laneCamera, makeScene, nodeGeometry, overlaps, zoomFlowCamera,
+  COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, eventLabel, fitFlowCamera, laneCamera, makeScene, nodeGeometry, overlaps, runOutcome, zoomFlowCamera,
   type Box, type Camera, type FlowArrangement, type FlowBranch, type FlowSelection, type Point,
 } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
@@ -474,8 +474,7 @@ export function FlowCanvas({
             const status = time === null ? nodeStatus.get(branch.run.key) : undefined;
             const processCount = show.filter(({ task }) => task?.process).length;
             const agentCount = show.length - processCount - Number(!!branch.run.marker);
-            const rootTone = describeActor(branch, undefined, branch.trace, time).tone;
-            const operating = time === null && ((!!status?.working && rootTone !== "complete" && rootTone !== "error") || show.some(({ task }) =>
+            const operating = time === null && ((!!status?.working && !runOutcome(branch)) || show.some(({ task }) =>
               task && task.returnedAt === undefined && (task.running || task.process?.state === "running")));
             const pulse = operating && pulseSlots > 0;
             if (pulse) pulseSlots--;

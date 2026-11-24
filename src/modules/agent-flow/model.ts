@@ -18,6 +18,7 @@ export const FLOW_LABELS = {
   "background-started": "Background job started",
   "loop-started": "Loop scheduled",
   "task-activity": "Task activity",
+  "task-alias": "Task reference",
   returned: "Returned",
   delivery: "Terminal input",
   "turn-ended": "Turn complete",

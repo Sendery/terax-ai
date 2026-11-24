@@ -113,6 +113,8 @@ cp "${UNIVERSAL_DMG[0]}" "$DOWNLOAD_DMG"
 file "$DOWNLOAD_DMG"
 shasum -a 256 "$DOWNLOAD_DMG"
 
+node scripts/dev-release-config.mjs --verify-distribution "${UNIVERSAL_APP[0]}" "$DOWNLOAD_DMG"
+
 gh release upload "$RELEASE_TAG" \
   "$DOWNLOAD_DMG" \
   --repo "$REPOSITORY" \

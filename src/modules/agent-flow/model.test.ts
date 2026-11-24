@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { collectNodeStatus, fileCrossings, fileRelations, normalizedFile, relayGraph, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
 import type { AgentNotification, AgentSession, SessionDigest } from "@/modules/agents/lib/types";
 import { backgroundBranch } from "@/modules/agent-flow/background";
+import { currentSourceFilter, sourceGroups, sourceMatches, type SourceFilter } from "@/modules/agent-flow/FlowSourceFilter";
 import {
   beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
 } from "@/modules/agent-flow/model";
@@ -24,6 +25,22 @@ const grandchild = historyRun({
 }, "Project");
 
 describe("Agent Flow", () => {
+  it("groups live shells by tab identity and distinguishes a full tab from chosen shells", () => {
+    const pane = { leafId: 1, tabId: 3, shellKey: "launch:3:1", title: "Review", slot: 1, split: true };
+    const sibling = { ...pane, leafId: 2, shellKey: "launch:3:2", slot: 2 };
+    const other = { ...pane, tabId: 4, shellKey: "launch:4:3", leafId: 3 };
+    const groups = sourceGroups([pane, sibling, other], [{ ...root, group: "launch:3" }]);
+    expect(groups.map(({ title, shells }) => [title, shells.length])).toEqual([["Review · 1", 2], ["Review · 2", 1]]);
+    const chosen: SourceFilter = new Map([["launch:3", new Set([sibling.shellKey])]]);
+    const partial = currentSourceFilter(chosen, groups);
+    expect(sourceMatches(partial, "launch:3", pane.shellKey)).toBe(false);
+    expect(sourceMatches(partial, "launch:3", sibling.shellKey)).toBe(true);
+    expect(currentSourceFilter(chosen, sourceGroups([pane, other], [])).size).toBe(0);
+    const full = currentSourceFilter(new Map([["launch:3", null]]), groups);
+    expect(sourceMatches(full, "launch:3", "launch:3:5")).toBe(true);
+    expect(sourceMatches(full, "launch:4", other.shellKey)).toBe(false);
+  });
+
   it("keeps live tab attribution and attaches only recorded child sessions", () => {
     const live = { ...root, key: "live", active: true, group: "tab", tabTitle: "My terminal", color: "purple" as const };
     expect(mergeRuns([live], [root, child, grandchild])).toEqual([live]);
@@ -346,6 +363,36 @@ describe("Agent Flow", () => {
     const selected = liveBranches([branch], new Map(), 400_000, { run: root.key, task: "done" });
     expect(selected.branches[0].tasks.some(({ id }) => id === "done")).toBe(true);
     expect(buildTimeline([branch], new Map()).marks).toContainEqual({ at: 1000, kind: "returned" });
+  });
+
+  it("ends a background task by its provider alias even with a stale digest", () => {
+    const run = { ...root, harness: "claude" as const, active: true, leafId: 11, startedAt: 20 };
+    const trace = { name: null, failed: false, limited: false, events: [
+      { id: "1", at: 21, kind: "background-started" as const, taskId: "call" },
+      { id: "2", at: 22, kind: "task-alias" as const, taskId: "call", text: "background-id" },
+      { id: "3", at: 23, kind: "returned" as const, taskId: "background-id" },
+    ] };
+    const branch = branchFor(run, [], { 11: {
+      sessionId: "root", name: null, recap: null, recapAt: null, lastReply: null, lastReplyAt: null,
+      goal: null, pendingQuestion: null, prs: [], artifacts: [],
+      tasks: [{ id: "call", kind: "background", label: "Build helper", startedAt: 21 }],
+    } }, new Map([[traceKey(run) ?? "", trace]]));
+    expect(branch.tasks[0]).toMatchObject({ id: "call", returnedAt: 23 });
+    expect(liveBranches([branch], new Map(), 31_000, null).branches[0].tasks).toEqual([]);
+    expect(buildTimeline([branch], new Map()).marks).toContainEqual({ at: 23, kind: "returned" });
+  });
+
+  it("retires completed Codex descendants and ignores late PTY working noise on the parent", () => {
+    const run = { ...root, active: true, startedAt: 10, events: [{ id: "pty", at: 25, kind: "working" as const }] };
+    const trace = { name: null, failed: false, limited: false, events: [
+      { id: "end", at: 20, kind: "turn-ended" as const },
+      { id: "reply", at: 21, kind: "reply" as const, text: "Done" },
+    ] };
+    const traces = new Map([[traceKey(run) ?? "", trace], [traceKey(child) ?? "", trace]]);
+    const branch = branchFor(run, [child], null, traces);
+    expect(describeActor(branch, undefined, trace, null).label).toBe("Turn complete");
+    expect(branch.tasks[0].returnedAt).toBe(20);
+    expect(liveBranches([branch], traces, 31_000, null).branches[0].tasks).toEqual([]);
   });
 
   it("rewinds a delegation independently of its result", () => {

@@ -58,7 +58,11 @@ export function flowRunKey(session: AgentSession): string {
 }
 
 export function flowShellKey(tabId: number, leafId: number): string {
-  return `${launch}:${tabId}:${leafId}`;
+  return `${flowTabKey(tabId)}:${leafId}`;
+}
+
+export function flowTabKey(tabId: number): string {
+  return `${launch}:${tabId}`;
 }
 
 type Pane = { tabId: number; leafId: number };
@@ -122,7 +126,7 @@ export function recordFlowSignal(
   const leaves = tab && leafIds(tab.paneTree);
   const run: FlowRun = {
     key,
-    group: `${launch}:${session.tabId}`,
+    group: flowTabKey(session.tabId),
     shellKey: flowShellKey(session.tabId, session.leafId),
     tabTitle: tab ? labelFor(tab).slice(0, 160) : old?.tabTitle ?? "Terminal",
     paneLabel: leaves && leaves.length > 1 ? `Shell ${leaves.indexOf(session.leafId) + 1}` : old?.paneLabel,

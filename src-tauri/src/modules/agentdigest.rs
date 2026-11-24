@@ -114,6 +114,7 @@ pub struct SessionDigest {
 #[derive(Clone, Debug)]
 struct OpenTask {
     id: String,
+    alias: Option<String>,
     kind: TaskKind,
     label: String,
     started_at: u64,
@@ -173,7 +174,7 @@ const CODEX_KEYS: &[&str] = &[
     "create_pull_request",
 ];
 
-const TERMINAL_TASK_STATES: &[&str] = &["completed", "failed", "killed", "stopped"];
+const TERMINAL_TASK_STATES: &[&str] = &["completed", "failed", "killed", "stopped", "cancelled", "canceled", "timed_out"];
 /// What a tool result says when the work it started keeps running.
 const ASYNC_MARKERS: &[&str] = &["Async agent launched", "running in background", "Monitor started"];
 
@@ -347,7 +348,9 @@ impl DigestBuilder {
         };
         // A foreground subagent returns its answer here; one that runs on
         // reports back later through a task notification.
-        if !claude_result_pending(block) {
+        if claude_result_pending(block) {
+            self.open[index].alias = claude_pending_task_id(block);
+        } else {
             self.open.remove(index);
         }
     }
@@ -355,8 +358,9 @@ impl DigestBuilder {
     fn update_notified(&mut self, text: &str, at: Option<u64>) {
         for (id, status) in claude_task_notices(text) {
             if status.is_some_and(|status| TERMINAL_TASK_STATES.contains(&status)) {
-                self.open.retain(|task| task.id != id);
-            } else if let Some((task, at)) = self.open.iter_mut().find(|task| task.id == id).zip(at) {
+                self.open.retain(|task| task.id != id && task.alias.as_deref() != Some(id));
+            } else if let Some((task, at)) = self.open.iter_mut()
+                .find(|task| task.id == id || task.alias.as_deref() == Some(id)).zip(at) {
                 task.last_activity_at = Some(task.last_activity_at.unwrap_or(task.started_at).max(at));
             }
         }
@@ -503,7 +507,7 @@ impl DigestBuilder {
             self.open.remove(0);
         }
         self.open.push(OpenTask {
-            id: id.to_string(), kind, label, started_at, expires_at, last_activity_at: None, cron: None,
+            id: id.to_string(), alias: None, kind, label, started_at, expires_at, last_activity_at: None, cron: None,
         });
     }
 }
@@ -550,10 +554,20 @@ pub(crate) fn claude_result_pending(block: &Value) -> bool {
     block["is_error"] != true && ASYNC_MARKERS.iter().any(|marker| text.contains(marker))
 }
 
+pub(crate) fn claude_pending_task_id(block: &Value) -> Option<String> {
+    let text = flatten_text(&block["content"]);
+    ["agentId:", "agent_id:", "Monitor started (task ", "running in background with ID:"]
+        .iter()
+        .filter_map(|prefix| text.split_once(prefix).map(|(_, tail)| tail.trim_start()))
+        .map(|tail| tail.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).next().unwrap_or_default())
+        .find(|id| is_safe_session_id(id))
+        .map(str::to_owned)
+}
+
 pub(crate) fn claude_task_notices(text: &str) -> impl Iterator<Item = (&str, Option<&str>)> {
     text.split("<task-notification>").skip(1).filter_map(|block| {
         let block = block.split("</task-notification>").next()?;
-        Some((tag(block, "tool-use-id")?, tag(block, "status")))
+        Some((tag(block, "tool-use-id").or_else(|| tag(block, "task-id"))?, tag(block, "status")))
     })
 }
 
@@ -1030,6 +1044,16 @@ mod tests {
             AGENT_USE,
             AGENT_LAUNCHED,
             r#"{"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>x</task-id>\n<tool-use-id>toolu_a</tool-use-id>\n<status>completed</status>\n</task-notification>"}"#,
+        ]);
+        assert!(d.tasks.is_empty());
+    }
+
+    #[test]
+    fn a_background_notification_can_name_the_process_instead_of_the_tool_call() {
+        let d = fold(DigestAgent::Claude, &[
+            r#"{"type":"assistant","timestamp":"2026-09-29T09:59:00.000Z","message":{"content":[{"type":"tool_use","id":"toolu_b","name":"Bash","input":{"run_in_background":true}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_b","content":"Command running in background with ID: b4."}]}}"#,
+            r#"{"type":"queue-operation","content":"<task-notification><task-id>b4</task-id><status>completed</status></task-notification>"}"#,
         ]);
         assert!(d.tasks.is_empty());
     }

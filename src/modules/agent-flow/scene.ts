@@ -65,7 +65,7 @@ export function signalEvents(events: readonly TraceEvent[], limit = 12): TraceEv
   const result: TraceEvent[] = [];
   for (let index = events.length - 1; index >= 0 && result.length < limit; index--) {
     const event = events[index];
-    if (event.kind !== "usage" && event.kind !== "working") result.push(event);
+    if (event.kind !== "usage" && event.kind !== "working" && event.kind !== "task-alias") result.push(event);
   }
   return result.reverse();
 }
@@ -75,7 +75,16 @@ export function contextPercent(context: NonNullable<NonNullable<Actor["usage"]>[
 }
 
 export function eventStream(run: FlowRun, trace: FlowTrace | undefined): TraceEvent[] {
-  return [...run.events, ...trace?.events ?? []].sort((a, b) => a.at - b.at);
+  const events = [...run.events, ...trace?.events ?? []];
+  const aliases = new Map<string, string>();
+  for (const event of events) {
+    if (event.kind === "task-alias" && event.text && event.taskId) aliases.set(event.text, event.taskId);
+  }
+  return events.flatMap((event) => {
+    if (event.kind === "task-alias") return [];
+    const taskId = event.taskId && aliases.get(event.taskId);
+    return [taskId ? { ...event, taskId } : event];
+  }).sort((a, b) => a.at - b.at);
 }
 
 function terminalOutcome(events: readonly TraceEvent[], since: number) {
@@ -85,10 +94,19 @@ function terminalOutcome(events: readonly TraceEvent[], since: number) {
     if (event.taskId) continue;
     if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error")
       return event;
-    if (event.kind === "started" || event.kind === "user" || event.kind === "attention" || event.kind === "working")
+    if (event.kind === "started" || event.kind === "user" || event.kind === "attention" || event.kind === "working"
+      || event.kind === "tool" || event.kind === "delegated")
       return undefined;
   }
   return undefined;
+}
+
+export function runOutcome(branch: FlowBranch): TraceEvent | undefined {
+  const transcript = branch.trace?.events;
+  const outcome = transcript && terminalOutcome(transcript, branch.run.startedAt - 2000);
+  if (outcome && !branch.events.some((event) => event.at > outcome.at
+    && (event.kind === "user" || event.kind === "attention"))) return outcome;
+  return terminalOutcome(branch.events, branch.run.startedAt - 2000);
 }
 
 export function branchFor(
@@ -211,10 +229,10 @@ export function describeActor(
 ): Actor {
   const events = beforeTime(task ? trace?.events ?? [] : branch.events, time);
   const taskReturned = task?.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-  const status = [...events].reverse().find((event) => (
+  const status = (!task && time === null ? runOutcome(branch) : undefined) ?? [...events].reverse().find((event) => (
     (event.kind === "error" && !event.taskId) || event.kind === "exited" ||
     event.kind === "attention" || event.kind === "finished" || event.kind === "turn-ended" ||
-    event.kind === "started" || event.kind === "working" || event.kind === "tool" || event.kind === "delegated"
+    event.kind === "started" || event.kind === "user" || event.kind === "working" || event.kind === "tool" || event.kind === "delegated"
   ));
   let tone: Actor["tone"] = "idle";
   let label = task ? "Delegated" : branch.run.projectHistory ? "History" : "Recorded";

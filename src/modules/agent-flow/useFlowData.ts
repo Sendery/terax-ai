@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import type { FlowTerminal } from "@/modules/agent-flow/coordination";
-import { loadFlowJournal, flowRunKey, flowShellKey, useFlowJournal } from "@/modules/agent-flow/journal";
+import { loadFlowJournal, flowRunKey, flowShellKey, flowTabKey, useFlowJournal } from "@/modules/agent-flow/journal";
 import {
   historyRun, mergeRuns,
   type FlowRun, type HistorySession, type TraceEvent,
@@ -154,7 +154,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       };
       byKey.set(key, {
         key,
-        group: record?.group ?? `${key.split(":")[0]}:${tab.id}`,
+        group: flowTabKey(tab.id),
         shellKey: flowShellKey(tab.id, session.leafId),
         tabTitle: labelFor(tab),
         paneLabel: pane?.split ? `Shell ${pane.slot}` : undefined,
@@ -221,7 +221,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       const tab = ids?.size === 1 ? currentTabs.get([...ids][0]) : undefined;
       if (tab?.kind !== "terminal") return run;
       return {
-        ...run, group: flowShellKey(tab.id, tab.activeLeafId).split(":").slice(0, -1).join(":"),
+        ...run, group: flowTabKey(tab.id),
         tabTitle: labelFor(tab), color: tab.color,
       };
     });

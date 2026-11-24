@@ -295,7 +295,7 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
     exitCode: null as number | null,
     select: vi.fn(async () => null),
     scroll: vi.fn(),
-    getSelection: () => null,
+    getSelection: (): string | null => null,
   };
   const binding = bindNativeInput(
     session as unknown as EngineSession,
@@ -358,6 +358,14 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
     expect.objectContaining({ action: "release", button: 2 }),
   );
   expect(session.select).not.toHaveBeenCalled();
+  const selection = vi.spyOn(session, "getSelection").mockReturnValue("marked terminal text");
+  session.sendMouse.mockClear();
+  pointer.preventDefault.mockClear();
+  hostEvents.get("pointerdown")?.(pointer);
+  hostEvents.get("contextmenu")?.(pointer);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+  expect(pointer.preventDefault).not.toHaveBeenCalled();
+  selection.mockRestore();
   hostEvents.get("wheel")?.({ ...pointer, deltaY: -16, deltaMode: 0 });
   expect(session.sendMouse).toHaveBeenLastCalledWith(
     expect.objectContaining({ action: "press", button: 3 }),

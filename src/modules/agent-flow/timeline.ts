@@ -35,7 +35,7 @@ export function buildTimeline(
     }
     const row = lane.events;
     const add = ({ at, kind }: TimeMark) => {
-      if (at <= 0 || kind === "usage") return;
+      if (at <= 0 || kind === "usage" || kind === "task-alias") return;
       const mark = { at, kind };
       row.set(at, mark);
       aggregate.set(at, mark);
