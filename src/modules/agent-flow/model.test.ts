@@ -11,7 +11,7 @@ import {
   laneCamera, liveBranches, makeScene, nodeGeometry, overlaps, signalTone, zoomCamera, zoomFlowCamera,
 } from "@/modules/agent-flow/scene";
 import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
-import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
+import { mergeTrace, traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 import { createWatch } from "@/modules/watchers/lib/watch";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
@@ -388,7 +388,7 @@ describe("Agent Flow", () => {
       { id: "end", at: 20, kind: "turn-ended" as const },
       { id: "reply", at: 21, kind: "reply" as const, text: "Done" },
     ] };
-    const traces = new Map([[traceKey(run) ?? "", trace], [traceKey(child) ?? "", trace]]);
+    const traces = new Map<string, FlowTrace>([[traceKey(run) ?? "", trace], [traceKey(child) ?? "", trace]]);
     const branch = branchFor(run, [child], null, traces);
     expect(describeActor(branch, undefined, trace, null).label).toBe("Turn complete");
     expect(branch.tasks[0].returnedAt).toBe(20);
