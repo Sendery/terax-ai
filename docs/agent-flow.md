@@ -1,8 +1,15 @@
 # Agent Flow
 
 Open **Agent Flow** from the Agent Monitor header. It opens a Terax workspace
-tab. The map shows concurrent sessions and their available delegations together.
-Choose a source tab or project, or switch between active and all sessions.
+tab. Use **Detach** to move the map into a separate window that you can put on
+another display. **Dock** returns to the workspace tab. Both views follow the
+same terminal sessions.
+
+The source menu groups open shells under their tab. Select a tab to include all
+its shells, including newly opened splits, or select individual shells. The
+menu updates as shells open or close. A named session uses its CLI name. Other
+agent sessions show their tab, start time and CLI. **All sessions** also exposes
+archived sources that cannot be attributed to a current tab.
 Agents and subagents share the source tab accent. Replies and prompts appear
 in speech bubbles, tool calls appear beside the agent that made them, and
 delegation and return events travel in opposite directions along their links.
@@ -12,7 +19,9 @@ The latest-signal card opens the corresponding agent and event. Replay pauses
 ambient movement.
 
 Drag the map or use the trackpad to pan, pinch or use the zoom buttons to zoom,
-and use Fit all to reorient the canvas. The minimap starts folded in the
+and use **Fit all** to reorient the canvas. The adjacent zoom menu offers presets
+and **Auto fit**, which smoothly reframes the map as nodes appear or leave.
+The minimap starts folded in the
 bottom-left corner and opens above the zoom controls. The Agents list can find
 and center a session. The direction button switches between top to bottom and
 left to right. In the horizontal view, each session starts on the left and
@@ -58,6 +67,8 @@ Use the timeline to scrub, step or replay at 1×, 2× or 4×. It opens as a sing
 activity overview. Expand Shells to show one track per terminal pane, including
 separate panes in the same tab. All tracks share the same time scale and
 playhead. Click a track or use its arrow keys to seek to one of its events.
+Each shell has a checkbox to hide its track and its marks from the timeline.
+The canvas keeps showing the shell while its timeline is hidden.
 Archived sessions without recorded pane attribution get individual tracks.
 Go live returns to incoming activity. Usage displays available token records for Claude Code,
 Codex and Pi and reported cost for Pi. Codex also displays the last recorded
@@ -72,8 +83,12 @@ input token count against its context window. The amounts cover the loaded trace
 | Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace |
 | Grok | Process status and terminal alerts | Terminal activity is retained from this version |
 
-Project history is discovered for open and recently recorded public terminal directories. Previous
-transcripts without a recorded tab association appear under the project. Codex,
+Finished subagents and jobs leave the live map after 30 seconds. In **Active
+sessions**, a completed session also leaves once its work ends. A subsequent
+turn brings it back. The timeline and **All sessions** retain recorded activity.
+
+Project history is discovered for open and recently recorded public terminal directories.
+History joins a current tab when its directory maps to that one tab. Codex,
 Copilot and Antigravity transcripts join a terminal run when a unique start-time match is
 available in its directory. Resumed or concurrent runs with ambiguous matches
 remain separate. The terminal journal keeps at most 160 recent public runs and
