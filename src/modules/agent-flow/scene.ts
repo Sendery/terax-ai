@@ -321,28 +321,23 @@ type Cluster = {
 
 type Layout = { clusters: Cluster[]; width: number; height: number };
 
-export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number, compact = false) {
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, compact = false) {
   const { width, centerX, centerY } = nodeGeometry(direction, compact);
   const a = { x: from.x + centerX, y: from.y + centerY };
   const b = { x: to.x + centerX, y: to.y + centerY };
   if (direction === "right") {
     const start = { x: a.x + 29, y: a.y };
     const end = { x: b.x - 29, y: b.y };
-    let track = start.y;
     let d = `M ${start.x} ${start.y}`;
-    if (clusterHeight !== undefined && to.x - from.x > width + 26) {
-      const exit = from.x + width + 13;
-      const bottom = clusterHeight - 8;
-      d += ` H ${exit - 8} Q ${exit} ${track} ${exit} ${track + 8} V ${bottom - 8} Q ${exit} ${bottom} ${exit + 8} ${bottom}`;
-      track = bottom;
+    if (start.y === end.y) {
+      d += ` H ${end.x}`;
+    } else {
+      // Stay in the gap between speech and tools until there is room to turn.
+      const depart = compact ? start.x : from.x + width + 6;
+      const control = Math.round((end.x - depart) * 0.42);
+      if (depart !== start.x) d += ` H ${depart}`;
+      d += ` C ${depart + control} ${start.y}, ${end.x - control} ${end.y}, ${end.x} ${end.y}`;
     }
-    if (track !== end.y) {
-      const inlet = to.x - 6;
-      const bend = Math.min(12, Math.abs(end.y - track) / 2);
-      const step = Math.sign(end.y - track) * bend;
-      d += ` H ${inlet - bend} Q ${inlet} ${track} ${inlet} ${track + step} V ${end.y - step} Q ${inlet} ${end.y} ${inlet + bend} ${end.y}`;
-    }
-    d += ` H ${end.x}`;
     const tip = returned ? start : end;
     const back = tip.x + (returned ? 7 : -7);
     return { d, arrow: `M ${back} ${tip.y - 4} L ${tip.x} ${tip.y} L ${back} ${tip.y + 4}` };
@@ -359,10 +354,10 @@ export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, r
 export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit", compact = false) {
   const { width: nodeWidth, height: nodeHeight, centerX, centerY } = nodeGeometry(direction, compact);
   const coordinator = branches.find(({ run }) => run.marker === "terax");
-  const slotX = nodeWidth + 26;
-  const slotY = nodeHeight + 38;
+  const horizontal = direction === "right";
+  const slotY = nodeHeight + (horizontal ? 20 : 38);
   const placed = branches.filter(({ run }) => run.marker !== "terax").map((branch) => {
-    const header = CLUSTER_HEADER + (!compact && direction === "right" ? 16 : 0);
+    const header = CLUSTER_HEADER + (!compact && horizontal ? 16 : 0);
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
     for (const task of branch.tasks) {
@@ -372,10 +367,13 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       layer.push(task);
       layers[depth] = layer;
     }
-    const breadth = Math.min(4, Math.max(...layers.map((layer) => layer.length)));
-    const depth = layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
-    const width = ((direction === "down" ? breadth : depth) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
-    const rows = direction === "down" ? depth : breadth;
+    const widestLayer = Math.max(...layers.map((layer) => layer.length));
+    const breadth = horizontal ? widestLayer : Math.min(4, widestLayer);
+    const depth = horizontal ? layers.length : layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
+    const turnSpace = horizontal && !compact ? Math.min(120, (breadth - 1) * 24) : 0;
+    const slotX = nodeWidth + 26 + turnSpace;
+    const width = ((horizontal ? depth : breadth) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
+    const rows = horizontal ? breadth : depth;
     const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2;
     const positions = new Map<string, Point>();
     const nodes: Cluster["nodes"] = [];
@@ -386,9 +384,9 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         const row = Math.floor(index / breadth);
         const count = Math.min(breadth, layer.length - row * breadth);
         const cross = (index % breadth) + (breadth - count) / 2;
-        const at = direction === "down"
-          ? { x: CLUSTER_PAD + cross * slotX, y: header + CLUSTER_PAD + (rank + row) * slotY }
-          : { x: CLUSTER_PAD + (rank + row) * slotX, y: header + CLUSTER_PAD + cross * slotY };
+        const at = horizontal
+          ? { x: CLUSTER_PAD + rank * slotX, y: header + CLUSTER_PAD + cross * slotY }
+          : { x: CLUSTER_PAD + cross * slotX, y: header + CLUSTER_PAD + (rank + row) * slotY };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);
@@ -400,7 +398,6 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
 
   function addCoordinator(layout: Layout): Layout {
     if (!coordinator) return layout;
-    const horizontal = direction === "right";
     const width = Math.max(layout.width, 2 * GUTTER + 192);
     const height = Math.max(layout.height, 2 * GUTTER + COORDINATOR_HEIGHT);
     const box = { x: GUTTER, y: GUTTER, width: horizontal ? COORDINATOR_WIDTH : width - 2 * GUTTER,

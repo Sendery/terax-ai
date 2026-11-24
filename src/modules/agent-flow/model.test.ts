@@ -157,7 +157,7 @@ describe("Agent Flow", () => {
     const restored = zoomFlowCamera(zoom, point, 1.25, layouts, direction, null);
     expect(restored.x).toBeCloseTo(camera.x);
     expect(restored.y).toBeCloseTo(camera.y);
-    expect(edgeGeometry(compact.clusters[0].nodes[0].at, compact.clusters[0].nodes[1].at, direction, false, undefined, true).d)
+    expect(edgeGeometry(compact.clusters[0].nodes[0].at, compact.clusters[0].nodes[1].at, direction, false, true).d)
       .toBe("M 125 91 H 249");
   });
 
@@ -172,12 +172,27 @@ describe("Agent Flow", () => {
     expect(result.arrow).toBe("M 83 69 L 76 73 L 83 77");
   });
 
-  it("branches between rows near the destination and routes past occupied columns through the gutter", () => {
+  it("curves between rows beyond the source card, with the compact curve starting at the beacon", () => {
     const from = { x: 0, y: 0 };
     const branch = edgeGeometry(from, { x: 352, y: 150 }, "right", false);
-    expect(branch.d).toBe("M 76 73 H 334 Q 346 73 346 85 V 211 Q 346 223 358 223 H 370");
-    const bypass = edgeGeometry(from, { x: 704, y: 150 }, "right", false, 324);
-    expect(bypass.d).toContain("347 316 H");
+    expect(branch.d).toBe("M 76 73 H 332 C 348 73, 354 223, 370 223");
+    const compact = edgeGeometry(from, { x: 182, y: 144 }, "right", true, true);
+    expect(compact.d).toBe("M 107 42 C 159 42, 179 186, 231 186");
+    expect(compact.arrow).toBe("M 114 38 L 107 42 L 114 46");
+  });
+
+  it.each([false, true])("keeps all seven siblings level with their own descendants one column farther right (compact=%s)", (compact) => {
+    const branch = branchFor(root, [], null, new Map());
+    branch.tasks = Array.from({ length: 7 }, (_, i) => ({ id: `sibling-${i}`, label: `Review ${i}`, at: i + 11 }));
+    branch.tasks.push({ id: "follow-up", parentId: "sibling-0", label: "Follow-up", at: 22 });
+    const { nodes } = makeScene([branch], "right", "fit", compact).clusters[0];
+    const siblings = nodes.slice(1, 8);
+    const followUp = nodes[8];
+    expect(new Set(siblings.map(({ at }) => at.x)).size).toBe(1);
+    expect(new Set(siblings.map(({ at }) => at.y)).size).toBe(7);
+    expect(siblings.every(({ parent }) => parent === nodes[0].at)).toBe(true);
+    expect(followUp.parent).toBe(siblings[0].at);
+    expect(followUp.at.x - siblings[0].at.x).toBe(siblings[0].at.x - nodes[0].at.x);
   });
 
   it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {

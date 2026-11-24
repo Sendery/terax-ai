@@ -498,7 +498,7 @@ export function FlowCanvas({
                     {show.map(({ task, parent, at }) => {
                       if (!parent || !task) return null;
                       const returned = task.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, box.height, compact);
+                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, compact);
                       const transit = recent(returned ? task.returnedAt : task.at, time, clock);
                       return (
                         <g key={task.id}>
