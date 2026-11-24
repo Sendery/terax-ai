@@ -181,18 +181,25 @@ describe("Agent Flow", () => {
     expect(compact.arrow).toBe("M 114 38 L 107 42 L 114 46");
   });
 
-  it.each([false, true])("keeps all seven siblings level with their own descendants one column farther right (compact=%s)", (compact) => {
+  it.each([false, true])("wraps seven siblings across two columns with a clear path to the farther column (compact=%s)", (compact) => {
     const branch = branchFor(root, [], null, new Map());
     branch.tasks = Array.from({ length: 7 }, (_, i) => ({ id: `sibling-${i}`, label: `Review ${i}`, at: i + 11 }));
     branch.tasks.push({ id: "follow-up", parentId: "sibling-0", label: "Follow-up", at: 22 });
-    const { nodes } = makeScene([branch], "right", "fit", compact).clusters[0];
+    const { nodes, channel, box } = makeScene([branch], "right", "fit", compact).clusters[0];
     const siblings = nodes.slice(1, 8);
+    const firstColumn = siblings.filter(({ at }) => at.x === siblings[0].at.x);
+    const secondColumn = siblings.filter(({ at }) => at.x === siblings[6].at.x);
     const followUp = nodes[8];
-    expect(new Set(siblings.map(({ at }) => at.x)).size).toBe(1);
-    expect(new Set(siblings.map(({ at }) => at.y)).size).toBe(7);
+    expect([firstColumn.length, secondColumn.length]).toEqual([4, 3]);
+    expect(box.height).toBeLessThan(5 * (nodeGeometry("right", compact).height + 20));
     expect(siblings.every(({ parent }) => parent === nodes[0].at)).toBe(true);
     expect(followUp.parent).toBe(siblings[0].at);
-    expect(followUp.at.x - siblings[0].at.x).toBe(siblings[0].at.x - nodes[0].at.x);
+    expect(followUp.at.x).toBeGreaterThan(secondColumn[0].at.x);
+    expect(channel?.y).toBe(nodes[0].at.y + nodeGeometry("right", compact).centerY);
+    expect(channel?.y).toBeGreaterThan(firstColumn[1].at.y + nodeGeometry("right", compact).height);
+    expect(channel?.y).toBeLessThan(firstColumn[2].at.y - (compact ? 0 : 44));
+    expect(edgeGeometry(nodes[0].at, secondColumn[0].at, "right", false, compact, channel).d)
+      .toContain(` H ${firstColumn[0].at.x + nodeGeometry("right", compact).width + 6} C `);
   });
 
   it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {

@@ -316,27 +316,40 @@ export function processEvents(task: FlowTask, events: readonly TraceEvent[], tim
 type Cluster = {
   branch: FlowBranch;
   box: Box;
+  channel?: { y: number; step: number };
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
 type Layout = { clusters: Cluster[]; width: number; height: number };
 
-export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, compact = false) {
+function horizontalCurve(from: Point, to: Point): string {
+  if (from.y === to.y) return ` H ${to.x}`;
+  const control = Math.round((to.x - from.x) * 0.42);
+  return ` C ${from.x + control} ${from.y}, ${to.x - control} ${to.y}, ${to.x} ${to.y}`;
+}
+
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, compact = false, channel?: Cluster["channel"]) {
   const { width, centerX, centerY } = nodeGeometry(direction, compact);
   const a = { x: from.x + centerX, y: from.y + centerY };
   const b = { x: to.x + centerX, y: to.y + centerY };
   if (direction === "right") {
     const start = { x: a.x + 29, y: a.y };
     const end = { x: b.x - 29, y: b.y };
+    const across = channel && to.x - from.x > channel.step ? channel : undefined;
     let d = `M ${start.x} ${start.y}`;
-    if (start.y === end.y) {
+    if (!across && start.y === end.y) {
       d += ` H ${end.x}`;
     } else {
       // Stay in the gap between speech and tools until there is room to turn.
-      const depart = compact ? start.x : from.x + width + 6;
-      const control = Math.round((end.x - depart) * 0.42);
-      if (depart !== start.x) d += ` H ${depart}`;
-      d += ` C ${depart + control} ${start.y}, ${end.x - control} ${end.y}, ${end.x} ${end.y}`;
+      let depart = { x: compact ? start.x : from.x + width + 6, y: start.y };
+      if (depart.x !== start.x) d += ` H ${depart.x}`;
+      if (across) {
+        const entry = { x: from.x + across.step - 6, y: across.y };
+        const exit = { x: to.x - across.step + width + 6, y: across.y };
+        d += horizontalCurve(depart, entry) + horizontalCurve(entry, exit);
+        depart = exit;
+      }
+      d += horizontalCurve(depart, end);
     }
     const tip = returned ? start : end;
     const back = tip.x + (returned ? 7 : -7);
@@ -368,32 +381,47 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       layers[depth] = layer;
     }
     const widestLayer = Math.max(...layers.map((layer) => layer.length));
-    const breadth = horizontal ? widestLayer : Math.min(4, widestLayer);
-    const depth = horizontal ? layers.length : layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
-    const turnSpace = horizontal && !compact ? Math.min(120, (breadth - 1) * 24) : 0;
+    const limit = Math.min(widestLayer, horizontal ? Math.max(4, Math.ceil(Math.sqrt(2 * widestLayer))) : 4);
+    const bands = layers.flatMap((layer) => {
+      const count = Math.ceil(layer.length / limit);
+      const chunk = horizontal ? layer.length / count : limit;
+      return Array.from({ length: count }, (_, i) => layer.slice(Math.ceil(i * chunk), Math.ceil((i + 1) * chunk)));
+    });
+    const rows = horizontal ? Math.max(...bands.map((band) => band.length)) : bands.length;
+    const turnSpace = horizontal && !compact ? Math.min(120, (rows - 1) * 24) : 0;
     const slotX = nodeWidth + 26 + turnSpace;
-    const width = ((horizontal ? depth : breadth) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
-    const rows = horizontal ? breadth : depth;
-    const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2;
+    const width = ((horizontal ? bands.length : limit) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
+    const top = header + CLUSTER_PAD;
+    const split = Math.ceil(rows / 2);
+    const wraps = horizontal && bands.length > layers.length;
+    const channelGap = wraps && !compact ? 48 : 0;
+    // Speech cards can extend above their node, so reserve extra clearance in full detail.
+    const cardOverhang = compact ? 0 : 44;
+    const channel = wraps ? {
+      y: top + split * slotY + (nodeHeight - slotY + channelGap - cardOverhang) / 2,
+      step: slotX,
+    } : undefined;
+    const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2 + channelGap;
     const positions = new Map<string, Point>();
     const nodes: Cluster["nodes"] = [];
-    let rank = 0;
-    for (const layer of layers) {
-      for (let index = 0; index < layer.length; index++) {
-        const task = layer[index];
-        const row = Math.floor(index / breadth);
-        const count = Math.min(breadth, layer.length - row * breadth);
-        const cross = (index % breadth) + (breadth - count) / 2;
+    for (const [rank, band] of bands.entries()) {
+      const upper = Math.ceil(band.length / 2);
+      for (const [index, task] of band.entries()) {
+        const cross = index + ((horizontal ? rows : limit) - band.length) / 2;
+        let y = top + (horizontal ? cross : rank) * slotY;
+        if (channel) {
+          const row = split - upper + index;
+          y = rank === 0 ? channel.y - centerY : top + row * slotY + (index >= upper ? channelGap : 0);
+        }
         const at = horizontal
-          ? { x: CLUSTER_PAD + rank * slotX, y: header + CLUSTER_PAD + cross * slotY }
-          : { x: CLUSTER_PAD + cross * slotX, y: header + CLUSTER_PAD + (rank + row) * slotY };
+          ? { x: CLUSTER_PAD + rank * slotX, y }
+          : { x: CLUSTER_PAD + cross * slotX, y };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);
       }
-      rank += Math.ceil(layer.length / breadth);
     }
-    return { branch, width, height, nodes };
+    return { branch, width, height, nodes, channel };
   });
 
   function addCoordinator(layout: Layout): Layout {
@@ -424,7 +452,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         ? { x: nextLane, y: GUTTER, width: group.width, height: compact ? group.height : crossSize }
         : { x: GUTTER, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
       nextLane += (across ? group.width : group.height) + GUTTER;
-      return { branch: group.branch, box, nodes: group.nodes };
+      return { branch: group.branch, box, nodes: group.nodes, channel: group.channel };
     });
     return addCoordinator({
       clusters,
@@ -453,7 +481,7 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
         y += tallest + GUTTER;
         tallest = 0;
       }
-      clusters.push({ branch: group.branch, box: { x, y, width: group.width, height: group.height }, nodes: group.nodes });
+      clusters.push({ branch: group.branch, box: { x, y, width: group.width, height: group.height }, nodes: group.nodes, channel: group.channel });
       tallest = Math.max(tallest, group.height);
       right = Math.max(right, x + group.width);
       x += group.width + GUTTER;

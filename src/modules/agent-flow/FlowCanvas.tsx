@@ -458,7 +458,7 @@ export function FlowCanvas({
               rowPort={fromCoordinator(relation) && direction === "right"}
               selected={relation.key === activeRelation?.key} offset={offset} onSelect={onRelation} />;
           })}
-          {visible.map(({ branch, box, nodes }) => {
+          {visible.map(({ branch, box, channel, nodes }) => {
             if (time !== null && branch.start > time) return null;
             const linked = activeRelation?.from === branch.run.key || activeRelation?.to === branch.run.key;
             if (branch.run.marker === "terax") return (
@@ -498,7 +498,7 @@ export function FlowCanvas({
                     {show.map(({ task, parent, at }) => {
                       if (!parent || !task) return null;
                       const returned = task.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, compact);
+                      const { d, arrow } = edgeGeometry(parent, at, direction, returned, compact, channel);
                       const transit = recent(returned ? task.returnedAt : task.at, time, clock);
                       return (
                         <g key={task.id}>
