@@ -14,7 +14,8 @@ export function FlowWindowBridge({ tabs, onActivate, onDock }: {
   onActivate: (tabId: number, leafId: number) => void;
   onDock: () => void;
 }) {
-  const [connected, setConnected] = useState(false);
+  const [connection, setConnection] = useState(0);
+  const connected = connection > 0;
   const [refresh, setRefresh] = useState(0);
   const data = useFlowData(tabs, connected, refresh);
   const background = useFlowBackground(connected);
@@ -41,7 +42,7 @@ export function FlowWindowBridge({ tabs, onActivate, onDock }: {
     }
     const subscriptions = [
       main.listen<FlowWindowRequest>(FLOW_REQUEST, ({ payload }) => {
-        if (payload?.kind === "ready") setConnected(true);
+        if (payload?.kind === "ready") setConnection((value) => value + 1);
         if (payload?.kind === "refresh") setRefresh((value) => value + 1);
         if (payload?.kind === "dock") {
           latest.current.onDock();
@@ -54,15 +55,15 @@ export function FlowWindowBridge({ tabs, onActivate, onDock }: {
         }
         if (payload?.kind === "diff") void openDiff(payload);
       }),
-      main.listen(FLOW_CLOSED, () => setConnected(false)),
+      main.listen(FLOW_CLOSED, () => setConnection(0)),
     ];
     return () => { for (const subscription of subscriptions) void subscription.then((stop) => stop()).catch(() => {}); };
   }, []);
 
   useEffect(() => {
-    if (!connected) return;
+    if (!connection) return;
     const snapshot = windowSnapshot({ runs, children, digests, panes, hidden, deliveries, notifications, loading, failed }, background);
     void emitTo(FLOW_WINDOW, FLOW_SNAPSHOT, snapshot).catch(() => {});
-  }, [connected, runs, children, digests, panes, hidden, deliveries, notifications, loading, failed, background]);
+  }, [connection, runs, children, digests, panes, hidden, deliveries, notifications, loading, failed, background]);
   return null;
 }

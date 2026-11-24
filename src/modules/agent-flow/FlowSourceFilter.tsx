@@ -99,7 +99,7 @@ export function FlowSourceFilter({ groups, filter, onChange }: {
                       const next = new Set(selection === null ? group.shells.map((shell) => shell.key) : selection);
                       if (event.target.checked) next.add(key);
                       else next.delete(key);
-                      update(group.key, next);
+                      update(group.key, next.size === group.shells.length ? null : next);
                     }} />
                   <span>{shellLabel}</span>
                 </label>

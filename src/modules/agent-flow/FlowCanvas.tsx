@@ -592,13 +592,14 @@ export function FlowCanvas({
                 else setAnimatingFit(false);
                 setAutoFit(enabled);
               }} />Auto fit</label>
-              <div role="group" aria-label="Zoom presets">
+              <fieldset>
+                <legend className="sr-only">Zoom presets</legend>
                 {[0.25, 0.5, 1, 1.5, 2].map((scale) => (
                   <button type="button" key={scale} onClick={() => zoom(scale / cameraRef.current.scale)}>
                     {scale * 100}%
                   </button>
                 ))}
-              </div>
+              </fieldset>
             </PopoverContent>
           </Popover>
         </fieldset>

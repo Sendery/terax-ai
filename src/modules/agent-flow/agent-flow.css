@@ -308,7 +308,7 @@
 }
 
 .flow-zoom-menu label,
-.flow-zoom-menu [role="group"] {
+.flow-zoom-menu fieldset {
   display: flex;
   align-items: center;
   gap: 5px;
