@@ -7,9 +7,9 @@ use modules::{
     pty, reader, scheduler, secrets, shell, slotmonit, tts, waker, workspace,
 };
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 #[cfg(target_os = "macos")]
-use tauri::{PhysicalPosition, WindowEvent};
+use tauri::PhysicalPosition;
 use tauri_plugin_window_state::StateFlags;
 
 /// Drained on first read so HMR / re-mounts can't replay the launch dir.
@@ -113,6 +113,31 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Res
         }
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_agent_flow_window(app: tauri::AppHandle, window: WebviewWindow) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Agent Flow can only be detached from the main window".into());
+    }
+    if let Some(existing) = app.get_webview_window("agent-flow") {
+        existing.show().map_err(|e| e.to_string())?;
+        return existing.set_focus().map_err(|e| e.to_string());
+    }
+    let detached = WebviewWindowBuilder::new(&app, "agent-flow", WebviewUrl::App("agent-flow.html".into()))
+        .title("Agent Flow")
+        .inner_size(1220.0, 820.0)
+        .min_inner_size(620.0, 420.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    detached.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed) {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.emit("agent-flow:closed", ());
+            }
+        }
+    });
     Ok(())
 }
 
@@ -263,6 +288,16 @@ pub fn run() {
             // Before any store is read: stores load lazily from the webview, and
             // the webview has not started yet.
             profile::seed_on_launch(_app.handle());
+            if let Some(main) = _app.get_webview_window("main") {
+                let handle = _app.handle().clone();
+                main.on_window_event(move |event| {
+                    if matches!(event, WindowEvent::Destroyed) {
+                        if let Some(flow) = handle.get_webview_window("agent-flow") {
+                            let _ = flow.close();
+                        }
+                    }
+                });
+            }
             // macOS skips parent() for the settings window, so tie its lifecycle
             // to the main window here instead. Other platforms keep parent().
             #[cfg(target_os = "macos")]
@@ -436,6 +471,7 @@ pub fn run() {
             workspace::workspace_current_dir,
             get_launch_dir,
             open_settings_window,
+            open_agent_flow_window,
             open_notes_window,
             close_notes_window,
             open_terminal_lab_window,

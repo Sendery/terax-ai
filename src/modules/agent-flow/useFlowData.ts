@@ -17,6 +17,7 @@ const HISTORY_LIMIT = 25;
 const LIVE_HISTORY_MS = 8500;
 
 type History = { key: string; sourceKey: string; runs: FlowRun[]; failed: boolean };
+export type FlowData = ReturnType<typeof useFlowData>;
 
 export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number) {
   const sessions = useAgentStore((state) => open ? state.sessions : null);
@@ -205,7 +206,26 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       const sessionId = matching[0].sessionId;
       return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
     });
-    return mergeRuns(attributed, candidates);
+    const byCwd = new Map<string, Set<number>>();
+    for (const pane of panes) {
+      const tab = currentTabs.get(pane.tabId);
+      if (tab?.kind !== "terminal") continue;
+      const cwd = findLeafCwd(tab.paneTree, pane.leafId) ?? tab.cwd;
+      if (!cwd) continue;
+      const ids = byCwd.get(cwd) ?? new Set<number>();
+      ids.add(tab.id);
+      byCwd.set(cwd, ids);
+    }
+    const matchedHistory = candidates.map((run) => {
+      const ids = run.cwd ? byCwd.get(run.cwd) : undefined;
+      const tab = ids?.size === 1 ? currentTabs.get([...ids][0]) : undefined;
+      if (tab?.kind !== "terminal") return run;
+      return {
+        ...run, group: flowShellKey(tab.id, tab.activeLeafId).split(":").slice(0, -1).join(":"),
+        tabTitle: labelFor(tab), color: tab.color,
+      };
+    });
+    return mergeRuns(attributed, matchedHistory);
   }, [sessions, digests, journal, tabs, panes, hidden, history, sourceKey]);
 
   const children = useMemo(() => history.sourceKey === sourceKey

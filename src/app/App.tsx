@@ -249,6 +249,7 @@ import {
   WorkspaceSurface,
 } from "./components/WorkspaceSurface";
 import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
+import { FlowWindowBridge } from "@/modules/agent-flow/FlowWindowBridge";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 
@@ -3349,6 +3350,7 @@ export default function App() {
             activeId={activeId}
             onActivate={onActivateAgent}
           />
+          <FlowWindowBridge tabs={tabs} onActivate={onFocusFlowTerminal} onDock={onOpenAgentFlow} />
           <Toaster position="bottom-right" />
 
           {hasComposer ? (

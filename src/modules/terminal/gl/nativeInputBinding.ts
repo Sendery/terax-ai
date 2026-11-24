@@ -15,7 +15,7 @@ import {
   nativeKeyEvent,
   nativeReadlineSequence,
 } from "@/modules/terminal/gl/nativeKeyboard";
-import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import { isSecondaryClick, usesTerminalContextMenu } from "@/modules/terminal/lib/pointer";
 import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
 import {
   readTerminalClipboard,
@@ -486,9 +486,10 @@ export function bindNativeInput(
     pendingMotion = null;
   };
   const onPointerDown = (event: PointerEvent) => {
+    const secondary = isSecondaryClick(event, IS_MAC);
     if (
       reportsMouse(event) &&
-      !(IS_MAC && event.ctrlKey && event.button === 0)
+      !(secondary && usesTerminalContextMenu(event, IS_MAC, session.getSelection() !== null))
     ) {
       if (event.button < 0 || event.button > 4) return;
       event.preventDefault();
@@ -506,7 +507,7 @@ export function bindNativeInput(
       return;
     }
 
-    if (isSecondaryClick(event, IS_MAC) || event.button !== 0) return;
+    if (secondary || event.button !== 0) return;
     event.preventDefault();
     focus();
     pointer = event.pointerId;
@@ -727,7 +728,7 @@ export function bindNativeInput(
     } else if (delta.rows) session.scroll(delta.rows);
   };
   const onContextMenu = (event: MouseEvent) => {
-    if (reportsMouse(event) && !(IS_MAC && event.ctrlKey))
+    if (reportsMouse(event) && !usesTerminalContextMenu(event, IS_MAC, session.getSelection() !== null))
       event.preventDefault();
   };
   const onFocus = () => reportFocus(true);

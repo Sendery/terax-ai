@@ -28,7 +28,7 @@ import {
   RenderCapacityError,
 } from "@/modules/terminal/gl/renderCapacity";
 import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
-import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import { isSecondaryClick, usesTerminalContextMenu } from "@/modules/terminal/lib/pointer";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import {
   markSessionReady,
@@ -507,18 +507,17 @@ export const NativeTerminalPane = forwardRef<
       replayContextMenu.current = false;
       return;
     }
+    const saved = preClickSelection.current ?? engine.current?.getSelection() ?? null;
+    preClickSelection.current = null;
     if (
       engine.current?.exitCode === null &&
       engine.current?.inputState?.mouseTracking &&
-      !event.shiftKey &&
-      !(IS_MAC ? event.metaKey || event.ctrlKey : event.ctrlKey)
+      !usesTerminalContextMenu(event, IS_MAC, saved !== null)
     ) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
-    const saved = preClickSelection.current;
-    preClickSelection.current = null;
     if (saved !== null) {
       selectedForMenu.current = saved;
       return;

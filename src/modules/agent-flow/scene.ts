@@ -78,6 +78,19 @@ export function eventStream(run: FlowRun, trace: FlowTrace | undefined): TraceEv
   return [...run.events, ...trace?.events ?? []].sort((a, b) => a.at - b.at);
 }
 
+function terminalOutcome(events: readonly TraceEvent[], since: number) {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (event.at < since) return undefined;
+    if (event.taskId) continue;
+    if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error")
+      return event;
+    if (event.kind === "started" || event.kind === "user" || event.kind === "attention" || event.kind === "working")
+      return undefined;
+  }
+  return undefined;
+}
+
 export function branchFor(
   run: FlowRun,
   children: readonly FlowRun[],
@@ -95,6 +108,7 @@ export function branchFor(
     const known = tasks.find((entry) => (task.id && entry.id === task.id)
       || ((entry.process?.kind ?? "subagent") === task.kind && entry.label === task.label
         && Math.abs(entry.at - task.startedAt) < 2000));
+    if (known?.returnedAt !== undefined) return;
     if (task.kind === "subagent") {
       if (known) known.running = known.returnedAt === undefined;
       else if (!family.length) tasks.push({
@@ -112,6 +126,16 @@ export function branchFor(
     if (known) known.process = process;
     else tasks.push({ id: task.id ?? `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt, process });
   });
+  for (const task of tasks) {
+    if (!task.run || task.returnedAt !== undefined) continue;
+    const childEvents = traces.get(traceKey(task.run) ?? "")?.events ?? [];
+    const outcome = terminalOutcome(childEvents, task.at);
+    if (outcome) {
+      task.returnedAt = outcome.at;
+      task.failed = outcome.kind === "error";
+      task.running = false;
+    }
+  }
   return { run, trace, events, digest, tasks, start: run.createdAt ?? events[0]?.at ?? run.startedAt };
 }
 
@@ -120,14 +144,13 @@ function retirementAt(task: FlowTask, traces: ReadonlyMap<string, FlowTrace>): n
   if (task.process?.state === "paused") return 0;
   if (task.running || task.process?.state) return Infinity;
   const events = traces.get(traceKey(task.run) ?? "")?.events ?? [];
+  const outcome = terminalOutcome(events, task.at);
+  if (outcome) return outcome.at + FINISHED_LINGER_MS;
   let lastActivity = Math.max(task.at, task.run?.startedAt ?? 0, task.process?.lastActivityAt ?? 0);
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i];
     if (event.kind === "usage" || event.taskId) continue;
     lastActivity = Math.max(lastActivity, event.at);
-    if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error") {
-      return event.at + FINISHED_LINGER_MS;
-    }
     if (event.kind === "attention") return Infinity;
     break;
   }

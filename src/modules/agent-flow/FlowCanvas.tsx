@@ -2,8 +2,9 @@ import {
   type CSSProperties, type KeyboardEvent, type PointerEvent,
   memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
-import { ArrowDown01Icon, ArrowRight01Icon, ArrowUp01Icon, File01Icon, Flowchart01Icon, MapsIcon, Message01Icon, Radar01Icon, RepeatIcon, TerminalIcon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowUp01Icon, File01Icon, Flowchart01Icon, MapsIcon, Message01Icon, Radar01Icon, RepeatIcon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AgentIcon } from "@/modules/agents/lib/agentIcon";
 import { displayAgent } from "@/modules/agents/lib/format";
 import { relationDescription, relationLabel, type FlowNodeStatus, type FlowRelation } from "@/modules/agent-flow/coordination";
@@ -109,13 +110,14 @@ const ActorNode = memo(function ActorNode({
   const activityAt = latestProcessActivity[latestProcessActivity.length - 1]?.at;
   const processIcon = process?.kind === "monitor" ? Radar01Icon : process?.kind === "loop" ? RepeatIcon : TerminalIcon;
   const markerLabel = run.marker === "shell" ? "Shell" : "Terax tasks";
-  const stateLabel = pending ?? (nodeStatus?.working ? "Working" : isMarker ? markerLabel : actor.label);
+  const working = nodeStatus?.working && actor.tone !== "complete" && actor.tone !== "error" && actor.label !== "Exited";
+  const stateLabel = pending ?? (working ? "Working" : isMarker ? markerLabel : actor.label);
   const status = pending ?? (actor.activity && !actor.speech ? eventLabel(actor.activity) : stateLabel);
   const flash = notice && recent(notice.at, time, clock);
   const animate = recent(actor.activity?.at, time, clock);
   const context = actor.usage?.context;
   return (
-    <div className="flow-actor" data-tone={pending ? "waiting" : nodeStatus?.working ? "active" : actor.tone} data-compact={compact}
+    <div className="flow-actor" data-tone={pending ? "waiting" : working ? "active" : actor.tone} data-compact={compact}
       data-kind={process ? "process" : isMarker ? run.marker : task ? "subagent" : "agent"} data-notice={notice?.tone}
       style={{ left: area.x, top: area.y,
         "--flow-phase": `${-((area.x * 31 + area.y * 17) % 7000) / 1000}s` } as CSSProperties}>
@@ -212,6 +214,8 @@ export function FlowCanvas({
   const viewport = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState(initialCamera);
+  const [autoFit, setAutoFit] = useState(false);
+  const [animatingFit, setAnimatingFit] = useState(false);
   const compact = camera.scale < COMPACT_SCALE;
   const layouts = useMemo(() => ({
     expanded: makeScene(branches, direction, arrangement),
@@ -268,13 +272,17 @@ export function FlowCanvas({
       fitAllRequested.current = false;
       fittedBounds.current = "";
     }
-    const bounds = `${expanded.width}:${expanded.height}:${compact.width}:${compact.height}:${size.width}:${size.height}`;
-    if (manualCamera.current || bounds === fittedBounds.current || (pinnedRun && lastAnchor.current && fittedBounds.current)) return;
+    const topology = autoFit ? expanded.clusters.map(({ branch, nodes }) =>
+      JSON.stringify([branch.run.key, nodes.map(({ task }) => task?.id ?? "").sort()])).sort().join("\n") : "";
+    const bounds = `${expanded.width}:${expanded.height}:${compact.width}:${compact.height}:${size.width}:${size.height}:${topology}`;
+    if ((!autoFit && manualCamera.current) || bounds === fittedBounds.current
+      || (pinnedRun && lastAnchor.current && fittedBounds.current)) return;
+    setAnimatingFit(autoFit && !!fittedBounds.current);
     fittedBounds.current = bounds;
-    const next = arrangement === "lanes" && !fitAllRequested.current
+    const next = arrangement === "lanes" && !fitAllRequested.current && !autoFit
       ? laneCamera(expanded, size) : fitFlowCamera(layouts, size);
     commit(next, true);
-  }, [size, layouts, fitRequest, commit, arrangement, pinnedRun]);
+  }, [size, layouts, fitRequest, commit, arrangement, pinnedRun, autoFit]);
 
   useLayoutEffect(() => {
     const pinned = pinnedRun && scene.clusters.find(({ branch }) => branch.run.key === pinnedRun);
@@ -314,6 +322,7 @@ export function FlowCanvas({
   }, [focusRequest, layouts, size, commit, direction]);
 
   const zoomAt = useCallback((point: Point, factor: number, immediate = false) => {
+    setAnimatingFit(false);
     manualCamera.current = true;
     commit(zoomFlowCamera(cameraRef.current, point, factor, layouts, direction, time), immediate);
   }, [commit, direction, layouts, time]);
@@ -323,6 +332,7 @@ export function FlowCanvas({
     if (!element) return;
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
+      setAnimatingFit(false);
       manualCamera.current = true;
       const current = cameraRef.current;
       if (event.ctrlKey || event.metaKey) {
@@ -360,6 +370,7 @@ export function FlowCanvas({
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 0 && (event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
+    setAnimatingFit(false);
     manualCamera.current = true;
     gesture.current = { pointer: event.pointerId, start: { x: event.clientX, y: event.clientY }, camera: cameraRef.current };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -389,6 +400,7 @@ export function FlowCanvas({
     const movement = directions[event.key];
     if (movement) {
       event.preventDefault();
+      setAnimatingFit(false);
       manualCamera.current = true;
       commit({ ...camera, x: camera.x + movement.x, y: camera.y + movement.y }, true);
     } else if (event.key === "+" || event.key === "=" || event.key === "-" || event.key === "0") {
@@ -401,6 +413,7 @@ export function FlowCanvas({
   function fitAll() {
     manualCamera.current = false;
     fitAllRequested.current = true;
+    setAnimatingFit(true);
     commit(fitFlowCamera(layouts, size), true);
   }
 
@@ -426,7 +439,7 @@ export function FlowCanvas({
         onPointerCancel={panEnd} onLostPointerCapture={panEnd}>
         <div className="flow-atmosphere" aria-hidden="true"
           style={{ transform: `translate(${camera.x * 0.085}px, ${camera.y * 0.085}px)` }}><i /><i /></div>
-        <div className="flow-world" data-detail={compact ? "compact" : detailed ? "full" : "conversation"} data-direction={direction}
+        <div className="flow-world" data-fit-transition={animatingFit} data-detail={compact ? "compact" : detailed ? "full" : "conversation"} data-direction={direction}
           data-layout={arrangement}
           style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
             "--flow-live-stroke": `${1.5 / camera.scale}px`,
@@ -461,7 +474,8 @@ export function FlowCanvas({
             const status = time === null ? nodeStatus.get(branch.run.key) : undefined;
             const processCount = show.filter(({ task }) => task?.process).length;
             const agentCount = show.length - processCount - Number(!!branch.run.marker);
-            const operating = time === null && (!!status?.working || show.some(({ task }) =>
+            const rootTone = describeActor(branch, undefined, branch.trace, time).tone;
+            const operating = time === null && ((!!status?.working && rootTone !== "complete" && rootTone !== "error") || show.some(({ task }) =>
               task && task.returnedAt === undefined && (task.running || task.process?.state === "running")));
             const pulse = operating && pulseSlots > 0;
             if (pulse) pulseSlots--;
@@ -568,7 +582,26 @@ export function FlowCanvas({
           <span>{Math.round(camera.scale * 100)}%</span>
           <button type="button" aria-label="Zoom in" disabled={camera.scale >= 2.2} onClick={() => zoom(1.25)}>+</button>
           <button type="button" onClick={fitAll}>Fit all</button>
-          <HugeiconsIcon icon={direction === "down" ? ArrowDown01Icon : ArrowRight01Icon} size={13} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Zoom options" title="Zoom options"><HugeiconsIcon icon={ArrowDown01Icon} size={13} /></button>
+            </PopoverTrigger>
+            <PopoverContent className="flow-zoom-menu" aria-label="Zoom options" align="start" side="top">
+              <label><input type="checkbox" checked={autoFit} onChange={(event) => {
+                const enabled = event.target.checked;
+                if (enabled) fitAll();
+                else setAnimatingFit(false);
+                setAutoFit(enabled);
+              }} />Auto fit</label>
+              <div role="group" aria-label="Zoom presets">
+                {[0.25, 0.5, 1, 1.5, 2].map((scale) => (
+                  <button type="button" key={scale} onClick={() => zoom(scale / cameraRef.current.scale)}>
+                    {scale * 100}%
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </fieldset>
       </div>
     </div>
