@@ -7,7 +7,7 @@ import { flowTime } from "@/modules/agent-flow/FlowTimeline";
 import type { FlowRun } from "@/modules/agent-flow/model";
 
 type Shell = { key: string; label: string };
-type SourceGroup = { key: string; title: string; shells: Shell[]; archived?: boolean };
+type SourceGroup = { key: string; title: string; shells: Shell[]; tab?: boolean; archived?: boolean };
 export type SourceFilter = Map<string, ReadonlySet<string> | null>;
 
 export function shellGroup(shellKey: string) {
@@ -19,7 +19,7 @@ export function sourceGroups(panes: readonly FlowTerminal[], runs: readonly Flow
   const liveRuns = new Map(runs.filter((run) => run.active).map((run) => [run.key, run]));
   for (const pane of panes) {
     const key = shellGroup(pane.shellKey);
-    const group = groups.get(key) ?? { key, title: pane.title, shells: [] };
+    const group = groups.get(key) ?? { key, title: pane.title, shells: [], tab: true };
     groups.set(key, group);
     const run = pane.runKey ? liveRuns.get(pane.runKey) : undefined;
     const label = run?.name ?? (pane.session
@@ -28,9 +28,15 @@ export function sourceGroups(panes: readonly FlowTerminal[], runs: readonly Flow
     group.shells.push({ key: pane.shellKey, label });
   }
   for (const run of runs) {
-    if (!groups.has(run.group)) {
-      groups.set(run.group, { key: run.group, title: run.tabTitle, shells: [], archived: !run.active && run.marker !== "background" });
+    const group = groups.get(run.group);
+    if (group) {
+      if (run.shellKey) group.tab = true;
+      continue;
     }
+    groups.set(run.group, {
+      key: run.group, title: run.tabTitle, shells: [], tab: !!run.shellKey,
+      archived: !run.active && run.marker !== "background",
+    });
   }
   const counts = new Map<string, number>();
   const ordinals = new Map<string, number>();
@@ -99,7 +105,7 @@ export function FlowSourceFilter({ groups, filter, onChange }: {
                       const next = new Set(selection === null ? group.shells.map((shell) => shell.key) : selection);
                       if (event.target.checked) next.add(key);
                       else next.delete(key);
-                      update(group.key, next.size === group.shells.length ? null : next);
+                      update(group.key, next);
                     }} />
                   <span>{shellLabel}</span>
                 </label>

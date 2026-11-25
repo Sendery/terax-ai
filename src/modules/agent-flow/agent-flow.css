@@ -334,6 +334,10 @@
     color-mix(in oklab, var(--flow-panel) 35%, transparent);
 }
 
+.flow-cluster-content {
+  position: absolute;
+}
+
 .flow-cluster[data-active="true"] {
   border-color: color-mix(in oklab, var(--flow-accent) 48%, transparent);
 }

@@ -81,6 +81,8 @@ export function AgentFlowView({
   const groups = useMemo(() => sourceGroups(panes, background ? [...scopedRuns, background.run] : scopedRuns),
     [panes, scopedRuns, background]);
   const filter = useMemo(() => currentSourceFilter(groupsFilter, groups), [groupsFilter, groups]);
+  const groupedTabs = useMemo(() => new Set(groups.filter(({ key, tab }) => tab && filter.get(key) === null).map(({ key }) => key)),
+    [filter, groups]);
   const groupKey = JSON.stringify([...filter].map(([key, shells]) => [key, shells && [...shells].sort()]).sort());
   const inScope = useMemo(() => scopedRuns.filter((run) => sourceMatches(filter, run.group, run.shellKey))
     .sort((a, b) => Number(!!b.active) - Number(!!a.active) || b.startedAt - a.startedAt), [scopedRuns, filter]);
@@ -284,7 +286,7 @@ export function AgentFlowView({
 
       {windowMessage ? <p role="status" className="flow-window-message">{windowMessage}</p> : null}
       <div className="flow-stage">
-        <FlowCanvas branches={canvasBranches} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
+        <FlowCanvas branches={canvasBranches} groupedTabs={groupedTabs} traces={traces} direction={direction} arrangement={arrangement} time={time} target={selection}
           focusRequest={focusRequest} fitRequest={`${direction}:${arrangement}:${groupKey}:${actualScope}`}
           pinnedRun={pinnedRun} relations={relations} activeRelation={relation} nodeStatus={nodeStatus}
           onRelation={selectRelation}

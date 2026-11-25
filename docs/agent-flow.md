@@ -5,11 +5,13 @@ tab. Use **Detach** to move the map into a separate window that you can put on
 another display. **Dock** returns to the workspace tab. Both views follow the
 same terminal sessions.
 
-The source menu groups open shells under their tab. Select a tab to include all
-its shells, including newly opened splits, or select individual shells. The
-menu updates as shells open or close. A named session uses its CLI name. Other
-agent sessions show their tab, start time and CLI. **All sessions** also exposes
-archived sources that cannot be attributed to a current tab.
+The source menu groups open shells under their tab. Select a tab to show its
+agents in one frame, including agents in newly opened splits. Select shells
+individually to keep each session in its own frame, even if every shell is
+selected. The menu updates as shells open or close. A named session uses its
+CLI name. Other agent sessions show their tab, start time and CLI. **All
+sessions** also exposes archived sources that cannot be attributed to a current
+tab.
 Agents and subagents share the source tab accent. Replies and prompts appear
 in speech bubbles, tool calls appear beside the agent that made them, and
 delegation and return events travel in opposite directions along their links.

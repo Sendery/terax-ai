@@ -41,6 +41,37 @@ describe("Agent Flow", () => {
     expect(sourceMatches(full, "launch:4", other.shellKey)).toBe(false);
   });
 
+  it.each(["down", "right"] as const)("shares a %s frame only for an explicitly selected tab", (direction) => {
+    const first = { ...root, group: "launch:3", shellKey: "launch:3:1", tabTitle: "Review" };
+    const second = { ...first, key: "claude", shellKey: "launch:3:2", agent: "claude" };
+    const older = { ...first, key: "older", shellKey: undefined };
+    const other = { ...second, key: "other", group: "launch:4", shellKey: "launch:4:1" };
+    const branches = [
+      branchFor(first, [child], null, new Map()),
+      branchFor(second, [], null, new Map()),
+      branchFor(older, [], null, new Map()),
+      branchFor(other, [], null, new Map()),
+    ];
+    expect(makeScene(branches, direction).frames).toHaveLength(4);
+    for (const arrangement of ["fit", "lanes"] as const) {
+      for (const compact of [false, true]) {
+        const { frames } = makeScene(branches, direction, arrangement, compact, new Set(["launch:3"]));
+        expect(frames).toHaveLength(2);
+        const [frame, separate] = frames;
+        expect(frame.tab).toBe("launch:3");
+        const [a, b] = frame.clusters;
+        expect(frame.clusters.map(({ branch }) => branch.run.key)).toEqual([first.key, second.key, older.key]);
+        expect(a.nodes[1].parent).toEqual(a.nodes[0].at);
+        expect(b.nodes[0].parent).toBeUndefined();
+        expect(overlaps(a.box, b.box)).toBe(false);
+        expect(separate.clusters.map(({ branch }) => branch.run.key)).toEqual([other.key]);
+        expect(overlaps(frame.box, separate.box)).toBe(false);
+        expect(a.box.x).toBe(frame.box.x);
+        expect(a.box.y).toBe(frame.box.y);
+      }
+    }
+  });
+
   it("keeps live tab attribution and attaches only recorded child sessions", () => {
     const live = { ...root, key: "live", active: true, group: "tab", tabTitle: "My terminal", color: "purple" as const };
     expect(mergeRuns([live], [root, child, grandchild])).toEqual([live]);
