@@ -1,5 +1,6 @@
 import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { UIMessage } from "ai";
+import { lastUserImages } from "@/modules/ai/lib/attachments";
 import { messagesToPrompt, messageText } from "./transcript";
 import type { CliPermissionMode, CliRunContext, CliRunPlan } from "./types";
 
@@ -174,6 +175,7 @@ export function planPiRun(ctx: CliRunContext): CliRunPlan {
   return {
     argv,
     stdin: turn.prompt,
+    images: lastUserImages(ctx.messages),
     bridge: true,
     metadata: { pi: turn.meta },
   };

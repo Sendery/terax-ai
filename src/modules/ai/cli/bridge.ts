@@ -1,4 +1,5 @@
 import type { AgyPermissions } from "./agy";
+import type { ChatImage } from "@/modules/ai/lib/attachments";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import type { CliSpawnEvent } from "./types";
@@ -64,6 +65,7 @@ export function runCliAgent(
     argv: string[];
     cwd: string | null;
     stdin?: string;
+    images?: ChatImage[];
     bridge?: boolean;
   },
   handlers: RunHandlers,
@@ -96,7 +98,7 @@ export function runCliAgent(
       argv: args.argv,
       cwd: args.cwd ?? undefined,
       workspace: currentWorkspaceEnv(),
-      options: { stdin: args.stdin, bridge: args.bridge ?? false },
+      options: { stdin: args.stdin, images: args.images, bridge: args.bridge ?? false },
       onEvent: channel,
     }).catch((e) => {
       if (started) return;

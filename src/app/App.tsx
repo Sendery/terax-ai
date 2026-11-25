@@ -42,6 +42,7 @@ import {
   useChatStore,
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import { AiResponseActionsContext } from "@/modules/ai/components/AiResponseContextMenu";
 import { native } from "@/modules/ai/lib/native";
 import {
   checkReadable,
@@ -829,7 +830,7 @@ export default function App() {
   // selection a right-click may already have replaced. The zero-argument
   // wrappers keep the signature the shortcuts and command palette are wired to.
   const askWithSelection = useCallback(
-    (selection: string) => {
+    (selection: string, from?: "chat") => {
       if (!hasComposer) {
         void openSettingsWindow("models");
         return;
@@ -838,8 +839,8 @@ export default function App() {
         focusInput(null);
         return;
       }
-      const source: "terminal" | "editor" =
-        (activeTab?.kind === "editor" || activeTab?.kind === "markdown") ? "editor" : "terminal";
+      const source = from ??
+        ((activeTab?.kind === "editor" || activeTab?.kind === "markdown") ? "editor" : "terminal");
       attachSelection(selection, source);
     },
     [hasComposer, focusInput, attachSelection, activeTab],
@@ -1090,6 +1091,18 @@ export default function App() {
       onOpenMermaid: openMermaidWithSource,
     }),
     [askWithSelection, addTextToNote, openMermaidWithSource],
+  );
+
+  const chatResponseActions = useMemo(
+    () => ({
+      selectionActions: {
+        ...selectionMenuActions,
+        onAsk: (text: string) => askWithSelection(text, "chat"),
+      },
+      onReadAloud: speakAloud,
+      onStopReading: stopReading,
+    }),
+    [selectionMenuActions, askWithSelection, speakAloud, stopReading],
   );
 
   const openNewTab = useCallback(() => {
@@ -3435,5 +3448,9 @@ export default function App() {
     </ThemeProvider>
   );
 
-  return <AiComposerProvider>{shell}</AiComposerProvider>;
+  return (
+    <AiResponseActionsContext.Provider value={chatResponseActions}>
+      <AiComposerProvider>{shell}</AiComposerProvider>
+    </AiResponseActionsContext.Provider>
+  );
 }

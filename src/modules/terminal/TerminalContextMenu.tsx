@@ -39,7 +39,7 @@ export type TerminalSelectionActions = SelectionActions;
 
 type Props = {
   children: ReactNode;
-  leafId: number;
+  leafId?: number;
   /** Selection captured before the menu opened, since a right-click can move
    *  the xterm selection on its own. */
   readSelection: () => string | null;
@@ -81,8 +81,9 @@ export function TerminalContextMenu({
       <ContextMenuContent
         className="min-w-44"
         onCloseAutoFocus={(event) => {
+          if (!onRestoreFocus) return;
           event.preventDefault();
-          onRestoreFocus?.();
+          onRestoreFocus();
         }}
       >
         <MenuBody
@@ -144,20 +145,27 @@ function MenuBody({
             return;
           }
           void readTerminalClipboard().then((text) => {
-            if (text) pasteIntoLeaf(leafId, text);
+            if (text && leafId !== undefined) pasteIntoLeaf(leafId, text);
           });
         }}
       >
         <HugeiconsIcon icon={ClipboardPasteIcon} size={14} strokeWidth={1.75} />
         <span className="flex-1">Paste</span>
       </ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        onSelect={() => (onRedraw ? onRedraw() : repaintLeaf(leafId))}
-      >
-        <HugeiconsIcon icon={Refresh01Icon} size={14} strokeWidth={1.75} />
-        <span className="flex-1">Redraw</span>
-      </ContextMenuItem>
+      {onRedraw || leafId !== undefined ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onSelect={() => {
+              if (onRedraw) onRedraw();
+              else if (leafId !== undefined) repaintLeaf(leafId);
+            }}
+          >
+            <HugeiconsIcon icon={Refresh01Icon} size={14} strokeWidth={1.75} />
+            <span className="flex-1">Redraw</span>
+          </ContextMenuItem>
+        </>
+      ) : null}
       {selectionActions ? (
         <>
           <ContextMenuSeparator />

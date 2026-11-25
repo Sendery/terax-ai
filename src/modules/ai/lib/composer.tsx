@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -13,26 +14,19 @@ import { tryRunSlashCommand, type SlashCommandMeta } from "./slashCommands";
 import { getChat, useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
 import { currentWorkspaceEnv } from "@/modules/workspace";
+import { toast } from "sonner";
+import { cliAcceptsImages, IMAGE_TYPES, MAX_IMAGE_BYTES, readChatAttachment, type FileAttachment } from "@/modules/ai/lib/attachments";
+import { CLI_PROVIDERS, getModel } from "@/modules/ai/config";
+import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 
-export type FileAttachment = {
-  id: string;
-  name: string;
-  kind: "image" | "text" | "selection";
-  mediaType: string;
-  url?: string;
-  text?: string;
-  size: number;
-  /** For kind === "selection": which surface it came from. */
-  source?: "terminal" | "editor";
-};
+export type { FileAttachment } from "@/modules/ai/lib/attachments";
 
 type MessagePart =
   | { type: "text"; text: string }
   | { type: "file"; mediaType: string; url: string; filename?: string };
 
-export const MAX_TEXT_INLINE = 200_000;
 export const ACCEPTED_FILES =
-  "image/*,.txt,.md,.json,.yaml,.yml,.toml,.sh,.zsh,.bash,.py,.js,.jsx,.ts,.tsx,.rs,.go,.java,.c,.cpp,.h,.hpp,.html,.css,.csv,.log,.env,.config,.conf,.ini,Dockerfile,.dockerfile";
+  "image/png,image/jpeg,image/gif,image/webp,.txt,.md,.json,.yaml,.yml,.toml,.sh,.zsh,.bash,.py,.js,.jsx,.ts,.tsx,.rs,.go,.java,.c,.cpp,.h,.hpp,.html,.css,.csv,.log,.env,.config,.conf,.ini,Dockerfile,.dockerfile";
 
 type Voice = ReturnType<typeof useWhisperRecording>;
 
@@ -41,7 +35,8 @@ type ComposerCtx = {
   value: string;
   setValue: React.Dispatch<React.SetStateAction<string>>;
   files: FileAttachment[];
-  addFiles: (list: FileList | null) => Promise<void>;
+  addFiles: (list: Iterable<File> | null) => Promise<void>;
+  pasteFromClipboard: () => Promise<void>;
   /** Attach a file by absolute path — used by the file explorer's "Attach to Agent". */
   attachFileByPath: (path: string) => Promise<void>;
   removeFile: (id: string) => void;
@@ -78,6 +73,8 @@ export function AiComposerProvider({ children }: ProviderProps) {
 
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<FileAttachment[]>([]);
+  const pendingFiles = useRef(0);
+  const [readingFiles, setReadingFiles] = useState(false);
   const [pickedSnippets, setPickedSnippets] = useState<Snippet[]>([]);
   const [pickedCommands, setPickedCommands] = useState<SlashCommandMeta[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -132,9 +129,8 @@ export function AiComposerProvider({ children }: ProviderProps) {
         next.push({
           id: sel.id,
           name:
-            sel.source === "editor"
-              ? "Editor selection"
-              : "Terminal selection",
+            sel.source === "chat" ? "Chat selection" :
+            sel.source === "editor" ? "Editor selection" : "Terminal selection",
           kind: "selection",
           mediaType: "text/plain",
           text: sel.text,
@@ -153,15 +149,56 @@ export function AiComposerProvider({ children }: ProviderProps) {
     },
   });
 
-  const addFiles = async (list: FileList | null) => {
-    if (!list) return;
-    const next: FileAttachment[] = [];
-    for (const f of Array.from(list)) {
-      const att = await readAttachment(f);
-      if (att) next.push(att);
+  const addFiles = useCallback(async (list: Iterable<File> | null) => {
+    const files = list ? Array.from(list) : [];
+    if (!files.length) return;
+    if (files.length > 20) {
+      toast.error("Attach up to 20 files at a time.");
+      return;
     }
-    if (next.length) setFiles((prev) => [...prev, ...next]);
-  };
+    pendingFiles.current++;
+    setReadingFiles(true);
+    try {
+      const next: FileAttachment[] = [];
+      for (const file of files) {
+        try {
+          next.push(await readChatAttachment(file));
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Could not read the attachment.");
+        }
+      }
+      if (next.length) setFiles((prev) => [...prev, ...next]);
+    } finally {
+      if (--pendingFiles.current === 0) setReadingFiles(false);
+    }
+  }, []);
+
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard?.read?.();
+      const images: File[] = [];
+      for (const item of items ?? []) {
+        const type = IMAGE_TYPES.find((candidate) => item.types.includes(candidate));
+        if (type) images.push(new File([await item.getType(type)], `clipboard.${type.split("/")[1]}`, { type }));
+      }
+      if (images.length) {
+        useChatStore.getState().focusInput();
+        await addFiles(images);
+        return;
+      }
+    } catch {
+      // Some WebViews only allow text reads or expose images through paste events.
+    }
+    const text = await readTerminalClipboard();
+    if (!text) return;
+    const area = textareaRef.current;
+    const start = area?.selectionStart;
+    const end = area?.selectionEnd;
+    setValue((prev) => start === undefined || end === undefined
+      ? prev + text
+      : prev.slice(0, start) + text + prev.slice(end));
+    useChatStore.getState().focusInput();
+  }, [addFiles]);
 
   const removeFile = (id: string) =>
     setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -217,7 +254,24 @@ export function AiComposerProvider({ children }: ProviderProps) {
   };
 
   const submit = () => {
-    if (isBusy) return;
+    if (isBusy || pendingFiles.current > 0) return;
+    const images = files.filter((file) => file.kind === "image");
+    if (images.length) {
+      const provider = getModel(useChatStore.getState().selectedModelId).provider;
+      const cli = CLI_PROVIDERS[provider];
+      if (cli && !cliAcceptsImages(cli)) {
+        toast.error("This CLI cannot receive image attachments. Choose a model that supports images or remove the images.");
+        return;
+      }
+      if (images.length > 20) {
+        toast.error("Attach up to 20 images per message.");
+        return;
+      }
+      if (images.reduce((total, file) => total + file.size, 0) > MAX_IMAGE_BYTES) {
+        toast.error("Image attachments must total 10 MB or less.");
+        return;
+      }
+    }
     const trimmed = value.trim();
     if (
       !trimmed &&
@@ -389,7 +443,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
   };
 
   const canSend =
-    !isBusy &&
+    !isBusy && !readingFiles &&
     (value.trim().length > 0 ||
       files.length > 0 ||
       pickedSnippets.length > 0 ||
@@ -401,6 +455,7 @@ export function AiComposerProvider({ children }: ProviderProps) {
     setValue,
     files,
     addFiles,
+    pasteFromClipboard,
     attachFileByPath,
     removeFile,
     pickedSnippets,
@@ -417,38 +472,4 @@ export function AiComposerProvider({ children }: ProviderProps) {
   };
 
   return <Ctx.Provider value={ctx}>{children}</Ctx.Provider>;
-}
-
-async function readAttachment(file: File): Promise<FileAttachment | null> {
-  const id = `${file.name}-${file.size}-${file.lastModified}`;
-  if (file.type.startsWith("image/")) {
-    const url = await readAsDataURL(file);
-    return {
-      id,
-      name: file.name,
-      kind: "image",
-      mediaType: file.type || "image/png",
-      url,
-      size: file.size,
-    };
-  }
-  if (file.size > MAX_TEXT_INLINE) return null;
-  const text = await file.text();
-  return {
-    id,
-    name: file.name,
-    kind: "text",
-    mediaType: file.type || "text/plain",
-    text,
-    size: file.size,
-  };
-}
-
-function readAsDataURL(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

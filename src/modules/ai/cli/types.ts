@@ -1,3 +1,5 @@
+import type { ChatImage } from "@/modules/ai/lib/attachments";
+
 export type CliAgentId =
   | "claude"
   | "codex"
@@ -40,6 +42,7 @@ export type CliRunContext = {
 export type CliRunPlan = {
   argv: string[];
   stdin?: string;
+  images?: ChatImage[];
   bridge?: boolean;
   metadata?: Record<string, unknown>;
 };

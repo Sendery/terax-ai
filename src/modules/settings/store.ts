@@ -216,6 +216,7 @@ export type Preferences = {
   /** Minutes of silence before running speech engines are stopped. 0 keeps
    *  them resident. */
   ttsIdleStopMinutes: number;
+  prepareChatAudio: boolean;
   favoriteModelIds: string[];
   recentModelIds: string[];
   vimMode: boolean;
@@ -312,6 +313,7 @@ const LEGACY_KEY_TTS_DEVICE = "ttsDevice";
 const KEY_TTS_DEVICES = "ttsDevices";
 const KEY_TTS_LANGUAGES = "ttsLanguages";
 const KEY_TTS_IDLE_STOP_MINUTES = "ttsIdleStopMinutes";
+const KEY_PREPARE_CHAT_AUDIO = "prepareChatAudio";
 
 export const TTS_IDLE_STOP_MIN = 0;
 export const TTS_IDLE_STOP_MAX = 240;
@@ -471,6 +473,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   ttsDevices: {},
   ttsLanguages: [...DEFAULT_ENABLED_LANGUAGES],
   ttsIdleStopMinutes: TTS_IDLE_STOP_DEFAULT,
+  prepareChatAudio: false,
   favoriteModelIds: [],
   recentModelIds: [],
   vimMode: false,
@@ -646,6 +649,7 @@ export async function loadPreferences(): Promise<Preferences> {
     ttsIdleStopMinutes: coerceTtsIdleStopMinutes(
       get<unknown>(KEY_TTS_IDLE_STOP_MINUTES),
     ),
+    prepareChatAudio: get<unknown>(KEY_PREPARE_CHAT_AUDIO) === true,
     favoriteModelIds: (
       get<string[]>(KEY_FAVORITE_MODELS) ??
       DEFAULT_PREFERENCES.favoriteModelIds
@@ -978,6 +982,10 @@ export async function setTtsIdleStopMinutes(value: number): Promise<void> {
   await writePref(KEY_TTS_IDLE_STOP_MINUTES, coerceTtsIdleStopMinutes(value));
 }
 
+export async function setPrepareChatAudio(value: boolean): Promise<void> {
+  await writePref(KEY_PREPARE_CHAT_AUDIO, value);
+}
+
 export async function setFavoriteModelIds(value: string[]): Promise<void> {
   await writePref(KEY_FAVORITE_MODELS, value);
 }
@@ -1139,6 +1147,7 @@ export async function onPreferencesChange(
     [KEY_TTS_DEVICES]: "ttsDevices",
     [KEY_TTS_LANGUAGES]: "ttsLanguages",
     [KEY_TTS_IDLE_STOP_MINUTES]: "ttsIdleStopMinutes",
+    [KEY_PREPARE_CHAT_AUDIO]: "prepareChatAudio",
     [KEY_FAVORITE_MODELS]: "favoriteModelIds",
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",

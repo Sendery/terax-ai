@@ -52,7 +52,15 @@ import type {
   UIMessage,
   UIMessagePart,
 } from "ai";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useContext, useMemo } from "react";
+import { useComposer } from "@/modules/ai/lib/composer";
+import { IMAGE_TYPES } from "@/modules/ai/lib/attachments";
+import { responseText } from "@/modules/ai/lib/responseAudio";
+import {
+  AiResponseActionsContext,
+  AiResponseContextMenu,
+  type AiResponseActions,
+} from "@/modules/ai/components/AiResponseContextMenu";
 import { AiToolApproval } from "./AiToolApproval";
 
 const SHELL_STATE_LABEL: Record<UserShellBlock["state"], string> = {
@@ -155,12 +163,12 @@ function CommandSnippet({ name }: { name: string }) {
 type AnyToolPart = ToolUIPart | DynamicToolUIPart;
 
 type ContextChip =
-  | { kind: "selection"; source: "terminal" | "editor"; lines: number }
+  | { kind: "selection"; source: "terminal" | "editor" | "chat"; lines: number }
   | { kind: "file"; name: string; lines: number }
   | { kind: "snippet"; name: string };
 
 const SELECTION_RE =
-  /<selection\s+source="(terminal|editor)">\n?([\s\S]*?)\n?<\/selection>/g;
+  /<selection\s+source="(terminal|editor|chat)">\n?([\s\S]*?)\n?<\/selection>/g;
 const FILE_RE =
   /<file\s+name="([^"]+)"[^>]*>\n?([\s\S]*?)\n?<\/file>/g;
 const SNIPPET_RE = /<snippet\s+name="([^"]+)">\n?[\s\S]*?\n?<\/snippet>/g;
@@ -181,7 +189,7 @@ function stripUserContextBlocks(text: string): {
   out = out.replace(SELECTION_RE, (_m, source: string, body: string) => {
     chips.push({
       kind: "selection",
-      source: source === "editor" ? "editor" : "terminal",
+      source: source === "editor" || source === "chat" ? source : "terminal",
       lines: countLines(body),
     });
     return "";
@@ -238,7 +246,7 @@ function chipIcon(c: ContextChip) {
 
 function chipLabel(c: ContextChip): string {
   if (c.kind === "selection") {
-    return c.source === "editor" ? "Editor selection" : "Terminal selection";
+    return c.source === "chat" ? "Chat selection" : c.source === "editor" ? "Editor selection" : "Terminal selection";
   }
   if (c.kind === "file") return c.name;
   return `#${c.name}`;
@@ -267,6 +275,8 @@ export function AiChatView({
   clearError,
   addToolApprovalResponse,
 }: Props) {
+  const responseActions = useContext(AiResponseActionsContext);
+  const { pasteFromClipboard } = useComposer();
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages[messages.length - 1];
   const showSpinner = isBusy && lastMessage?.role === "user";
@@ -308,6 +318,8 @@ export function AiChatView({
             message={m}
             onApproval={onApproval}
             streaming={m.id === streamingMessageId}
+            responseActions={responseActions}
+            onPaste={pasteFromClipboard}
           />
         ))}
         {compactionNotice && (
@@ -403,11 +415,16 @@ const RenderedMessage = memo(function RenderedMessage({
   message,
   onApproval,
   streaming,
+  responseActions,
+  onPaste,
 }: {
   message: UIMessage;
   onApproval: (id: string, approved: boolean) => void;
   streaming: boolean;
+  responseActions: AiResponseActions | null;
+  onPaste: () => Promise<void>;
 }) {
+  const groups = useMemo(() => buildPartGroups(message.parts as AnyPart[]), [message.parts]);
   // Index of the trailing text part — only that one is "live" mid-stream.
   // Earlier text parts (separated by tool calls) are already finalized.
   let lastTextIdx = -1;
@@ -470,6 +487,12 @@ const RenderedMessage = memo(function RenderedMessage({
           {stripped.chips.length > 0 ? (
             <ContextChips chips={stripped.chips} />
           ) : null}
+          {message.parts.map((part, index) => {
+            if (part.type !== "file" ||
+              !IMAGE_TYPES.some((type) => part.mediaType === type && part.url.startsWith(`data:${type};base64,`))) return null;
+            return <img key={`${message.id}-file-${index}`} src={part.url} alt={part.filename || "Attached image"}
+              loading="lazy" className="max-h-48 max-w-full self-start rounded-md object-contain" />;
+          })}
           {stripped.text && commandName !== "compact" ? (
             <p className="whitespace-pre-wrap wrap-break-word">
               {stripped.text}
@@ -480,44 +503,50 @@ const RenderedMessage = memo(function RenderedMessage({
     );
   }
 
-  const groups = useMemo(() => buildPartGroups(message.parts as AnyPart[]), [
-    message.parts,
-  ]);
-
+  const parts = groups.map((g) => {
+    if (g.kind === "reads") {
+      return (
+        <PartAppear key={`${message.id}-${g.key}`}>
+          <ReadGroup parts={g.parts} />
+        </PartAppear>
+      );
+    }
+    const isReadSingle =
+      partType(g.part) === "tool-read_file" &&
+      ((g.part as { state?: string }).state ?? "") !==
+        "approval-requested";
+    if (isReadSingle) {
+      return (
+        <PartAppear key={`${message.id}-${g.key}`}>
+          <ReadRow part={g.part} />
+        </PartAppear>
+      );
+    }
+    return (
+      <PartAppear key={`${message.id}-${g.key}`}>
+        <RenderedPart
+          part={g.part}
+          onApproval={onApproval}
+          streaming={streaming && g.idx === lastTextIdx}
+        />
+      </PartAppear>
+    );
+  });
   return (
     <Message from={message.role}>
       <MessageContent>
-        <div className="flex flex-col gap-3">
-          {groups.map((g) => {
-            if (g.kind === "reads") {
-              return (
-                <PartAppear key={`${message.id}-${g.key}`}>
-                  <ReadGroup parts={g.parts} />
-                </PartAppear>
-              );
-            }
-            const isReadSingle =
-              partType(g.part) === "tool-read_file" &&
-              ((g.part as { state?: string }).state ?? "") !==
-                "approval-requested";
-            if (isReadSingle) {
-              return (
-                <PartAppear key={`${message.id}-${g.key}`}>
-                  <ReadRow part={g.part} />
-                </PartAppear>
-              );
-            }
-            return (
-              <PartAppear key={`${message.id}-${g.key}`}>
-                <RenderedPart
-                  part={g.part}
-                  onApproval={onApproval}
-                  streaming={streaming && g.idx === lastTextIdx}
-                />
-              </PartAppear>
-            );
-          })}
-        </div>
+        {message.role === "assistant" && responseActions ? (
+          <AiResponseContextMenu
+            actions={responseActions}
+            onPaste={onPaste}
+            text={responseText(message)}
+            streaming={streaming}
+          >
+            {parts}
+          </AiResponseContextMenu>
+        ) : (
+          <div className="flex flex-col gap-3">{parts}</div>
+        )}
       </MessageContent>
     </Message>
   );

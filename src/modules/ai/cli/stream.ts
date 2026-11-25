@@ -1,3 +1,4 @@
+import { cliAcceptsImages, lastUserImages } from "@/modules/ai/lib/attachments";
 import { createUIMessageStream, type UIMessage } from "ai";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { AgentUsageDelta } from "@/modules/ai/lib/agent";
@@ -42,6 +43,9 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
             emitter.finish();
             return;
           }
+          if (!cliAcceptsImages(opts.cliId) && lastUserImages(opts.uiMessages).length) {
+            throw new Error(`${def.label} does not support image attachments in Terax AI.`);
+          }
           const plan = def.planRun({
             host,
             messages: opts.uiMessages,
@@ -56,7 +60,7 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
             planMode: opts.planMode,
             nonce: Date.now().toString(36),
           });
-          if (plan.stdin !== undefined && plan.stdin.trim() === "") {
+          if (plan.stdin !== undefined && plan.stdin.trim() === "" && !plan.images?.length) {
             emitter.error(`${def.label} needs a text message to work on.`);
             emitter.finish();
             return;
@@ -74,6 +78,7 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
                 argv: plan.argv,
                 cwd: opts.cwd,
                 stdin: plan.stdin,
+                images: plan.images,
                 bridge: plan.bridge,
               },
               {
