@@ -73,6 +73,9 @@ describe("Agent Flow", () => {
     const actor = describeActor(branch, branch.tasks[0], traces.get(traceKey(child) ?? ""), null);
     expect(actor.tools.map(({ text }) => text)).toEqual(["exec_command"]);
     expect(actor.usage?.tokens).toBe(87);
+    const timeline = buildTimeline([branch], traces);
+    expect(timeline.marks).toContainEqual({ at: 14, kind: "tool" });
+    expect(timeline.marks).not.toContainEqual({ at: 9, kind: "tool" });
   });
 
   it("keeps Terax AI's inline subagent usage and tools separate from its parent", () => {

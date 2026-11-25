@@ -1,6 +1,6 @@
 import { taskStartKind, type FlowKind } from "@/modules/agent-flow/model";
 import type { ResolvedDelivery } from "@/modules/agent-flow/coordination";
-import type { FlowBranch } from "@/modules/agent-flow/scene";
+import { actorEvents, type FlowBranch } from "@/modules/agent-flow/scene";
 import { traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 import type { TabColor } from "@/modules/tabs/lib/tabColors";
 
@@ -20,7 +20,8 @@ export function buildTimeline(
   const lanes = new Map<string, Omit<TimeLane, "marks"> & { events: Map<number, TimeMark> }>();
   const aggregate = new Map<number, TimeMark>();
 
-  for (const { run, tasks, events, start, trace } of branches) {
+  for (const branch of branches) {
+    const { run, tasks, events, start, trace } = branch;
     if (run.marker === "terax") continue;
     const shell = run.shellKey ?? (run.leafId === undefined ? run.key : `${run.group}:${run.leafId}`);
     let lane = lanes.get(shell);
@@ -47,7 +48,8 @@ export function buildTimeline(
       const activity = task.process?.lastActivityAt;
       if (activity !== undefined && activity > task.at) add({ at: activity, kind: "task-activity" });
       if (task.returnedAt !== undefined) add({ at: task.returnedAt, kind: task.failed ? "error" : "returned" });
-      for (const event of traces.get(traceKey(task.run) ?? "")?.events ?? []) add(event);
+      const childTrace = traces.get(traceKey(task.run) ?? "");
+      if (childTrace) for (const event of actorEvents(branch, task, childTrace)) add(event);
     }
   }
   for (const { at, source, target } of deliveries) {

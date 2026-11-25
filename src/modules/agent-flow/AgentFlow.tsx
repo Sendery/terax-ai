@@ -169,8 +169,8 @@ export function AgentFlowView({
       add(actorEvents(entry, undefined, entry.trace), runName(entry.run, entry.trace?.name));
       for (const item of entry.tasks) {
         const trace = traces.get(traceKey(item.run) ?? "");
-        if (trace) add(trace.events, item.label, item.id);
-        else add(actorEvents(entry, item, undefined).filter(({ kind }) => kind === "tool"), item.label, item.id);
+        const events = actorEvents(entry, item, trace);
+        add(trace ? events : events.filter(({ kind }) => kind === "tool"), item.label, item.id);
       }
     }
     return signals.sort((a, b) => a.event.at - b.event.at).slice(-12);
