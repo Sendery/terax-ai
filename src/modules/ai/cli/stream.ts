@@ -1,5 +1,6 @@
 import { createUIMessageStream, type UIMessage } from "ai";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import type { AgentUsageDelta } from "@/modules/ai/lib/agent";
 import { allocateSpawnId, killCliAgent, runCliAgent } from "./bridge";
 import { ChunkEmitter } from "./parsers/emitter";
 import { CLI_AGENTS } from "./registry";
@@ -17,6 +18,7 @@ export type RunCliAgentOptions = {
   planMode?: boolean;
   abortSignal?: AbortSignal;
   onStep?: (step: string | null) => void;
+  onUsage?: (delta: AgentUsageDelta) => void;
 };
 
 /**
@@ -32,7 +34,7 @@ export function runCliAgentStream(opts: RunCliAgentOptions) {
     toUIMessageStream: (_o?: { originalMessages?: UIMessage[] }) =>
       createUIMessageStream({
         execute: async ({ writer }) => {
-          const emitter = new ChunkEmitter(writer);
+          const emitter = new ChunkEmitter(writer, opts.onUsage);
           const host = def.prepare ? await def.prepare().catch(() => null) : undefined;
           // Stop pressed while the host was being read: the abort listener
           // below is not attached yet, so nothing would kill the run.

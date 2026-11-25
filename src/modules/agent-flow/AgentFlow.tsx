@@ -16,7 +16,7 @@ import { currentSourceFilter, FlowSourceFilter, shellGroup, sourceGroups, source
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
-import { branchFor, describeActor, eventLabel, liveBranches, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
+import { actorEvents, branchFor, describeActor, eventLabel, liveBranches, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData, type FlowData } from "@/modules/agent-flow/useFlowData";
@@ -98,6 +98,7 @@ export function AgentFlowView({
     const selected = inScope.find((run) => run.key === selectionRun);
     if (selected) add(traceTarget(selected, live && !!selected.active));
     let history = 0;
+    let historicalChildren = 0;
     for (const run of inScope) {
       const visible = nearby.has(run.key) || !near.length;
       if (!run.active && !visible && run !== selected) continue;
@@ -107,9 +108,10 @@ export function AgentFlowView({
       add(traceTarget(run, follow));
       if (visible || run === selected) {
         for (const descendant of sessionFamily(run, children)) {
-          if (descendant.run && (follow || descendant.id === selectionTask)) {
-            add(traceTarget(descendant.run, follow));
-          }
+          if (!descendant.run) continue;
+          const inspect = run === selected && descendant.id === selectionTask;
+          if (!inspect && !run.active && historicalChildren++ >= HISTORY_READ_AHEAD) continue;
+          add(traceTarget(descendant.run, follow));
         }
       }
     }
@@ -128,7 +130,7 @@ export function AgentFlowView({
   const graphBranches = useMemo(() => [...branches, ...(showBackground ? [showBackground] : []), ...relay.markers.map((run) => ({
     run, events: run.events, trace: undefined, digest: undefined, tasks: [], start: run.startedAt,
   }))], [branches, showBackground, relay.markers]);
-  const { branches: canvasBranches, nextExpiry } = useMemo(() => live
+  const { branches: canvasBranches, nextExpiry } = useMemo(() => live && actualScope === "active"
     ? liveBranches(graphBranches, traces, Math.max(Date.now(), retirementTick), selection, actualScope === "active")
     : { branches: graphBranches, nextExpiry: Infinity }, [live, graphBranches, retirementTick, selection, traces, actualScope]);
   useEffect(() => {
@@ -164,10 +166,11 @@ export function AgentFlowView({
           signals.push({ key, run: entry.run, agent, event, task });
         }
       };
-      add(entry.events, runName(entry.run, entry.trace?.name));
+      add(actorEvents(entry, undefined, entry.trace), runName(entry.run, entry.trace?.name));
       for (const item of entry.tasks) {
         const trace = traces.get(traceKey(item.run) ?? "");
         if (trace) add(trace.events, item.label, item.id);
+        else add(actorEvents(entry, item, undefined).filter(({ kind }) => kind === "tool"), item.label, item.id);
       }
     }
     return signals.sort((a, b) => a.event.at - b.event.at).slice(-12);
@@ -178,8 +181,8 @@ export function AgentFlowView({
       { id: item.run.key, name: runName(item.run, item.trace?.name), color: accent(item.run), value: describeActor(item, undefined, item.trace, time).usage },
       ...item.tasks.flatMap((subagent) => {
         const trace = traces.get(traceKey(subagent.run) ?? "");
-        return trace ? [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label,
-          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage }] : [];
+        return [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label,
+          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage }];
       }),
     ];
     return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value }] : []);

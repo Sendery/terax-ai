@@ -130,6 +130,12 @@ export function createPiParser(emitter: ChunkEmitter, run?: ParserRun): CliParse
 
   function handleMessageEnd(message: Json | null): void {
     if (message?.role !== "assistant") return;
+    const usage = asRecord(message.usage);
+    const total = usage?.totalTokens;
+    const output = usage?.output;
+    if (typeof total === "number" && typeof output === "number" && total >= output) {
+      emitter.usage(total - output, output, usage?.cacheRead);
+    }
     if (message.stopReason === "error") {
       pendingError =
         typeof message.errorMessage === "string" && message.errorMessage

@@ -46,7 +46,7 @@ export type Actor = {
   activity: TraceEvent | undefined;
   tools: TraceEvent[];
   signals: TraceEvent[];
-  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number } } | undefined;
+  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number }; outputOnly?: boolean } | undefined;
 };
 
 export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" | "state";
@@ -77,13 +77,21 @@ export function contextPercent(context: NonNullable<NonNullable<Actor["usage"]>[
 export function eventStream(run: FlowRun, trace: FlowTrace | undefined): TraceEvent[] {
   const events = [...run.events, ...trace?.events ?? []];
   const aliases = new Map<string, string>();
+  const codex = run.harness === "codex";
   for (const event of events) {
-    if (event.kind === "task-alias" && event.text && event.taskId) aliases.set(event.text, event.taskId);
+    if (event.kind !== "task-alias" || !event.text || !event.taskId) continue;
+    if (codex) aliases.set(event.taskId, event.text);
+    else aliases.set(event.text, event.taskId);
   }
   return events.flatMap((event) => {
     if (event.kind === "task-alias") return [];
-    const taskId = event.taskId && aliases.get(event.taskId);
-    return [taskId ? { ...event, taskId } : event];
+    let taskId = event.taskId;
+    for (let hops = 0; taskId && hops < (codex ? 4 : 1); hops++) {
+      const next = aliases.get(taskId);
+      if (!next || next === taskId) break;
+      taskId = next;
+    }
+    return [taskId !== event.taskId ? { ...event, taskId } : event];
   }).sort((a, b) => a.at - b.at);
 }
 
@@ -121,7 +129,12 @@ export function branchFor(
   const digest = run.sessionId && latestDigest?.sessionId === run.sessionId ? latestDigest : undefined;
   const recorded = flowTasks(events);
   const family = sessionFamily(run, children);
-  const tasks = family.length ? [...family, ...recorded.filter((task) => task.process)] : recorded;
+  const recordedById = new Map(recorded.map((task) => [task.id, task]));
+  const tasks = family.map((task) => {
+    const earlier = recordedById.get(task.id);
+    recordedById.delete(task.id);
+    return earlier ? { ...earlier, ...task, at: Math.min(task.at, earlier.at) } : task;
+  }).concat([...recordedById.values()]);
   liveTasks(digest?.tasks ?? [], run.startedAt).forEach((task, index) => {
     const known = tasks.find((entry) => (task.id && entry.id === task.id)
       || ((entry.process?.kind ?? "subagent") === task.kind && entry.label === task.label
@@ -217,6 +230,7 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
   let cost: number | undefined;
   let context: NonNullable<Actor["usage"]>["context"];
   let found = false;
+  let outputOnly = true;
   const records = new Map<string, NonNullable<TraceEvent["usage"]>>();
   for (const event of events) {
     const usage = event.usage;
@@ -224,23 +238,31 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
     found = true;
     if (usage.context && usage.context.window > 0) context = usage.context;
     if (usage.cumulative) {
+      records.clear();
       tokens = usage.tokens;
-      if (usage.cost !== undefined && usage.cost !== null) cost = usage.cost;
+      cost = usage.cost ?? undefined;
+      outputOnly = usage.outputOnly === true;
     } else {
       records.set(usage.key ?? event.id, usage);
     }
   }
   for (const usage of records.values()) {
+    outputOnly &&= usage.outputOnly === true;
     tokens += usage.tokens;
     if (usage.cost !== undefined && usage.cost !== null) cost = (cost ?? 0) + usage.cost;
   }
-  return found ? { tokens, cost, context } : undefined;
+  return found ? { tokens, cost, context, ...(outputOnly && { outputOnly: true }) } : undefined;
+}
+
+export function actorEvents(branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined) {
+  if (task) return trace?.events ?? branch.events.filter((event) => event.taskId === task.id || event.id === task.id);
+  return branch.events.filter((event) => !event.taskId || (event.kind !== "tool" && event.kind !== "usage" && event.kind !== "reply"));
 }
 
 export function describeActor(
   branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined, time: number | null,
 ): Actor {
-  const events = beforeTime(task ? trace?.events ?? [] : branch.events, time);
+  const events = beforeTime(actorEvents(branch, task, trace), time);
   const taskReturned = task?.returnedAt !== undefined && (time === null || task.returnedAt <= time);
   const status = (!task && time === null ? runOutcome(branch) : undefined) ?? [...events].reverse().find((event) => (
     (event.kind === "error" && !event.taskId) || event.kind === "exited" ||
@@ -285,11 +307,7 @@ export function describeActor(
   const digest = time === null && !task ? branch.digest : undefined;
   const summary = digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap;
   const recentTurn = relevant.find((event) => event.kind === "user");
-  const recordedSignals = task && !trace
-    ? branch.events.filter((event) => (time === null || event.at <= time)
-      && (event.taskId === task.id || event.id === task.id))
-    : events;
-  const signals = signalEvents(task?.process ? processEvents(task, recordedSignals, time) : recordedSignals);
+  const signals = signalEvents(task?.process ? processEvents(task, events, time) : events);
   return {
     label, tone, activity: activity ?? signals[signals.length - 1],
     speech: speech ?? (summary ? { id: `summary:${summary}`, kind: "reply", at: digest?.lastReplyAt ?? branch.start, text: summary } : undefined),

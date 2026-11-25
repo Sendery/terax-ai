@@ -10,6 +10,7 @@ export function createCodexParser(emitter: ChunkEmitter): CliParser {
   const textSeen = new Map<string, number>();
   const reasoningSeen = new Map<string, number>();
   const toolStarted = new Set<string>();
+  const children = new Map<string, string>();
 
   const onLine = (line: string) => {
     const obj = parseJsonLine(line);
@@ -18,6 +19,11 @@ export function createCodexParser(emitter: ChunkEmitter): CliParser {
 
     if (type === "item.started" || type === "item.updated" || type === "item.completed") {
       handleItem(obj.item as Record<string, unknown> | undefined, type);
+      return;
+    }
+    if (type === "turn.completed") {
+      const usage = obj.usage as Record<string, unknown> | undefined;
+      if (usage) emitter.usage(usage.input_tokens, usage.output_tokens, usage.cached_input_tokens);
       return;
     }
     if (type === "turn.failed" || type === "error") {
@@ -43,6 +49,38 @@ export function createCodexParser(emitter: ChunkEmitter): CliParser {
       const full = String(item.text ?? "");
       emitter.reasoningDelta(full.slice(reasoningSeen.get(id) ?? 0));
       reasoningSeen.set(id, full.length);
+      return;
+    }
+    if (itype === "collab_tool_call") {
+      const spawn = item.tool === "spawn_agent";
+      if (!toolStarted.has(id) && typeof item.tool === "string") {
+        emitter.tool(id, item.tool, {});
+        toolStarted.add(id);
+      }
+      if (spawn && Array.isArray(item.receiver_thread_ids)) {
+        for (const thread of item.receiver_thread_ids) {
+          if (typeof thread === "string") children.set(thread, id);
+        }
+      }
+      if (phase === "item.completed" && (!spawn || item.status === "failed")) {
+        emitter.toolResult(id, item.status === "failed" ? { error: "Tool failed" } : {});
+      }
+      const states = item.agents_states as Record<string, { status?: string }> | undefined;
+      for (const [thread, state] of Object.entries(states ?? {})) {
+        const call = children.get(thread);
+        if (call && (state?.status === "completed" || state?.status === "shutdown" || state?.status === "errored")) {
+          emitter.toolResult(call, state.status === "errored" ? { error: "Subagent failed" } : {});
+          children.delete(thread);
+        }
+      }
+      return;
+    }
+    if (itype === "web_search") {
+      if (!toolStarted.has(id)) {
+        emitter.tool(id, "Web search", {});
+        toolStarted.add(id);
+      }
+      if (phase === "item.completed") emitter.toolResult(id, {});
       return;
     }
     if (itype === "command_execution") {

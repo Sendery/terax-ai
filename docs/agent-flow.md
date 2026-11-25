@@ -77,15 +77,16 @@ input token count against its context window. The amounts cover the loaded trace
 | CLI | Recorded terminal activity | Transcript activity |
 | --- | --- | --- |
 | Claude Code | Terax hooks, process status and terminal alerts | Messages, tool calls, delegation calls and return notifications from the parent transcript |
-| Codex | Process status and terminal alerts | Messages, tools, turns and child rollout links, with child activity when available |
+| Codex | Process status and terminal alerts | Tools, turns, token counts and context occupancy from rollouts. Subagents use the recorded parent relationship and task events, including children that run in a different worktree. |
 | Pi | Pi extension markers, process status and terminal alerts | Messages, tools and explicit subagent calls from the session transcript |
-| Copilot CLI | Process status and terminal alerts | Messages, tools, turns and structured subagent events |
-| Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace |
-| Grok | Process status and terminal alerts | Terminal activity is retained from this version |
+| Copilot CLI | Process status and terminal alerts | Messages, tools, turns, structured subagent events and token totals from usage records or session accounting when present. |
+| Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace. Usage depends on the transcript including a count. |
+| Grok | Process status and terminal alerts | Terminal activity only. |
+| Terax AI | Chat and delegated tool lifecycle | Tool names, subagent status and reported token counts. The Flow journal stores no chat text, tool inputs or outputs. |
 
 Finished subagents and jobs leave the live map after 30 seconds. In **Active
 sessions**, a completed session also leaves once its work ends. A subsequent
-turn brings it back. The timeline and **All sessions** retain recorded activity.
+turn brings it back. **All sessions** keeps finished subagents available with their tools and usage.
 
 Project history is discovered for open and recently recorded public terminal directories.
 History joins a current tab when its directory maps to that one tab. Codex,

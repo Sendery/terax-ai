@@ -1,4 +1,9 @@
 import type { UIMessageStreamWriter } from "ai";
+import type { AgentUsageDelta } from "@/modules/ai/lib/agent";
+
+function tokenCount(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0;
+}
 
 /**
  * Thin helper over a `UIMessageStreamWriter` that tracks open text/reasoning
@@ -11,7 +16,21 @@ export class ChunkEmitter {
   private reasoningId: string | null = null;
   private readonly openTools = new Set<string>();
 
-  constructor(private readonly writer: UIMessageStreamWriter) {}
+  constructor(
+    private readonly writer: UIMessageStreamWriter,
+    private readonly onUsage?: (delta: AgentUsageDelta) => void,
+  ) {}
+
+  usage(input: unknown, output: unknown, cached?: unknown): void {
+    const inputTokens = tokenCount(input);
+    const outputTokens = tokenCount(output);
+    const cachedInputTokens = tokenCount(cached);
+    if (!inputTokens && !outputTokens) return;
+    this.onUsage?.({
+      inputTokens, outputTokens, cachedInputTokens, lastInputTokens: inputTokens,
+      lastCachedTokens: cachedInputTokens, ...(input === undefined && { outputOnly: true }),
+    });
+  }
 
   private id(prefix: string): string {
     this.seq += 1;

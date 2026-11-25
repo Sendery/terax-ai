@@ -29,7 +29,7 @@ export function sourceGroups(panes: readonly FlowTerminal[], runs: readonly Flow
   }
   for (const run of runs) {
     if (!groups.has(run.group)) {
-      groups.set(run.group, { key: run.group, title: run.tabTitle, shells: [], archived: run.marker !== "background" });
+      groups.set(run.group, { key: run.group, title: run.tabTitle, shells: [], archived: !run.active && run.marker !== "background" });
     }
   }
   const counts = new Map<string, number>();

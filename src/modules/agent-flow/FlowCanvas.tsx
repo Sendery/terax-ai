@@ -143,8 +143,8 @@ const ActorNode = memo(function ActorNode({
         </span>
         <span className="flow-node-caption" title={name}>{name}</span>
         <span className="flow-node-state">{stateLabel}</span>
-        {detailed && actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} tokens</span> : null}
-        {detailed && context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
+        {!compact && actor.usage ? <span className="flow-node-usage">{number.format(actor.usage.tokens)} {actor.usage.outputOnly ? "output tokens" : "tokens"}</span> : null}
+        {!compact && context ? <span className="flow-node-context" title={`${context.input.toLocaleString()} / ${context.window.toLocaleString()} input tokens at last request`}>
           {contextPercent(context)}% context
         </span> : null}
         {actor.usage?.cost !== undefined && detailed ? (
@@ -169,9 +169,9 @@ const ActorNode = memo(function ActorNode({
               <strong>{actor.speech.text}</strong>
             </button>
           ) : <div className="flow-activity-label"><span>{task ? "Subagent" : displayAgent(run.agent)}</span><strong>{status}</strong></div>}
-          {detailed && actor.tools.length ? (
+          {actor.tools.length ? (
             <div className="flow-tool-links">
-              {actor.tools.map((event) => (
+              {actor.tools.slice(0, detailed ? 2 : 1).map((event) => (
                 <button type="button" key={event.id} data-new={recent(event.at, time, clock)}
                   data-current={current && selection?.event === event.id}
                   title={event.file ?? eventLabel(event)} onClick={() => str(event)}>

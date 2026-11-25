@@ -24,10 +24,21 @@ export function createClaudeParser(emitter: ChunkEmitter): CliParser {
       handleToolResults(obj.message as Record<string, unknown> | undefined);
       return;
     }
-    if (type === "result" && obj.is_error === true) {
-      const msg =
-        typeof obj.result === "string" ? obj.result : "Claude run failed";
-      emitter.error(msg);
+    if (type === "result") {
+      const usage = obj.usage as Record<string, unknown> | undefined;
+      if (usage) {
+        const input = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"]
+          .reduce((total, key) => {
+            const value = usage[key];
+            return total + (typeof value === "number" ? value : 0);
+          }, 0);
+        emitter.usage(input, usage.output_tokens, usage.cache_read_input_tokens);
+      }
+      if (obj.is_error === true) {
+        const msg =
+          typeof obj.result === "string" ? obj.result : "Claude run failed";
+        emitter.error(msg);
+      }
     }
   };
 

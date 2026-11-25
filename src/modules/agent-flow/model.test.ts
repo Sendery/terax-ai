@@ -4,7 +4,7 @@ import type { AgentNotification, AgentSession, SessionDigest } from "@/modules/a
 import { backgroundBranch } from "@/modules/agent-flow/background";
 import { currentSourceFilter, sourceGroups, sourceMatches, type SourceFilter } from "@/modules/agent-flow/FlowSourceFilter";
 import {
-  beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
+  beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily, type FlowRun,
 } from "@/modules/agent-flow/model";
 import {
   branchFor, COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, fitCamera, fitFlowCamera,
@@ -49,6 +49,45 @@ describe("Agent Flow", () => {
       ["child", undefined, "Scout", 12],
       ["grandchild", "child", "Reviewer", 15],
     ]);
+  });
+
+  it("combines a Codex spawn and wait result with the child's tools and usage", () => {
+    const live = { ...root, active: true };
+    const traces = new Map<string, FlowTrace>([
+      [traceKey(live) ?? "", { name: null, limited: false, failed: false, events: [
+        { id: "call", at: 10, kind: "delegated", taskId: "tool-call" },
+        { id: "link", at: 12, kind: "task-alias", taskId: "tool-call", text: "review" },
+        { id: "thread", at: 13, kind: "task-alias", taskId: "review", text: "child" },
+        { id: "started-child", at: 14, kind: "delegated", taskId: "child" },
+        { id: "wait", at: 20, kind: "returned", taskId: "child" },
+      ] }],
+      [traceKey(child) ?? "", { name: null, limited: false, failed: false, events: [
+        { id: "tool", at: 14, kind: "tool", text: "exec_command" },
+        { id: "tokens", at: 16, kind: "usage", usage: { tokens: 87, cumulative: true } },
+      ] }],
+    ]);
+    const branch = branchFor(live, [child], null, traces);
+    expect(branch.tasks).toHaveLength(1);
+    expect(branch.tasks[0]).toMatchObject({ id: "child", at: 10, returnedAt: 20, label: "Scout" });
+    const actor = describeActor(branch, branch.tasks[0], traces.get(traceKey(child) ?? ""), null);
+    expect(actor.tools.map(({ text }) => text)).toEqual(["exec_command"]);
+    expect(actor.usage?.tokens).toBe(87);
+  });
+
+  it("keeps Terax AI's inline subagent usage and tools separate from its parent", () => {
+    const run: FlowRun = {
+      ...root, harness: "generic", agent: "terax", events: [
+        { id: "spawn", at: 11, kind: "delegated", taskId: "sub" },
+        { id: "child-tool", at: 12, kind: "tool", taskId: "sub", text: "Search" },
+        { id: "child-usage", at: 13, kind: "usage", taskId: "sub", usage: { tokens: 17, cumulative: false } },
+        { id: "root-usage", at: 14, kind: "usage", usage: { tokens: 37, cumulative: true } },
+      ],
+    };
+    const branch = branchFor(run, [], null, new Map());
+    expect(describeActor(branch, undefined, undefined, null).usage?.tokens).toBe(37);
+    const actor = describeActor(branch, branch.tasks[0], undefined, null);
+    expect(actor.usage?.tokens).toBe(17);
+    expect(actor.tools.map(({ text }) => text)).toEqual(["Search"]);
   });
 
   it("places actual descendants on successive layers in both directions", () => {

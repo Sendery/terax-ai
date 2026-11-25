@@ -42,6 +42,7 @@ export type TraceEvent = {
     cumulative: boolean;
     key?: string | null;
     cost?: number | null;
+    outputOnly?: boolean;
     context?: { input: number; window: number };
   } | null;
 };
@@ -83,6 +84,8 @@ export type FlowRun = {
   active?: boolean;
   projectHistory?: boolean;
 };
+
+export type FlowActivity = Pick<TraceEvent, "kind" | "text" | "taskId" | "usage">;
 
 export type FlowEndpoint = { shellKey: string; runKey?: string };
 
@@ -128,6 +131,8 @@ export function flowTasks(events: readonly TraceEvent[]): FlowTask[] {
   for (const event of events) {
     if (event.kind === "delegated" || event.kind === "monitor-started" || event.kind === "background-started") {
       const id = event.taskId ?? event.id;
+      const known = tasks.get(id);
+      if (known && known.returnedAt === undefined) continue;
       const kind = event.kind === "monitor-started" ? "monitor" : event.kind === "background-started" ? "background" : undefined;
       tasks.set(id, { id, label: event.text || (kind ? PROCESS_LABELS[kind] : "Subagent"), at: event.at,
         ...(kind && { process: { kind } }) });
