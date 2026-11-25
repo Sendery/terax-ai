@@ -179,10 +179,10 @@ export function AgentFlowView({
   const measurements = useMemo(() => usage ? branches.flatMap((item) => {
     const entries = [
       { id: item.run.key, name: runName(item.run, item.trace?.name), color: accent(item.run), value: describeActor(item, undefined, item.trace, time).usage },
-      ...item.tasks.flatMap((subagent) => {
+      ...item.tasks.map((subagent) => {
         const trace = traces.get(traceKey(subagent.run) ?? "");
-        return [{ id: `${item.run.key}:${subagent.id}`, name: subagent.label,
-          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage }];
+        return { id: `${item.run.key}:${subagent.id}`, name: subagent.label,
+          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage };
       }),
     ];
     return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value }] : []);

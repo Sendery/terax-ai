@@ -70,9 +70,10 @@ playhead. Click a track or use its arrow keys to seek to one of its events.
 Each shell has a checkbox to hide its track and its marks from the timeline.
 The canvas keeps showing the shell while its timeline is hidden.
 Archived sessions without recorded pane attribution get individual tracks.
-Go live returns to incoming activity. Usage displays available token records for Claude Code,
-Codex and Pi and reported cost for Pi. Codex also displays the last recorded
-input token count against its context window. The amounts cover the loaded traces.
+Go live returns to incoming activity. Usage displays the counts reported by
+each provider and the cost reported by Pi. Codex also displays the last
+recorded input token count against its context window. The amounts cover the
+loaded traces. When an inspector has only output counts, it labels them as such.
 
 | CLI | Recorded terminal activity | Transcript activity |
 | --- | --- | --- |

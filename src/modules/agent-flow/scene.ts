@@ -255,7 +255,11 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
 }
 
 export function actorEvents(branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined) {
-  if (task) return trace?.events ?? branch.events.filter((event) => event.taskId === task.id || event.id === task.id);
+  if (task && trace) {
+    const start = task.run?.createdAt ?? task.at;
+    return trace.events.filter((event) => event.at >= start);
+  }
+  if (task) return branch.events.filter((event) => event.taskId === task.id || event.id === task.id);
   return branch.events.filter((event) => !event.taskId || (event.kind !== "tool" && event.kind !== "usage" && event.kind !== "reply"));
 }
 

@@ -314,12 +314,16 @@ fn codex_item(item: &Value, emit: &mut impl FnMut(Kind, String, Option<String>))
     match item["type"].as_str().unwrap_or_default() {
         "SubAgentActivity" => {
             let Some(thread) = safe_key(&item["agent_thread_id"]) else { return };
+            let kind = item["kind"].as_str();
+            if !matches!(kind, Some("started" | "completed" | "failed")) {
+                return;
+            }
             let name = item["agent_path"].as_str().and_then(|path| path.rsplit('/').next())
                 .filter(|name| is_safe_session_id(name));
             if let Some(name) = name {
                 emit(Kind::TaskAlias, thread.clone(), Some(name.to_owned()));
             }
-            match item["kind"].as_str() {
+            match kind {
                 Some("started") => emit(Kind::Delegated, name.unwrap_or_default().to_owned(), Some(thread)),
                 Some("completed") => emit(Kind::Returned, String::new(), Some(thread)),
                 Some("failed") => emit(Kind::Error, String::new(), Some(thread)),

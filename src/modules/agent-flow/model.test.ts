@@ -62,6 +62,7 @@ describe("Agent Flow", () => {
         { id: "wait", at: 20, kind: "returned", taskId: "child" },
       ] }],
       [traceKey(child) ?? "", { name: null, limited: false, failed: false, events: [
+        { id: "inherited", at: 9, kind: "tool", text: "Parent tool" },
         { id: "tool", at: 14, kind: "tool", text: "exec_command" },
         { id: "tokens", at: 16, kind: "usage", usage: { tokens: 87, cumulative: true } },
       ] }],
