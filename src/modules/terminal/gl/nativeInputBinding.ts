@@ -30,6 +30,7 @@ type Appearance = {
 type Options = Appearance & {
   isActive: () => boolean;
   allowInput?: () => boolean;
+  selectTextOnDrag?: () => boolean;
   focusPrompt?: () => void;
   onError: (error: unknown) => void;
   onSelection?: (text: string | null) => void;
@@ -88,6 +89,7 @@ export function bindNativeInput(
   let wheelCarry = 0;
   let wheelCarryX = 0;
   let pointer: number | null = null;
+  let deferredClick: { x: number; y: number; press: NativeMouseEvent } | null = null;
   let pendingDrag: NativeSelectionCommand | null = null;
   let dragFrame = 0;
   let selectionBusy = 0;
@@ -487,10 +489,12 @@ export function bindNativeInput(
   };
   const onPointerDown = (event: PointerEvent) => {
     const secondary = isSecondaryClick(event, IS_MAC);
-    if (
-      reportsMouse(event) &&
-      !(secondary && usesTerminalContextMenu(event, IS_MAC, session.getSelection() !== null))
-    ) {
+    const primary = event.button === 0 && !secondary;
+    const tracked = reportsMouse(event);
+    const selectTextOnDrag = options.selectTextOnDrag?.() ?? false;
+    const hasSelection = session.getSelection() !== null;
+    const terminalMenu = secondary && usesTerminalContextMenu(event, IS_MAC, hasSelection, selectTextOnDrag);
+    if (tracked && !terminalMenu && !(primary && selectTextOnDrag)) {
       if (event.button < 0 || event.button > 4) return;
       event.preventDefault();
       focus();
@@ -502,15 +506,19 @@ export function bindNativeInput(
         /* Detached host. */
       }
       flushMotion();
+      if (primary && hasSelection) watch(select({ kind: "clear" }));
       lastMouse = mouseEvent(event, "press", mouseButton);
       watch(session.sendMouse(lastMouse));
       return;
     }
 
-    if (secondary || event.button !== 0) return;
+    if (!primary) return;
     event.preventDefault();
     focus();
     pointer = event.pointerId;
+    deferredClick = tracked && !hasSelection
+      ? { x: event.clientX, y: event.clientY, press: mouseEvent(event, "press", 0) }
+      : null;
     try {
       host.setPointerCapture(pointer);
     } catch {
@@ -556,7 +564,8 @@ export function bindNativeInput(
   const onPointerMove = (event: PointerEvent) => {
     if (
       mousePointer === event.pointerId ||
-      (pointer === null && reportsMouse(event))
+      (pointer === null && reportsMouse(event) &&
+        (!(event.buttons & 2) || !options.selectTextOnDrag?.()))
     ) {
       pendingMotion = mouseEvent(
         event,
@@ -578,6 +587,10 @@ export function bindNativeInput(
       return;
     }
     if (pointer !== event.pointerId) return;
+    if (deferredClick) {
+      if (Math.hypot(event.clientX - deferredClick.x, event.clientY - deferredClick.y) <= 4) return;
+      deferredClick = null;
+    }
     if (
       blockPress &&
       Math.hypot(event.clientX - blockPress.x, event.clientY - blockPress.y) > 4
@@ -616,14 +629,26 @@ export function bindNativeInput(
     flushDrag(true);
     pointer = null;
     const click = blockPress;
+    const mouseClick = deferredClick;
     const alt = altPress;
     const duration = alt ? performance.now() - alt.at : Infinity;
     altPress = null;
     blockPress = null;
+    deferredClick = null;
     const released = select({ kind: "release" });
     const generation = selectionGeneration;
     const revision = session.selectionRevision;
     const completed = released.then(async (text) => {
+      if (
+        mouseClick && text === null && event.button === 0 && event.type !== "pointercancel" &&
+        Math.hypot(event.clientX - mouseClick.x, event.clientY - mouseClick.y) <= 4 &&
+        !disposed && options.isActive() && reportsMouse(event) &&
+        generation === selectionGeneration && session.selectionRevision === revision
+      ) {
+        watch(session.sendMouse(mouseClick.press));
+        await session.sendMouse(mouseEvent(event, "release", 0));
+        return;
+      }
       const current = () =>
         !disposed &&
         options.isActive() &&
@@ -728,7 +753,8 @@ export function bindNativeInput(
     } else if (delta.rows) session.scroll(delta.rows);
   };
   const onContextMenu = (event: MouseEvent) => {
-    if (reportsMouse(event) && !usesTerminalContextMenu(event, IS_MAC, session.getSelection() !== null))
+    if (reportsMouse(event) &&
+      !usesTerminalContextMenu(event, IS_MAC, session.getSelection() !== null, options.selectTextOnDrag?.()))
       event.preventDefault();
   };
   const onFocus = () => reportFocus(true);
@@ -739,6 +765,7 @@ export function bindNativeInput(
       pointer = null;
       blockPress = null;
       altPress = null;
+      deferredClick = null;
       watch(select({ kind: "release" }));
     }
     if (mousePointer !== null) {

@@ -1,4 +1,5 @@
 import { IS_MAC } from "@/lib/platform";
+import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { registerNativeCaptureProvider } from "@/modules/capture/lib/captureLease";
 import { registerCanvasSnapshotProvider } from "@/modules/capture/lib/rasterize";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -50,6 +51,12 @@ import {
 } from "react";
 
 const noSubscription = () => () => {};
+
+function selectAgentText(leafId: number, ptyId: number | null) {
+  const agent = useAgentStore.getState().sessions[leafId];
+  return ptyId !== null && agent?.ptyId === ptyId &&
+    (agent.harness === "claude" || agent.harness === "codex");
+}
 
 export const NativeTerminalPane = forwardRef<
   TerminalPaneHandle,
@@ -312,6 +319,7 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
+            selectTextOnDrag: () => selectAgentText(leafId, session.id),
             allowInput: () =>
               owner.exited || (owner.blockInput?.directInput ?? true),
             focusPrompt: () => {
@@ -512,7 +520,7 @@ export const NativeTerminalPane = forwardRef<
     if (
       engine.current?.exitCode === null &&
       engine.current?.inputState?.mouseTracking &&
-      !usesTerminalContextMenu(event, IS_MAC, saved !== null)
+      !usesTerminalContextMenu(event, IS_MAC, saved !== null, selectAgentText(leafId, engine.current.id))
     ) {
       event.preventDefault();
       event.stopPropagation();

@@ -12,8 +12,9 @@ export function usesTerminalContextMenu(
   event: Pick<MouseEvent, "shiftKey" | "metaKey" | "ctrlKey">,
   isMac: boolean,
   hasSelection: boolean,
+  preferTerminal = false,
 ): boolean {
-  return hasSelection || event.shiftKey || event.ctrlKey || (isMac && event.metaKey);
+  return preferTerminal || hasSelection || event.shiftKey || event.ctrlKey || (isMac && event.metaKey);
 }
 
 /** xterm activates a link on the mouseup of any button; only a primary click
