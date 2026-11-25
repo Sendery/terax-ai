@@ -1,5 +1,5 @@
 import type { UIMessageStreamWriter } from "ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createAgyParser } from "./agy";
 import { ChunkEmitter } from "./emitter";
 
@@ -10,7 +10,8 @@ function harness() {
   const writer = {
     write: (chunk: Chunk) => chunks.push(chunk),
   } as unknown as UIMessageStreamWriter;
-  const emitter = new ChunkEmitter(writer);
+  const onUsage = vi.fn();
+  const emitter = new ChunkEmitter(writer, onUsage);
   const parser = createAgyParser(emitter);
   const feed = (...events: unknown[]) => {
     for (const e of events) parser.onLine(typeof e === "string" ? e : JSON.stringify(e));
@@ -21,7 +22,7 @@ function harness() {
       .map((c) => c.delta)
       .join("");
   const errors = () => chunks.filter((c) => c.type === "error").map((c) => c.errorText);
-  return { chunks, parser, emitter, feed, text, errors };
+  return { chunks, parser, emitter, feed, text, errors, onUsage };
 }
 
 const CONV = "cb744511-269f-4700-81a0-ddc9c1da539d";
@@ -51,6 +52,7 @@ describe("agy stream-json parser", () => {
       messageMetadata: { agy: { conversationId: CONV } },
     });
     expect(h.errors()).toEqual([]);
+    expect(h.onUsage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ reportedTotalTokens: 19016 }));
   });
 
   it("renders a tool call once and closes it with its output or error", () => {

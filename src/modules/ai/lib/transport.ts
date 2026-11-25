@@ -104,8 +104,8 @@ export function createContextAwareTransport(deps: Deps) {
       } } : deps.toolContext,
       onStep: deps.onStep,
       onUsage: (delta) => {
-        deps.onUsage?.(delta);
-        const tokens = delta.inputTokens + delta.outputTokens;
+        if (delta.reportedTotalTokens === undefined) deps.onUsage?.(delta);
+        const tokens = delta.reportedTotalTokens ?? delta.inputTokens + delta.outputTokens;
         if (tokens > 0) record?.({ kind: "usage", usage: { tokens, cumulative: false, outputOnly: delta.outputOnly } });
       },
       onCompact: deps.onCompact,

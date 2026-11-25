@@ -427,6 +427,7 @@ export type AgentUsageDelta = AgentUsage & {
   lastInputTokens: number;
   lastCachedTokens: number;
   outputOnly?: boolean;
+  reportedTotalTokens?: number;
 };
 
 const EMPTY_USAGE: AgentUsage = {

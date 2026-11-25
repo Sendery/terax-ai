@@ -10,6 +10,7 @@ export function createOpenCodeParser(emitter: ChunkEmitter): CliParser {
   const textSeen = new Map<string, number>();
   const reasoningSeen = new Map<string, number>();
   const toolStarted = new Set<string>();
+  const countedSteps = new Set<string>();
 
   const onLine = (line: string) => {
     const obj = parseJsonLine(line);
@@ -23,6 +24,15 @@ export function createOpenCodeParser(emitter: ChunkEmitter): CliParser {
     }
     if (!part) return;
 
+    if (type === "step_finish") {
+      const id = part.id;
+      const tokens = part.tokens as { input?: unknown; output?: unknown; cache?: { read?: unknown } } | undefined;
+      if (tokens && typeof id === "string" && !countedSteps.has(id)) {
+        emitter.usage(tokens.input, tokens.output, tokens.cache?.read);
+        countedSteps.add(id);
+      }
+      return;
+    }
     if (type === "text") {
       const id = String(part.id ?? "text");
       const full = String(part.text ?? "");
@@ -37,7 +47,7 @@ export function createOpenCodeParser(emitter: ChunkEmitter): CliParser {
       reasoningSeen.set(id, full.length);
       return;
     }
-    if (type === "tool") {
+    if (type === "tool" || type === "tool_use") {
       const id = String(part.callID ?? part.id ?? `tool-${toolStarted.size}`);
       const state = (part.state ?? {}) as Record<string, unknown>;
       const name = String(part.tool ?? "tool");
@@ -46,9 +56,8 @@ export function createOpenCodeParser(emitter: ChunkEmitter): CliParser {
         toolStarted.add(id);
       }
       const status = state.status as string | undefined;
-      if (status === "completed" || status === "error") {
-        emitter.toolResult(id, state.output ?? state.error ?? null);
-      }
+      if (status === "completed") emitter.toolResult(id, state.output ?? null);
+      else if (status === "error") emitter.toolResult(id, { error: state.error ?? "Tool failed" });
     }
   };
 

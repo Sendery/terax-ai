@@ -3,12 +3,13 @@ import { type ChunkEmitter, parseJsonLine, type CliParser } from "./emitter";
 /**
  * cursor-agent `--output-format stream-json --stream-partial-output`.
  * Shape mirrors Claude's stream-json but coarser: `assistant` events carry the
- * cumulative message content (text grows across events); tool calls surface as
- * `tool_call` content blocks; `result` carries terminal status.
+ * cumulative message content. Tool calls can arrive as top-level `tool_call`
+ * events or as message blocks. `result` carries terminal status.
  */
 export function createCursorParser(emitter: ChunkEmitter): CliParser {
   let emittedText = "";
   const toolStarted = new Set<string>();
+  const toolDone = new Set<string>();
 
   const onLine = (line: string) => {
     const obj = parseJsonLine(line);
@@ -18,6 +19,22 @@ export function createCursorParser(emitter: ChunkEmitter): CliParser {
     if (type === "assistant") {
       const content = (obj.message as Record<string, unknown> | undefined)?.content;
       if (Array.isArray(content)) for (const block of content) handleBlock(block);
+      return;
+    }
+    if (type === "tool_call") {
+      const id = obj.call_id;
+      if (typeof id !== "string" || !obj.tool_call || typeof obj.tool_call !== "object") return;
+      const tool = Object.entries(obj.tool_call).find(([name, value]) => name.endsWith("ToolCall") && value && typeof value === "object");
+      if (!tool) return;
+      const [name, details] = tool as [string, { args?: unknown; result?: unknown }];
+      if (!toolStarted.has(id)) {
+        emitter.tool(id, name.slice(0, -"ToolCall".length), details.args);
+        toolStarted.add(id);
+      }
+      if (obj.subtype === "completed" && !toolDone.has(id)) {
+        emitter.toolResult(id, details.result);
+        toolDone.add(id);
+      }
       return;
     }
     if (type === "result" && obj.is_error === true) {

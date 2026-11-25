@@ -6,6 +6,7 @@ type Step = {
   step_type?: string;
   text_delta?: string;
   thinking_delta?: string;
+  usage?: { total_tokens?: unknown };
   tool_name?: string;
   tool_info?: {
     name?: string;
@@ -24,6 +25,7 @@ type Step = {
 export function createAgyParser(emitter: ChunkEmitter): CliParser {
   const toolStarted = new Set<string>();
   const toolDone = new Set<string>();
+  const countedSteps = new Set<string>();
   let conversationId: string | null = null;
   let textSeen = false;
   let failed = false;
@@ -37,6 +39,11 @@ export function createAgyParser(emitter: ChunkEmitter): CliParser {
 
   function onStep(step: Step): void {
     if (step.step_type === "agent_response") {
+      const id = toolId(step);
+      if (step.state === "DONE" && step.usage?.total_tokens !== undefined && !countedSteps.has(id)) {
+        countedSteps.add(id);
+        emitter.totalUsage(step.usage.total_tokens);
+      }
       if (step.thinking_delta) emitter.reasoningDelta(step.thinking_delta);
       if (step.text_delta) {
         textSeen = true;

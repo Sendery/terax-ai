@@ -32,6 +32,14 @@ export class ChunkEmitter {
     });
   }
 
+  totalUsage(value: unknown): void {
+    const reportedTotalTokens = tokenCount(value);
+    if (reportedTotalTokens) this.onUsage?.({
+      inputTokens: 0, outputTokens: 0, cachedInputTokens: 0,
+      lastInputTokens: 0, lastCachedTokens: 0, reportedTotalTokens,
+    });
+  }
+
   private id(prefix: string): string {
     this.seq += 1;
     return `${prefix}-${this.seq}`;

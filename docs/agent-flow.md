@@ -85,6 +85,10 @@ loaded traces. When an inspector has only output counts, it labels them as such.
 | Grok | Process status and terminal alerts | Terminal activity only. |
 | Terax AI | Chat and delegated tool lifecycle | Tool names, subagent status and reported token counts. The Flow journal stores no chat text, tool inputs or outputs. |
 
+When used as Terax AI chat providers, Cursor Agent contributes tool events and
+OpenCode contributes tool events, explicit subagent calls and token counts for
+the steps in its JSON stream. Terax does not discover their terminal transcripts.
+
 Finished subagents and jobs leave the live map after 30 seconds. In **Active
 sessions**, a completed session also leaves once its work ends. A subsequent
 turn brings it back. **All sessions** keeps finished subagents available with their tools and usage.

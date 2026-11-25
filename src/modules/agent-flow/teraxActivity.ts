@@ -22,11 +22,12 @@ export function observeTeraxStream(
     transform(chunk, controller) {
       if (chunk.type === "tool-input-available") {
         const name = chunk.toolName;
-        if (name === "run_subagent" || name === "spawn_agent") {
+        const input = chunk.input as { type?: unknown; subagent_type?: unknown } | undefined;
+        const openCodeTask = name === "task" && typeof input?.subagent_type === "string";
+        if (name === "run_subagent" || name === "spawn_agent" || openCodeTask) {
           delegates.add(chunk.toolCallId);
-          const input = chunk.input as { type?: unknown } | undefined;
-          const label = typeof input?.type === "string" && /^[a-z_]{1,40}$/.test(input.type)
-            ? input.type : "Subagent";
+          const role = openCodeTask ? input?.subagent_type : input?.type;
+          const label = typeof role === "string" && /^[a-z_]{1,40}$/.test(role) ? role : "Subagent";
           record({ kind: "delegated", text: label, taskId: taskKey(chunk.toolCallId) });
         } else {
           record({ kind: "tool", text: name.slice(0, 120) });
