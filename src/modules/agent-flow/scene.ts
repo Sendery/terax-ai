@@ -272,7 +272,8 @@ export function actorEvents(branch: FlowBranch, task: FlowTask | undefined, trac
 export function describeActor(
   branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined, time: number | null,
 ): Actor {
-  const events = beforeTime(actorEvents(branch, task, trace), time);
+  const recorded = beforeTime(actorEvents(branch, task, trace), time);
+  const events = task?.process ? processEvents(task, recorded, time) : recorded;
   const taskReturned = task?.returnedAt !== undefined && (time === null || task.returnedAt <= time);
   const status = (!task && time === null ? runOutcome(branch) : undefined) ?? [...events].reverse().find((event) => (
     (event.kind === "error" && !event.taskId) || event.kind === "exited" ||
@@ -317,7 +318,7 @@ export function describeActor(
   const digest = time === null && !task ? branch.digest : undefined;
   const summary = digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap;
   const recentTurn = relevant.find((event) => event.kind === "user");
-  const signals = signalEvents(task?.process ? processEvents(task, events, time) : events);
+  const signals = signalEvents(events);
   return {
     label, tone, activity: activity ?? signals[signals.length - 1],
     speech: speech ?? (summary ? { id: `summary:${summary}`, kind: "reply", at: digest?.lastReplyAt ?? branch.start, text: summary } : undefined),
