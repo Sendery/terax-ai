@@ -70,6 +70,8 @@ struct Usage {
     cost: Option<f64>,
     output_only: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    includes_subagents: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     context: Option<ContextUsage>,
 }
 
@@ -147,7 +149,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 .filter_map(|key| usage.get(key)?.as_u64())
                 .fold(0u64, u64::saturating_add);
             let key = safe_key(&message["id"]).or_else(|| safe_key(&row["uuid"]))?;
-            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None, output_only: false, context: None })
+            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None, output_only: false, includes_subagents: None, context: None })
         }
         Provider::Pi if message["role"] == "assistant" => {
             let usage = &message["usage"];
@@ -157,6 +159,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 key: safe_key(&row["id"]),
                 cost: usage["cost"]["total"].as_f64().filter(|cost| cost.is_finite() && *cost >= 0.0),
                 output_only: false,
+                includes_subagents: None,
                 context: None,
             })
         }
@@ -173,6 +176,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 key: None,
                 cost: None,
                 output_only: false,
+                includes_subagents: None,
                 context,
             })
         }
@@ -183,7 +187,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
             Some(Usage {
                 tokens: input.saturating_add(output), cumulative: false,
                 key: safe_key(&usage["apiCallId"]).or_else(|| safe_key(&row["id"])),
-                cost: None, output_only: false, context: None,
+                cost: None, output_only: false, includes_subagents: None, context: None,
             })
         }
         Provider::Copilot if matches!(row["type"].as_str(), Some("session.shutdown" | "session.usage_checkpoint")) => {
@@ -193,7 +197,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 let usage = &entry["usage"];
                 Some(usage["inputTokens"].as_u64()?.saturating_add(usage["outputTokens"].as_u64()?))
             }).reduce(u64::saturating_add)?;
-            Some(Usage { tokens, cumulative: true, key: None, cost: None, output_only: false, context: None })
+            Some(Usage { tokens, cumulative: true, key: None, cost: None, output_only: false, includes_subagents: Some(true), context: None })
         }
         Provider::Copilot if row["type"] == "assistant.message" => {
             let data = &row["data"];
@@ -204,12 +208,12 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
             Some(Usage {
                 tokens: total.or_else(|| output.map(|value| value.saturating_add(input.unwrap_or(0))))?,
                 cumulative: false, key: safe_key(&data["messageId"]).or_else(|| safe_key(&row["id"])),
-                cost: None, output_only: total.is_none() && input.is_none(), context: None,
+                cost: None, output_only: total.is_none() && input.is_none(), includes_subagents: None, context: None,
             })
         }
         Provider::Agy if row["type"] == "PLANNER_RESPONSE" => Some(Usage {
             tokens: row["usage"]["total_tokens"].as_u64()?,
-            cumulative: false, key: safe_key(&row["id"]), cost: None, output_only: false, context: None,
+            cumulative: false, key: safe_key(&row["id"]), cost: None, output_only: false, includes_subagents: None, context: None,
         }),
         _ => None,
     }
@@ -452,8 +456,8 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             let p = &row["data"];
             match kind {
                 "user.message" => emit(Kind::User, text(&p["content"]), None),
-                "assistant.message" => emit(Kind::Reply, text(&p["content"]), None),
-                "tool.execution_start" => emit(Kind::Tool, text(&p["toolName"]), None),
+                "assistant.message" => emit(Kind::Reply, text(&p["content"]), safe_key(&p["parentToolCallId"])),
+                "tool.execution_start" => emit(Kind::Tool, text(&p["toolName"]), safe_key(&p["parentToolCallId"])),
                 "assistant.turn_end" => emit(Kind::TurnEnded, String::new(), None),
                 "session.error" => emit(Kind::Error, String::new(), None),
                 "subagent.started" => emit(
@@ -807,7 +811,7 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
                 at,
                 kind: Kind::Usage,
                 text: String::new(),
-                task_id: None,
+                task_id: if provider == Provider::Copilot { safe_key(&row["data"]["parentToolCallId"]) } else { None },
                 file: None,
                 usage: Some(usage),
             });
@@ -973,11 +977,28 @@ mod tests {
     }
 
     #[test]
-    fn copilot_usage_preserves_output_only_counts() {
-        let row = serde_json::json!({"id":"message","type":"assistant.message","data":{"outputTokens":32}});
-        let usage = usage_for(Provider::Copilot, &row).unwrap();
+    fn copilot_attributes_tools_and_output_counts_to_subagents() {
+        let mut file = tempfile::tempfile().unwrap();
+        for row in [
+            serde_json::json!({"type":"tool.execution_start","timestamp":"2026-11-22T10:00:00Z","data":{"toolName":"view","parentToolCallId":"child"}}),
+            serde_json::json!({"type":"assistant.message","timestamp":"2026-11-22T10:00:01Z","data":{"messageId":"answer","content":"Done","outputTokens":32,"parentToolCallId":"child"}}),
+            serde_json::json!({"type":"session.shutdown","timestamp":"2026-11-22T10:00:02Z","data":{"modelMetrics":{"model":{"usage":{"inputTokens":80,"outputTokens":32}}}}}),
+        ] {
+            writeln!(file, "{row}").unwrap();
+        }
+        let trace = read_trace(file, Provider::Copilot, 0).unwrap();
+        assert_eq!(trace.events.len(), 4);
+        assert_eq!(trace.events[0].kind, Kind::Tool);
+        assert_eq!(trace.events[0].task_id.as_deref(), Some("child"));
+        assert_eq!(trace.events[1].kind, Kind::Reply);
+        assert_eq!(trace.events[1].task_id.as_deref(), Some("child"));
+        assert_eq!(trace.events[2].task_id.as_deref(), Some("child"));
+        let usage = trace.events[2].usage.as_ref().unwrap();
         assert_eq!(usage.tokens, 32);
         assert!(usage.output_only);
+        let checkpoint = trace.events[3].usage.as_ref().unwrap();
+        assert_eq!(checkpoint.tokens, 112);
+        assert_eq!(checkpoint.includes_subagents, Some(true));
     }
 
     #[test]

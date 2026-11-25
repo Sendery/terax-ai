@@ -16,7 +16,7 @@ import { currentSourceFilter, FlowSourceFilter, shellGroup, sourceGroups, source
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { FlowTimeline, flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, sessionFamily, type FlowDirection, type FlowRun, type TraceEvent } from "@/modules/agent-flow/model";
-import { actorEvents, branchFor, describeActor, eventLabel, liveBranches, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
+import { actorEvents, branchFor, combinedUsage, describeActor, eventLabel, liveBranches, signalEvents, signalTone, type FlowArrangement, type FlowSelection } from "@/modules/agent-flow/scene";
 import { traceKey, traceTarget, useFlowTraces, type TraceTarget } from "@/modules/agent-flow/traceReader";
 import { buildTimeline } from "@/modules/agent-flow/timeline";
 import { useFlowData, type FlowData } from "@/modules/agent-flow/useFlowData";
@@ -177,19 +177,24 @@ export function AgentFlowView({
   }, [branches, traces, time]);
   const latest = signalFeed[signalFeed.length - 1];
   const measurements = useMemo(() => usage ? branches.flatMap((item) => {
+    const root = describeActor(item, undefined, item.trace, time).usage;
+    const covered = root?.subagentsThrough;
     const entries = [
-      { id: item.run.key, name: runName(item.run, item.trace?.name), color: accent(item.run), value: describeActor(item, undefined, item.trace, time).usage },
+      { id: item.run.key, name: runName(item.run, item.trace?.name), value: root, total: root },
       ...item.tasks.map((subagent) => {
         const trace = traces.get(traceKey(subagent.run) ?? "");
-        return { id: `${item.run.key}:${subagent.id}`, name: subagent.label,
-          color: accent(item.run), value: describeActor(item, subagent, trace, time).usage };
+        const value = describeActor(item, subagent, trace, time).usage;
+        const total = covered === undefined ? value : combinedUsage(
+          beforeTime(actorEvents(item, subagent, trace), time).filter(({ at }) => at > covered),
+        );
+        return { id: `${item.run.key}:${subagent.id}`, name: subagent.label, value, total };
       }),
     ];
-    return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value }] : []);
+    return entries.flatMap((entry) => entry.value ? [{ ...entry, value: entry.value, color: accent(item.run) }] : []);
   }) : [], [branches, time, traces, usage]);
-  const aggregate = measurements.reduce<{ tokens: number; cost: number | undefined }>((total, item) => ({
-    tokens: total.tokens + item.value.tokens,
-    cost: item.value.cost === undefined ? total.cost : (total.cost ?? 0) + item.value.cost,
+  const aggregate = measurements.reduce<{ tokens: number; cost: number | undefined }>((total, { total: entry }) => ({
+    tokens: total.tokens + (entry?.tokens ?? 0),
+    cost: entry?.cost === undefined ? total.cost : (total.cost ?? 0) + entry.cost,
   }), { tokens: 0, cost: undefined });
   const peakUsage = Math.max(1, ...measurements.map((item) => item.value.tokens));
 

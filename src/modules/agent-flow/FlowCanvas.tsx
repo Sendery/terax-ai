@@ -474,7 +474,8 @@ export function FlowCanvas({
             const status = time === null ? nodeStatus.get(branch.run.key) : undefined;
             const processCount = show.filter(({ task }) => task?.process).length;
             const agentCount = show.length - processCount - Number(!!branch.run.marker);
-            const operating = time === null && ((!!status?.working && !runOutcome(branch)) || show.some(({ task }) =>
+            const chatWorking = branch.run.group === "terax-ai" && branch.run.active;
+            const operating = time === null && (((status?.working || chatWorking) && !runOutcome(branch)) || show.some(({ task }) =>
               task && task.returnedAt === undefined && (task.running || task.process?.state === "running")));
             const pulse = operating && pulseSlots > 0;
             if (pulse) pulseSlots--;

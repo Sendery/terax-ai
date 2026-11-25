@@ -43,6 +43,7 @@ export type TraceEvent = {
     key?: string | null;
     cost?: number | null;
     outputOnly?: boolean;
+    includesSubagents?: boolean;
     context?: { input: number; window: number };
   } | null;
 };

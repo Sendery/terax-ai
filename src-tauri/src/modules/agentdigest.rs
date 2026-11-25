@@ -818,11 +818,6 @@ type CodexResolutions = HashMap<String, (Instant, Option<PathBuf>)>;
 
 static CODEX_RESOLVED: Mutex<Option<CodexResolutions>> = Mutex::new(None);
 
-/// The newest codex rollout recorded for `cwd`.
-///
-/// Codex mints its own ids and the restore feature already resumes it by
-/// directory, so the pane is matched the same way. Only the most recent
-/// rollouts are opened, and only their first line, which is `session_meta`.
 pub(crate) fn codex_subagent(meta: &Value) -> bool {
     meta["thread_source"] == "subagent" || meta["source"].get("subagent").is_some()
 }
@@ -835,6 +830,7 @@ fn codex_matches(meta: &Value, session_id: Option<&str>, cwd: &str) -> bool {
         && meta["cwd"].as_str().is_some_and(|value| value.trim_end_matches('/') == cwd)
 }
 
+/// Resolve a known thread or the newest root rollout recorded for the pane's directory.
 fn resolve_codex(session_id: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
     let cwd = cwd.unwrap_or_default().trim_end_matches('/');
     let key = session_id.map(|id| format!("id:{id}")).unwrap_or_else(|| format!("cwd:{cwd}"));

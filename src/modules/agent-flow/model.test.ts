@@ -94,6 +94,20 @@ describe("Agent Flow", () => {
     expect(actor.tools.map(({ text }) => text)).toEqual(["Search"]);
   });
 
+  it("marks the part of Copilot's subagent usage included in the session total", () => {
+    const run: FlowRun = {
+      ...root, harness: "copilot", events: [
+        { id: "spawn", at: 10, kind: "delegated", taskId: "child" },
+        { id: "child-usage", at: 11, kind: "usage", taskId: "child", usage: { tokens: 32, cumulative: false, outputOnly: true } },
+        { id: "checkpoint", at: 12, kind: "usage", usage: { tokens: 112, cumulative: true, includesSubagents: true } },
+      ],
+    };
+    const branch = branchFor(run, [], null, new Map());
+    expect(describeActor(branch, undefined, undefined, 11).usage).toBeUndefined();
+    expect(describeActor(branch, undefined, undefined, null).usage).toMatchObject({ tokens: 112, subagentsThrough: 12 });
+    expect(describeActor(branch, branch.tasks[0], undefined, null).usage).toMatchObject({ tokens: 32, outputOnly: true });
+  });
+
   it("places actual descendants on successive layers in both directions", () => {
     const branch = branchFor(root, [child, grandchild], null, new Map());
     const down = makeScene([branch], "down").clusters[0].nodes;

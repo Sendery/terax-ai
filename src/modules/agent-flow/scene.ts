@@ -46,7 +46,7 @@ export type Actor = {
   activity: TraceEvent | undefined;
   tools: TraceEvent[];
   signals: TraceEvent[];
-  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number }; outputOnly?: boolean } | undefined;
+  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number }; outputOnly?: boolean; subagentsThrough?: number } | undefined;
 };
 
 export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" | "state";
@@ -225,12 +225,13 @@ export function liveBranches(
   return { branches: visible, nextExpiry };
 }
 
-function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
+export function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
   let tokens = 0;
   let cost: number | undefined;
   let context: NonNullable<Actor["usage"]>["context"];
   let found = false;
   let outputOnly = true;
+  let subagentsThrough: number | undefined;
   const records = new Map<string, NonNullable<TraceEvent["usage"]>>();
   for (const event of events) {
     const usage = event.usage;
@@ -242,6 +243,7 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
       tokens = usage.tokens;
       cost = usage.cost ?? undefined;
       outputOnly = usage.outputOnly === true;
+      subagentsThrough = usage.includesSubagents ? event.at : undefined;
     } else {
       records.set(usage.key ?? event.id, usage);
     }
@@ -251,7 +253,11 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
     tokens += usage.tokens;
     if (usage.cost !== undefined && usage.cost !== null) cost = (cost ?? 0) + usage.cost;
   }
-  return found ? { tokens, cost, context, ...(outputOnly && { outputOnly: true }) } : undefined;
+  return found ? {
+    tokens, cost, context,
+    ...(subagentsThrough !== undefined && { subagentsThrough }),
+    ...(outputOnly && { outputOnly: true }),
+  } : undefined;
 }
 
 export function actorEvents(branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined) {

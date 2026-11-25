@@ -80,7 +80,7 @@ loaded traces. When an inspector has only output counts, it labels them as such.
 | Claude Code | Terax hooks, process status and terminal alerts | Messages, tool calls, delegation calls and return notifications from the parent transcript |
 | Codex | Process status and terminal alerts | Tools, turns, token counts and context occupancy from rollouts. Subagents use the recorded parent relationship and task events, including children that run in a different worktree. |
 | Pi | Pi extension markers, process status and terminal alerts | Messages, tools and explicit subagent calls from the session transcript |
-| Copilot CLI | Process status and terminal alerts | Messages, tools, turns, structured subagent events and token totals from usage records or session accounting when present. |
+| Copilot CLI | Process status and terminal alerts | Messages, tools, turns and structured subagent events. Messages and tools with a parent tool-call ID attach to that subagent. Usage records and accounting totals appear when supplied. Subagents show output counts when that is all their messages report. |
 | Antigravity | Process status and terminal alerts | Messages, tools and errors from local transcripts with a recorded workspace. Usage depends on the transcript including a count. |
 | Grok | Process status and terminal alerts | Terminal activity only. |
 | Terax AI | Chat and delegated tool lifecycle | Tool names, subagent status and reported token counts. The Flow journal stores no chat text, tool inputs or outputs. |
