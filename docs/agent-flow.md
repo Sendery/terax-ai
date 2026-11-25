@@ -1,9 +1,9 @@
 # Agent Flow
 
 Open **Agent Flow** from the Agent Monitor header. It opens a Terax workspace
-tab. Use **Detach** to move the map into a separate window that you can put on
-another display. **Dock** returns to the workspace tab. Both views follow the
-same terminal sessions.
+tab. **Detach** moves the map into a separate window and closes its workspace
+tab. **Dock** brings Agent Flow back as a workspace tab. The map follows the same
+terminal sessions in either view.
 
 The source menu groups open shells under their tab. Select a tab to show its
 agents in one frame, including agents in newly opened splits. Select shells

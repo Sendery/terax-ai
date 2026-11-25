@@ -1293,6 +1293,14 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     for (const lid of toDispose) disposeSession(lid);
   }, [setTabs]);
 
+  const closeAgentFlowTab = useCallback((id: number) => {
+    const current = tabsRef.current;
+    const flow = current.find((tab) => tab.id === id);
+    if (flow?.kind !== "agent-flow") return;
+    if (nextActiveInSpace(current, id) === null) newTabInSpace(flow.spaceId);
+    closeTab(id);
+  }, [closeTab, newTabInSpace]);
+
   const updateTab = useCallback((id: number, patch: TabPatch) => {
     setTabs((t) =>
       t.map((x) => {
@@ -1596,6 +1604,7 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     openPrReviewTab,
     openReaderTab,
     openAgentFlowTab,
+    closeAgentFlowTab,
     setPrReviewBase,
     setAiDiffStatus,
     closeAiDiffTab,

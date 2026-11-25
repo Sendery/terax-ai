@@ -39,6 +39,7 @@ vi.mock("@/modules/terminal/lib/leafSession", () => ({
   disposeSession: vi.fn(),
 }));
 import { useTabs } from "@/modules/tabs/lib/useTabs";
+import { disposeSession } from "@/modules/terminal/lib/leafSession";
 function TestHarness() {
   hooks.cursor = 0;
   return useTabs();
@@ -135,4 +136,36 @@ it("keeps a dirty Markdown document and metadata while changing views or reopeni
   expect(current.tabs.find(t => t.id === id)).toMatchObject({kind:"markdown",dirty:true,customTitle:"My notes",viewMode:"rendered"});
   current.updateTab(id, {path:"/repo/renamed.md"});
   expect(flush().tabs.find(t => t.id === id)).toMatchObject({path:"/repo/renamed.md",dirty:true});
+});
+
+it("closes the detached Agent Flow tab without disposing its terminal", () => {
+  const api = TestHarness();
+  const terminalId = api.activeId;
+  api.openAgentFlowTab();
+  const opened = flush();
+  const flowId = opened.activeId;
+
+  opened.closeAgentFlowTab(terminalId);
+  opened.closeAgentFlowTab(flowId);
+  opened.closeAgentFlowTab(flowId);
+
+  const detached = flush();
+  expect(detached.tabs).toEqual(api.tabs);
+  expect(detached.activeId).toBe(terminalId);
+  expect(disposeSession).not.toHaveBeenCalled();
+});
+
+it("replaces Agent Flow with a shell if it was the only tab in its space", () => {
+  const api = TestHarness();
+  api.setActiveSpaceForNewTabs("flow-space");
+  api.openAgentFlowTab();
+  const opened = flush();
+  opened.closeAgentFlowTab(opened.activeId);
+
+  const detached = flush();
+  expect(detached.tabs.find((tab) => tab.id === detached.activeId)).toMatchObject({
+    kind: "terminal",
+    spaceId: "flow-space",
+  });
+  expect(detached.tabs.map((tab) => tab.kind)).toEqual(["terminal", "terminal"]);
 });

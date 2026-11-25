@@ -27,25 +27,31 @@ import "./agent-flow.css";
 const HISTORY_READ_AHEAD = 28;
 
 export default function AgentFlow({
-  tabs, open, onActivate,
+  tabs, open, onActivate, onDetached,
 }: {
   tabs: readonly Tab[];
   open: boolean;
   onActivate: (tabId: number, leafId: number) => void;
+  onDetached: () => void;
 }) {
   const [refresh, setRefresh] = useState(0);
   const [message, setMessage] = useState("");
+  const [detaching, setDetaching] = useState(false);
   const data = useFlowData(tabs, open, refresh);
   const background = useFlowBackground(open);
 
   function detach() {
     setMessage("");
-    void invoke("open_agent_flow_window").catch(() => setMessage("Agent Flow could not open in a separate window."));
+    setDetaching(true);
+    void invoke("open_agent_flow_window").then(onDetached, () => {
+      setDetaching(false);
+      setMessage("Agent Flow could not open in a separate window.");
+    });
   }
 
   return <AgentFlowView open={open} data={data} background={background} onActivate={onActivate}
     refresh={refresh} onRefresh={() => setRefresh((value) => value + 1)}
-    windowAction={isTauri() ? { label: "Detach", run: detach } : undefined} windowMessage={message} />;
+    windowAction={isTauri() ? { label: "Detach", run: detach, pending: detaching } : undefined} windowMessage={message} />;
 }
 
 export function AgentFlowView({
@@ -58,7 +64,7 @@ export function AgentFlowView({
   onRefresh: () => void;
   onActivate: (tabId: number, leafId: number) => void;
   onOpenDiff?: (file: FileCrossing) => Promise<string | undefined>;
-  windowAction?: { label: string; run: () => void };
+  windowAction?: { label: string; run: () => void; pending?: boolean };
   windowMessage?: string;
 }) {
   const [direction, setDirection] = useState<FlowDirection>("down");
@@ -280,7 +286,7 @@ export function AgentFlowView({
             setRelationKey(null);
           }}>Usage</button>
           <button type="button" onClick={onRefresh} disabled={loading}>Refresh</button>
-          {windowAction ? <button type="button" onClick={windowAction.run}>{windowAction.label}</button> : null}
+          {windowAction ? <button type="button" disabled={windowAction.pending} onClick={windowAction.run}>{windowAction.label}</button> : null}
         </div>
       </header>
 

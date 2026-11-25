@@ -78,6 +78,7 @@ type Props = {
   onMermaidSourceChange: MermaidStackProps["onSourceChange"];
   onMermaidVisualLayoutChange: MermaidStackProps["onVisualLayoutChange"];
   onActivateAgent: (tabId: number, leafId: number) => void;
+  onAgentFlowDetached: (tabId: number) => void;
 };
 
 /**
@@ -120,8 +121,10 @@ export function WorkspaceSurface({
   onMermaidSourceChange,
   onMermaidVisualLayoutChange,
   onActivateAgent,
+  onAgentFlowDetached,
 }: Props) {
   const kind = activeTab?.kind;
+  const agentFlowTab = tabs.find((tab) => tab.kind === "agent-flow");
   const isTerminalTab = kind === "terminal";
   const isEditorTab = kind === "editor" || kind === "markdown";
   const isPreviewTab = kind === "preview";
@@ -290,10 +293,16 @@ export function WorkspaceSurface({
               }}
             />
           </div>
-          {tabs.some((tab) => tab.kind === "agent-flow") ? (
+          {agentFlowTab ? (
             <div className={cn("absolute inset-0", kind !== "agent-flow" && "hidden")}>
               <Suspense fallback={<p className="p-4 text-xs text-muted-foreground">Loading Agent Flow…</p>}>
-                <AgentFlow tabs={tabs} open={kind === "agent-flow"} onActivate={onActivateAgent} />
+                <AgentFlow
+                  key={agentFlowTab.id}
+                  tabs={tabs}
+                  open={kind === "agent-flow"}
+                  onActivate={onActivateAgent}
+                  onDetached={() => onAgentFlowDetached(agentFlowTab.id)}
+                />
               </Suspense>
             </div>
           ) : null}

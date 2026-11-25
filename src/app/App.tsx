@@ -312,6 +312,7 @@ export default function App() {
     openPrReviewTab,
     openReaderTab,
     openAgentFlowTab,
+    closeAgentFlowTab,
     setPrReviewBase,
     moveTab,
     setTabPinned,
@@ -3178,6 +3179,7 @@ export default function App() {
                         onMermaidSourceChange={updateMermaidSource}
                         onMermaidVisualLayoutChange={updateMermaidVisualLayout}
                         onActivateAgent={onFocusFlowTerminal}
+                        onAgentFlowDetached={closeAgentFlowTab}
                       />
                     </div>
 
