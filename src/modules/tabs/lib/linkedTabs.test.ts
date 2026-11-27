@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hydrateTabs, serializeTabs } from "@/modules/spaces/lib/serialize";
-import { cleanLinkedTabs, indexLinkedTabs, linkTabs, resizeLinkedTabs, unlinkTabs } from "./linkedTabs";
+import { cleanLinkedTabs, indexLinkedTabs, linkTabs, resizeLinkedTabs, unlinkTabs, warmActiveTabs } from "./linkedTabs";
 import type { Tab } from "./useTabs";
 
 const key = "e07bc755-0de0-4052-a077-45caa0ec1ffc";
@@ -33,6 +33,10 @@ describe("linked tabs", () => {
     expect(indexLinkedTabs(restored).get(restored[1].id)).toEqual({
       key, leftId: restored[1].id, rightId: restored[0].id, percent: 61,
     });
+    const unrelated = { ...terminal, id: ++next };
+    expect(restored.every((tab) => tab.cold)).toBe(true);
+    expect(warmActiveTabs([...restored, unrelated], restored[0].id).map((tab) => tab.cold))
+      .toEqual([false, false, true]);
   });
 
   it("cleans links if a tab is closed or moved and refuses private shells", () => {

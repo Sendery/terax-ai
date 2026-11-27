@@ -69,6 +69,16 @@ export function linkTabs(tabs: Tab[], leftId: number, rightId: number, key: stri
   });
 }
 
+export function warmActiveTabs(tabs: Tab[], activeId: number): Tab[] {
+  const active = tabs.find((tab) => tab.id === activeId);
+  if (!active) return tabs;
+  const key = active.linkedView?.key;
+  const shouldWarm = (tab: Tab) =>
+    tab.cold && (tab === active || (key !== undefined && tab.linkedView?.key === key));
+  if (!tabs.some(shouldWarm)) return tabs;
+  return tabs.map((tab) => shouldWarm(tab) ? { ...tab, cold: false } : tab);
+}
+
 export function unlinkTabs(tabs: Tab[], tabId: number): Tab[] {
   const key = tabs.find((tab) => tab.id === tabId)?.linkedView?.key;
   return key ? tabs.map((tab) => tab.linkedView?.key === key ? { ...tab, linkedView: undefined } : tab) : tabs;
