@@ -160,11 +160,20 @@ pub fn spawn(
         let mut cmd = cmd;
         if let Some(token) = &shell_token {
             cmd.env(shell_init::SHELL_MARKER_ENV, token.as_str());
+            cmd.env(shell_init::KITTY_GRAPHICS_ENV, "1");
             #[cfg(windows)]
             {
-                let inherited = cmd.get_env("WSLENV").and_then(|value| value.to_str()).unwrap_or("").to_owned();
-                let mut names: Vec<&str> = inherited.split(':').filter(|name| !name.is_empty() && name.split('/').next()!=Some(shell_init::SHELL_MARKER_ENV)).collect();
-                names.push(shell_init::SHELL_MARKER_ENV);
+                let forwarded = [shell_init::SHELL_MARKER_ENV, shell_init::KITTY_GRAPHICS_ENV];
+                let inherited = cmd.get_env("WSLENV").and_then(|value| value.to_str()).unwrap_or("");
+                let mut names: Vec<&str> = inherited
+                    .split(':')
+                    .filter(|entry| !entry.is_empty())
+                    .filter(|entry| {
+                        let name = entry.split('/').next().unwrap_or_default();
+                        !forwarded.iter().any(|key| key.eq_ignore_ascii_case(name))
+                    })
+                    .collect();
+                names.extend(forwarded);
                 cmd.env("WSLENV", names.join(":"));
             }
         }

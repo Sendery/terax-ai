@@ -16,8 +16,10 @@ const ZLOGIN_SCRIPT: &str = include_str!("scripts/zlogin.zsh");
 const ZSHRC_SCRIPT: &str = include_str!("scripts/zshrc.zsh");
 #[cfg(windows)]
 const FISH_INIT_SCRIPT: &str = include_str!("scripts/init.fish");
-const FISH_REINSTALL_PROMPT: &str =
-    "functions -q __terax_install_prompt; and __terax_install_prompt";
+const FISH_POST_CONFIG: &str = concat!(
+    "functions -q __terax_install_prompt; and __terax_install_prompt; ",
+    "functions -q __terax_install_codex; and __terax_install_codex",
+);
 
 #[cfg(windows)]
 fn bashrc_script() -> &'static str {
@@ -137,6 +139,7 @@ const TERM_PROGRAM: &str = "Terax";
 pub const PTY_ID_ENV: &str = "TERAX_PTY_ID";
 
 pub const SHELL_MARKER_ENV: &str = "TERAX_SHELL_INTEGRATION_TOKEN";
+pub const KITTY_GRAPHICS_ENV: &str = "TERAX_KITTY_GRAPHICS";
 
 fn apply_blocks_environment(cmd: &mut CommandBuilder, blocks: bool, wsl: bool) {
     cmd.env_remove("TERAX_BLOCKS");
@@ -169,6 +172,7 @@ fn apply_blocks_environment(cmd: &mut CommandBuilder, blocks: bool, wsl: bool) {
 
 fn apply_common(cmd: &mut CommandBuilder, cwd: Option<String>, blocks: bool) {
     cmd.env_remove(SHELL_MARKER_ENV);
+    cmd.env_remove(KITTY_GRAPHICS_ENV);
     apply_blocks_environment(cmd, blocks, false);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
@@ -318,9 +322,10 @@ mod unix {
                 cmd.arg("-i");
                 // Re-assert our prompt after config.fish (-C runs last), so a
                 // framework prompt (starship etc.) loaded there can't override
-                // the markers and break cwd tracking.
+                // the markers and break cwd tracking. Check for a user-defined
+                // Codex command only after fish has loaded its configuration.
                 cmd.arg("-C");
-                cmd.arg(super::FISH_REINSTALL_PROMPT);
+                cmd.arg(super::FISH_POST_CONFIG);
             }
             Shell::Other => {
                 log::info!(
@@ -383,7 +388,7 @@ mod unix {
                     "/usr/bin/fish".to_string(),
                     "-i".to_string(),
                     "-C".to_string(),
-                    super::super::FISH_REINSTALL_PROMPT.to_string(),
+                    super::super::FISH_POST_CONFIG.to_string(),
                 ]
             );
         }
@@ -543,6 +548,7 @@ mod windows {
             cmd.arg(arg);
         }
         cmd.env_remove(SHELL_MARKER_ENV);
+        cmd.env_remove(super::KITTY_GRAPHICS_ENV);
         super::apply_blocks_environment(&mut cmd, blocks, true);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -596,7 +602,7 @@ mod windows {
                 args.push(shell_path.to_string());
                 args.push("-i".to_string());
                 args.push("-C".to_string());
-                args.push(super::FISH_REINSTALL_PROMPT.to_string());
+                args.push(super::FISH_POST_CONFIG.to_string());
             }
             (ShellKind::Zsh, WslShellIntegration::None) => {
                 args.push(shell_path.to_string());
@@ -828,7 +834,7 @@ mod windows {
                     "/usr/bin/fish".to_string(),
                     "-i".to_string(),
                     "-C".to_string(),
-                    super::super::FISH_REINSTALL_PROMPT.to_string(),
+                    super::super::FISH_POST_CONFIG.to_string(),
                 ]
             );
         }
@@ -927,6 +933,14 @@ mod term_program_tests {
         apply_common(&mut cmd, None, false);
         assert_eq!(cmd.get_env("TERM_PROGRAM"), Some(OsStr::new("Terax")));
     }
+    #[test]
+    fn shell_launch_does_not_inherit_a_kitty_graphics_marker() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env(KITTY_GRAPHICS_ENV, "1");
+        apply_common(&mut cmd, None, false);
+        assert_eq!(cmd.get_env(KITTY_GRAPHICS_ENV), None);
+    }
+
     #[test]
     fn explicit_blocks_option_overrides_inherited_environment() {
         for enabled in [false, true] {
