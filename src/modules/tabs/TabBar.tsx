@@ -299,11 +299,6 @@ export function TabBar({
                 ? tabColorStyle(t.color, isActive)
                 : undefined;
 
-              const accessibleLabel = tabAccessibleLabel(
-                labelFor(t),
-                t.color,
-                (t.kind === "editor" || t.kind === "markdown") && !!t.dirty,
-              );
               const trigger = (
                 <TabsTrigger
                   value={String(t.id)}
@@ -319,7 +314,12 @@ export function TabBar({
                         }
                       : undefined
                   }
-                  aria-label={partner ? `${accessibleLabel}, linked to ${labelFor(partner)}` : accessibleLabel}
+                  aria-label={tabAccessibleLabel(
+                    labelFor(t),
+                    t.color,
+                    (t.kind === "editor" || t.kind === "markdown") && !!t.dirty,
+                  )}
+                  aria-description={partner ? `Linked to ${labelFor(partner)}` : undefined}
                   onPointerDown={(e) => {
                     if (e.button !== 0) return;
                     if ((e.target as HTMLElement).closest("[data-no-drag]"))
