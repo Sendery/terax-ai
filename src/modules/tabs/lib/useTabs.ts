@@ -32,7 +32,7 @@ import {
 } from "react";
 import { replaceMermaidTab } from "./mermaidTabMutation";
 import type { TabColor } from "./tabColors";
-import { cleanLinkedTabs, linkTabs, resizeLinkedTabs, type TabLink, unlinkTabs } from "./linkedTabs";
+import { cleanLinkedTabs, linkTabs, resizeLinkedTabs, type TabLink, unlinkTabs, warmActiveTabs } from "./linkedTabs";
 
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
@@ -476,14 +476,9 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     activeIdRef.current = activeId;
   }, [activeId]);
 
-  // Activating a cold tab warms it: one choke point for every activation path.
+  // Activating a restored pair mounts both sides on demand.
   useEffect(() => {
-    if (!booted) return;
-    setTabs((curr) => {
-      const t = curr.find((x) => x.id === activeId);
-      if (!t?.cold) return curr;
-      return curr.map((x) => (x.id === activeId ? { ...x, cold: false } : x));
-    });
+    if (booted) setTabs((current) => warmActiveTabs(current, activeId));
   }, [activeId, booted, setTabs]);
 
   // Spawns a restored tab where it sits, without stealing focus. Session
