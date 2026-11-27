@@ -17,7 +17,7 @@ import {
 } from "@/modules/reader/components/ReadContextMenu";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
-import { lazy, Suspense, type ComponentProps, type CSSProperties, useMemo } from "react";
+import { lazy, Suspense, type ComponentProps, type CSSProperties, useMemo, useState } from "react";
 
 const AgentFlow = lazy(() => import("@/modules/agent-flow/AgentFlow"));
 
@@ -327,19 +327,11 @@ export function WorkspaceSurface({
             </div>
           ) : null}
           {tabPair ? (
-            <div className="pointer-events-none absolute inset-x-3 inset-y-2 z-10">
-              <ResizablePanelGroup key={tabPair.key} orientation="horizontal">
-                <ResizablePanel
-                  id="linked-left"
-                  defaultSize={`${tabPair.percent}%`}
-                  minSize={`${MIN_SPLIT_PERCENT}%`}
-                  maxSize={`${MAX_SPLIT_PERCENT}%`}
-                  onResize={(size) => onResizeTabPair(tabPair.key, size.asPercentage)}
-                />
-                <ResizableHandle withHandle aria-label="Resize linked tabs" className="pointer-events-auto" />
-                <ResizablePanel id="linked-right" minSize={`${MIN_SPLIT_PERCENT}%`} />
-              </ResizablePanelGroup>
-            </div>
+            <LinkedTabDivider
+              key={tabPair.key}
+              pair={tabPair}
+              onResize={onResizeTabPair}
+            />
           ) : null}
         </div>
         {dock ? (
@@ -370,4 +362,28 @@ export function WorkspaceSurface({
     </div>
   );
   return <LinkedTabContext.Provider value={linkedContext}>{workspace}</LinkedTabContext.Provider>;
+}
+
+function LinkedTabDivider({ pair, onResize }: {
+  pair: LinkedTabs;
+  onResize: Props["onResizeTabPair"];
+}) {
+  // Changing the default while dragging re-registers the panels and interrupts the gesture.
+  const [defaultLayout] = useState(() => ({
+    "linked-left": pair.percent,
+    "linked-right": 100 - pair.percent,
+  }));
+  return (
+    <div className="pointer-events-none absolute inset-x-3 inset-y-2 z-10">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        defaultLayout={defaultLayout}
+        onLayoutChange={(layout) => onResize(pair.key, layout["linked-left"])}
+      >
+        <ResizablePanel id="linked-left" minSize={`${MIN_SPLIT_PERCENT}%`} maxSize={`${MAX_SPLIT_PERCENT}%`} />
+        <ResizableHandle withHandle aria-label="Resize linked tabs" className="pointer-events-auto" />
+        <ResizablePanel id="linked-right" minSize={`${MIN_SPLIT_PERCENT}%`} />
+      </ResizablePanelGroup>
+    </div>
+  );
 }
