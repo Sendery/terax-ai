@@ -11,7 +11,8 @@ use serde_json::Value;
 
 use super::{
     agentdigest::{
-        claude_result_pending, claude_task_notices, codex_thread_name, parse_rfc3339_ms,
+        claude_pending_task_id, claude_result_pending, claude_task_notices, codex_subagent, codex_thread_name,
+        parse_rfc3339_ms,
     },
     agentsessions::{find_session_file, is_safe_session_id, sessions_root, AgentKind},
 };
@@ -52,6 +53,7 @@ enum Kind {
     Delegated,
     MonitorStarted,
     BackgroundStarted,
+    TaskAlias,
     TaskActivity,
     Returned,
     TurnEnded,
@@ -66,6 +68,9 @@ struct Usage {
     cumulative: bool,
     key: Option<String>,
     cost: Option<f64>,
+    output_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    includes_subagents: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     context: Option<ContextUsage>,
 }
@@ -144,7 +149,7 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 .filter_map(|key| usage.get(key)?.as_u64())
                 .fold(0u64, u64::saturating_add);
             let key = safe_key(&message["id"]).or_else(|| safe_key(&row["uuid"]))?;
-            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None, context: None })
+            Some(Usage { tokens, cumulative: false, key: Some(key), cost: None, output_only: false, includes_subagents: None, context: None })
         }
         Provider::Pi if message["role"] == "assistant" => {
             let usage = &message["usage"];
@@ -153,6 +158,8 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 cumulative: false,
                 key: safe_key(&row["id"]),
                 cost: usage["cost"]["total"].as_f64().filter(|cost| cost.is_finite() && *cost >= 0.0),
+                output_only: false,
+                includes_subagents: None,
                 context: None,
             })
         }
@@ -168,9 +175,46 @@ fn usage_for(provider: Provider, row: &Value) -> Option<Usage> {
                 cumulative: true,
                 key: None,
                 cost: None,
+                output_only: false,
+                includes_subagents: None,
                 context,
             })
         }
+        Provider::Copilot if row["type"] == "session.usage_record" => {
+            let usage = &row["data"]["usage"];
+            let input = usage["inputTokens"].as_u64()?;
+            let output = usage["outputTokens"].as_u64()?;
+            Some(Usage {
+                tokens: input.saturating_add(output), cumulative: false,
+                key: safe_key(&usage["apiCallId"]).or_else(|| safe_key(&row["id"])),
+                cost: None, output_only: false, includes_subagents: None, context: None,
+            })
+        }
+        Provider::Copilot if matches!(row["type"].as_str(), Some("session.shutdown" | "session.usage_checkpoint")) => {
+            let data = &row["data"];
+            let models = data["modelMetrics"].as_object().or_else(|| data["accountingSnapshot"]["modelMetrics"].as_object())?;
+            let tokens = models.values().filter_map(|entry| {
+                let usage = &entry["usage"];
+                Some(usage["inputTokens"].as_u64()?.saturating_add(usage["outputTokens"].as_u64()?))
+            }).reduce(u64::saturating_add)?;
+            Some(Usage { tokens, cumulative: true, key: None, cost: None, output_only: false, includes_subagents: Some(true), context: None })
+        }
+        Provider::Copilot if row["type"] == "assistant.message" => {
+            let data = &row["data"];
+            let usage = data.get("usage").unwrap_or(data);
+            let total = usage["totalTokens"].as_u64();
+            let input = usage["inputTokens"].as_u64();
+            let output = usage["outputTokens"].as_u64();
+            Some(Usage {
+                tokens: total.or_else(|| output.map(|value| value.saturating_add(input.unwrap_or(0))))?,
+                cumulative: false, key: safe_key(&data["messageId"]).or_else(|| safe_key(&row["id"])),
+                cost: None, output_only: total.is_none() && input.is_none(), includes_subagents: None, context: None,
+            })
+        }
+        Provider::Agy if row["type"] == "PLANNER_RESPONSE" => Some(Usage {
+            tokens: row["usage"]["total_tokens"].as_u64()?,
+            cumulative: false, key: safe_key(&row["id"]), cost: None, output_only: false, includes_subagents: None, context: None,
+        }),
         _ => None,
     }
 }
@@ -202,8 +246,12 @@ fn tool_file(provider: Provider, row: &Value, name: &str, occurrence: usize) -> 
             explicit_file(&block["input"]).or_else(|| explicit_file(&block["arguments"]))
         }
         Provider::Codex => {
-            let args: Value = serde_json::from_str(row["payload"]["arguments"].as_str()?).ok()?;
-            explicit_file(&args)
+            let payload = &row["payload"];
+            if let Some(raw) = payload["arguments"].as_str() {
+                explicit_file(&serde_json::from_str::<Value>(raw).ok()?)
+            } else {
+                explicit_file(&payload["item"]["arguments"])
+            }
         }
         Provider::Copilot => explicit_file(&row["data"]["arguments"]),
         Provider::Agy => None,
@@ -230,11 +278,71 @@ fn message_text(role: &str, value: &Value, emit: &mut impl FnMut(Kind, String, O
 fn project_task_notices(raw: &str, emit: &mut impl FnMut(Kind, String, Option<String>)) {
     for (id, status) in claude_task_notices(raw).filter(|(id, _)| is_safe_session_id(id)) {
         let kind = match status {
-            Some("failed" | "killed") => Kind::Error,
-            Some("completed" | "stopped") => Kind::Returned,
+            Some("failed" | "killed" | "timed_out") => Kind::Error,
+            Some("completed" | "stopped" | "cancelled" | "canceled") => Kind::Returned,
             _ => Kind::TaskActivity,
         };
         emit(kind, String::new(), Some(id.to_string()));
+    }
+}
+
+fn codex_tool_result(payload: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
+    let output = &payload["output"];
+    let parsed = output.as_str()
+        .or_else(|| output.as_array()?.iter().find_map(|part| part["text"].as_str()))
+        .and_then(|text| serde_json::from_str::<Value>(text).ok());
+    let result = parsed.as_ref().unwrap_or(output);
+    let child = safe_key(&result["agent_id"]).or_else(|| safe_key(&result["task_name"]));
+    if let (Some(call), Some(child)) = (safe_key(&payload["call_id"]), child) {
+        emit(Kind::TaskAlias, child, Some(call));
+    }
+    if !result["timed_out"].is_boolean() {
+        return;
+    }
+    for (id, status) in result["status"].as_object().into_iter().flatten().take(32) {
+        if !is_safe_session_id(id) {
+            continue;
+        }
+        let kind = if status.get("errored").is_some() || status == "not_found" {
+            Kind::Error
+        } else if status.get("completed").is_some() || status == "shutdown" {
+            Kind::Returned
+        } else {
+            continue;
+        };
+        emit(kind, String::new(), Some(id.clone()));
+    }
+}
+
+fn codex_item(item: &Value, emit: &mut impl FnMut(Kind, String, Option<String>)) {
+    match item["type"].as_str().unwrap_or_default() {
+        "SubAgentActivity" => {
+            let Some(thread) = safe_key(&item["agent_thread_id"]) else { return };
+            let kind = item["kind"].as_str();
+            if !matches!(kind, Some("started" | "completed" | "failed")) {
+                return;
+            }
+            let name = item["agent_path"].as_str().and_then(|path| path.rsplit('/').next())
+                .filter(|name| is_safe_session_id(name));
+            if let Some(name) = name {
+                emit(Kind::TaskAlias, thread.clone(), Some(name.to_owned()));
+            }
+            match kind {
+                Some("started") => emit(Kind::Delegated, name.unwrap_or_default().to_owned(), Some(thread)),
+                Some("completed") => emit(Kind::Returned, String::new(), Some(thread)),
+                Some("failed") => emit(Kind::Error, String::new(), Some(thread)),
+                _ => {}
+            }
+        }
+        "CommandExecution" => emit(Kind::Tool, "Run shell".into(), None),
+        "FileChange" => emit(Kind::Tool, "Apply patch".into(), None),
+        "McpToolCall" => {
+            let tool = text(&item["tool"]);
+            if !tool.is_empty() {
+                emit(Kind::Tool, tool, None);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -250,6 +358,13 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             }
             let message = &row["message"];
             let role = message["role"].as_str().unwrap_or(kind);
+            if provider == Provider::Pi && role == "toolResult" {
+                if let Some(id) = safe_key(&message["toolCallId"]) {
+                    let kind = if message["isError"] == true { Kind::Error } else { Kind::Returned };
+                    emit(kind, String::new(), Some(id));
+                }
+                return;
+            }
             if !matches!(role, "user" | "assistant") || row["isSidechain"] == true {
                 return;
             }
@@ -284,10 +399,16 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
                             emit(Kind::Tool, name, None);
                         }
                     }
-                    "tool_result" if !claude_result_pending(block) => {
+                    "tool_result" => {
                         if let Some(id) = safe_key(&block["tool_use_id"]) {
-                            let kind = if block["is_error"] == true { Kind::Error } else { Kind::Returned };
-                            emit(kind, String::new(), Some(id));
+                            if claude_result_pending(block) {
+                                if let Some(alias) = claude_pending_task_id(block) {
+                                    emit(Kind::TaskAlias, alias, Some(id));
+                                }
+                            } else {
+                                let kind = if block["is_error"] == true { Kind::Error } else { Kind::Returned };
+                                emit(kind, String::new(), Some(id));
+                            }
                         }
                     }
                     _ => {}
@@ -299,26 +420,35 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             match (kind, p["type"].as_str().unwrap_or_default()) {
                 ("event_msg", "user_message") => emit(Kind::User, text(&p["message"]), None),
                 ("event_msg", "agent_message") => emit(Kind::Reply, text(&p["message"]), None),
+                ("event_msg", "item_completed") => codex_item(&p["item"], emit),
                 ("event_msg", "task_complete" | "turn_complete") => {
                     emit(Kind::TurnEnded, String::new(), None)
                 }
                 ("event_msg", "error") => emit(Kind::Error, String::new(), None),
                 ("response_item", "function_call" | "custom_tool_call") => {
                     let name = text(&p["name"]);
-                    if name == "spawn_agent" {
+                    if matches!(name.as_str(), "spawn_agent" | "spawn_agents") {
                         let args: Value = p["arguments"]
                             .as_str()
                             .and_then(|s| serde_json::from_str(s).ok())
                             .unwrap_or_default();
                         emit(
                             Kind::Delegated,
-                            first_text([&args["agent_type"], &args["nickname"]]),
+                            first_text([&args["agent_type"], &args["nickname"], &args["task_name"]]),
                             safe_key(&p["call_id"]),
                         );
-                    } else {
+                    } else if !name.is_empty() {
                         emit(Kind::Tool, name, None);
                     }
                 }
+                ("response_item", "function_call_output" | "custom_tool_call_output") => {
+                    codex_tool_result(p, emit)
+                }
+                ("response_item", "web_search_call" | "web_search_tool_call") => {
+                    emit(Kind::Tool, "Web search".into(), None)
+                }
+                ("response_item", "local_shell_call") => emit(Kind::Tool, "Run shell".into(), None),
+                ("response_item", "tool_search_call") => emit(Kind::Tool, "Find tools".into(), None),
                 _ => {}
             }
         }
@@ -326,8 +456,8 @@ fn project(provider: Provider, row: &Value, emit: &mut impl FnMut(Kind, String, 
             let p = &row["data"];
             match kind {
                 "user.message" => emit(Kind::User, text(&p["content"]), None),
-                "assistant.message" => emit(Kind::Reply, text(&p["content"]), None),
-                "tool.execution_start" => emit(Kind::Tool, text(&p["toolName"]), None),
+                "assistant.message" => emit(Kind::Reply, text(&p["content"]), safe_key(&p["parentToolCallId"])),
+                "tool.execution_start" => emit(Kind::Tool, text(&p["toolName"]), safe_key(&p["parentToolCallId"])),
                 "assistant.turn_end" => emit(Kind::TurnEnded, String::new(), None),
                 "session.error" => emit(Kind::Error, String::new(), None),
                 "subagent.started" => emit(
@@ -382,7 +512,9 @@ fn collect(dir: &Path, depth: usize, files: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
-    for entry in entries.flatten() {
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_cached_key(|entry| std::cmp::Reverse(entry.file_name()));
+    for entry in entries {
         if files.len() >= MAX_FILES {
             break;
         }
@@ -433,7 +565,14 @@ fn metadata(path: &Path, provider: Provider) -> Option<HistorySession> {
         }
         _ => return None,
     };
-    let spawn = &row["payload"]["source"]["subagent"]["thread_spawn"];
+    let payload = &row["payload"];
+    let spawn = &payload["source"]["subagent"]["thread_spawn"];
+    let parent_id = safe_key(&spawn["parent_thread_id"]).or_else(|| {
+        codex_subagent(payload).then(|| safe_key(&payload["parent_thread_id"])).flatten()
+    });
+    if provider == Provider::Codex && codex_subagent(payload) && parent_id.is_none() {
+        return None;
+    }
     let modified_at = path
         .metadata()
         .ok()?
@@ -447,11 +586,12 @@ fn metadata(path: &Path, provider: Provider) -> Option<HistorySession> {
         provider,
         cwd: cwd.as_str()?.to_string(),
         modified_at,
-        created_at: row["timestamp"].as_str().and_then(parse_rfc3339_ms),
-        parent_id: safe_key(&spawn["parent_thread_id"]),
-        name: spawn["agent_nickname"]
-            .as_str()
-            .map(|_| text(&spawn["agent_nickname"])),
+        created_at: payload["timestamp"].as_str().or_else(|| row["timestamp"].as_str()).and_then(parse_rfc3339_ms),
+        parent_id,
+        name: {
+            let name = first_text([&spawn["agent_nickname"], &payload["agent_nickname"], &spawn["agent_role"]]);
+            (!name.is_empty()).then_some(name)
+        },
     })
 }
 
@@ -478,7 +618,11 @@ fn resolve(provider: Provider, id: &str) -> Option<PathBuf> {
                     .is_some_and(|name| name == id),
                 _ => false,
             };
-            hint && metadata(path, provider).is_some_and(|meta| meta.id == id)
+            hint && if provider == Provider::Codex {
+                read_first(path).is_some_and(|row| row["type"] == "session_meta" && row["payload"]["id"] == id)
+            } else {
+                metadata(path, provider).is_some_and(|meta| meta.id == id)
+            }
         }),
         Provider::Agy => agy_transcript(&agy_root()?, id),
     }
@@ -640,8 +784,14 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
             } else {
                 None
             };
+            let id = if kind == Kind::Tool && provider == Provider::Codex {
+                safe_key(&row["payload"]["call_id"]).or_else(|| safe_key(&row["payload"]["item"]["id"]))
+                    .map(|id| format!("tool:{id}"))
+            } else {
+                None
+            };
             events.push_back(Event {
-                id: format!("{line_offset}:{index}"),
+                id: id.unwrap_or_else(|| format!("{line_offset}:{index}")),
                 at,
                 file,
                 kind,
@@ -661,7 +811,7 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
                 at,
                 kind: Kind::Usage,
                 text: String::new(),
-                task_id: None,
+                task_id: if provider == Provider::Copilot { safe_key(&row["data"]["parentToolCallId"]) } else { None },
                 file: None,
                 usage: Some(usage),
             });
@@ -677,7 +827,7 @@ fn read_trace(file: File, provider: Provider, offset: u64) -> std::io::Result<Tr
 }
 
 #[tauri::command]
-pub async fn agent_flow_history(cwds: Vec<String>) -> Result<Vec<HistorySession>, String> {
+pub async fn agent_flow_history(cwds: Vec<String>, excluded_cwds: Option<Vec<String>>) -> Result<Vec<HistorySession>, String> {
     let cwds: HashSet<_> = cwds
         .into_iter()
         .take(100)
@@ -686,6 +836,7 @@ pub async fn agent_flow_history(cwds: Vec<String>) -> Result<Vec<HistorySession>
     if cwds.is_empty() {
         return Ok(Vec::new());
     }
+    let excluded: HashSet<_> = excluded_cwds.unwrap_or_default().into_iter().take(100).collect();
     tauri::async_runtime::spawn_blocking(move || {
         let mut found = Vec::new();
         for provider in [Provider::Codex, Provider::Copilot] {
@@ -693,13 +844,14 @@ pub async fn agent_flow_history(cwds: Vec<String>) -> Result<Vec<HistorySession>
             files.sort_by_cached_key(|path| {
                 std::cmp::Reverse(path.metadata().and_then(|m| m.modified()).ok())
             });
-            found.extend(
-                files
-                    .into_iter()
-                    .filter_map(|path| metadata(&path, provider))
-                    .filter(|session| cwds.contains(&session.cwd))
-                    .take(120),
-            );
+            let sessions = files.into_iter()
+                .filter_map(|path| metadata(&path, provider))
+                .filter(|session| !excluded.contains(&session.cwd));
+            if provider == Provider::Codex {
+                found.extend(codex_history(sessions.collect(), &cwds));
+            } else {
+                found.extend(sessions.filter(|session| cwds.contains(&session.cwd)).take(120));
+            }
         }
         let mut agy = agy_history(&cwds);
         agy.sort_by_key(|session| std::cmp::Reverse(session.modified_at));
@@ -709,6 +861,36 @@ pub async fn agent_flow_history(cwds: Vec<String>) -> Result<Vec<HistorySession>
     })
     .await
     .map_err(|error| error.to_string())
+}
+
+fn codex_history(sessions: Vec<HistorySession>, cwds: &HashSet<String>) -> Vec<HistorySession> {
+    let mut descendants = HashMap::<&str, Vec<&str>>::new();
+    let mut selected: HashSet<_> = sessions.iter()
+        .filter(|session| session.parent_id.is_none() && cwds.contains(&session.cwd))
+        .take(120).map(|session| session.id.as_str()).collect();
+    for session in &sessions {
+        if let Some(parent) = &session.parent_id {
+            descendants.entry(parent).or_default().push(&session.id);
+        }
+    }
+    let mut queue: VecDeque<_> = selected.iter().copied().collect();
+    while let Some(parent) = queue.pop_front() {
+        if let Some(children) = descendants.get(parent) {
+            for &child in children {
+                if selected.len() >= 360 {
+                    break;
+                }
+                if selected.insert(child) {
+                    queue.push_back(child);
+                }
+            }
+        }
+    }
+    let selected: HashSet<_> = selected.into_iter().map(str::to_owned).collect();
+    let mut retained = HashSet::new();
+    sessions.into_iter().filter(|session| {
+        retained.insert(session.id.clone()) && selected.contains(session.id.as_str())
+    }).collect()
 }
 
 #[tauri::command]
@@ -739,6 +921,87 @@ mod tests {
     use std::io::Write;
 
     #[test]
+    fn codex_links_tool_call_to_child_and_projects_final_status_without_output() {
+        let mut events = Vec::new();
+        let mut emit = |kind, text, id| events.push((kind, text, id));
+        for row in [
+            serde_json::json!({"type":"response_item","payload":{"type":"function_call","name":"spawn_agent","call_id":"call","arguments":"{\"agent_type\":\"reviewer\"}"}}),
+            serde_json::json!({"type":"response_item","payload":{"type":"function_call_output","call_id":"call","output":[{"type":"input_text","text":"{\"agent_id\":\"child\"}"}]}}),
+            serde_json::json!({"type":"response_item","payload":{"type":"web_search_call","query":"not retained"}}),
+            serde_json::json!({"type":"response_item","payload":{"type":"function_call_output","call_id":"wait","output":"{\"status\":{\"child\":{\"completed\":\"not retained\"}},\"timed_out\":false}"}}),
+        ] {
+            project(Provider::Codex, &row, &mut emit);
+        }
+        assert_eq!(events, [
+            (Kind::Delegated, "reviewer".into(), Some("call".into())),
+            (Kind::TaskAlias, "child".into(), Some("call".into())),
+            (Kind::Tool, "Web search".into(), None),
+            (Kind::Returned, String::new(), Some("child".into())),
+        ]);
+    }
+
+    #[test]
+    fn codex_v2_projects_task_names_and_subagent_activity_items() {
+        let mut events = Vec::new();
+        let mut emit = |kind, text, id| events.push((kind, text, id));
+        for row in [
+            serde_json::json!({"type":"response_item","payload":{"type":"function_call_output","call_id":"call","output":"{\"task_name\":\"reviewer\"}"}}),
+            serde_json::json!({"type":"event_msg","payload":{"type":"item_completed","item":{"type":"SubAgentActivity","kind":"started","agent_thread_id":"child","agent_path":"/root/reviewer"}}}),
+            serde_json::json!({"type":"event_msg","payload":{"type":"item_completed","item":{"type":"SubAgentActivity","kind":"completed","agent_thread_id":"child","agent_path":"/root/reviewer"}}}),
+        ] {
+            project(Provider::Codex, &row, &mut emit);
+        }
+        assert_eq!(events, [
+            (Kind::TaskAlias, "reviewer".into(), Some("call".into())),
+            (Kind::TaskAlias, "child".into(), Some("reviewer".into())),
+            (Kind::Delegated, "reviewer".into(), Some("child".into())),
+            (Kind::TaskAlias, "child".into(), Some("reviewer".into())),
+            (Kind::Returned, String::new(), Some("child".into())),
+        ]);
+    }
+
+    #[test]
+    fn codex_history_joins_children_by_parent_across_worktrees() {
+        let session = |id: &str, cwd: &str, parent: Option<&str>| HistorySession {
+            id: id.into(), provider: Provider::Codex, cwd: cwd.into(), modified_at: 1,
+            created_at: None, parent_id: parent.map(str::to_owned), name: None,
+        };
+        let found = codex_history(vec![
+            session("nested", "/nested", Some("child")),
+            session("other_child", "/repo", Some("other_root")),
+            session("child", "/other-worktree", Some("root")),
+            session("root", "/repo", None),
+            session("other_root", "/unrelated", None),
+        ], &HashSet::from(["/repo".to_owned()]));
+        assert_eq!(found.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>(), ["nested", "child", "root"]);
+    }
+
+    #[test]
+    fn copilot_attributes_tools_and_output_counts_to_subagents() {
+        let mut file = tempfile::tempfile().unwrap();
+        for row in [
+            serde_json::json!({"type":"tool.execution_start","timestamp":"2026-11-22T10:00:00Z","data":{"toolName":"view","parentToolCallId":"child"}}),
+            serde_json::json!({"type":"assistant.message","timestamp":"2026-11-22T10:00:01Z","data":{"messageId":"answer","content":"Done","outputTokens":32,"parentToolCallId":"child"}}),
+            serde_json::json!({"type":"session.shutdown","timestamp":"2026-11-22T10:00:02Z","data":{"modelMetrics":{"model":{"usage":{"inputTokens":80,"outputTokens":32}}}}}),
+        ] {
+            writeln!(file, "{row}").unwrap();
+        }
+        let trace = read_trace(file, Provider::Copilot, 0).unwrap();
+        assert_eq!(trace.events.len(), 4);
+        assert_eq!(trace.events[0].kind, Kind::Tool);
+        assert_eq!(trace.events[0].task_id.as_deref(), Some("child"));
+        assert_eq!(trace.events[1].kind, Kind::Reply);
+        assert_eq!(trace.events[1].task_id.as_deref(), Some("child"));
+        assert_eq!(trace.events[2].task_id.as_deref(), Some("child"));
+        let usage = trace.events[2].usage.as_ref().unwrap();
+        assert_eq!(usage.tokens, 32);
+        assert!(usage.output_only);
+        let checkpoint = trace.events[3].usage.as_ref().unwrap();
+        assert_eq!(checkpoint.tokens, 112);
+        assert_eq!(checkpoint.includes_subagents, Some(true));
+    }
+
+    #[test]
     fn projects_background_tools_and_monitor_notifications_without_command_output() {
         let mut events = Vec::new();
         let mut emit = |kind, text, id| events.push((kind, text, id));
@@ -759,6 +1022,29 @@ mod tests {
             (Kind::BackgroundStarted, String::new(), Some("b".into())),
             (Kind::TaskActivity, String::new(), Some("m".into())),
             (Kind::Error, String::new(), Some("b".into())),
+        ]);
+    }
+
+    #[test]
+    fn projects_claude_task_aliases_and_pi_tool_results() {
+        let mut events = Vec::new();
+        let mut emit = |kind, text, id| events.push((kind, text, id));
+        project(Provider::Claude, &serde_json::json!({
+            "type": "user", "message": { "role": "user", "content": [
+                { "type": "tool_result", "tool_use_id": "b", "content": "Command running in background with ID: b4." },
+            ] },
+        }), &mut emit);
+        project(Provider::Claude, &serde_json::json!({
+            "type": "queue-operation", "operation": "enqueue",
+            "content": "<task-notification><task-id>b4</task-id><status>completed</status></task-notification>",
+        }), &mut emit);
+        project(Provider::Pi, &serde_json::json!({
+            "type": "message", "message": { "role": "toolResult", "toolCallId": "p", "isError": true },
+        }), &mut emit);
+        assert_eq!(events, [
+            (Kind::TaskAlias, "b4".into(), Some("b".into())),
+            (Kind::Returned, String::new(), Some("b4".into())),
+            (Kind::Error, String::new(), Some("p".into())),
         ]);
     }
 

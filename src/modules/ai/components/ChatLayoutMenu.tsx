@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -21,6 +23,8 @@ import {
   type ChatLayoutMode,
 } from "@/modules/ai/lib/chatLayout";
 import { useChatLayoutStore } from "@/modules/ai/store/chatLayoutStore";
+import { usePreferencesStore } from "@/modules/settings/preferences";
+import { setPrepareChatAudio } from "@/modules/settings/store";
 import { switchChatLayout } from "./ChatRelocate";
 
 const CHAT_LAYOUT_ICON: Record<ChatLayoutMode, typeof LayoutLeftIcon> = {
@@ -32,6 +36,7 @@ const CHAT_LAYOUT_ICON: Record<ChatLayoutMode, typeof LayoutLeftIcon> = {
 
 export function ChatLayoutMenu() {
   const mode = useChatLayoutStore((s) => s.mode);
+  const prepareAudio = usePreferencesStore((s) => s.prepareChatAudio);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -71,6 +76,11 @@ export function ChatLayoutMenu() {
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem checked={prepareAudio}
+          onCheckedChange={(enabled) => void setPrepareChatAudio(enabled)}>
+          Prepare audio for new replies
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

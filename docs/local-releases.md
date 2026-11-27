@@ -170,9 +170,20 @@ pnpm release:publish 0.9.0 --repo Sendery/terax-ai
 
 The repository must match the updater endpoint compiled into the application unless the release is only for testing.
 
-## Development releases (published pre-releases, unsigned installers)
+## Development releases
 
 Development builds are **published GitHub Pre-releases**, never drafts. They are visible in the releases list as soon as they exist, carry no signed updater manifest, and are filled incrementally per host. Being a pre-release rather than a draft is what makes them safe to publish immediately: there is no partial signed `latest.json` to gate, and every asset is content-independent and replaced idempotently.
+
+Before distributing a Mac development build, install a **Developer ID
+Application** certificate with its private key on the build host. Set
+`APPLE_SIGNING_IDENTITY` to that identity. Supply Tauri's notarization
+credentials securely on the build host. For example, use
+`APPLE_API_ISSUER`, `APPLE_API_KEY`, and `APPLE_API_KEY_PATH` with an App
+Store Connect key. The upload routes verify the DMG and check the signed
+app's stapled ticket and Gatekeeper assessment. Local packaging with
+`--no-upload` can still use the local signing identity or an ad hoc signature.
+
+[Tauri macOS signing and notarization](https://v2.tauri.app/distribute/sign/macos/)
 
 Create the pre-release once, pinned to the exact source commit, with no draft step:
 

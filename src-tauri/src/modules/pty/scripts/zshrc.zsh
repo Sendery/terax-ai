@@ -12,6 +12,14 @@
   unset _terax_user_zdotdir
 }
 
+# Tell Codex that this PTY can draw direct Kitty graphics. The variable is
+# scoped to Codex, and user-defined aliases and functions take precedence.
+if [ "${TERAX_KITTY_GRAPHICS:-}" = 1 ] &&
+   ! alias codex >/dev/null 2>&1 &&
+   ! typeset -f codex >/dev/null 2>&1; then
+  alias codex='KITTY_WINDOW_ID="${KITTY_WINDOW_ID-0}" codex'
+fi
+
 # Re-source guard within a single shell (e.g. user runs `source ~/.zshrc`).
 # This is NOT exported, so each nested zsh installs its own hooks — desired,
 # since every interactive shell needs its own prompt integration.

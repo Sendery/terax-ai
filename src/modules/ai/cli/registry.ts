@@ -1,4 +1,5 @@
 import { CLI_BINARIES } from "./binaries";
+import { lastUserImages } from "@/modules/ai/lib/attachments";
 import { cliInstructionBlocks } from "@/modules/ai/cli/instructions";
 import type { ParserFactory } from "./parsers/emitter";
 import { createClaudeParser } from "./parsers/claude";
@@ -115,11 +116,14 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "Claude Code",
     bin: CLI_BINARIES.claude,
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
-    planRun: transcriptRun((prompt, { model, permission }) => {
+    planRun: (ctx) => {
+      const { model, permission } = ctx;
+      const prompt = transcriptPrompt(ctx);
+      const images = lastUserImages(ctx.messages);
       const a = [
         "claude",
         "-p",
-        prompt,
+        ...(images.length ? [] : [prompt]),
         "--output-format",
         "stream-json",
         "--include-partial-messages",
@@ -129,8 +133,17 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
       ];
       if (permission === "full") a.push("--dangerously-skip-permissions");
       if (model) a.push("--model", model);
-      return a;
-    }),
+      if (!images.length) return { argv: a };
+      a.push("--input-format", "stream-json");
+      const content = [
+        ...(prompt ? [{ type: "text", text: prompt }] : []),
+        ...images.map(({ mediaType, data }) => ({
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data },
+        })),
+      ];
+      return { argv: a, stdin: `${JSON.stringify({ type: "user", message: { role: "user", content }, parent_tool_use_id: null })}\n` };
+    },
     createParser: createClaudeParser,
   },
   codex: {
@@ -138,12 +151,18 @@ export const CLI_AGENTS: Record<CliAgentId, CliAgentDef> = {
     label: "Codex",
     bin: CLI_BINARIES.codex,
     docsUrl: "https://github.com/openai/codex",
-    planRun: transcriptRun((prompt, { model, permission }) => {
-      const a = ["codex", "exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[permission]];
-      if (model) a.push("-m", model);
-      a.push(prompt);
-      return a;
-    }),
+    planRun: (ctx) => {
+      const prompt = transcriptPrompt(ctx);
+      const images = lastUserImages(ctx.messages);
+      const argv = ["codex", "exec", "--json", "--skip-git-repo-check", "-s", CODEX_SANDBOX[ctx.permission]];
+      if (ctx.model) argv.push("-m", ctx.model);
+      if (images.length) {
+        argv.push("-");
+        return { argv, stdin: prompt || "See the attached images.", images };
+      }
+      argv.push(prompt);
+      return { argv };
+    },
     createParser: createCodexParser,
   },
   cursor: {

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { native } from "@/modules/ai/lib/native";
 import { useAgentStore } from "@/modules/agents/store/agentStore";
 import type { FlowTerminal } from "@/modules/agent-flow/coordination";
-import { loadFlowJournal, flowRunKey, flowShellKey, useFlowJournal } from "@/modules/agent-flow/journal";
+import { loadFlowJournal, flowRunKey, flowShellKey, flowTabKey, useFlowJournal } from "@/modules/agent-flow/journal";
 import {
   historyRun, mergeRuns,
   type FlowRun, type HistorySession, type TraceEvent,
@@ -17,6 +17,8 @@ const HISTORY_LIMIT = 25;
 const LIVE_HISTORY_MS = 8500;
 
 type History = { key: string; sourceKey: string; runs: FlowRun[]; failed: boolean };
+type HistoryScope = { cwds: string[]; excludedCwds: string[] };
+export type FlowData = ReturnType<typeof useFlowData>;
 
 export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number) {
   const sessions = useAgentStore((state) => open ? state.sessions : null);
@@ -62,8 +64,9 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     const privateTabs = new Set(terminals.filter((tab) => tab.private).map((tab) => tab.id));
     const privateCwds = new Set(sources.filter((source) => privateTabs.has(source.tabId)).map((source) => source.cwd));
     const knownCwds = (journal ?? []).flatMap((run) => run.cwd ? [run.cwd] : []);
-    return JSON.stringify([...new Set([...sources.map((source) => source.cwd), ...knownCwds.reverse()])]
-      .filter((cwd) => !privateCwds.has(cwd)).slice(0, 100).sort());
+    const cwds = [...new Set([...sources.map((source) => source.cwd), ...knownCwds.reverse()])]
+      .filter((cwd) => !privateCwds.has(cwd)).slice(0, 100).sort();
+    return JSON.stringify({ cwds, excludedCwds: [...privateCwds].sort() });
   }, [open, tabs, journal]);
   const historyKey = sourceKey ? `${refresh}:${activeKey}:${sourceKey}` : "";
 
@@ -76,19 +79,21 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     if (!sourceKey) return;
     let stopped = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const cwds: string[] = JSON.parse(sourceKey);
+    const scope: HistoryScope = JSON.parse(sourceKey);
+    const excluded = new Set(scope.excludedCwds);
     void (async () => {
       const found = new Map<string, FlowRun>();
       const add = (session: HistorySession) => {
+        if (excluded.has(session.cwd)) return;
         const label = session.cwd.split(/[\\/]/).filter(Boolean).pop() ?? session.cwd;
         const run = historyRun(session, label);
         found.set(run.key, run);
       };
-      const extra = invoke<HistorySession[]>("agent_flow_history", { cwds })
+      const extra = invoke<HistorySession[]>("agent_flow_history", scope)
         .then((records) => { for (const record of records) add(record); })
         .catch(() => false);
       let failed = false;
-      for (const cwd of cwds) {
+      for (const cwd of scope.cwds) {
         const results = await Promise.allSettled((["claude", "pi"] as const).map(
           (provider) => native.agentSessionsList(provider, cwd, HISTORY_LIMIT),
         ));
@@ -111,11 +116,14 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
           if (stopped) return;
           if (document.visibilityState !== "hidden") {
             try {
-              const records = await invoke<HistorySession[]>("agent_flow_history", { cwds });
+              const records = await invoke<HistorySession[]>("agent_flow_history", scope);
               if (stopped) return;
-              const size = found.size;
+              const changed = records.some((entry) => {
+                const previous = found.get(`history:${entry.provider}:${entry.id}`);
+                return !previous || previous.startedAt !== entry.modifiedAt || previous.name !== (entry.name ?? undefined);
+              });
               for (const record of records) add(record);
-              if (found.size !== size || extraResult === false) {
+              if (changed || extraResult === false) {
                 setHistory({ key: historyKey, sourceKey, runs: [...found.values()], failed });
               }
             } catch {
@@ -153,7 +161,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       };
       byKey.set(key, {
         key,
-        group: record?.group ?? `${key.split(":")[0]}:${tab.id}`,
+        group: flowTabKey(tab.id),
         shellKey: flowShellKey(tab.id, session.leafId),
         tabTitle: labelFor(tab),
         paneLabel: pane?.split ? `Shell ${pane.slot}` : undefined,
@@ -177,7 +185,7 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
       if (tab?.kind !== "terminal") return [run];
       return tab.private ? [] : [{ ...run, tabTitle: labelFor(tab), color: tab.color }];
     });
-    const publicProjects = new Set<string>(JSON.parse(sourceKey || "[]"));
+    const publicProjects = new Set<string>(sourceKey ? (JSON.parse(sourceKey) as HistoryScope).cwds : []);
     const liveByProject = new Map<string, number>();
     for (const run of allowed) {
       if (run.active && run.cwd) {
@@ -187,11 +195,6 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
     }
     const attributed = allowed.map((run) => {
       const digest = run.leafId === undefined ? undefined : digests?.[run.leafId];
-      if (!run.sessionId && run.active && run.cwd && publicProjects.has(run.cwd) && digest?.sessionId
-        && liveByProject.get(`${run.harness}:${run.cwd}`) === 1
-        && Math.max(digest.lastReplyAt ?? 0, digest.recapAt ?? 0) >= run.startedAt) {
-        return { ...run, sessionId: digest.sessionId, name: digest.name ?? run.name };
-      }
       if (run.sessionId || !run.cwd ||
         (run.harness !== "codex" && run.harness !== "copilot" && run.harness !== "agy")) return run;
       const closeToStart = (at: number, other: FlowRun) => Math.abs(other.startedAt - at) <= 15_000;
@@ -201,11 +204,41 @@ export function useFlowData(tabs: readonly Tab[], open: boolean, refresh: number
         allowed.filter((other) => other.harness === run.harness && other.cwd === run.cwd &&
           closeToStart(entry.createdAt ?? 0, other)).length === 1,
       );
-      if (matching.length !== 1) return run;
-      const sessionId = matching[0].sessionId;
-      return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
+      if (matching.length === 1) {
+        const sessionId = matching[0].sessionId;
+        return { ...run, sessionId, name: matching[0].name ?? (digest?.sessionId === sessionId ? digest?.name ?? undefined : run.name) };
+      }
+      if (matching.length === 0 && run.harness === "codex" && run.active && publicProjects.has(run.cwd)
+        && digest?.sessionId && liveByProject.get(`${run.harness}:${run.cwd}`) === 1
+        && Math.max(digest.lastReplyAt ?? 0, digest.recapAt ?? 0) >= run.startedAt) {
+        const recent = candidates.filter((entry) => entry.harness === "codex" && !entry.parentId
+          && entry.cwd === run.cwd && entry.startedAt >= run.startedAt - 2000);
+        if (recent.length === 1 && recent[0].sessionId === digest.sessionId) {
+          return { ...run, sessionId: digest.sessionId, name: digest.name ?? run.name };
+        }
+      }
+      return run;
     });
-    return mergeRuns(attributed, candidates);
+    const byCwd = new Map<string, Set<number>>();
+    for (const pane of panes) {
+      const tab = currentTabs.get(pane.tabId);
+      if (tab?.kind !== "terminal") continue;
+      const cwd = findLeafCwd(tab.paneTree, pane.leafId) ?? tab.cwd;
+      if (!cwd) continue;
+      const ids = byCwd.get(cwd) ?? new Set<number>();
+      ids.add(tab.id);
+      byCwd.set(cwd, ids);
+    }
+    const matchedHistory = candidates.map((run) => {
+      const ids = run.cwd ? byCwd.get(run.cwd) : undefined;
+      const tab = ids?.size === 1 ? currentTabs.get([...ids][0]) : undefined;
+      if (tab?.kind !== "terminal") return run;
+      return {
+        ...run, group: flowTabKey(tab.id),
+        tabTitle: labelFor(tab), color: tab.color,
+      };
+    });
+    return mergeRuns(attributed, matchedHistory);
   }, [sessions, digests, journal, tabs, panes, hidden, history, sourceKey]);
 
   const children = useMemo(() => history.sourceKey === sourceKey

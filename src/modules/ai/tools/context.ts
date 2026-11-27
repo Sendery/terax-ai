@@ -1,3 +1,5 @@
+import type { FlowActivity } from "@/modules/agent-flow/model";
+
 export type ToolContext = {
   /** Active terminal tab cwd, used to resolve relative paths. Null = home. */
   getCwd: () => string | null;
@@ -20,6 +22,7 @@ export type ToolContext = {
   readCache: Map<string, { size: number; hash: number }>;
   /** Active chat session id — used by tools that persist per-session state (todos). */
   getSessionId: () => string | null;
+  recordSubagentActivity?: (toolCallId: string, event: FlowActivity) => void;
 };
 
 export function resolvePath(rawPath: string, cwd: string | null): string {

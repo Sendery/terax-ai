@@ -1,3 +1,4 @@
+import { cleanLinkedTabs, indexLinkedTabs, parseTabLink, type TabLink } from "@/modules/tabs/lib/linkedTabs";
 import { isViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import {
   parseGraphSource,
@@ -37,6 +38,7 @@ type SerializedTabBase = {
   color?: TabColor;
   notes?: NoteCard[];
   readerKey?: string;
+  linkedView?: TabLink;
   readerDock?: { docId: string | null; height: number };
 };
 
@@ -276,6 +278,7 @@ function serializeTab(tab: Tab): SerializedTab | null {
 
 export function serializeTabs(tabs: Tab[]): SerializedTab[] {
   const out: SerializedTab[] = [];
+  const links = indexLinkedTabs(tabs);
   for (const tab of tabs) {
     const s = serializeTab(tab);
     if (!s) continue;
@@ -289,6 +292,7 @@ export function serializeTabs(tabs: Tab[]): SerializedTab[] {
       if (valid.length) s.notes = valid;
     }
     if (tab.readerKey) s.readerKey = tab.readerKey;
+    if (links.has(tab.id)) s.linkedView = tab.linkedView;
     if (tab.readerDock && tab.kind !== "reader") {
       s.readerDock = {
         docId: tab.readerDock.docId,
@@ -558,10 +562,12 @@ export function hydrateTabs(
         if (valid.length) tab.notes = valid;
       }
       restoreReaderFields(s, tab);
+      const link = parseTabLink(s.linkedView);
+      if (link) tab.linkedView = link;
       out.push(tab);
     } catch {
       // Skip corrupted entries rather than failing the whole restore.
     }
   }
-  return out;
+  return cleanLinkedTabs(out);
 }

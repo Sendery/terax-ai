@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "agent-flow",
+  "description": "Read-only Agent Flow window and its connection to the main workspace",
+  "windows": ["agent-flow"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit-to",
+    "core:window:allow-close",
+    "store:allow-load",
+    "store:allow-get"
+  ]
+}

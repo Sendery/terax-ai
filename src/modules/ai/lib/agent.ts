@@ -426,6 +426,8 @@ export type AgentUsage = {
 export type AgentUsageDelta = AgentUsage & {
   lastInputTokens: number;
   lastCachedTokens: number;
+  outputOnly?: boolean;
+  reportedTotalTokens?: number;
 };
 
 const EMPTY_USAGE: AgentUsage = {
@@ -488,6 +490,7 @@ export async function runAgentStream(opts: RunAgentOptions) {
       planMode: opts.planMode,
       abortSignal: opts.abortSignal,
       onStep: opts.onStep,
+      onUsage: opts.onUsage,
     });
   }
 

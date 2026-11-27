@@ -92,6 +92,20 @@ function __terax_install_prompt
 end
 __terax_install_prompt
 
+# The launcher calls this after config.fish so a custom Codex function wins.
+function __terax_install_codex
+    if test "$TERAX_KITTY_GRAPHICS" = 1; and not functions -q codex
+        function codex
+            set -l kitty_id 0
+            if set -q KITTY_WINDOW_ID
+                set kitty_id "$KITTY_WINDOW_ID"
+            end
+            set -lx KITTY_WINDOW_ID "$kitty_id"
+            command codex $argv
+        end
+    end
+end
+
 # Opens a file or piped text in the Reader panel under this terminal (--tab: a Reader tab).
 function terax-read
     if not set -q TERAX_APP_EXE; or test -z "$TERAX_APP_EXE"

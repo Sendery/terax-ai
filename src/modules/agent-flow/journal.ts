@@ -4,7 +4,7 @@ import type { AgentSession, AgentSignal, SessionDigest } from "@/modules/agents/
 import { labelFor } from "@/modules/tabs/lib/tabLabel";
 import type { TerminalTab } from "@/modules/tabs/lib/useTabs";
 import { findLeafCwd, leafIds } from "@/modules/terminal/lib/panes";
-import type { FlowDelivery, FlowEndpoint, FlowKind, FlowRun } from "@/modules/agent-flow/model";
+import type { FlowActivity, FlowDelivery, FlowEndpoint, FlowKind, FlowRun } from "@/modules/agent-flow/model";
 
 const MAX_RUNS = 160;
 const MAX_EVENTS = 96;
@@ -58,7 +58,34 @@ export function flowRunKey(session: AgentSession): string {
 }
 
 export function flowShellKey(tabId: number, leafId: number): string {
-  return `${launch}:${tabId}:${leafId}`;
+  return `${flowTabKey(tabId)}:${leafId}`;
+}
+
+export function flowTabKey(tabId: number): string {
+  return `${launch}:${tabId}`;
+}
+
+export function recordTeraxFlow(sessionId: string, activity: FlowActivity): void {
+  const key = `terax-ai:${launch}:${sessionId}`;
+  const at = Date.now();
+  useFlowJournal.setState(({ runs }) => {
+    const previous = runs.find((run) => run.key === key);
+    const events = previous?.events ?? [];
+    const current = { ...activity, id: `${key}:${++eventSequence}`, at };
+    if (current.usage && !current.taskId) {
+      const prior = [...events].reverse().find((event) => !event.taskId && event.usage)?.usage;
+      current.usage = {
+        ...current.usage, cumulative: true, tokens: (prior?.tokens ?? 0) + current.usage.tokens,
+        outputOnly: current.usage.outputOnly && (!prior || prior.outputOnly),
+      };
+    }
+    const run: FlowRun = {
+      key, group: "terax-ai", tabTitle: "Terax AI", agent: "terax", harness: "generic", name: "Terax AI",
+      startedAt: previous?.startedAt ?? at, active: true, events: [...events, current].slice(-MAX_EVENTS),
+    };
+    return { runs: [...runs.filter((entry) => entry.key !== key), run].slice(-MAX_RUNS) };
+  });
+  scheduleWrite();
 }
 
 type Pane = { tabId: number; leafId: number };
@@ -122,7 +149,7 @@ export function recordFlowSignal(
   const leaves = tab && leafIds(tab.paneTree);
   const run: FlowRun = {
     key,
-    group: `${launch}:${session.tabId}`,
+    group: flowTabKey(session.tabId),
     shellKey: flowShellKey(session.tabId, session.leafId),
     tabTitle: tab ? labelFor(tab).slice(0, 160) : old?.tabTitle ?? "Terminal",
     paneLabel: leaves && leaves.length > 1 ? `Shell ${leaves.indexOf(session.leafId) + 1}` : old?.paneLabel,

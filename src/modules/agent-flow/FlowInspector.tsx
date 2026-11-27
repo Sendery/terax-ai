@@ -7,7 +7,7 @@ import { accent, runName } from "@/modules/agent-flow/FlowCanvas";
 import { SignalStrip } from "@/modules/agent-flow/FlowSignals";
 import { flowTime } from "@/modules/agent-flow/FlowTimeline";
 import { beforeTime, FLOW_LABELS, PROCESS_LABELS, type FlowTask, type TraceEvent } from "@/modules/agent-flow/model";
-import { contextPercent, describeActor, eventLabel, processEvents, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
+import { actorEvents, contextPercent, describeActor, eventLabel, processEvents, type Actor, type FlowBranch } from "@/modules/agent-flow/scene";
 import type { FlowTrace } from "@/modules/agent-flow/traceReader";
 
 const GROUPS = ["Activity", "Messages", "Tools", "Files"] as const;
@@ -17,7 +17,7 @@ export function UsageMetrics({ usage }: { usage: NonNullable<Actor["usage"]> }) 
   const context = usage.context;
   return (
     <dl className="flow-usage">
-      <div><dt>Reported tokens</dt><dd>{usage.tokens.toLocaleString()}</dd></div>
+      <div><dt>{usage.outputOnly ? "Output tokens" : "Reported tokens"}</dt><dd>{usage.tokens.toLocaleString()}</dd></div>
       {usage.cost !== undefined ? <div><dt>Reported cost</dt><dd>${usage.cost.toFixed(usage.cost < 1 ? 3 : 2)}</dd></div> : null}
       {context ? <div className="flow-context-meter">
         <dt>Input tokens at last request</dt>
@@ -51,11 +51,9 @@ export function FlowInspector({
   const [stat, setStat] = useState<string | null>(null);
   const run = branch.run;
   const relevant = useMemo(() => {
-    const events = beforeTime(task?.run ? trace?.events ?? [] : branch.events, time).filter(
-      (event) => event.kind !== "usage" && (task?.run || !task || event.taskId === task.id || event.id === task.id),
-    );
+    const events = beforeTime(actorEvents(branch, task, trace), time).filter((event) => event.kind !== "usage");
     return task?.process ? processEvents(task, events, time) : events;
-  }, [branch.events, task, time, trace?.events]);
+  }, [branch, task, time, trace]);
   const actor = describeActor(branch, task, trace, time);
   const focused = relevant.find((event) => event.id === eventId);
   const filtered = [...relevant].reverse().filter((event) => {

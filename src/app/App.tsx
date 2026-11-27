@@ -29,6 +29,7 @@ import {
   useAgentSessionRestore,
   useAgentStore,
 } from "@/modules/agents";
+import { indexLinkedTabs } from "@/modules/tabs/lib/linkedTabs";
 import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
@@ -42,6 +43,7 @@ import {
   useChatStore,
 } from "@/modules/ai";
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
+import { AiResponseActionsContext } from "@/modules/ai/components/AiResponseContextMenu";
 import { native } from "@/modules/ai/lib/native";
 import {
   checkReadable,
@@ -249,6 +251,7 @@ import {
   WorkspaceSurface,
 } from "./components/WorkspaceSurface";
 import { useAppCloseGuard } from "./hooks/useAppCloseGuard";
+import { FlowWindowBridge } from "@/modules/agent-flow/FlowWindowBridge";
 import { useTabCloseGuards } from "./hooks/useTabCloseGuards";
 import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 
@@ -282,6 +285,9 @@ export default function App() {
     reorderTabByGap,
     newTabInSpace,
     warmTab,
+    linkTabPair,
+    unlinkTabPair,
+    resizeTabPair,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,
@@ -311,6 +317,7 @@ export default function App() {
     openPrReviewTab,
     openReaderTab,
     openAgentFlowTab,
+    closeAgentFlowTab,
     setPrReviewBase,
     moveTab,
     setTabPinned,
@@ -587,6 +594,12 @@ export default function App() {
   const showChat = hasComposer && miniPresence.mounted;
 
   const activeTab = tabs.find((t) => t.id === activeId);
+  const linkedTabs = useMemo(() => indexLinkedTabs(tabs), [tabs]);
+  const tabPair = linkedTabs.get(activeId);
+  const partnerId = tabPair && (activeId === tabPair.leftId ? tabPair.rightId : tabPair.leftId);
+  useEffect(() => {
+    if (partnerId !== undefined) warmTab(partnerId);
+  }, [partnerId, warmTab]);
   const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
   // Type a note's reference at the active shell prompt as a citation. Never
   // executes: newlines are collapsed and no carriage return is sent.
@@ -827,7 +840,7 @@ export default function App() {
   // selection a right-click may already have replaced. The zero-argument
   // wrappers keep the signature the shortcuts and command palette are wired to.
   const askWithSelection = useCallback(
-    (selection: string) => {
+    (selection: string, from?: "chat") => {
       if (!hasComposer) {
         void openSettingsWindow("models");
         return;
@@ -836,8 +849,8 @@ export default function App() {
         focusInput(null);
         return;
       }
-      const source: "terminal" | "editor" =
-        (activeTab?.kind === "editor" || activeTab?.kind === "markdown") ? "editor" : "terminal";
+      const source = from ??
+        ((activeTab?.kind === "editor" || activeTab?.kind === "markdown") ? "editor" : "terminal");
       attachSelection(selection, source);
     },
     [hasComposer, focusInput, attachSelection, activeTab],
@@ -1088,6 +1101,18 @@ export default function App() {
       onOpenMermaid: openMermaidWithSource,
     }),
     [askWithSelection, addTextToNote, openMermaidWithSource],
+  );
+
+  const chatResponseActions = useMemo(
+    () => ({
+      selectionActions: {
+        ...selectionMenuActions,
+        onAsk: (text: string) => askWithSelection(text, "chat"),
+      },
+      onReadAloud: speakAloud,
+      onStopReading: stopReading,
+    }),
+    [selectionMenuActions, askWithSelection, speakAloud, stopReading],
   );
 
   const openNewTab = useCallback(() => {
@@ -1728,8 +1753,11 @@ export default function App() {
   );
 
   const handleFocusLeaf = useCallback(
-    (tabId: number, leafId: number) => focusPane(tabId, leafId),
-    [focusPane],
+    (tabId: number, leafId: number) => {
+      if (tabId === partnerId) setActiveId(tabId);
+      focusPane(tabId, leafId);
+    },
+    [focusPane, partnerId, setActiveId],
   );
 
   const onActivateAgent = useCallback(
@@ -3031,6 +3059,8 @@ export default function App() {
               tabs={spaceTabs}
               activeId={activeId}
               onSelect={setActiveId}
+              onLinkTabs={linkTabPair}
+              onUnlinkTabs={unlinkTabPair}
               onNew={openNewTab}
               onNewBlock={openNewBlockTab}
               onNewPrivate={openNewPrivateTab}
@@ -3149,6 +3179,9 @@ export default function App() {
                         tabs={tabs}
                         activeId={activeId}
                         activeTab={activeTab}
+                        tabPair={tabPair}
+                        onActivateTab={setActiveId}
+                        onResizeTabPair={resizeTabPair}
                         registerTerminalHandle={registerTerminalHandle}
                         onSearchReady={handleSearchReady}
                         onCwd={handleTerminalCwd}
@@ -3177,6 +3210,7 @@ export default function App() {
                         onMermaidSourceChange={updateMermaidSource}
                         onMermaidVisualLayoutChange={updateMermaidVisualLayout}
                         onActivateAgent={onFocusFlowTerminal}
+                        onAgentFlowDetached={closeAgentFlowTab}
                       />
                     </div>
 
@@ -3349,6 +3383,7 @@ export default function App() {
             activeId={activeId}
             onActivate={onActivateAgent}
           />
+          <FlowWindowBridge tabs={tabs} onActivate={onFocusFlowTerminal} onDock={onOpenAgentFlow} />
           <Toaster position="bottom-right" />
 
           {hasComposer ? (
@@ -3431,5 +3466,9 @@ export default function App() {
     </ThemeProvider>
   );
 
-  return <AiComposerProvider>{shell}</AiComposerProvider>;
+  return (
+    <AiResponseActionsContext.Provider value={chatResponseActions}>
+      <AiComposerProvider>{shell}</AiComposerProvider>
+    </AiResponseActionsContext.Provider>
+  );
 }

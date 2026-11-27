@@ -30,6 +30,8 @@ type Props = {
   tabs: Tab[];
   activeId: number;
   onSelect: (id: number) => void;
+  onLinkTabs?: (leftId: number, rightId: number) => void;
+  onUnlinkTabs?: (tabId: number) => void;
   onNew: () => void;
   onNewBlock: () => void;
   onNewPrivate: () => void;
@@ -76,6 +78,8 @@ export function Header({
   tabs,
   activeId,
   onSelect,
+  onLinkTabs,
+  onUnlinkTabs,
   onNew,
   onNewBlock,
   onNewPrivate,
@@ -277,6 +281,8 @@ export function Header({
           tabs={tabs}
           activeId={activeId}
           onSelect={onSelect}
+          onLinkTabs={onLinkTabs}
+          onUnlinkTabs={onUnlinkTabs}
           onNew={onNew}
           onNewBlock={onNewBlock}
           onNewPrivate={onNewPrivate}

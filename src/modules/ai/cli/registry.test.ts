@@ -201,3 +201,24 @@ describe("GitHub Copilot", () => {
     expect(argv[argv.length - 1]).toBe("--prompt=--allow-all");
   });
 });
+
+it("sends attached image bytes through each supported CLI without putting them in argv", () => {
+  const image = { type: "file", mediaType: "image/png", url: "data:image/png;base64,iVBORw0KGgo=" } as const;
+  const context: CliRunContext = {
+    ...base,
+    messages: [{ id: "photo", role: "user", parts: [image] }],
+  };
+  for (const id of ["pi", "codex"] as const) {
+    const plan = CLI_AGENTS[id].planRun(context);
+    expect(plan.images).toEqual([{ mediaType: "image/png", data: "iVBORw0KGgo=" }]);
+    expect(plan.argv.join(" ")).not.toContain("iVBORw0KGgo=");
+  }
+  const claude = CLI_AGENTS.claude.planRun(context);
+  expect(claude.argv).toContain("stream-json");
+  expect(JSON.parse(claude.stdin ?? "")).toMatchObject({
+    type: "user",
+    message: { role: "user", content: [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } },
+    ] },
+  });
+});

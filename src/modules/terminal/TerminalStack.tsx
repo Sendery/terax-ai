@@ -1,6 +1,8 @@
 import type { TerminalFileLocation } from "@/modules/terminal/lib/fileLinks";
 import { NativeTerminalSurface } from "@/modules/terminal/NativeTerminalSurface";
 import type { Tab } from "@/modules/tabs";
+import { LinkedTabPane, useLinkedTabs } from "@/modules/tabs/LinkedTabPane";
+import { linkedSide } from "@/modules/tabs/lib/linkedTabs";
 import type { TerminalSearch } from "@/modules/terminal/lib/terminalSearch";
 import { useEffect, useMemo, useRef } from "react";
 import { selectLiveTerminals } from "./lib/liveTerminals";
@@ -49,6 +51,7 @@ export function TerminalStack({
   selectionActions,
   homePath,
 }: Props) {
+  const linked = useLinkedTabs();
   const terminals = useMemo(() => selectLiveTerminals(tabs), [tabs]);
 
   const registerRef = useRef(registerHandle);
@@ -95,23 +98,14 @@ export function TerminalStack({
   return (
     <NativeTerminalSurface>
       {terminals.map((t) => {
-        const tabVisible = t.id === activeId;
+        const active = t.id === activeId;
+        const tabVisible = active || !!linkedSide(linked?.link, t.id);
         return (
-          <div
-            key={t.id}
-            data-capture-target="pane"
-            data-capture-tab-id={t.id}
-            className="absolute inset-0"
-            style={{
-              visibility: tabVisible ? "visible" : "hidden",
-              pointerEvents: tabVisible ? "auto" : "none",
-            }}
-            aria-hidden={!tabVisible}
-          >
+          <LinkedTabPane key={t.id} tabId={t.id} active={active} activateOnInteraction={false}>
             <PaneTreeView
               node={t.paneTree}
               tabVisible={tabVisible}
-              activeLeafId={t.activeLeafId}
+              activeLeafId={active ? t.activeLeafId : -1}
               blocks={t.blocks ?? false}
               onFocusLeaf={(leafId) => onFocusLeaf(t.id, leafId)}
               getBundle={getBundle}
@@ -123,7 +117,7 @@ export function TerminalStack({
               homePath={homePath}
               tabColor={t.color}
             />
-          </div>
+          </LinkedTabPane>
         );
       })}
     </NativeTerminalSurface>

@@ -293,10 +293,11 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
     sendMouse: vi.fn(async () => {}),
     sendKey: vi.fn(async () => {}),
     exitCode: null as number | null,
-    select: vi.fn(async () => null),
+    select: vi.fn(async (_command: NativeSelectionCommand) => null),
     scroll: vi.fn(),
-    getSelection: () => null,
+    getSelection: (): string | null => null,
   };
+  let selectTextOnDrag = false;
   const binding = bindNativeInput(
     session as unknown as EngineSession,
     {
@@ -325,6 +326,7 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
       foreground: "#fff",
       background: "#000",
       isActive: () => true,
+      selectTextOnDrag: () => selectTextOnDrag,
       onError: vi.fn(),
     },
   );
@@ -358,6 +360,14 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
     expect.objectContaining({ action: "release", button: 2 }),
   );
   expect(session.select).not.toHaveBeenCalled();
+  const selection = vi.spyOn(session, "getSelection").mockReturnValue("marked terminal text");
+  session.sendMouse.mockClear();
+  pointer.preventDefault.mockClear();
+  hostEvents.get("pointerdown")?.(pointer);
+  hostEvents.get("contextmenu")?.(pointer);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+  expect(pointer.preventDefault).not.toHaveBeenCalled();
+  selection.mockReturnValue(null);
   hostEvents.get("wheel")?.({ ...pointer, deltaY: -16, deltaMode: 0 });
   expect(session.sendMouse).toHaveBeenLastCalledWith(
     expect.objectContaining({ action: "press", button: 3 }),
@@ -385,6 +395,40 @@ it("routes negotiated TUI mouse and wheel, with Shift retaining native selection
   session.sendKey.mockClear();
   hostEvents.get("wheel")?.({ ...pointer, deltaY: -16, deltaMode: 0 });
   expect(session.sendKey).not.toHaveBeenCalled();
+  session.exitCode = null;
+  session.inputState.mouseTracking = true;
+  selectTextOnDrag = true;
+  session.sendMouse.mockClear();
+  session.select.mockClear();
+  pointer.preventDefault.mockClear();
+  hostEvents.get("pointerdown")?.(pointer);
+  hostEvents.get("contextmenu")?.(pointer);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+  expect(pointer.preventDefault).not.toHaveBeenCalled();
+
+  vi.stubGlobal("requestAnimationFrame", () => 1);
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const primary = { ...pointer, button: 0, buttons: 1 };
+  const end = { ...primary, clientX: 56, buttons: 0, type: "pointerup" };
+  hostEvents.get("pointerdown")?.(primary);
+  hostEvents.get("pointermove")?.({ ...end, buttons: 1 });
+  hostEvents.get("pointerup")?.(end);
+  expect(session.select.mock.calls.map(([command]) => command.kind)).toEqual(["press", "drag", "release"]);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+
+  selection.mockReturnValue("marked terminal text");
+  hostEvents.get("pointerdown")?.({ ...primary, clientX: 72 });
+  hostEvents.get("pointerup")?.({ ...end, clientX: 72 });
+  expect(session.select.mock.calls.slice(-2).map(([command]) => command.kind)).toEqual(["press", "release"]);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+
+  selection.mockReturnValue(null);
+  hostEvents.get("pointerdown")?.(primary);
+  expect(session.sendMouse).not.toHaveBeenCalled();
+  hostEvents.get("pointerup")?.({ ...primary, buttons: 0, type: "pointerup" });
+  await vi.waitFor(() => expect(session.sendMouse).toHaveBeenCalledTimes(2));
+  expect(session.sendMouse).toHaveBeenNthCalledWith(1, expect.objectContaining({ action: "press", button: 0 }));
+  expect(session.sendMouse).toHaveBeenNthCalledWith(2, expect.objectContaining({ action: "release", button: 0 }));
   binding.dispose();
 });
 

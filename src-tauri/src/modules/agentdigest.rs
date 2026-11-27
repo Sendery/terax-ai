@@ -114,6 +114,7 @@ pub struct SessionDigest {
 #[derive(Clone, Debug)]
 struct OpenTask {
     id: String,
+    alias: Option<String>,
     kind: TaskKind,
     label: String,
     started_at: u64,
@@ -173,7 +174,7 @@ const CODEX_KEYS: &[&str] = &[
     "create_pull_request",
 ];
 
-const TERMINAL_TASK_STATES: &[&str] = &["completed", "failed", "killed", "stopped"];
+const TERMINAL_TASK_STATES: &[&str] = &["completed", "failed", "killed", "stopped", "cancelled", "canceled", "timed_out"];
 /// What a tool result says when the work it started keeps running.
 const ASYNC_MARKERS: &[&str] = &["Async agent launched", "running in background", "Monitor started"];
 
@@ -347,7 +348,9 @@ impl DigestBuilder {
         };
         // A foreground subagent returns its answer here; one that runs on
         // reports back later through a task notification.
-        if !claude_result_pending(block) {
+        if claude_result_pending(block) {
+            self.open[index].alias = claude_pending_task_id(block);
+        } else {
             self.open.remove(index);
         }
     }
@@ -355,8 +358,9 @@ impl DigestBuilder {
     fn update_notified(&mut self, text: &str, at: Option<u64>) {
         for (id, status) in claude_task_notices(text) {
             if status.is_some_and(|status| TERMINAL_TASK_STATES.contains(&status)) {
-                self.open.retain(|task| task.id != id);
-            } else if let Some((task, at)) = self.open.iter_mut().find(|task| task.id == id).zip(at) {
+                self.open.retain(|task| task.id != id && task.alias.as_deref() != Some(id));
+            } else if let Some((task, at)) = self.open.iter_mut()
+                .find(|task| task.id == id || task.alias.as_deref() == Some(id)).zip(at) {
                 task.last_activity_at = Some(task.last_activity_at.unwrap_or(task.started_at).max(at));
             }
         }
@@ -503,7 +507,7 @@ impl DigestBuilder {
             self.open.remove(0);
         }
         self.open.push(OpenTask {
-            id: id.to_string(), kind, label, started_at, expires_at, last_activity_at: None, cron: None,
+            id: id.to_string(), alias: None, kind, label, started_at, expires_at, last_activity_at: None, cron: None,
         });
     }
 }
@@ -550,10 +554,20 @@ pub(crate) fn claude_result_pending(block: &Value) -> bool {
     block["is_error"] != true && ASYNC_MARKERS.iter().any(|marker| text.contains(marker))
 }
 
+pub(crate) fn claude_pending_task_id(block: &Value) -> Option<String> {
+    let text = flatten_text(&block["content"]);
+    ["agentId:", "agent_id:", "Monitor started (task ", "running in background with ID:"]
+        .iter()
+        .filter_map(|prefix| text.split_once(prefix).map(|(_, tail)| tail.trim_start()))
+        .map(|tail| tail.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).next().unwrap_or_default())
+        .find(|id| is_safe_session_id(id))
+        .map(str::to_owned)
+}
+
 pub(crate) fn claude_task_notices(text: &str) -> impl Iterator<Item = (&str, Option<&str>)> {
     text.split("<task-notification>").skip(1).filter_map(|block| {
         let block = block.split("</task-notification>").next()?;
-        Some((tag(block, "tool-use-id")?, tag(block, "status")))
+        Some((tag(block, "tool-use-id").or_else(|| tag(block, "task-id"))?, tag(block, "status")))
     })
 }
 
@@ -804,13 +818,22 @@ type CodexResolutions = HashMap<String, (Instant, Option<PathBuf>)>;
 
 static CODEX_RESOLVED: Mutex<Option<CodexResolutions>> = Mutex::new(None);
 
-/// The newest codex rollout recorded for `cwd`.
-///
-/// Codex mints its own ids and the restore feature already resumes it by
-/// directory, so the pane is matched the same way. Only the most recent
-/// rollouts are opened, and only their first line, which is `session_meta`.
-fn resolve_codex(cwd: &str) -> Option<PathBuf> {
-    let key = cwd.trim_end_matches('/').to_string();
+pub(crate) fn codex_subagent(meta: &Value) -> bool {
+    meta["thread_source"] == "subagent" || meta["source"].get("subagent").is_some()
+}
+
+fn codex_matches(meta: &Value, session_id: Option<&str>, cwd: &str) -> bool {
+    if let Some(id) = session_id {
+        return meta["id"] == id;
+    }
+    !codex_subagent(meta)
+        && meta["cwd"].as_str().is_some_and(|value| value.trim_end_matches('/') == cwd)
+}
+
+/// Resolve a known thread or the newest root rollout recorded for the pane's directory.
+fn resolve_codex(session_id: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
+    let cwd = cwd.unwrap_or_default().trim_end_matches('/');
+    let key = session_id.map(|id| format!("id:{id}")).unwrap_or_else(|| format!("cwd:{cwd}"));
     {
         let guard = CODEX_RESOLVED.lock().unwrap_or_else(|p| p.into_inner());
         if let Some((at, path)) = guard.as_ref().and_then(|map| map.get(&key)) {
@@ -823,10 +846,12 @@ fn resolve_codex(cwd: &str) -> Option<PathBuf> {
     collect_jsonl(&sessions_root(DigestAgent::Codex)?, 3, &mut files);
     files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
     let found = files.into_iter().take(CODEX_SCAN_FILES).map(|(_, path)| path).find(|path| {
+        if session_id.is_some_and(|id| !path.file_stem().is_some_and(|stem| stem.to_string_lossy().ends_with(id))) {
+            return false;
+        }
         first_line(path)
             .and_then(|line| serde_json::from_str::<Value>(&line).ok())
-            .and_then(|v| v["payload"]["cwd"].as_str().map(|c| c.trim_end_matches('/') == key))
-            .unwrap_or(false)
+            .is_some_and(|v| v["type"] == "session_meta" && codex_matches(&v["payload"], session_id, cwd))
     });
     let mut guard = CODEX_RESOLVED.lock().unwrap_or_else(|p| p.into_inner());
     guard.get_or_insert_with(HashMap::new).insert(key, (Instant::now(), found.clone()));
@@ -878,7 +903,8 @@ pub(crate) fn codex_thread_name(session_id: &str) -> Option<String> {
 
 fn resolve(agent: DigestAgent, session_id: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
     match agent {
-        DigestAgent::Codex => resolve_codex(cwd?),
+        DigestAgent::Codex if session_id.is_some() || cwd.is_some() => resolve_codex(session_id, cwd),
+        DigestAgent::Codex => None,
         DigestAgent::Claude | DigestAgent::Pi => {
             let kind = if agent == DigestAgent::Claude { AgentKind::Claude } else { AgentKind::Pi };
             let dir = cwd.and_then(|cwd| Some(sessions_root(agent)?.join(project_dir_name(cwd, kind))));
@@ -943,6 +969,18 @@ pub async fn agent_session_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_directory_fallback_skips_subagent_rollouts() {
+        let root = serde_json::json!({"id":"root","cwd":"/repo","source":"cli"});
+        let child = serde_json::json!({"id":"child","cwd":"/repo","source":{
+            "subagent":{"thread_spawn":{"parent_thread_id":"root"}}
+        }});
+        assert!(codex_matches(&root, None, "/repo"));
+        assert!(!codex_matches(&child, None, "/repo"));
+        assert!(!codex_matches(&root, Some("child"), "/repo"));
+        assert!(codex_matches(&child, Some("child"), "/another-worktree"));
+    }
 
     fn fold(agent: DigestAgent, lines: &[&str]) -> SessionDigest {
         let mut builder = DigestBuilder::new(agent);
@@ -1030,6 +1068,16 @@ mod tests {
             AGENT_USE,
             AGENT_LAUNCHED,
             r#"{"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>x</task-id>\n<tool-use-id>toolu_a</tool-use-id>\n<status>completed</status>\n</task-notification>"}"#,
+        ]);
+        assert!(d.tasks.is_empty());
+    }
+
+    #[test]
+    fn a_background_notification_can_name_the_process_instead_of_the_tool_call() {
+        let d = fold(DigestAgent::Claude, &[
+            r#"{"type":"assistant","timestamp":"2026-09-29T09:59:00.000Z","message":{"content":[{"type":"tool_use","id":"toolu_b","name":"Bash","input":{"run_in_background":true}}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_b","content":"Command running in background with ID: b4."}]}}"#,
+            r#"{"type":"queue-operation","content":"<task-notification><task-id>b4</task-id><status>completed</status></task-notification>"}"#,
         ]);
         assert!(d.tasks.is_empty());
     }

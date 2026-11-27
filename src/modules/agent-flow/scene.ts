@@ -46,7 +46,7 @@ export type Actor = {
   activity: TraceEvent | undefined;
   tools: TraceEvent[];
   signals: TraceEvent[];
-  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number } } | undefined;
+  usage: { tokens: number; cost: number | undefined; context?: { input: number; window: number }; outputOnly?: boolean; subagentsThrough?: number } | undefined;
 };
 
 export type SignalTone = "message" | "tool" | "branch" | "return" | "attention" | "state";
@@ -65,7 +65,7 @@ export function signalEvents(events: readonly TraceEvent[], limit = 12): TraceEv
   const result: TraceEvent[] = [];
   for (let index = events.length - 1; index >= 0 && result.length < limit; index--) {
     const event = events[index];
-    if (event.kind !== "usage" && event.kind !== "working") result.push(event);
+    if (event.kind !== "usage" && event.kind !== "working" && event.kind !== "task-alias") result.push(event);
   }
   return result.reverse();
 }
@@ -75,7 +75,46 @@ export function contextPercent(context: NonNullable<NonNullable<Actor["usage"]>[
 }
 
 export function eventStream(run: FlowRun, trace: FlowTrace | undefined): TraceEvent[] {
-  return [...run.events, ...trace?.events ?? []].sort((a, b) => a.at - b.at);
+  const events = [...run.events, ...trace?.events ?? []];
+  const aliases = new Map<string, string>();
+  const codex = run.harness === "codex";
+  for (const event of events) {
+    if (event.kind !== "task-alias" || !event.text || !event.taskId) continue;
+    if (codex) aliases.set(event.taskId, event.text);
+    else aliases.set(event.text, event.taskId);
+  }
+  return events.flatMap((event) => {
+    if (event.kind === "task-alias") return [];
+    let taskId = event.taskId;
+    for (let hops = 0; taskId && hops < (codex ? 4 : 1); hops++) {
+      const next = aliases.get(taskId);
+      if (!next || next === taskId) break;
+      taskId = next;
+    }
+    return [taskId !== event.taskId ? { ...event, taskId } : event];
+  }).sort((a, b) => a.at - b.at);
+}
+
+function terminalOutcome(events: readonly TraceEvent[], since: number) {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (event.at < since) return undefined;
+    if (event.taskId) continue;
+    if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error")
+      return event;
+    if (event.kind === "started" || event.kind === "user" || event.kind === "attention" || event.kind === "working"
+      || event.kind === "tool" || event.kind === "delegated")
+      return undefined;
+  }
+  return undefined;
+}
+
+export function runOutcome(branch: FlowBranch): TraceEvent | undefined {
+  const transcript = branch.trace?.events;
+  const outcome = transcript && terminalOutcome(transcript, branch.run.startedAt - 2000);
+  if (outcome && !branch.events.some((event) => event.at > outcome.at
+    && (event.kind === "user" || event.kind === "attention"))) return outcome;
+  return terminalOutcome(branch.events, branch.run.startedAt - 2000);
 }
 
 export function branchFor(
@@ -90,11 +129,17 @@ export function branchFor(
   const digest = run.sessionId && latestDigest?.sessionId === run.sessionId ? latestDigest : undefined;
   const recorded = flowTasks(events);
   const family = sessionFamily(run, children);
-  const tasks = family.length ? [...family, ...recorded.filter((task) => task.process)] : recorded;
+  const recordedById = new Map(recorded.map((task) => [task.id, task]));
+  const tasks = family.map((task) => {
+    const earlier = recordedById.get(task.id);
+    recordedById.delete(task.id);
+    return earlier ? { ...earlier, ...task, at: Math.min(task.at, earlier.at) } : task;
+  }).concat([...recordedById.values()]);
   liveTasks(digest?.tasks ?? [], run.startedAt).forEach((task, index) => {
     const known = tasks.find((entry) => (task.id && entry.id === task.id)
       || ((entry.process?.kind ?? "subagent") === task.kind && entry.label === task.label
         && Math.abs(entry.at - task.startedAt) < 2000));
+    if (known?.returnedAt !== undefined) return;
     if (task.kind === "subagent") {
       if (known) known.running = known.returnedAt === undefined;
       else if (!family.length) tasks.push({
@@ -112,6 +157,16 @@ export function branchFor(
     if (known) known.process = process;
     else tasks.push({ id: task.id ?? `digest:${task.startedAt}:${index}`, label: task.label, at: task.startedAt, process });
   });
+  for (const task of tasks) {
+    if (!task.run || task.returnedAt !== undefined) continue;
+    const childEvents = traces.get(traceKey(task.run) ?? "")?.events ?? [];
+    const outcome = terminalOutcome(childEvents, task.at);
+    if (outcome) {
+      task.returnedAt = outcome.at;
+      task.failed = outcome.kind === "error";
+      task.running = false;
+    }
+  }
   return { run, trace, events, digest, tasks, start: run.createdAt ?? events[0]?.at ?? run.startedAt };
 }
 
@@ -120,24 +175,28 @@ function retirementAt(task: FlowTask, traces: ReadonlyMap<string, FlowTrace>): n
   if (task.process?.state === "paused") return 0;
   if (task.running || task.process?.state) return Infinity;
   const events = traces.get(traceKey(task.run) ?? "")?.events ?? [];
+  const outcome = terminalOutcome(events, task.at);
+  if (outcome) return outcome.at + FINISHED_LINGER_MS;
   let lastActivity = Math.max(task.at, task.run?.startedAt ?? 0, task.process?.lastActivityAt ?? 0);
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i];
     if (event.kind === "usage" || event.taskId) continue;
     lastActivity = Math.max(lastActivity, event.at);
-    if (event.kind === "exited" || event.kind === "finished" || event.kind === "turn-ended" || event.kind === "error") {
-      return event.at + FINISHED_LINGER_MS;
-    }
     if (event.kind === "attention") return Infinity;
     break;
   }
   return lastActivity + UNCONFIRMED_IDLE_MS;
 }
 
-export function liveBranches(branches: readonly FlowBranch[], traces: ReadonlyMap<string, FlowTrace>, now: number, selection: FlowSelection | null) {
+export function liveBranches(
+  branches: readonly FlowBranch[],
+  traces: ReadonlyMap<string, FlowTrace>,
+  now: number,
+  selection: FlowSelection | null,
+  hideCompletedRuns = false,
+) {
   let nextExpiry = Infinity;
   const visible = branches.flatMap((branch) => {
-    if (!branch.tasks.length) return [branch];
     const kept = new Set<string>();
     const byId = new Map(branch.tasks.map((task) => [task.id, task]));
     for (const task of branch.tasks) {
@@ -151,18 +210,28 @@ export function liveBranches(branches: readonly FlowBranch[], traces: ReadonlyMa
         ancestor = ancestor.parentId ? byId.get(ancestor.parentId) : undefined;
       }
     }
-    if (kept.size === branch.tasks.length) return [branch];
     if (!kept.size && branch.run.marker === "background") return [];
+    if (hideCompletedRuns && !kept.size && branch.run.active && !branch.run.marker && selection?.run !== branch.run.key) {
+      const outcome = runOutcome(branch);
+      if (outcome) {
+        const expiry = outcome.at + FINISHED_LINGER_MS;
+        if (expiry <= now) return [];
+        nextExpiry = Math.min(nextExpiry, expiry);
+      }
+    }
+    if (kept.size === branch.tasks.length) return [branch];
     return [{ ...branch, tasks: branch.tasks.filter((task) => kept.has(task.id)) }];
   });
   return { branches: visible, nextExpiry };
 }
 
-function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
+export function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
   let tokens = 0;
   let cost: number | undefined;
   let context: NonNullable<Actor["usage"]>["context"];
   let found = false;
+  let outputOnly = true;
+  let subagentsThrough: number | undefined;
   const records = new Map<string, NonNullable<TraceEvent["usage"]>>();
   for (const event of events) {
     const usage = event.usage;
@@ -170,28 +239,46 @@ function combinedUsage(events: readonly TraceEvent[]): Actor["usage"] {
     found = true;
     if (usage.context && usage.context.window > 0) context = usage.context;
     if (usage.cumulative) {
+      records.clear();
       tokens = usage.tokens;
-      if (usage.cost !== undefined && usage.cost !== null) cost = usage.cost;
+      cost = usage.cost ?? undefined;
+      outputOnly = usage.outputOnly === true;
+      subagentsThrough = usage.includesSubagents ? event.at : undefined;
     } else {
       records.set(usage.key ?? event.id, usage);
     }
   }
   for (const usage of records.values()) {
+    outputOnly &&= usage.outputOnly === true;
     tokens += usage.tokens;
     if (usage.cost !== undefined && usage.cost !== null) cost = (cost ?? 0) + usage.cost;
   }
-  return found ? { tokens, cost, context } : undefined;
+  return found ? {
+    tokens, cost, context,
+    ...(subagentsThrough !== undefined && { subagentsThrough }),
+    ...(outputOnly && { outputOnly: true }),
+  } : undefined;
+}
+
+export function actorEvents(branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined) {
+  if (task && trace) {
+    const start = task.run?.createdAt ?? task.at;
+    return trace.events.filter((event) => event.at >= start);
+  }
+  if (task) return branch.events.filter((event) => event.taskId === task.id || event.id === task.id);
+  return branch.events.filter((event) => !event.taskId || (event.kind !== "tool" && event.kind !== "usage" && event.kind !== "reply"));
 }
 
 export function describeActor(
   branch: FlowBranch, task: FlowTask | undefined, trace: FlowTrace | undefined, time: number | null,
 ): Actor {
-  const events = beforeTime(task ? trace?.events ?? [] : branch.events, time);
+  const recorded = beforeTime(actorEvents(branch, task, trace), time);
+  const events = task?.process ? processEvents(task, recorded, time) : recorded;
   const taskReturned = task?.returnedAt !== undefined && (time === null || task.returnedAt <= time);
-  const status = [...events].reverse().find((event) => (
+  const status = (!task && time === null ? runOutcome(branch) : undefined) ?? [...events].reverse().find((event) => (
     (event.kind === "error" && !event.taskId) || event.kind === "exited" ||
     event.kind === "attention" || event.kind === "finished" || event.kind === "turn-ended" ||
-    event.kind === "started" || event.kind === "working" || event.kind === "tool" || event.kind === "delegated"
+    event.kind === "started" || event.kind === "user" || event.kind === "working" || event.kind === "tool" || event.kind === "delegated"
   ));
   let tone: Actor["tone"] = "idle";
   let label = task ? "Delegated" : branch.run.projectHistory ? "History" : "Recorded";
@@ -231,11 +318,7 @@ export function describeActor(
   const digest = time === null && !task ? branch.digest : undefined;
   const summary = digest?.pendingQuestion ?? digest?.lastReply ?? digest?.recap;
   const recentTurn = relevant.find((event) => event.kind === "user");
-  const recordedSignals = task && !trace
-    ? branch.events.filter((event) => (time === null || event.at <= time)
-      && (event.taskId === task.id || event.id === task.id))
-    : events;
-  const signals = signalEvents(task?.process ? processEvents(task, recordedSignals, time) : recordedSignals);
+  const signals = signalEvents(events);
   return {
     label, tone, activity: activity ?? signals[signals.length - 1],
     speech: speech ?? (summary ? { id: `summary:${summary}`, kind: "reply", at: digest?.lastReplyAt ?? branch.start, text: summary } : undefined),
@@ -262,33 +345,68 @@ export function processEvents(task: FlowTask, events: readonly TraceEvent[], tim
 type Cluster = {
   branch: FlowBranch;
   box: Box;
+  channel?: { y: number; step: number };
   nodes: { task?: FlowTask; at: Point; parent?: Point }[];
 };
 
-type Layout = { clusters: Cluster[]; width: number; height: number };
+type Frame = { box: Box; clusters: Cluster[]; tab?: string };
+type Layout = { frames: Frame[]; width: number; height: number };
 
-export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, clusterHeight?: number, compact = false) {
+function tabFrame(tab: string, sessions: Cluster[], horizontal: boolean): Frame {
+  const bandSize = Math.ceil(Math.sqrt(sessions.length));
+  let width = 0;
+  let height = 0;
+  const clusters: Cluster[] = [];
+  for (let i = 0; i < sessions.length; i += bandSize) {
+    const band = sessions.slice(i, i + bandSize);
+    let cross = 0;
+    let depth = 0;
+    for (const session of band) {
+      const box = { ...session.box, x: horizontal ? width : cross, y: horizontal ? cross : height };
+      clusters.push({ ...session, box });
+      cross += horizontal ? box.height : box.width;
+      depth = Math.max(depth, horizontal ? box.width : box.height);
+    }
+    if (horizontal) {
+      width += depth;
+      height = Math.max(height, cross);
+    } else {
+      height += depth;
+      width = Math.max(width, cross);
+    }
+  }
+  return { tab, box: { x: 0, y: 0, width, height }, clusters };
+}
+
+function horizontalCurve(from: Point, to: Point): string {
+  if (from.y === to.y) return ` H ${to.x}`;
+  const control = Math.round((to.x - from.x) * 0.42);
+  return ` C ${from.x + control} ${from.y}, ${to.x - control} ${to.y}, ${to.x} ${to.y}`;
+}
+
+export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, returned: boolean, compact = false, channel?: Cluster["channel"]) {
   const { width, centerX, centerY } = nodeGeometry(direction, compact);
   const a = { x: from.x + centerX, y: from.y + centerY };
   const b = { x: to.x + centerX, y: to.y + centerY };
   if (direction === "right") {
     const start = { x: a.x + 29, y: a.y };
     const end = { x: b.x - 29, y: b.y };
-    let track = start.y;
+    const across = channel && to.x - from.x > channel.step ? channel : undefined;
     let d = `M ${start.x} ${start.y}`;
-    if (clusterHeight !== undefined && to.x - from.x > width + 26) {
-      const exit = from.x + width + 13;
-      const bottom = clusterHeight - 8;
-      d += ` H ${exit - 8} Q ${exit} ${track} ${exit} ${track + 8} V ${bottom - 8} Q ${exit} ${bottom} ${exit + 8} ${bottom}`;
-      track = bottom;
+    if (!across && start.y === end.y) {
+      d += ` H ${end.x}`;
+    } else {
+      // Stay in the gap between speech and tools until there is room to turn.
+      let depart = { x: compact ? start.x : from.x + width + 6, y: start.y };
+      if (depart.x !== start.x) d += ` H ${depart.x}`;
+      if (across) {
+        const entry = { x: from.x + across.step - 6, y: across.y };
+        const exit = { x: to.x - across.step + width + 6, y: across.y };
+        d += horizontalCurve(depart, entry) + horizontalCurve(entry, exit);
+        depart = exit;
+      }
+      d += horizontalCurve(depart, end);
     }
-    if (track !== end.y) {
-      const inlet = to.x - 6;
-      const bend = Math.min(12, Math.abs(end.y - track) / 2);
-      const step = Math.sign(end.y - track) * bend;
-      d += ` H ${inlet - bend} Q ${inlet} ${track} ${inlet} ${track + step} V ${end.y - step} Q ${inlet} ${end.y} ${inlet + bend} ${end.y}`;
-    }
-    d += ` H ${end.x}`;
     const tip = returned ? start : end;
     const back = tip.x + (returned ? 7 : -7);
     return { d, arrow: `M ${back} ${tip.y - 4} L ${tip.x} ${tip.y} L ${back} ${tip.y + 4}` };
@@ -302,13 +420,16 @@ export function edgeGeometry(from: Point, to: Point, direction: FlowDirection, r
   return { d, arrow: `M ${tip.x - 4} ${back} L ${tip.x} ${tip.y} L ${tip.x + 4} ${back}` };
 }
 
-export function makeScene(branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit", compact = false) {
+export function makeScene(
+  branches: readonly FlowBranch[], direction: FlowDirection, arrangement: FlowArrangement = "fit", compact = false,
+  groupedTabs?: ReadonlySet<string>,
+) {
   const { width: nodeWidth, height: nodeHeight, centerX, centerY } = nodeGeometry(direction, compact);
   const coordinator = branches.find(({ run }) => run.marker === "terax");
-  const slotX = nodeWidth + 26;
-  const slotY = nodeHeight + 38;
-  const placed = branches.filter(({ run }) => run.marker !== "terax").map((branch) => {
-    const header = CLUSTER_HEADER + (!compact && direction === "right" ? 16 : 0);
+  const horizontal = direction === "right";
+  const slotY = nodeHeight + (horizontal ? 20 : 38);
+  const sessions = branches.filter(({ run }) => run.marker !== "terax").map((branch): Cluster => {
+    const header = CLUSTER_HEADER + (!compact && horizontal ? 16 : 0);
     const depths = new Map<string, number>();
     const layers: (FlowTask | undefined)[][] = [[undefined]];
     for (const task of branch.tasks) {
@@ -318,73 +439,117 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
       layer.push(task);
       layers[depth] = layer;
     }
-    const breadth = Math.min(4, Math.max(...layers.map((layer) => layer.length)));
-    const depth = layers.reduce((total, layer) => total + Math.ceil(layer.length / breadth), 0);
-    const width = ((direction === "down" ? breadth : depth) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
-    const rows = direction === "down" ? depth : breadth;
-    const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2;
+    const widestLayer = Math.max(...layers.map((layer) => layer.length));
+    const limit = Math.min(widestLayer, horizontal ? Math.max(4, Math.ceil(Math.sqrt(2 * widestLayer))) : 4);
+    const bands = layers.flatMap((layer) => {
+      const count = Math.ceil(layer.length / limit);
+      const chunk = horizontal ? layer.length / count : limit;
+      return Array.from({ length: count }, (_, i) => layer.slice(Math.ceil(i * chunk), Math.ceil((i + 1) * chunk)));
+    });
+    const rows = horizontal ? Math.max(...bands.map((band) => band.length)) : bands.length;
+    const turnSpace = horizontal && !compact ? Math.min(120, (rows - 1) * 24) : 0;
+    const slotX = nodeWidth + 26 + turnSpace;
+    const width = ((horizontal ? bands.length : limit) - 1) * slotX + nodeWidth + CLUSTER_PAD * 2;
+    const top = header + CLUSTER_PAD;
+    const split = Math.ceil(rows / 2);
+    const wraps = horizontal && bands.length > layers.length;
+    const channelGap = wraps && !compact ? 48 : 0;
+    // Speech cards can extend above their node, so reserve extra clearance in full detail.
+    const cardOverhang = compact ? 0 : 44;
+    const channel = wraps ? {
+      y: top + split * slotY + (nodeHeight - slotY + channelGap - cardOverhang) / 2,
+      step: slotX,
+    } : undefined;
+    const height = (rows - 1) * slotY + nodeHeight + header + CLUSTER_PAD * 2 + channelGap;
     const positions = new Map<string, Point>();
     const nodes: Cluster["nodes"] = [];
-    let rank = 0;
-    for (const layer of layers) {
-      for (let index = 0; index < layer.length; index++) {
-        const task = layer[index];
-        const row = Math.floor(index / breadth);
-        const count = Math.min(breadth, layer.length - row * breadth);
-        const cross = (index % breadth) + (breadth - count) / 2;
-        const at = direction === "down"
-          ? { x: CLUSTER_PAD + cross * slotX, y: header + CLUSTER_PAD + (rank + row) * slotY }
-          : { x: CLUSTER_PAD + (rank + row) * slotX, y: header + CLUSTER_PAD + cross * slotY };
+    for (const [rank, band] of bands.entries()) {
+      const upper = Math.ceil(band.length / 2);
+      for (const [index, task] of band.entries()) {
+        const cross = index + ((horizontal ? rows : limit) - band.length) / 2;
+        let y = top + (horizontal ? cross : rank) * slotY;
+        if (channel) {
+          const row = split - upper + index;
+          y = rank === 0 ? channel.y - centerY : top + row * slotY + (index >= upper ? channelGap : 0);
+        }
+        const at = horizontal
+          ? { x: CLUSTER_PAD + rank * slotX, y }
+          : { x: CLUSTER_PAD + cross * slotX, y };
         const parent = task?.parentId ? positions.get(task.parentId) : nodes[0]?.at;
         nodes.push({ task, at, parent });
         if (task) positions.set(task.id, at);
       }
-      rank += Math.ceil(layer.length / breadth);
     }
-    return { branch, width, height, nodes };
+    return { branch, box: { x: 0, y: 0, width, height }, nodes, channel };
   });
 
-  function addCoordinator(layout: Layout): Layout {
-    if (!coordinator) return layout;
-    const horizontal = direction === "right";
-    const width = Math.max(layout.width, 2 * GUTTER + 192);
-    const height = Math.max(layout.height, 2 * GUTTER + COORDINATOR_HEIGHT);
-    const box = { x: GUTTER, y: GUTTER, width: horizontal ? COORDINATOR_WIDTH : width - 2 * GUTTER,
-      height: horizontal ? height - 2 * GUTTER : COORDINATOR_HEIGHT };
-    const at = { x: box.width / 2 - centerX, y: box.height / 2 - centerY };
-    const dx = horizontal ? box.width + GUTTER : 0;
-    const dy = horizontal ? 0 : box.height + GUTTER;
-    return {
-      width: width + dx,
-      height: height + dy,
-      clusters: [
-        { branch: coordinator, box, nodes: [{ at }] },
-        ...layout.clusters.map((cluster) => ({ ...cluster, box: { ...cluster.box, x: cluster.box.x + dx, y: cluster.box.y + dy } })),
-      ],
-    };
+  const groups = new Map<string, Frame>();
+  const sources: Frame[] = [];
+  for (const session of sessions) {
+    const { group } = session.branch.run;
+    const tab = groupedTabs?.has(group) ? group : undefined;
+    const existing = tab === undefined ? undefined : groups.get(tab);
+    if (existing) {
+      existing.clusters.push(session);
+    } else {
+      const frame = { tab, box: session.box, clusters: [session] };
+      sources.push(frame);
+      if (tab !== undefined) groups.set(tab, frame);
+    }
+  }
+  const placed = sources.map((frame) => frame.tab === undefined ? frame : tabFrame(frame.tab, frame.clusters, horizontal));
+
+  function finish({ frames, width, height }: Layout) {
+    if (coordinator) {
+      width = Math.max(width, 2 * GUTTER + 192);
+      height = Math.max(height, 2 * GUTTER + COORDINATOR_HEIGHT);
+      const box = { x: GUTTER, y: GUTTER, width: horizontal ? COORDINATOR_WIDTH : width - 2 * GUTTER,
+        height: horizontal ? height - 2 * GUTTER : COORDINATOR_HEIGHT };
+      const at = { x: box.width / 2 - centerX, y: box.height / 2 - centerY };
+      const dx = horizontal ? box.width + GUTTER : 0;
+      const dy = horizontal ? 0 : box.height + GUTTER;
+      frames = [
+        { box, clusters: [{ branch: coordinator, box, nodes: [{ at }] }] },
+        ...frames.map((frame) => ({ ...frame, box: { ...frame.box, x: frame.box.x + dx, y: frame.box.y + dy } })),
+      ];
+      width += dx;
+      height += dy;
+    }
+    const positioned = frames.map((frame) => {
+      const { x, y } = frame.box;
+      return {
+        ...frame,
+        clusters: frame.clusters.map((cluster) => ({
+          ...cluster,
+          box: frame.tab === undefined ? frame.box : { ...cluster.box, x: x + cluster.box.x, y: y + cluster.box.y },
+        })),
+      };
+    });
+    return { width, height, frames: positioned, clusters: positioned.flatMap((frame) => frame.clusters) };
   }
 
   if (arrangement === "lanes") {
     const across = direction === "down";
-    const crossSize = placed.reduce((max, group) => Math.max(max, across ? group.height : group.width), 0);
+    const crossSize = placed.reduce((max, { box }) => Math.max(max, across ? box.height : box.width), 0);
     let nextLane = GUTTER;
-    const clusters = placed.map((group): Cluster => {
+    const frames = placed.map((frame) => {
+      const { width, height } = frame.box;
       const box = across
-        ? { x: nextLane, y: GUTTER, width: group.width, height: compact ? group.height : crossSize }
-        : { x: GUTTER, y: nextLane, width: compact ? group.width : crossSize, height: group.height };
-      nextLane += (across ? group.width : group.height) + GUTTER;
-      return { branch: group.branch, box, nodes: group.nodes };
+        ? { x: nextLane, y: GUTTER, width, height: compact ? height : crossSize }
+        : { x: GUTTER, y: nextLane, width: compact ? width : crossSize, height };
+      nextLane += (across ? width : height) + GUTTER;
+      return { ...frame, box };
     });
-    return addCoordinator({
-      clusters,
+    return finish({
+      frames,
       width: across ? nextLane : crossSize + 2 * GUTTER,
       height: across ? crossSize + 2 * GUTTER : nextLane,
     });
   }
 
-  const ordered = [...placed].sort((a, b) => b.height - a.height || b.width - a.width);
-  const widest = Math.max(0, ...ordered.map(({ width }) => width));
-  const area = placed.reduce((sum, { width, height }) => sum + (width + GUTTER) * (height + GUTTER), 0);
+  const ordered = [...placed].sort((a, b) => b.box.height - a.box.height || b.box.width - a.box.width);
+  const widest = Math.max(0, ...ordered.map(({ box }) => box.width));
+  const area = placed.reduce((sum, { box: { width, height } }) => sum + (width + GUTTER) * (height + GUTTER), 0);
   const ratio = 1.7;
   const nominal = Math.sqrt(area * ratio);
   const widths = placed.length > 140 ? [nominal] : [nominal, nominal * 1.2, nominal * 1.44, nominal * 1.68, nominal * 0.83];
@@ -395,24 +560,25 @@ export function makeScene(branches: readonly FlowBranch[], direction: FlowDirect
     let y = GUTTER;
     let tallest = 0;
     let right = 0;
-    const clusters: Cluster[] = [];
-    for (const group of ordered) {
-      if (x > GUTTER && x + group.width > rowWidth + GUTTER) {
+    const frames: Frame[] = [];
+    for (const frame of ordered) {
+      const { width, height } = frame.box;
+      if (x > GUTTER && x + width > rowWidth + GUTTER) {
         x = GUTTER;
         y += tallest + GUTTER;
         tallest = 0;
       }
-      clusters.push({ branch: group.branch, box: { x, y, width: group.width, height: group.height }, nodes: group.nodes });
-      tallest = Math.max(tallest, group.height);
-      right = Math.max(right, x + group.width);
-      x += group.width + GUTTER;
+      frames.push({ ...frame, box: { x, y, width, height } });
+      tallest = Math.max(tallest, height);
+      right = Math.max(right, x + width);
+      x += width + GUTTER;
     }
-    const layout = { clusters, width: right + GUTTER, height: y + tallest + GUTTER };
+    const layout = { frames, width: right + GUTTER, height: y + tallest + GUTTER };
     if (!best || Math.max(layout.width / ratio, layout.height) < Math.max(best.width / ratio, best.height)) {
       best = layout;
     }
   }
-  return addCoordinator(best ?? { clusters: [], width: GUTTER, height: GUTTER });
+  return finish(best ?? { frames: [], width: GUTTER, height: GUTTER });
 }
 
 export type FlowScene = ReturnType<typeof makeScene>;

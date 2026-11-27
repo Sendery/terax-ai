@@ -26,6 +26,14 @@ if [ -z "$__TERAX_HOOKS_LOADED" ]; then
   # on reload, guard with a flag.
   [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
 
+  # Tell Codex that this PTY can draw direct Kitty graphics. The variable is
+  # scoped to Codex, and user-defined aliases and functions take precedence.
+  if [ "${TERAX_KITTY_GRAPHICS:-}" = 1 ] &&
+     ! alias codex >/dev/null 2>&1 &&
+     ! typeset -f codex >/dev/null 2>&1; then
+    alias codex='KITTY_WINDOW_ID="${KITTY_WINDOW_ID-0}" codex'
+  fi
+
   _terax_urlencode() {
     local LC_ALL=C s="$1" i c
     for (( i=0; i<${#s}; i++ )); do

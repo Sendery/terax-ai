@@ -37,7 +37,13 @@ export function traceTarget(run: FlowRun, follow: boolean): TraceTarget | undefi
 export function mergeTrace(previous: FlowTrace | undefined, incoming: Trace): FlowTrace {
   const old = incoming.reset ? undefined : previous;
   if (old && !old.failed && !incoming.events.length && !incoming.name && !incoming.limited) return old;
-  const events = old ? [...old.events, ...incoming.events] : incoming.events;
+  const byId = new Map((old?.events ?? []).map((event) => [event.id, event]));
+  for (const event of incoming.events) {
+    const previous = byId.get(event.id);
+    if (!previous) byId.set(event.id, event);
+    else if (!previous.file && event.file) byId.set(event.id, { ...previous, file: event.file });
+  }
+  const events = [...byId.values()];
   return {
     events: events.length > MAX_EVENTS ? events.slice(-MAX_EVENTS) : events,
     name: incoming.name ?? old?.name ?? null,

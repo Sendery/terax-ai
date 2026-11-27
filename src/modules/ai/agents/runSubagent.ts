@@ -1,4 +1,5 @@
 import { generateText, stepCountIs } from "ai";
+import type { FlowActivity } from "@/modules/agent-flow/model";
 import {
   DEFAULT_MODEL_ID,
   getModel,
@@ -22,6 +23,7 @@ type Args = {
   toolContext: ToolContext;
   lmstudioBaseURL?: string;
   onStep?: (label: string) => void;
+  onActivity?: (event: FlowActivity) => void;
 };
 
 type RunResult = {
@@ -38,6 +40,7 @@ export async function runSubagent({
   toolContext,
   lmstudioBaseURL,
   onStep,
+  onActivity,
 }: Args): Promise<RunResult> {
   const def = SUBAGENTS[type];
   if (!def) throw new Error(`unknown subagent type: ${type}`);
@@ -66,9 +69,13 @@ export async function runSubagent({
     tools: tools as Parameters<typeof generateText>[0]["tools"],
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     onStepFinish: (step) => {
-      if (!onStep) return;
       const last = step.toolCalls?.[step.toolCalls.length - 1];
-      if (last) onStep(`${type}: ${last.toolName}`);
+      if (last) onStep?.(`${type}: ${last.toolName}`);
+      if (onActivity) {
+        for (const call of step.toolCalls ?? []) onActivity({ kind: "tool", text: call.toolName });
+        const tokens = (step.usage.inputTokens ?? 0) + (step.usage.outputTokens ?? 0);
+        if (tokens > 0) onActivity({ kind: "usage", usage: { tokens, cumulative: false } });
+      }
     },
   });
 

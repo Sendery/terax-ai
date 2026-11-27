@@ -8,6 +8,15 @@ export function isSecondaryClick(
   return event.button === 2 || (isMac && event.button === 0 && event.ctrlKey);
 }
 
+export function usesTerminalContextMenu(
+  event: Pick<MouseEvent, "shiftKey" | "metaKey" | "ctrlKey">,
+  isMac: boolean,
+  hasSelection: boolean,
+  preferTerminal = false,
+): boolean {
+  return preferTerminal || hasSelection || event.shiftKey || event.ctrlKey || (isMac && event.metaKey);
+}
+
 /** xterm activates a link on the mouseup of any button; only a primary click
  * may open it, so a right-click reaches the context menu instead. */
 export function isLinkActivation(

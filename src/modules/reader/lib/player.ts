@@ -395,7 +395,7 @@ async function voiceFor(entry: DocEntry): Promise<VoiceProfile> {
 }
 
 /** Binds the document to a voice: its cache folder, known clips and lengths. */
-async function bindVoice(docId: string): Promise<VoiceContext> {
+async function bindVoice(docId: string, forPlayback = true): Promise<VoiceContext> {
   const entry = entryOf(docId);
   if (!entry) throw new Error("This document is no longer open.");
   const voice = await voiceFor(entry);
@@ -408,8 +408,7 @@ async function bindVoice(docId: string): Promise<VoiceContext> {
   ) {
     return voiceContext;
   }
-  if (voiceContext?.voiceKey !== voiceKey || voiceContext?.docId !== docId)
-    releaseUrls();
+  if (forPlayback) releaseUrls();
   const keys = [...new Set(entry.doc.segments.map((s) => s.key))];
   const present = await readerNative
     .chunksPresent(docId, voiceKey, keys)
@@ -424,7 +423,7 @@ async function bindVoice(docId: string): Promise<VoiceContext> {
       durations: sameVoice ? fresh.durations : new Map(),
     }),
   );
-  voiceContext = {
+  const context: VoiceContext = {
     docId,
     voice,
     voiceKey,
@@ -433,7 +432,8 @@ async function bindVoice(docId: string): Promise<VoiceContext> {
     samplePath: null,
     isolated,
   };
-  return voiceContext;
+  if (forPlayback) voiceContext = context;
+  return context;
 }
 
 type SynthesizedClip = {
@@ -877,6 +877,28 @@ async function takeOver(docId: string): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Public controls
+
+/** Prepares the normal Reader cache without replacing or starting playback. */
+export async function prepareReaderAudio(docId: string, current: () => boolean): Promise<void> {
+  const ctx = await bindVoice(docId, false);
+  const entry = entryOf(docId);
+  if (!entry) return;
+  try {
+    for (const segment of entry.doc.segments) {
+      if (!current() || !entryOf(docId)) return;
+      if (isSilentSegment(segment) || entryOf(docId)?.cached.has(segment.key)) continue;
+      clearIdleTimer();
+      const bytes = await clipBytes(ctx, segment);
+      const ms = wavDurationMs(bytes);
+      if (ms !== null) recordDuration(ctx, segment.key, ms);
+    }
+  } finally {
+    const activeDocId = store().playback.docId;
+    if ((!activeDocId || !isLive(activeDocId)) && !useTtsStore.getState().speaking) {
+      armIdleTimer();
+    }
+  }
+}
 
 /** Plays from a word, or from where the document was left. */
 export async function playReader(

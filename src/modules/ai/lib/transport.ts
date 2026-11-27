@@ -1,4 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { recordTeraxFlow } from "@/modules/agent-flow/journal";
+import type { FlowActivity } from "@/modules/agent-flow/model";
+import { observeTeraxStream } from "@/modules/agent-flow/teraxActivity";
 import type { CustomEndpoint } from "../config";
 import { runAgentStream, type AgentUsageDelta } from "./agent";
 import type { ProviderKeys, CustomEndpointKeys } from "./keyring";
@@ -77,6 +80,12 @@ type SendOptions = {
 export function createContextAwareTransport(deps: Deps) {
   const run = async (options: SendOptions) => {
     const live = deps.getLive();
+    const sessionId = deps.toolContext.getSessionId();
+    const record = sessionId && !live.terminalPrivate
+      ? (activity: FlowActivity) => recordTeraxFlow(sessionId, activity)
+      : undefined;
+    const turnId = record ? crypto.randomUUID() : "";
+    const taskKey = (id: string) => `${turnId}:${id}`;
     const projectMemory = await readTeraxMd(live.workspaceRoot);
     const envBlock = formatEnvBlock(live);
     // `!!` output is for the user only: it never reaches a model or a CLI.
@@ -84,14 +93,21 @@ export function createContextAwareTransport(deps: Deps) {
     const messagesForRun = envBlock
       ? injectEnvIntoLastUser(visible, envBlock)
       : visible;
+    record?.({ kind: "working" });
     const result = await runAgentStream({
       keys: deps.getKeys(),
       modelId: deps.getModelId(),
       customInstructions: deps.getCustomInstructions(),
       agentPersona: deps.getAgentPersona(),
-      toolContext: deps.toolContext,
+      toolContext: record ? { ...deps.toolContext, recordSubagentActivity: (id, activity) => {
+        record({ ...activity, taskId: taskKey(id) });
+      } } : deps.toolContext,
       onStep: deps.onStep,
-      onUsage: deps.onUsage,
+      onUsage: (delta) => {
+        if (delta.reportedTotalTokens === undefined) deps.onUsage?.(delta);
+        const tokens = delta.reportedTotalTokens ?? delta.inputTokens + delta.outputTokens;
+        if (tokens > 0) record?.({ kind: "usage", usage: { tokens, cumulative: false, outputOnly: delta.outputOnly } });
+      },
       onCompact: deps.onCompact,
       onFinishMeta: deps.onFinishMeta,
       lmstudioBaseURL: deps.getLmstudioBaseURL?.(),
@@ -111,11 +127,15 @@ export function createContextAwareTransport(deps: Deps) {
       projectMemory,
       uiMessages: messagesForRun,
       abortSignal: options.abortSignal,
+    }).catch((error) => {
+      record?.({ kind: "error" });
+      throw error;
     });
-    return result.toUIMessageStream({
+    const stream = result.toUIMessageStream({
       originalMessages: options.messages,
       onError: formatAiError,
     });
+    return record ? observeTeraxStream(stream, record, taskKey, options.abortSignal) : stream;
   };
 
   return {

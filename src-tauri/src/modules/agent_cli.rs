@@ -6,12 +6,14 @@
 //! a generic, injection-safe spawner so adding a CLI never touches Rust.
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use shared_child::SharedChild;
 use tauri::ipc::Channel;
@@ -129,6 +131,64 @@ pub async fn agent_cli_which(bins: Vec<String>) -> HashMap<String, Option<String
 /// Upper bound for a prompt handed over stdin. A flattened chat transcript can
 /// be large, but nothing a chat composes comes near this.
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
+const MAX_CLAUDE_JSON_BYTES: usize = 24 * 1024 * 1024;
+const MAX_CLI_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+const MAX_CLI_IMAGES: usize = 20;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentCliImage {
+    media_type: String,
+    data: String,
+}
+
+fn image_extension(media_type: &str, bytes: &[u8]) -> Option<&'static str> {
+    match media_type {
+        "image/png" if bytes.starts_with(b"\x89PNG\r\n\x1a\n") => Some("png"),
+        "image/jpeg" if bytes.starts_with(b"\xff\xd8\xff") => Some("jpg"),
+        "image/gif" if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") => Some("gif"),
+        "image/webp" if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") => Some("webp"),
+        _ => None,
+    }
+}
+
+fn stage_cli_images(
+    bin: &str,
+    args: &[String],
+    images: Vec<AgentCliImage>,
+) -> Result<Option<(tempfile::TempDir, Vec<OsString>)>, String> {
+    if images.is_empty() {
+        return Ok(None);
+    }
+    let prefix = match bin {
+        "pi" => "@",
+        "codex" if args.first().is_some_and(|arg| arg == "exec") => "--image=",
+        _ => return Err("This CLI does not support image files.".into()),
+    };
+    if images.len() > MAX_CLI_IMAGES {
+        return Err("Attach up to 20 images per message.".into());
+    }
+    let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let mut image_args = Vec::with_capacity(images.len());
+    let mut total = 0;
+    for (index, image) in images.into_iter().enumerate() {
+        if image.data.len() > (MAX_CLI_IMAGE_BYTES - total).div_ceil(3) * 4 {
+            return Err("Image attachments must total 10 MB or less.".into());
+        }
+        let bytes = STANDARD.decode(image.data).map_err(|_| "Invalid image data.")?;
+        total += bytes.len();
+        if total > MAX_CLI_IMAGE_BYTES {
+            return Err("Image attachments must total 10 MB or less.".into());
+        }
+        let extension = image_extension(&image.media_type, &bytes).ok_or("Unsupported or invalid image file.")?;
+        let path = directory.path().join(format!("image-{}.{}", index + 1, extension));
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        let mut arg = OsString::from(prefix);
+        arg.push(path);
+        image_args.push(arg);
+    }
+    Ok(Some((directory, image_args)))
+}
 
 /// Environment that lets a spawned agent reach this instance's Pi bridge. The
 /// Pi-Terax extension only registers its control tools inside a Terax
@@ -143,12 +203,14 @@ fn bridge_env(discovery: Option<PathBuf>) -> Vec<(&'static str, String)> {
 }
 
 /// Optional extras for one spawn, grouped so the command signature stays small.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCliSpawnOptions {
     /// Written to the child's stdin, then closed. Absent means stdin is null.
     #[serde(default)]
     pub stdin: Option<String>,
+    #[serde(default)]
+    images: Vec<AgentCliImage>,
     /// Hand the child this instance's Pi bridge (see `bridge_env`).
     #[serde(default)]
     pub bridge: bool,
@@ -179,8 +241,13 @@ pub async fn agent_cli_spawn(
         return Err("empty binary".into());
     }
 
-    let AgentCliSpawnOptions { stdin, bridge } = options.unwrap_or_default();
-    if stdin.as_ref().is_some_and(|text| text.len() > MAX_STDIN_BYTES) {
+    let AgentCliSpawnOptions { stdin, bridge, images } = options.unwrap_or_default();
+    let stdin_limit = if bin == "claude" && args.windows(2).any(|pair| pair == ["--input-format", "stream-json"]) {
+        MAX_CLAUDE_JSON_BYTES
+    } else {
+        MAX_STDIN_BYTES
+    };
+    if stdin.as_ref().is_some_and(|text| text.len() > stdin_limit) {
         return Err("prompt is too large".into());
     }
 
@@ -189,9 +256,20 @@ pub async fn agent_cli_spawn(
 
     let program = resolve_bin(bin).ok_or_else(|| format!("{bin} not found on PATH"))?;
 
+    let attachments = stage_cli_images(bin, args, images)?;
     let mut cmd = Command::new(&program);
-    cmd.args(args)
-        .env("PATH", login_path())
+    match &attachments {
+        Some((_, image_args)) if bin == "codex" => {
+            cmd.arg(&args[0]).args(image_args).args(&args[1..]);
+        }
+        Some((_, image_args)) => {
+            cmd.args(args).args(image_args);
+        }
+        None => {
+            cmd.args(args);
+        }
+    }
+    cmd.env("PATH", login_path())
         .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -235,6 +313,7 @@ pub async fn agent_cli_spawn(
     let children = Arc::clone(&state.children);
     thread::spawn(move || {
         let code = waiter.wait().ok().and_then(|s| s.code());
+        drop(attachments);
         let _ = on_event.send(AgentCliEvent::Exit { code });
         children.lock().unwrap().remove(&id);
     });
@@ -374,6 +453,23 @@ fn stream_lines<R: std::io::Read>(pipe: R, ch: &Channel<AgentCliEvent>, stdout: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stages_only_validated_image_bytes_in_a_scoped_directory() {
+        let image = || AgentCliImage {
+            media_type: "image/png".into(),
+            data: "iVBORw0KGgo=".into(),
+        };
+        let (directory, args) = stage_cli_images("pi", &[], vec![image()]).unwrap().unwrap();
+        let path = directory.path().join("image-1.png");
+        assert_eq!(std::fs::read(&path).unwrap(), b"\x89PNG\r\n\x1a\n");
+        assert_eq!(args, [OsString::from(format!("@{}", path.display()))]);
+        drop(directory);
+        assert!(!path.exists());
+        assert!(stage_cli_images("claude", &[], vec![image()]).is_err());
+        let invalid = AgentCliImage { media_type: "image/jpeg".into(), ..image() };
+        assert!(stage_cli_images("codex", &["exec".into()], vec![invalid]).is_err());
+    }
 
     #[test]
     fn agy_permissions_keep_only_rule_lists() {

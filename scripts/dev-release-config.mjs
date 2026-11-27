@@ -43,7 +43,7 @@ export function macSigningIdentity({
   listIdentities = keychainCodeSigningIdentities,
 } = {}) {
   if (platform !== "darwin") return null;
-  const wanted = env.TERAX_MACOS_SIGNING_IDENTITY || LOCAL_SIGNING_IDENTITY;
+  const wanted = env.TERAX_MACOS_SIGNING_IDENTITY || env.APPLE_SIGNING_IDENTITY || LOCAL_SIGNING_IDENTITY;
   if (wanted === "-") return null;
   return listIdentities().includes(wanted) ? wanted : null;
 }
@@ -51,6 +51,21 @@ export function macSigningIdentity({
 /** `tauri build` flags matching the identity: unsigned builds skip signing. */
 export function tauriSignArgs(signingIdentity) {
   return signingIdentity ? [] : ["--no-sign"];
+}
+
+export function verifyMacDistribution(app, dmg) {
+  const checks = [
+    ["hdiutil", ["verify", dmg]],
+    ["codesign", ["--verify", "--deep", "--strict", app]],
+    ["xcrun", ["stapler", "validate", app]],
+    ["spctl", ["--assess", "--type", "execute", "--verbose=2", app]],
+  ];
+  for (const [command, args] of checks) {
+    const result = spawnSync(command, args, { stdio: "inherit" });
+    if (result.status !== 0) {
+      throw new Error(`macOS distribution check failed (${command}). Build with a Developer ID Application identity and Tauri notarization credentials before uploading.`);
+    }
+  }
 }
 
 /**
@@ -76,6 +91,10 @@ export function developmentConfigOverride(baseConfig = {}, { signingIdentity = n
 }
 
 function main() {
+  if (process.argv[2] === "--verify-distribution") {
+    verifyMacDistribution(process.argv[3], process.argv[4]);
+    return;
+  }
   const signingIdentity = macSigningIdentity();
   if (process.argv[2] === "--sign-args") {
     process.stdout.write(tauriSignArgs(signingIdentity).join(" "));

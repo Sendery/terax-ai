@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import { collectNodeStatus, fileCrossings, fileRelations, normalizedFile, relayGraph, resolveDeliveries, type FlowTerminal } from "@/modules/agent-flow/coordination";
 import type { AgentNotification, AgentSession, SessionDigest } from "@/modules/agents/lib/types";
 import { backgroundBranch } from "@/modules/agent-flow/background";
+import { currentSourceFilter, sourceGroups, sourceMatches, type SourceFilter } from "@/modules/agent-flow/FlowSourceFilter";
 import {
-  beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily,
+  beforeTime, flowTasks, historyRun, mergeRuns, sessionFamily, type FlowRun,
 } from "@/modules/agent-flow/model";
 import {
   branchFor, COMPACT_SCALE, contextPercent, describeActor, edgeGeometry, fitCamera, fitFlowCamera,
   laneCamera, liveBranches, makeScene, nodeGeometry, overlaps, signalTone, zoomCamera, zoomFlowCamera,
 } from "@/modules/agent-flow/scene";
 import { buildTimeline, nearTick, timeFraction } from "@/modules/agent-flow/timeline";
-import { mergeTrace, traceKey } from "@/modules/agent-flow/traceReader";
+import { mergeTrace, traceKey, type FlowTrace } from "@/modules/agent-flow/traceReader";
 import { createWatch } from "@/modules/watchers/lib/watch";
 
 const root = historyRun({ id: "root", provider: "codex", cwd: "/project", modifiedAt: 40 }, "Project");
@@ -24,6 +25,53 @@ const grandchild = historyRun({
 }, "Project");
 
 describe("Agent Flow", () => {
+  it("groups live shells by tab identity and distinguishes a full tab from chosen shells", () => {
+    const pane = { leafId: 1, tabId: 3, shellKey: "launch:3:1", title: "Review", slot: 1, split: true };
+    const sibling = { ...pane, leafId: 2, shellKey: "launch:3:2", slot: 2 };
+    const other = { ...pane, tabId: 4, shellKey: "launch:4:3", leafId: 3 };
+    const groups = sourceGroups([pane, sibling, other], [{ ...root, group: "launch:3" }]);
+    expect(groups.map(({ title, shells }) => [title, shells.length])).toEqual([["Review · 1", 2], ["Review · 2", 1]]);
+    const chosen: SourceFilter = new Map([["launch:3", new Set([sibling.shellKey])]]);
+    const partial = currentSourceFilter(chosen, groups);
+    expect(sourceMatches(partial, "launch:3", pane.shellKey)).toBe(false);
+    expect(sourceMatches(partial, "launch:3", sibling.shellKey)).toBe(true);
+    expect(currentSourceFilter(chosen, sourceGroups([pane, other], [])).size).toBe(0);
+    const full = currentSourceFilter(new Map([["launch:3", null]]), groups);
+    expect(sourceMatches(full, "launch:3", "launch:3:5")).toBe(true);
+    expect(sourceMatches(full, "launch:4", other.shellKey)).toBe(false);
+  });
+
+  it.each(["down", "right"] as const)("shares a %s frame only for an explicitly selected tab", (direction) => {
+    const first = { ...root, group: "launch:3", shellKey: "launch:3:1", tabTitle: "Review" };
+    const second = { ...first, key: "claude", shellKey: "launch:3:2", agent: "claude" };
+    const older = { ...first, key: "older", shellKey: undefined };
+    const other = { ...second, key: "other", group: "launch:4", shellKey: "launch:4:1" };
+    const branches = [
+      branchFor(first, [child], null, new Map()),
+      branchFor(second, [], null, new Map()),
+      branchFor(older, [], null, new Map()),
+      branchFor(other, [], null, new Map()),
+    ];
+    expect(makeScene(branches, direction).frames).toHaveLength(4);
+    for (const arrangement of ["fit", "lanes"] as const) {
+      for (const compact of [false, true]) {
+        const { frames } = makeScene(branches, direction, arrangement, compact, new Set(["launch:3"]));
+        expect(frames).toHaveLength(2);
+        const [frame, separate] = frames;
+        expect(frame.tab).toBe("launch:3");
+        const [a, b] = frame.clusters;
+        expect(frame.clusters.map(({ branch }) => branch.run.key)).toEqual([first.key, second.key, older.key]);
+        expect(a.nodes[1].parent).toEqual(a.nodes[0].at);
+        expect(b.nodes[0].parent).toBeUndefined();
+        expect(overlaps(a.box, b.box)).toBe(false);
+        expect(separate.clusters.map(({ branch }) => branch.run.key)).toEqual([other.key]);
+        expect(overlaps(frame.box, separate.box)).toBe(false);
+        expect(a.box.x).toBe(frame.box.x);
+        expect(a.box.y).toBe(frame.box.y);
+      }
+    }
+  });
+
   it("keeps live tab attribution and attaches only recorded child sessions", () => {
     const live = { ...root, key: "live", active: true, group: "tab", tabTitle: "My terminal", color: "purple" as const };
     expect(mergeRuns([live], [root, child, grandchild])).toEqual([live]);
@@ -32,6 +80,63 @@ describe("Agent Flow", () => {
       ["child", undefined, "Scout", 12],
       ["grandchild", "child", "Reviewer", 15],
     ]);
+  });
+
+  it("combines a Codex spawn and wait result with the child's tools and usage", () => {
+    const live = { ...root, active: true };
+    const traces = new Map<string, FlowTrace>([
+      [traceKey(live) ?? "", { name: null, limited: false, failed: false, events: [
+        { id: "call", at: 10, kind: "delegated", taskId: "tool-call" },
+        { id: "link", at: 12, kind: "task-alias", taskId: "tool-call", text: "review" },
+        { id: "thread", at: 13, kind: "task-alias", taskId: "review", text: "child" },
+        { id: "started-child", at: 14, kind: "delegated", taskId: "child" },
+        { id: "wait", at: 20, kind: "returned", taskId: "child" },
+      ] }],
+      [traceKey(child) ?? "", { name: null, limited: false, failed: false, events: [
+        { id: "inherited", at: 9, kind: "tool", text: "Parent tool" },
+        { id: "tool", at: 14, kind: "tool", text: "exec_command" },
+        { id: "tokens", at: 16, kind: "usage", usage: { tokens: 87, cumulative: true } },
+      ] }],
+    ]);
+    const branch = branchFor(live, [child], null, traces);
+    expect(branch.tasks).toHaveLength(1);
+    expect(branch.tasks[0]).toMatchObject({ id: "child", at: 10, returnedAt: 20, label: "Scout" });
+    const actor = describeActor(branch, branch.tasks[0], traces.get(traceKey(child) ?? ""), null);
+    expect(actor.tools.map(({ text }) => text)).toEqual(["exec_command"]);
+    expect(actor.usage?.tokens).toBe(87);
+    const timeline = buildTimeline([branch], traces);
+    expect(timeline.marks).toContainEqual({ at: 14, kind: "tool" });
+    expect(timeline.marks).not.toContainEqual({ at: 9, kind: "tool" });
+  });
+
+  it("keeps Terax AI's inline subagent usage and tools separate from its parent", () => {
+    const run: FlowRun = {
+      ...root, harness: "generic", agent: "terax", events: [
+        { id: "spawn", at: 11, kind: "delegated", taskId: "sub" },
+        { id: "child-tool", at: 12, kind: "tool", taskId: "sub", text: "Search" },
+        { id: "child-usage", at: 13, kind: "usage", taskId: "sub", usage: { tokens: 17, cumulative: false } },
+        { id: "root-usage", at: 14, kind: "usage", usage: { tokens: 37, cumulative: true } },
+      ],
+    };
+    const branch = branchFor(run, [], null, new Map());
+    expect(describeActor(branch, undefined, undefined, null).usage?.tokens).toBe(37);
+    const actor = describeActor(branch, branch.tasks[0], undefined, null);
+    expect(actor.usage?.tokens).toBe(17);
+    expect(actor.tools.map(({ text }) => text)).toEqual(["Search"]);
+  });
+
+  it("marks the part of Copilot's subagent usage included in the session total", () => {
+    const run: FlowRun = {
+      ...root, harness: "copilot", events: [
+        { id: "spawn", at: 10, kind: "delegated", taskId: "child" },
+        { id: "child-usage", at: 11, kind: "usage", taskId: "child", usage: { tokens: 32, cumulative: false, outputOnly: true } },
+        { id: "checkpoint", at: 12, kind: "usage", usage: { tokens: 112, cumulative: true, includesSubagents: true } },
+      ],
+    };
+    const branch = branchFor(run, [], null, new Map());
+    expect(describeActor(branch, undefined, undefined, 11).usage).toBeUndefined();
+    expect(describeActor(branch, undefined, undefined, null).usage).toMatchObject({ tokens: 112, subagentsThrough: 12 });
+    expect(describeActor(branch, branch.tasks[0], undefined, null).usage).toMatchObject({ tokens: 32, outputOnly: true });
   });
 
   it("places actual descendants on successive layers in both directions", () => {
@@ -140,7 +245,7 @@ describe("Agent Flow", () => {
     const restored = zoomFlowCamera(zoom, point, 1.25, layouts, direction, null);
     expect(restored.x).toBeCloseTo(camera.x);
     expect(restored.y).toBeCloseTo(camera.y);
-    expect(edgeGeometry(compact.clusters[0].nodes[0].at, compact.clusters[0].nodes[1].at, direction, false, undefined, true).d)
+    expect(edgeGeometry(compact.clusters[0].nodes[0].at, compact.clusters[0].nodes[1].at, direction, false, true).d)
       .toBe("M 125 91 H 249");
   });
 
@@ -155,12 +260,34 @@ describe("Agent Flow", () => {
     expect(result.arrow).toBe("M 83 69 L 76 73 L 83 77");
   });
 
-  it("branches between rows near the destination and routes past occupied columns through the gutter", () => {
+  it("curves between rows beyond the source card, with the compact curve starting at the beacon", () => {
     const from = { x: 0, y: 0 };
     const branch = edgeGeometry(from, { x: 352, y: 150 }, "right", false);
-    expect(branch.d).toBe("M 76 73 H 334 Q 346 73 346 85 V 211 Q 346 223 358 223 H 370");
-    const bypass = edgeGeometry(from, { x: 704, y: 150 }, "right", false, 324);
-    expect(bypass.d).toContain("347 316 H");
+    expect(branch.d).toBe("M 76 73 H 332 C 348 73, 354 223, 370 223");
+    const compact = edgeGeometry(from, { x: 182, y: 144 }, "right", true, true);
+    expect(compact.d).toBe("M 107 42 C 159 42, 179 186, 231 186");
+    expect(compact.arrow).toBe("M 114 38 L 107 42 L 114 46");
+  });
+
+  it.each([false, true])("wraps seven siblings across two columns with a clear path to the farther column (compact=%s)", (compact) => {
+    const branch = branchFor(root, [], null, new Map());
+    branch.tasks = Array.from({ length: 7 }, (_, i) => ({ id: `sibling-${i}`, label: `Review ${i}`, at: i + 11 }));
+    branch.tasks.push({ id: "follow-up", parentId: "sibling-0", label: "Follow-up", at: 22 });
+    const { nodes, channel, box } = makeScene([branch], "right", "fit", compact).clusters[0];
+    const siblings = nodes.slice(1, 8);
+    const firstColumn = siblings.filter(({ at }) => at.x === siblings[0].at.x);
+    const secondColumn = siblings.filter(({ at }) => at.x === siblings[6].at.x);
+    const followUp = nodes[8];
+    expect([firstColumn.length, secondColumn.length]).toEqual([4, 3]);
+    expect(box.height).toBeLessThan(5 * (nodeGeometry("right", compact).height + 20));
+    expect(siblings.every(({ parent }) => parent === nodes[0].at)).toBe(true);
+    expect(followUp.parent).toBe(siblings[0].at);
+    expect(followUp.at.x).toBeGreaterThan(secondColumn[0].at.x);
+    expect(channel?.y).toBe(nodes[0].at.y + nodeGeometry("right", compact).centerY);
+    expect(channel?.y).toBeGreaterThan(firstColumn[1].at.y + nodeGeometry("right", compact).height);
+    expect(channel?.y).toBeLessThan(firstColumn[2].at.y - (compact ? 0 : 44));
+    expect(edgeGeometry(nodes[0].at, secondColumn[0].at, "right", false, compact, channel).d)
+      .toContain(` H ${firstColumn[0].at.x + nodeGeometry("right", compact).width + 6} C `);
   });
 
   it("keeps separate shell tracks for split panes and combines runs from the same shell", () => {
@@ -346,6 +473,41 @@ describe("Agent Flow", () => {
     const selected = liveBranches([branch], new Map(), 400_000, { run: root.key, task: "done" });
     expect(selected.branches[0].tasks.some(({ id }) => id === "done")).toBe(true);
     expect(buildTimeline([branch], new Map()).marks).toContainEqual({ at: 1000, kind: "returned" });
+  });
+
+  it("ends a background task by its provider alias even with a stale digest", () => {
+    const run = { ...root, harness: "claude" as const, active: true, leafId: 11, startedAt: 20 };
+    const trace = { name: null, failed: false, limited: false, events: [
+      { id: "1", at: 21, kind: "background-started" as const, taskId: "call" },
+      { id: "2", at: 22, kind: "task-alias" as const, taskId: "call", text: "background-id" },
+      { id: "3", at: 23, kind: "returned" as const, taskId: "background-id" },
+    ] };
+    const branch = branchFor(run, [], { 11: {
+      sessionId: "root", name: null, recap: null, recapAt: null, lastReply: null, lastReplyAt: null,
+      goal: null, pendingQuestion: null, prs: [], artifacts: [],
+      tasks: [{ id: "call", kind: "background", label: "Build helper", startedAt: 21 }],
+    } }, new Map([[traceKey(run) ?? "", trace]]));
+    expect(branch.tasks[0]).toMatchObject({ id: "call", returnedAt: 23 });
+    expect(liveBranches([branch], new Map(), 31_000, null).branches[0].tasks).toEqual([]);
+    expect(buildTimeline([branch], new Map()).marks).toContainEqual({ at: 23, kind: "returned" });
+  });
+
+  it("retires completed Codex descendants and ignores late PTY working noise on the parent", () => {
+    const run = { ...root, active: true, startedAt: 10, events: [{ id: "pty", at: 25, kind: "working" as const }] };
+    const trace = { name: null, failed: false, limited: false, events: [
+      { id: "end", at: 20, kind: "turn-ended" as const },
+      { id: "reply", at: 21, kind: "reply" as const, text: "Done" },
+    ] };
+    const traces = new Map<string, FlowTrace>([[traceKey(run) ?? "", trace], [traceKey(child) ?? "", trace]]);
+    const branch = branchFor(run, [child], null, traces);
+    expect(describeActor(branch, undefined, trace, null).label).toBe("Turn complete");
+    expect(branch.tasks[0].returnedAt).toBe(20);
+    expect(liveBranches([branch], traces, 31_000, null).branches[0].tasks).toEqual([]);
+    expect(liveBranches([branch], traces, 31_000, null, true).branches).toEqual([]);
+    expect(liveBranches([branch], traces, 31_000, { run: run.key }, true).branches).toHaveLength(1);
+    const next = { ...trace, events: [...trace.events, { id: "new", at: 31_001, kind: "user" as const }] };
+    traces.set(traceKey(run) ?? "", next);
+    expect(liveBranches([branchFor(run, [child], null, traces)], traces, 31_002, null, true).branches).toHaveLength(1);
   });
 
   it("rewinds a delegation independently of its result", () => {

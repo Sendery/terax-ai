@@ -1,4 +1,5 @@
-import { cn } from "@/lib/utils";
+import { LinkedTabPane, useLinkedTabs } from "@/modules/tabs/LinkedTabPane";
+import { linkedSide } from "@/modules/tabs/lib/linkedTabs";
 import type { PreviewTab, Tab } from "@/modules/tabs";
 import { useEffect, useRef } from "react";
 import { PreviewPane, type PreviewPaneHandle } from "./PreviewPane";
@@ -16,6 +17,7 @@ export function PreviewStack({
   onUrlChange,
   registerHandle,
 }: Props) {
+  const linked = useLinkedTabs();
   const previews = tabs.filter(
     (t): t is PreviewTab => t.kind === "preview" && !t.cold,
   );
@@ -65,25 +67,17 @@ export function PreviewStack({
   return (
     <div className="relative h-full w-full">
       {previews.map((t) => {
-        const visible = t.id === activeId;
+        const active = t.id === activeId;
+        const visible = active || !!linkedSide(linked?.link, t.id);
         return (
-          <div
-            key={t.id}
-            data-capture-target="pane"
-            data-capture-tab-id={t.id}
-            className={cn(
-              "absolute inset-0",
-              !visible && "invisible pointer-events-none",
-            )}
-            aria-hidden={!visible}
-          >
+          <LinkedTabPane key={t.id} tabId={t.id} active={active}>
             <PreviewPane
               ref={getRefCallback(t.id)}
               url={t.url}
               visible={visible}
               onUrlChange={getUrlCallback(t.id)}
             />
-          </div>
+          </LinkedTabPane>
         );
       })}
     </div>

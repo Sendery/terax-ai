@@ -1,4 +1,5 @@
 import { IS_MAC } from "@/lib/platform";
+import { useAgentStore } from "@/modules/agents/store/agentStore";
 import { registerNativeCaptureProvider } from "@/modules/capture/lib/captureLease";
 import { registerCanvasSnapshotProvider } from "@/modules/capture/lib/rasterize";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -28,7 +29,7 @@ import {
   RenderCapacityError,
 } from "@/modules/terminal/gl/renderCapacity";
 import { terminalCopyText } from "@/modules/terminal/lib/agentCopy";
-import { isSecondaryClick } from "@/modules/terminal/lib/pointer";
+import { isSecondaryClick, usesTerminalContextMenu } from "@/modules/terminal/lib/pointer";
 import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
 import {
   markSessionReady,
@@ -50,6 +51,12 @@ import {
 } from "react";
 
 const noSubscription = () => () => {};
+
+function selectAgentText(leafId: number, ptyId: number | null) {
+  const agent = useAgentStore.getState().sessions[leafId];
+  return ptyId !== null && agent?.ptyId === ptyId &&
+    (agent.harness === "claude" || agent.harness === "codex");
+}
 
 export const NativeTerminalPane = forwardRef<
   TerminalPaneHandle,
@@ -312,6 +319,7 @@ export const NativeTerminalPane = forwardRef<
             isActive: () =>
               latest.current.visible && Boolean(latest.current.focused ?? true),
             onError: report,
+            selectTextOnDrag: () => selectAgentText(leafId, session.id),
             allowInput: () =>
               owner.exited || (owner.blockInput?.directInput ?? true),
             focusPrompt: () => {
@@ -507,18 +515,17 @@ export const NativeTerminalPane = forwardRef<
       replayContextMenu.current = false;
       return;
     }
+    const saved = preClickSelection.current ?? engine.current?.getSelection() ?? null;
+    preClickSelection.current = null;
     if (
       engine.current?.exitCode === null &&
       engine.current?.inputState?.mouseTracking &&
-      !event.shiftKey &&
-      !(IS_MAC ? event.metaKey || event.ctrlKey : event.ctrlKey)
+      !usesTerminalContextMenu(event, IS_MAC, saved !== null, selectAgentText(leafId, engine.current.id))
     ) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
-    const saved = preClickSelection.current;
-    preClickSelection.current = null;
     if (saved !== null) {
       selectedForMenu.current = saved;
       return;
@@ -528,7 +535,7 @@ export const NativeTerminalPane = forwardRef<
     const originalSession = engine.current;
     const element = host.current;
     if (!owner || !element) return;
-    const { clientX, clientY, button, ctrlKey } = event;
+    const { clientX, clientY, button, ctrlKey, shiftKey, metaKey } = event;
     void (async () => {
       await owner.opened;
       const session = engine.current;
@@ -558,6 +565,8 @@ export const NativeTerminalPane = forwardRef<
           clientY,
           button,
           ctrlKey,
+          shiftKey,
+          metaKey,
         }),
       );
     })().catch((cause) => setError(String(cause)));

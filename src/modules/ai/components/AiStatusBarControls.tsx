@@ -101,13 +101,9 @@ export function AiOpenButton({
   );
 }
 
-export function AiStatusBarControls() {
+export function AiComposerControls() {
   const c = useComposer();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const toggleMini = useChatStore((s) => s.toggleMini);
-  const miniOpen = useChatStore((s) => s.mini.open);
-  const closePanel = useChatStore((s) => s.closePanel);
-
   return (
     <div className="flex min-w-0 items-center gap-0.5">
       <input
@@ -130,6 +126,19 @@ export function AiStatusBarControls() {
         <HugeiconsIcon icon={Add01Icon} size={13} strokeWidth={2} />
       </IconBtn>
 
+      <ModelDropdown />
+    </div>
+  );
+}
+
+export function AiStatusBarControls() {
+  const c = useComposer();
+  const toggleMini = useChatStore((s) => s.toggleMini);
+  const miniOpen = useChatStore((s) => s.mini.open);
+  const closePanel = useChatStore((s) => s.closePanel);
+
+  return (
+    <div className="flex min-w-0 items-center gap-0.5">
       {c.voice.supported && (
         <IconBtn
           title={
@@ -161,8 +170,6 @@ export function AiStatusBarControls() {
           )}
         </IconBtn>
       )}
-
-      <ModelDropdown />
 
       <span className="mx-1 h-8 w-px shrink-0 bg-border" aria-hidden />
       <IconBtn

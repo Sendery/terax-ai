@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { usePresence } from "@/lib/usePresence";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceFiles } from "../hooks/useWorkspaceFiles";
+import { clipboardFiles } from "@/modules/ai/lib/attachments";
 import { useComposer } from "../lib/composer";
 import { SLASH_COMMANDS } from "../lib/slashCommands";
 import { useChatStore } from "../store/chatStore";
@@ -218,6 +219,12 @@ export function AiComposerInput() {
               ref={c.textareaRef}
               value={c.value}
               onChange={(e) => c.setValue(e.target.value)}
+              onPaste={(event) => {
+                const files = clipboardFiles(event.clipboardData);
+                if (!files.length) return;
+                event.preventDefault();
+                void c.addFiles(files);
+              }}
               onKeyUp={updateTrigger}
               onClick={updateTrigger}
               onSelect={updateTrigger}

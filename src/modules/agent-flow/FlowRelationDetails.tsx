@@ -23,26 +23,32 @@ function Endpoint({ endpoint, activate, inspect }: {
     : <span>{endpoint.title}</span>;
 }
 
-function FileEvidence({ file, inspect }: { file: FileCrossing; inspect: Inspect }) {
+export async function openFlowDiff(cwd: string, path: string): Promise<string | undefined> {
+  const repo = await native.gitResolveRepo(cwd);
+  const absolute = normalizedFile(repo?.repoRoot, path);
+  const root = repo?.repoRoot.replace(/\\/g, "/").replace(/\/$/, "");
+  if (!root || !absolute?.startsWith(`${root}/`)) return "The file is outside a resolved Git checkout.";
+  const result = await callAppCommand("git.diff.open", {
+    repoRoot: repo?.repoRoot, path: absolute.slice(root.length + 1), mode: "+",
+  });
+  return result.ok ? undefined : result.error.message;
+}
+
+function FileEvidence({ file, inspect, openDiff }: {
+  file: FileCrossing;
+  inspect: Inspect;
+  openDiff?: (file: FileCrossing) => Promise<string | undefined>;
+}) {
   const [message, setMessage] = useState("");
   const [opening, setOpening] = useState(false);
-  async function openDiff() {
+  async function showDiff() {
     const cwd = file.touches.find(({ operation }) => operation === "write")?.run.cwd;
     if (!cwd) return;
     setOpening(true);
     setMessage("");
     try {
-      const repo = await native.gitResolveRepo(cwd);
-      const absolute = normalizedFile(repo?.repoRoot, file.path);
-      const root = repo?.repoRoot.replace(/\\/g, "/").replace(/\/$/, "");
-      if (!root || !absolute?.startsWith(`${root}/`)) {
-        setMessage("The file is outside a resolved Git checkout.");
-        return;
-      }
-      const result = await callAppCommand("git.diff.open", {
-        repoRoot: repo?.repoRoot, path: absolute.slice(root.length + 1), mode: "+",
-      });
-      if (!result.ok) setMessage(result.error.message);
+      const error = await (openDiff ? openDiff(file) : openFlowDiff(cwd, file.path));
+      if (error) setMessage(error);
     } catch {
       setMessage("The Git diff could not be opened.");
     } finally {
@@ -61,18 +67,19 @@ function FileEvidence({ file, inspect }: { file: FileCrossing; inspect: Inspect 
       </li>)}
     </ol>
     <div className="flow-inspector-actions">
-      <button type="button" disabled={opening} onClick={() => void openDiff()}>Open Git diff</button>
+      <button type="button" disabled={opening} onClick={() => void showDiff()}>Open Git diff</button>
     </div>
     {message ? <small role="status">{message}</small> : null}
   </>;
 }
 
-export function FlowRelationDetails({ relation, close, activate, inspect, seek }: {
+export function FlowRelationDetails({ relation, close, activate, inspect, seek, openDiff }: {
   relation: FlowRelation;
   close: () => void;
   activate: Activate;
   inspect: Inspect;
   seek: (at: number) => void;
+  openDiff?: (file: FileCrossing) => Promise<string | undefined>;
 }) {
   const newest = relation.kind === "relay" ? relation.deliveries[0] : undefined;
   return <aside className="flow-inspector flow-relation-details" aria-label={relation.kind === "relay" ? "Terminal relay" : "Shared file activity"}
@@ -84,7 +91,7 @@ export function FlowRelationDetails({ relation, close, activate, inspect, seek }
       </button>
     </header>
     <div className="flow-inspector-scroll">
-      {relation.kind === "file" ? <FileEvidence file={relation.file} inspect={inspect} /> : <>
+    {relation.kind === "file" ? <FileEvidence file={relation.file} inspect={inspect} openDiff={openDiff} /> : <>
         {newest ? <div className="flow-inspector-actions flow-relay-endpoints">
           {newest.from ? <Endpoint endpoint={newest.from} activate={activate} inspect={inspect} /> : <span>{TERAX_SOURCE_TITLE}</span>}
           <span aria-hidden="true">→</span>

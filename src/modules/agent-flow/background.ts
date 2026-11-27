@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import type { FlowRun, FlowTask } from "@/modules/agent-flow/model";
 import type { FlowBranch } from "@/modules/agent-flow/scene";
 import { native } from "@/modules/ai/lib/native";
 import type { Watch } from "@/modules/watchers/lib/watch";
+import { useWatchStore } from "@/modules/watchers/lib/watchStore";
 
 type NativeJob = {
   handle: number;
@@ -15,7 +16,7 @@ const NO_JOBS: NativeJob[] = [];
 const JOB_REFRESH_MS = 5000;
 export const BACKGROUND_GROUP = "terax:background";
 
-export function useFlowShellJobs(open: boolean) {
+function useFlowShellJobs(open: boolean) {
   const [jobs, setJobs] = useState(NO_JOBS);
   useEffect(() => {
     if (!open || !isTauri()) return;
@@ -52,6 +53,13 @@ export function useFlowShellJobs(open: boolean) {
     };
   }, [open]);
   return jobs;
+}
+
+export function useFlowBackground(open: boolean) {
+  const watches = useWatchStore((state) => open ? state.watches : null);
+  const running = useWatchStore((state) => open ? state.running : null);
+  const jobs = useFlowShellJobs(open);
+  return useMemo(() => backgroundBranch(watches ?? [], running ?? [], jobs), [watches, running, jobs]);
 }
 
 export function backgroundBranch(watches: readonly Watch[], running: readonly string[], jobs: readonly NativeJob[]): FlowBranch | undefined {

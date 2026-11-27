@@ -84,4 +84,11 @@ describe("macOS signing identity", () => {
   it("never signs off macOS", () => {
     expect(macSigningIdentity({ platform: "linux", env: {}, listIdentities: () => keychain })).toBeNull();
   });
+
+  it("uses the standard Tauri identity for signed distribution", () => {
+    const identity = "Developer ID Application: Example";
+    expect(macSigningIdentity({
+      platform: "darwin", env: { APPLE_SIGNING_IDENTITY: identity }, listIdentities: () => `"${identity}"`,
+    })).toBe(identity);
+  });
 });

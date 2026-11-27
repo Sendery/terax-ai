@@ -20,6 +20,7 @@ import {
 
 function makeChat(sessionId: string): Chat<UIMessage> {
   const readCache = new Map<string, { size: number; hash: number }>();
+  let privateAtSend = false;
   const toolContext: ToolContext = {
     getCwd: () => useChatStore.getState().live.getCwd(),
     getWorkspaceRoot: () => useChatStore.getState().live.getWorkspaceRoot(),
@@ -51,9 +52,10 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     },
     getLive: () => {
       const live = useChatStore.getState().live;
+      privateAtSend = live.isActiveTerminalPrivate();
       return {
         cwd: live.getCwd(),
-        terminalPrivate: live.isActiveTerminalPrivate(),
+        terminalPrivate: privateAtSend,
         workspaceRoot: live.getWorkspaceRoot(),
         activeFile: live.getActiveFile(),
       };
@@ -109,6 +111,13 @@ function makeChat(sessionId: string): Chat<UIMessage> {
     transport,
     messages: initialMessages,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: ({ message, isAbort, isDisconnect, isError }) => {
+      if (isAbort || isDisconnect || isError) return;
+      if (privateAtSend || !usePreferencesStore.getState().prepareChatAudio) return;
+      void import("@/modules/ai/lib/responseAudio").then(({ queueResponseAudio, responseText }) => {
+        queueResponseAudio(responseText(message));
+      });
+    },
     onError: (e) => {
       useChatStore.getState().patchAgentMeta({
         status: "error",

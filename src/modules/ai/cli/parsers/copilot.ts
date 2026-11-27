@@ -46,6 +46,11 @@ export function createCopilotParser(emitter: ChunkEmitter): CliParser {
         }
         return;
       }
+      case "session.usage_record": {
+        const usage = data.usage as Data | undefined;
+        if (usage) emitter.usage(usage.inputTokens, usage.outputTokens, usage.cacheReadTokens);
+        return;
+      }
       case "assistant.message": {
         // Final text also arrives whole; use it only if nothing streamed.
         const content = data.content;

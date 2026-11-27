@@ -19,7 +19,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { isMainModule } from "./cli-entrypoint.mjs";
-import { developmentConfigOverride, macSigningIdentity, tauriSignArgs } from "./dev-release-config.mjs";
+import { developmentConfigOverride, macSigningIdentity, tauriSignArgs, verifyMacDistribution } from "./dev-release-config.mjs";
 
 const DEFAULT_REPOSITORY = "Sendery/terax-ai";
 const SEMVER = /^v?(\d+\.\d+\.\d+-[0-9A-Za-z.-]+)$/;
@@ -149,6 +149,13 @@ function main() {
     run("node", buildArgs, { cwd: cacheRoot });
     const built = developmentArtifacts(join(cacheRoot, plan.root));
     if (!built.length) throw new Error(`No installers were produced below ${join(cacheRoot, plan.root)}. Check the preceding build trace.`);
+    if (options.upload && process.platform === "darwin") {
+      const macos = join(cacheRoot, plan.root, "macos");
+      const apps = readdirSync(macos).filter((file) => file.endsWith(".app"));
+      const images = built.filter((file) => file.endsWith(".dmg"));
+      if (apps.length !== 1 || images.length !== 1) throw new Error("Expected one macOS app and one disk image.");
+      verifyMacDistribution(join(macos, apps[0]), images[0]);
+    }
     const artifacts = stageDownloads(built, join(cacheRoot, ".terax", "downloads", options.tag));
     trace("validated artifacts", { artifacts: artifacts.map((file) => basename(file)) });
     if (options.upload) run("gh", ["release", "upload", options.tag, ...artifacts, "--repo", options.repository, "--clobber"]);

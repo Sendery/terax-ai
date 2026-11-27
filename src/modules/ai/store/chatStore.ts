@@ -84,7 +84,7 @@ export type MiniState = {
 export type PendingSelection = {
   id: string;
   text: string;
-  source: "terminal" | "editor";
+  source: "terminal" | "editor" | "chat";
 };
 
 export type ApprovalResponder = (
@@ -131,7 +131,7 @@ type StoreState = {
   consumePrefill: () => string | null;
 
   pendingSelections: PendingSelection[];
-  attachSelection: (text: string, source: "terminal" | "editor") => void;
+  attachSelection: (text: string, source: PendingSelection["source"]) => void;
   consumeSelections: () => PendingSelection[];
 
   agentMeta: AgentMeta;

@@ -48,7 +48,7 @@ function TimeMarkers({ bins }: { bins: MarkerBins }) {
 }
 
 function ShellTrack({
-  lane, bins, start, end, cursor, jump,
+  lane, bins, start, end, cursor, jump, visible, onVisibility,
 }: {
   lane: TimeLane;
   bins: MarkerBins;
@@ -56,16 +56,20 @@ function ShellTrack({
   end: number;
   cursor: number;
   jump: (at: number | null) => void;
+  visible: boolean;
+  onVisibility: (key: string, visible: boolean) => void;
 }) {
   const closest = nearTick(lane.marks, cursor);
   return (
     <li className="flow-time-lane" style={{ "--flow-lane-color": lane.color ? TAB_COLOR_CSS[lane.color] : "var(--flow-default)" } as CSSProperties}>
-      <div className="flow-time-lane-name" title={lane.description ?? lane.title}>
+      <label className="flow-time-lane-name" title={lane.description ?? lane.title}>
+        <input type="checkbox" checked={visible} aria-label={`Show timeline for ${lane.title}`}
+          onChange={(event) => onVisibility(lane.key, event.target.checked)} />
         <span className="flow-time-lane-dot" data-active={lane.active} />
         <strong>{lane.title}</strong>
         {lane.description && lane.description !== lane.title ? <small>{lane.description}</small> : null}
-      </div>
-      <button type="button" className="flow-shell-track" aria-label={`Seek events in ${lane.title}${lane.description ? `, ${lane.description}` : ""}`}
+      </label>
+      {visible ? <button type="button" className="flow-shell-track" aria-label={`Seek events in ${lane.title}${lane.description ? `, ${lane.description}` : ""}`}
         disabled={!closest}
         title={closest ? `${FLOW_LABELS[closest.kind]} · ${flowTime.format(closest.at)}` : "No recorded events"}
         onClick={(event) => {
@@ -83,13 +87,13 @@ function ShellTrack({
         }}>
         <TimeMarkers bins={bins} />
         <span className="flow-shell-playhead" aria-hidden="true" />
-      </button>
+      </button> : null}
     </li>
   );
 }
 
 export function FlowTimeline({
-  marks, lanes, time, setTime, playing, setPlaying,
+  marks: allMarks, lanes, time, setTime, playing, setPlaying,
 }: {
   marks: readonly TimeMark[];
   lanes: readonly TimeLane[];
@@ -100,17 +104,36 @@ export function FlowTimeline({
 }) {
   const [speed, setSpeed] = useState(1);
   const [expanded, setExpanded] = useState(false);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const lanesId = useId();
-  const start = marks[0]?.at ?? 0;
-  const end = marks[marks.length - 1]?.at ?? start;
+  const marks = useMemo(() => {
+    if (!hidden.size) return allMarks;
+    const visible = new Map<number, TimeMark>();
+    for (const lane of lanes) {
+      if (!hidden.has(lane.key)) for (const mark of lane.marks) visible.set(mark.at, mark);
+    }
+    return [...visible.values()].sort((a, b) => a.at - b.at);
+  }, [allMarks, lanes, hidden]);
+  const start = allMarks[0]?.at ?? 0;
+  const end = allMarks[allMarks.length - 1]?.at ?? start;
   const cursor = time ?? end;
   const next = marks.findIndex(({ at }) => at > cursor);
   const index = next < 0 ? marks.length - 1 : Math.max(0, next - 1);
   const previous = marks[index] && marks[index].at < cursor ? index : index - 1;
   const bins = useMemo(() => bucketMarks(marks, start, end), [marks, start, end]);
   const expandedLanes = useMemo(() => expanded
-    ? lanes.map((lane) => ({ lane, bins: bucketMarks(lane.marks, start, end) }))
-    : [], [expanded, lanes, start, end]);
+    ? lanes.map((lane) => ({ lane, bins: hidden.has(lane.key) ? [] : bucketMarks(lane.marks, start, end) }))
+    : [], [expanded, lanes, hidden, start, end]);
+
+  function setVisibility(key: string, visible: boolean) {
+    setPlaying(false);
+    setHidden((previous) => {
+      const next = new Set(previous);
+      if (visible) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!playing || time === null || next < 0) return;
@@ -187,7 +210,8 @@ export function FlowTimeline({
       </div>
       <ul id={lanesId} className="flow-shell-lanes" aria-label="Shell timeline tracks" hidden={!expanded || !expandedLanes.length}>
         {expandedLanes.map(({ lane, bins: laneBins }) => (
-          <ShellTrack key={lane.key} lane={lane} bins={laneBins} start={start} end={end} cursor={cursor} jump={jump} />
+          <ShellTrack key={lane.key} lane={lane} bins={laneBins} start={start} end={end} cursor={cursor} jump={jump}
+            visible={!hidden.has(lane.key)} onVisibility={setVisibility} />
         ))}
       </ul>
     </section>
