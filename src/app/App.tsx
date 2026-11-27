@@ -29,6 +29,7 @@ import {
   useAgentSessionRestore,
   useAgentStore,
 } from "@/modules/agents";
+import { indexLinkedTabs } from "@/modules/tabs/lib/linkedTabs";
 import { captureSurface } from "@/modules/capture";
 import {
   AgentRunBridge,
@@ -284,6 +285,9 @@ export default function App() {
     reorderTabByGap,
     newTabInSpace,
     warmTab,
+    linkTabPair,
+    unlinkTabPair,
+    resizeTabPair,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,
@@ -590,6 +594,12 @@ export default function App() {
   const showChat = hasComposer && miniPresence.mounted;
 
   const activeTab = tabs.find((t) => t.id === activeId);
+  const linkedTabs = useMemo(() => indexLinkedTabs(tabs), [tabs]);
+  const tabPair = linkedTabs.get(activeId);
+  const partnerId = tabPair && (activeId === tabPair.leftId ? tabPair.rightId : tabPair.leftId);
+  useEffect(() => {
+    if (partnerId !== undefined) warmTab(partnerId);
+  }, [partnerId, warmTab]);
   const tabNotes = useTabNotes(activeTab?.notes, mutateActiveTabNotes);
   // Type a note's reference at the active shell prompt as a citation. Never
   // executes: newlines are collapsed and no carriage return is sent.
@@ -1743,8 +1753,11 @@ export default function App() {
   );
 
   const handleFocusLeaf = useCallback(
-    (tabId: number, leafId: number) => focusPane(tabId, leafId),
-    [focusPane],
+    (tabId: number, leafId: number) => {
+      if (tabId === partnerId) setActiveId(tabId);
+      focusPane(tabId, leafId);
+    },
+    [focusPane, partnerId, setActiveId],
   );
 
   const onActivateAgent = useCallback(
@@ -3046,6 +3059,8 @@ export default function App() {
               tabs={spaceTabs}
               activeId={activeId}
               onSelect={setActiveId}
+              onLinkTabs={linkTabPair}
+              onUnlinkTabs={unlinkTabPair}
               onNew={openNewTab}
               onNewBlock={openNewBlockTab}
               onNewPrivate={openNewPrivateTab}
@@ -3164,6 +3179,9 @@ export default function App() {
                         tabs={tabs}
                         activeId={activeId}
                         activeTab={activeTab}
+                        tabPair={tabPair}
+                        onActivateTab={setActiveId}
+                        onResizeTabPair={resizeTabPair}
                         registerTerminalHandle={registerTerminalHandle}
                         onSearchReady={handleSearchReady}
                         onCwd={handleTerminalCwd}

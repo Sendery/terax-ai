@@ -42,6 +42,9 @@ import {
   Globe02Icon,
   IncognitoIcon,
   PaintBrush01Icon,
+  LayoutTwoColumnIcon,
+  Link01Icon,
+  Unlink01Icon,
   PencilEdit02Icon,
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
@@ -56,6 +59,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { AgentTabBadge } from "./AgentTabBadge";
+import { canLinkTab, indexLinkedTabs } from "./lib/linkedTabs";
 import { tabFilePath } from "./lib/tabFilePath";
 import { labelFor } from "./lib/tabLabel";
 import type { EditorTab, Tab } from "./lib/useTabs";
@@ -64,6 +68,8 @@ type Props = {
   tabs: Tab[];
   activeId: number;
   onSelect: (id: number) => void;
+  onLinkTabs?: (leftId: number, rightId: number) => void;
+  onUnlinkTabs?: (tabId: number) => void;
   onNew: () => void;
   onNewBlock: () => void;
   onNewPrivate: () => void;
@@ -87,6 +93,8 @@ export function TabBar({
   tabs,
   activeId,
   onSelect,
+  onLinkTabs,
+  onUnlinkTabs,
   onNew,
   onNewBlock,
   onNewPrivate,
@@ -101,6 +109,8 @@ export function TabBar({
   onReorder,
   compact,
 }: Props) {
+  const linked = indexLinkedTabs(tabs);
+  const available = onLinkTabs ? tabs.filter((tab) => canLinkTab(tab) && !linked.has(tab.id)) : [];
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -243,6 +253,9 @@ export function TabBar({
               const isActive = t.id === activeId;
               const isNew = !firstRender && !seen.has(t.id);
               const filePath = tabFilePath(t);
+              const pair = linked.get(t.id);
+              const partner = pair && tabs.find(({ id }) => id === (pair.leftId === t.id ? pair.rightId : pair.leftId));
+              const candidates = canLinkTab(t) ? available.filter((tab) => tab.id !== t.id) : [];
 
               const srcIndex = tabs.findIndex((x) => x.id === draggingId);
               const showGap = (gap: number) =>
@@ -286,11 +299,17 @@ export function TabBar({
                 ? tabColorStyle(t.color, isActive)
                 : undefined;
 
+              const accessibleLabel = tabAccessibleLabel(
+                labelFor(t),
+                t.color,
+                (t.kind === "editor" || t.kind === "markdown") && !!t.dirty,
+              );
               const trigger = (
                 <TabsTrigger
                   value={String(t.id)}
                   data-tab-id={t.id}
                   data-tab-active={isActive ? "true" : undefined}
+                  data-tab-linked={partner ? "true" : undefined}
                   style={
                     colorStyle
                       ? {
@@ -300,11 +319,7 @@ export function TabBar({
                         }
                       : undefined
                   }
-                  aria-label={tabAccessibleLabel(
-                    labelFor(t),
-                    t.color,
-                    (t.kind === "editor" || t.kind === "markdown") && !!t.dirty,
-                  )}
+                  aria-label={partner ? `${accessibleLabel}, linked to ${labelFor(partner)}` : accessibleLabel}
                   onPointerDown={(e) => {
                     if (e.button !== 0) return;
                     if ((e.target as HTMLElement).closest("[data-no-drag]"))
@@ -380,6 +395,11 @@ export function TabBar({
                     )}
                   >
                     <TabIcon tab={t} />
+                    {partner ? (
+                      <span title={`Linked to ${labelFor(partner)}`} aria-hidden="true" className="shrink-0">
+                        <HugeiconsIcon icon={Link01Icon} size={12} />
+                      </span>
+                    ) : null}
                     {/* Preview tabs use italic to signal the transient state,
                         matching the visual convention from VSCode. */}
                     <span className={cn("truncate", isPreview && "italic")}>
@@ -477,6 +497,27 @@ export function TabBar({
                         )}
                       </ContextMenuSubContent>
                     </ContextMenuSub>
+                    {partner && onUnlinkTabs ? (
+                      <ContextMenuItem onSelect={() => onUnlinkTabs(t.id)}>
+                        <HugeiconsIcon icon={Unlink01Icon} size={14} />
+                        <span>Separate tabs</span>
+                      </ContextMenuItem>
+                    ) : candidates.length ? (
+                      <ContextMenuSub>
+                        <ContextMenuSubTrigger>
+                          <HugeiconsIcon icon={LayoutTwoColumnIcon} size={14} />
+                          <span className="flex-1">Split view with</span>
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="max-h-64 w-56 overflow-y-auto">
+                          {candidates.map((tab) => (
+                            <ContextMenuItem key={tab.id} onSelect={() => onLinkTabs?.(t.id, tab.id)}>
+                              <TabIcon tab={tab} />
+                              <span className="truncate">{labelFor(tab)}</span>
+                            </ContextMenuItem>
+                          ))}
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                    ) : null}
                     {filePath ? (
                       <>
                         <ContextMenuSeparator />

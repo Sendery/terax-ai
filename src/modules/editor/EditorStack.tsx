@@ -1,4 +1,5 @@
-import { cn } from "@/lib/utils";
+import { LinkedTabPane, useLinkedTabs } from "@/modules/tabs/LinkedTabPane";
+import { linkedSide } from "@/modules/tabs/lib/linkedTabs";
 import { resolveViewMode, type ViewMode } from "@/modules/renderable/viewMode";
 import type { EditorTab, MarkdownTab, Tab } from "@/modules/tabs";
 import { useEffect, useRef } from "react";
@@ -21,6 +22,7 @@ export function EditorStack({
   onCloseTab,
   onSetRenderableView,
 }: Props) {
+  const linked = useLinkedTabs();
   const editors = tabs.filter(
     (t): t is EditorTab | MarkdownTab => (t.kind === "editor" || t.kind === "markdown") && !t.cold,
   );
@@ -91,18 +93,10 @@ export function EditorStack({
   return (
     <div className="relative h-full w-full">
       {editors.map((t) => {
-        const visible = t.id === activeId;
+        const active = t.id === activeId;
+        const visible = active || !!linkedSide(linked?.link, t.id);
         return (
-          <div
-            key={t.id}
-            data-capture-target="pane"
-            data-capture-tab-id={t.id}
-            className={cn(
-              "absolute inset-0",
-              !visible && "invisible pointer-events-none",
-            )}
-            aria-hidden={!visible}
-          >
+          <LinkedTabPane key={t.id} tabId={t.id} active={active}>
             <div className="relative h-full overflow-hidden rounded-md border border-border/60 bg-background">
               <EditorPane
                 ref={getRefCallback(t.id)}
@@ -114,7 +108,7 @@ export function EditorStack({
                 onClose={getCloseCallback(t.id)}
               />
             </div>
-          </div>
+          </LinkedTabPane>
         );
       })}
     </div>

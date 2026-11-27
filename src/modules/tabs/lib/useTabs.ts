@@ -32,6 +32,7 @@ import {
 } from "react";
 import { replaceMermaidTab } from "./mermaidTabMutation";
 import type { TabColor } from "./tabColors";
+import { cleanLinkedTabs, linkTabs, resizeLinkedTabs, type TabLink, unlinkTabs } from "./linkedTabs";
 
 // Matches the renderer slot pool size — over this we'd evict an active leaf.
 export const MAX_PANES_PER_TAB = 4;
@@ -54,6 +55,7 @@ type TabBase = {
   readerKey?: string;
   /** The Reader panel docked under the tab's content, when open. */
   readerDock?: ReaderDock;
+  linkedView?: TabLink;
 };
 
 /** `docId` null shows the Reader library instead of a document. */
@@ -465,8 +467,9 @@ export function useTabs(initial?: Partial<TerminalTab>) {
   const setTabs = useCallback((action: SetStateAction<Tab[]>) => {
     const next =
       typeof action === "function" ? action(tabsRef.current) : action;
-    tabsRef.current = next;
-    commitTabs(next);
+    const linked = cleanLinkedTabs(next);
+    tabsRef.current = linked;
+    commitTabs(linked);
   }, []);
 
   useEffect(() => {
@@ -492,6 +495,21 @@ export function useTabs(initial?: Partial<TerminalTab>) {
       if (!t?.cold) return curr;
       return curr.map((x) => (x.id === tabId ? { ...x, cold: false } : x));
     });
+  }, [setTabs]);
+
+  const linkTabPair = useCallback((leftId: number, rightId: number) => {
+    const current = tabsRef.current;
+    const next = linkTabs(current, leftId, rightId, crypto.randomUUID());
+    if (next !== current) {
+      setTabs(next);
+      setActiveId(leftId);
+    }
+  }, [setTabs]);
+  const unlinkTabPair = useCallback((tabId: number) => {
+    setTabs((current) => unlinkTabs(current, tabId));
+  }, [setTabs]);
+  const resizeTabPair = useCallback((key: string, percent: number) => {
+    setTabs((current) => resizeLinkedTabs(current, key, percent));
   }, [setTabs]);
 
   const allocId = useCallback(() => nextIdRef.current++, []);
@@ -1576,6 +1594,9 @@ export function useTabs(initial?: Partial<TerminalTab>) {
     setTabPinned,
     newTabInSpace,
     warmTab,
+    linkTabPair,
+    unlinkTabPair,
+    resizeTabPair,
     removeTabsForSpace,
     markBooted,
     setActiveSpaceForNewTabs,

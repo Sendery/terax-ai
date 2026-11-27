@@ -1,3 +1,6 @@
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { LinkedTabContext } from "@/modules/tabs/LinkedTabPane";
+import { type LinkedTabs, MAX_SPLIT_PERCENT, MIN_SPLIT_PERCENT } from "@/modules/tabs/lib/linkedTabs";
 import { graphDockMargins } from "@/modules/graphx/lib/presentation";
 import { GraphPanels } from "@/modules/graphx";
 import type { GraphPanelProps } from "@/modules/graphx/GraphPanels";
@@ -14,7 +17,7 @@ import {
 } from "@/modules/reader/components/ReadContextMenu";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
-import { lazy, Suspense, type ComponentProps } from "react";
+import { lazy, Suspense, type ComponentProps, type CSSProperties, useMemo } from "react";
 
 const AgentFlow = lazy(() => import("@/modules/agent-flow/AgentFlow"));
 
@@ -49,6 +52,9 @@ type Props = {
   tabs: Tab[];
   activeId: number;
   activeTab: Tab | undefined;
+  tabPair?: LinkedTabs;
+  onActivateTab: (tabId: number) => void;
+  onResizeTabPair: (key: string, percent: number) => void;
   registerTerminalHandle: TerminalStackProps["registerHandle"];
   onSearchReady: TerminalStackProps["onSearchReady"];
   onCwd: TerminalStackProps["onCwd"];
@@ -93,6 +99,9 @@ export function WorkspaceSurface({
   tabs,
   activeId,
   activeTab,
+  tabPair,
+  onActivateTab,
+  onResizeTabPair,
   registerTerminalHandle,
   onSearchReady,
   onCwd,
@@ -125,9 +134,14 @@ export function WorkspaceSurface({
 }: Props) {
   const kind = activeTab?.kind;
   const agentFlowTab = tabs.find((tab) => tab.kind === "agent-flow");
-  const isTerminalTab = kind === "terminal";
-  const isEditorTab = kind === "editor" || kind === "markdown";
-  const isPreviewTab = kind === "preview";
+  const partner = tabPair && tabs.find((tab) =>
+    tab.id === (activeId === tabPair.leftId ? tabPair.rightId : tabPair.leftId));
+  const isTerminalTab = kind === "terminal" || partner?.kind === "terminal";
+  const isEditorTab = kind === "editor" || kind === "markdown" ||
+    partner?.kind === "editor" || partner?.kind === "markdown";
+  const isPreviewTab = kind === "preview" || partner?.kind === "preview";
+  const linkedContext = useMemo(() => tabPair ? { link: tabPair, activate: onActivateTab } : null,
+    [tabPair, onActivateTab]);
   const isMermaidTab = kind === "mermaid";
   const isAiDiffTab = kind === "ai-diff";
   const isGitDiffTab = kind === "git-diff" || kind === "git-commit-file";
@@ -146,16 +160,20 @@ export function WorkspaceSurface({
     activeTab && activeTab.kind !== "reader" ? activeTab.readerDock : undefined;
   const dockTabId = activeTab?.id ?? -1;
 
-  return (
+  const workspace = (
     <div className="relative h-full min-h-0">
       <div
         className="relative flex h-full min-h-0 flex-col"
         style={graphDockMargins(tabs, activeTab)}
       >
-        <div className="relative min-h-0 flex-1">
+        <div
+          className="relative min-h-0 flex-1"
+          style={tabPair ? ({ "--tab-split-position": `${tabPair.percent}%` } as CSSProperties) : undefined}
+        >
           <div
             className={cn(
               "absolute inset-0 px-3 pt-2 pb-2",
+              tabPair && "pointer-events-none",
               !isTerminalTab && "invisible pointer-events-none",
             )}
             aria-hidden={!isTerminalTab}
@@ -179,6 +197,7 @@ export function WorkspaceSurface({
             <div
               className={cn(
                 "absolute inset-0 px-3 pt-2 pb-2",
+                tabPair && "pointer-events-none",
                 !isEditorTab && "invisible pointer-events-none",
               )}
               aria-hidden={!isEditorTab}
@@ -196,6 +215,7 @@ export function WorkspaceSurface({
           <div
             className={cn(
               "absolute inset-0 px-3 pt-2 pb-2",
+              tabPair && "pointer-events-none",
               !isPreviewTab && "invisible pointer-events-none",
             )}
             aria-hidden={!isPreviewTab}
@@ -306,6 +326,21 @@ export function WorkspaceSurface({
               </Suspense>
             </div>
           ) : null}
+          {tabPair ? (
+            <div className="pointer-events-none absolute inset-x-3 inset-y-2 z-10">
+              <ResizablePanelGroup key={tabPair.key} orientation="horizontal">
+                <ResizablePanel
+                  id="linked-left"
+                  defaultSize={`${tabPair.percent}%`}
+                  minSize={`${MIN_SPLIT_PERCENT}%`}
+                  maxSize={`${MAX_SPLIT_PERCENT}%`}
+                  onResize={(size) => onResizeTabPair(tabPair.key, size.asPercentage)}
+                />
+                <ResizableHandle withHandle aria-label="Resize linked tabs" className="pointer-events-auto" />
+                <ResizablePanel id="linked-right" minSize={`${MIN_SPLIT_PERCENT}%`} />
+              </ResizablePanelGroup>
+            </div>
+          ) : null}
         </div>
         {dock ? (
           <ReaderDock
@@ -334,4 +369,5 @@ export function WorkspaceSurface({
       />
     </div>
   );
+  return <LinkedTabContext.Provider value={linkedContext}>{workspace}</LinkedTabContext.Provider>;
 }
